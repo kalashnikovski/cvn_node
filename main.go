@@ -7,27 +7,24 @@ import (
 	"time"
 )
 
-// Transaction represents the plaintext relational ledger data transfer structure
 type Transaction struct {
-	Sender    string    `json:"sender"`    // Bound to Plain-Text Decentralized Identity (DID)
-	Recipient string    `json:"recipient"` // Bound to Plain-Text Decentralized Identity (DID)
-	Amount    float64   `json:"amount"`    // Transferred CVN token quantity
-	Witness   string    `json:"witness"`   // Cryptographic Local Communal Peer Co-Signer Node ID
-	Timestamp time.Time `json:"timestamp"` // Transaction generation time
+	Sender    string    `json:"sender"`
+	Recipient string    `json:"recipient"`
+	Amount    float64   `json:"amount"`
+	Witness   string    `json:"witness"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
-// Block represents a single linear cryptographic entry inside the Layer-1 chain state machine
 type Block struct {
-	Index        int64         `json:"index"`         // Sequential block height identifier
-	Timestamp    int64         `json:"timestamp"`     // Epoch time when validation finality achieved
-	Transactions []Transaction `json:"transactions"`  // Plaintext batch data payload
-	PrevHash     string        `json:"prev_hash"`     // Cryptographic linkage pointer to historical block
-	Hash         string        `json:"hash"`          // Unique signature block hash string
-	Nonce        int64         `json:"nonce"`         // ASIC-neutral CPU Proof-of-Diligence iteration value
-	Difficulty   int64         `json:"difficulty"`    // Organic Heartbeat Protocol boundary metric
+	Index        int64         `json:"index"`
+	Timestamp    int64         `json:"timestamp"`
+	Transactions []Transaction `json:"transactions"`
+	PrevHash     string        `json:"prev_hash"`
+	Hash         string        `json:"hash"`
+	Nonce        int64         `json:"nonce"`
+	Difficulty   int64         `json:"difficulty"`
 }
 
-// CalculateHash compresses block metadata through a clean cryptographic SHA-256 array pass
 func CalculateHash(b Block) string {
 	record := fmt.Sprintf("%d%d%s%s%d%d", b.Index, b.Timestamp, fmt.Sprintf("%v", b.Transactions), b.PrevHash, b.Nonce, b.Difficulty)
 	h := sha256.New()
@@ -35,49 +32,83 @@ func CalculateHash(b Block) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// CreateGenesisBlock initializes the un-deconstructible foundational state ledger entry
 func CreateGenesisBlock() Block {
-	// Hardcoding the sacred relational root metadata directly into the Genesis block payload
 	genesisTx := Transaction{
 		Sender:    "GENESIS_VOID_REWARD_POOL",
 		Recipient: "COVENANT_STEWARD_ASSEMBLY",
-		Amount:    2100000000.0, // Fixed supply cap target anchor point
+		Amount:    2100000000.0,
 		Witness:   "ROOT_PEER_WITNESS_GATEWAY",
-		Timestamp: time.Unix(1790640000, 0), // Anchored timestamp blueprint entry
+		Timestamp: time.Unix(1790640000, 0),
 	}
-
 	genesisBlock := Block{
 		Index:        0,
-		Timestamp:    time.Unix(1790640000, 0).Unix(), // Static initial clock registration
+		Timestamp:    time.Unix(1790640000, 0).Unix(),
 		Transactions: []Transaction{genesisTx},
 		PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
 		Nonce:        0,
-		Difficulty:   100000, // Starting parameter baseline for the Organic Heartbeat Protocol
+		Difficulty:   100000,
 	}
-	
 	genesisBlock.Hash = CalculateHash(genesisBlock)
 	return genesisBlock
 }
 
+func MineBlock(prevBlock Block, txs []Transaction) Block {
+	var newBlock Block
+	newBlock.Index = prevBlock.Index + 1
+	newBlock.Timestamp = time.Now().Unix()
+	newBlock.Transactions = txs
+	newBlock.PrevHash = prevBlock.Hash
+	newBlock.Difficulty = prevBlock.Difficulty
+	newBlock.Nonce = 0
+
+	fmt.Printf("\n⚒️  Proof-of-Diligence Active: Mining Block %d... (Press Ctrl+C to stop)\n", newBlock.Index)
+	
+	for {
+		newBlock.Hash = CalculateHash(newBlock)
+		if newBlock.Hash[:4] == "0000" {
+			fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Hash: %s\n", newBlock.Nonce, newBlock.Hash)
+			break
+		}
+		newBlock.Nonce++
+	}
+	return newBlock
+}
+
 func main() {
 	fmt.Println("====================================================")
-	fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 STATE ARCHITECTURE")
-	fmt.Println("   Initializing Local Sovereign Genesis Framework Node")
+	fmt.Println("💎 COVENANT STANDARD (CVN) CONTINUOUS MINING RIG")
 	fmt.Println("====================================================\n")
 
-	fmt.Println("🤖 Executing genesis block cryptographic verification routines...")
-	genesis := CreateGenesisBlock()
+	// Initialize the ledger with the Genesis Block baseline entry
+	blockchain := []Block{CreateGenesisBlock()}
+	currentBlock := blockchain[0]
 
-	// Serializes the structure into clean readable text JSON output streams
-	genesisJSON, err := json.MarshalIndent(genesis, "", "  ")
-	if err != nil {
-		fmt.Printf("❌ Critical failure serializing state machine metadata: %v\n", err)
-		return
+	// The Infinite Mining Loop: This structural layer keeps mining blocks continuously until stopped manually
+	for {
+		// Simulating an incoming automated transaction block packet for each new block height
+		pendingTransactions := []Transaction{
+			{
+				Sender:    "COVENANT_STEWARD_ASSEMBLY",
+				Recipient: "Nikola_Continuous_Steward_Node",
+				Amount:    50.0,
+				Witness:   "Communal_Peer_Witness_7",
+				Timestamp: time.Now(),
+			},
+		}
+
+		// Mine the next block sequentially using the prior block's cryptographic hash signature
+		newBlock := MineBlock(currentBlock, pendingTransactions)
+		
+		// Serialize and log the newly anchored block metadata state
+		blockJSON, _ := json.MarshalIndent(newBlock, "", "  ")
+		fmt.Println(string(blockJSON))
+		fmt.Println("-----------------------------------------------------")
+
+		// Update the blockchain index pointers to immediately target the next block height
+		blockchain = append(blockchain, newBlock)
+		currentBlock = newBlock
+
+		// Introduce a tiny 1-second pause to prevent your processor from locking your desktop UI threads
+		time.Sleep(1 * time.Second)
 	}
-
-	fmt.Println("\n--- VERIFIED GENESIS BLOCK METADATA LEDGER RECORD ---")
-	fmt.Println(string(genesisJSON))
-	fmt.Println("-----------------------------------------------------")
-	fmt.Println("✅ Success! Genesis framework compiled and verified at Block Height 0.")
-	fmt.Println("👉 System state is secure. Ready to map Peer-to-Peer communication layers.")
 }
