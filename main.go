@@ -4,8 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 )
+
+const BlockchainFile = "ledger_vault.json"
 
 type Transaction struct {
 	Sender    string    `json:"sender"`
@@ -52,6 +55,46 @@ func CreateGenesisBlock() Block {
 	return genesisBlock
 }
 
+func SaveChain(chain []Block) {
+	data, err := json.MarshalIndent(chain, "", "  ")
+	if err != nil {
+		fmt.Printf("❌ Error serializing ledger data: %v\n", err)
+		return
+	}
+	_ = os.WriteFile(BlockchainFile, data, 0644)
+}
+
+func LoadChain() []Block {
+	if _, err := os.Stat(BlockchainFile); os.IsNotExist(err) {
+		// No file database exists yet, generate from Genesis
+		chain := []Block{CreateGenesisBlock()}
+		SaveChain(chain)
+		return chain
+	}
+	data, err := os.ReadFile(BlockchainFile)
+	if err != nil {
+		return []Block{CreateGenesisBlock()}
+	}
+	var chain []Block
+	_ = json.Unmarshal(data, &chain)
+	return chain
+}
+
+func GetAddressBalance(chain []Block, address string) float64 {
+	var balance float64 = 0.0
+	for _, block := range chain {
+		for _, tx := range block.Transactions {
+			if tx.Recipient == address {
+				balance += tx.Amount
+			}
+			if tx.Sender == address {
+				balance -= tx.Amount
+			}
+		}
+	}
+	return balance
+}
+
 func MineBlock(prevBlock Block, txs []Transaction) Block {
 	var newBlock Block
 	newBlock.Index = prevBlock.Index + 1
@@ -62,7 +105,6 @@ func MineBlock(prevBlock Block, txs []Transaction) Block {
 	newBlock.Nonce = 0
 
 	fmt.Printf("\n⚒️  Proof-of-Diligence Active: Mining Block %d... (Press Ctrl+C to stop)\n", newBlock.Index)
-	
 	for {
 		newBlock.Hash = CalculateHash(newBlock)
 		if newBlock.Hash[:4] == "0000" {
@@ -76,16 +118,18 @@ func MineBlock(prevBlock Block, txs []Transaction) Block {
 
 func main() {
 	fmt.Println("====================================================")
-	fmt.Println("💎 COVENANT STANDARD (CVN) CONTINUOUS MINING RIG")
+	fmt.Println("💎 COVENANT STANDARD (CVN) HARDENED LEDGER RIG")
 	fmt.Println("====================================================\n")
 
-	// Initialize the ledger with the Genesis Block baseline entry
-	blockchain := []Block{CreateGenesisBlock()}
-	currentBlock := blockchain[0]
+	// Read existing database array directly off your local C-Drive storage
+	blockchain := LoadChain()
+	currentBlock := blockchain[len(blockchain)-1]
 
-	// The Infinite Mining Loop: This structural layer keeps mining blocks continuously until stopped manually
+	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+	initialBalance := GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node")
+	fmt.Printf("💰 Initial Wallet Balance: %.2f CVN\n", initialBalance)
+
 	for {
-		// Simulating an incoming automated transaction block packet for each new block height
 		pendingTransactions := []Transaction{
 			{
 				Sender:    "COVENANT_STEWARD_ASSEMBLY",
@@ -96,19 +140,17 @@ func main() {
 			},
 		}
 
-		// Mine the next block sequentially using the prior block's cryptographic hash signature
 		newBlock := MineBlock(currentBlock, pendingTransactions)
-		
-		// Serialize and log the newly anchored block metadata state
-		blockJSON, _ := json.MarshalIndent(newBlock, "", "  ")
-		fmt.Println(string(blockJSON))
-		fmt.Println("-----------------------------------------------------")
-
-		// Update the blockchain index pointers to immediately target the next block height
 		blockchain = append(blockchain, newBlock)
 		currentBlock = newBlock
 
-		// Introduce a tiny 1-second pause to prevent your processor from locking your desktop UI threads
+		// Instantly write newly mined data block parameters onto physical disk space
+		SaveChain(blockchain)
+
+		nikolaBalance := GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node")
+		fmt.Printf("💰 WALLET AUDIT: [Nikola_Continuous_Steward_Node] Balance: %.2f CVN\n", nikolaBalance)
+		fmt.Println("-----------------------------------------------------")
+
 		time.Sleep(1 * time.Second)
 	}
 }
