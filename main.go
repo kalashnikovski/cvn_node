@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"time"
 )
@@ -114,6 +116,34 @@ func MineBlock(prevBlock Block, txs []Transaction) Block {
 	return newBlock
 }
 
+// StartTCPServer handles concurrent incoming connections on a separate background thread
+func StartTCPServer() {
+	listener, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		fmt.Printf("⚠️  TCP Server Error: Failed to bind to Port 8080: %v\n", err)
+		return
+	}
+	defer listener.Close()
+
+	fmt.Println("📡 Native TCP Subnetwork Initialized. Listening continuously on Port :8080...")
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+
+		// Spin up a concurrent GoRoutine worker to handle each peer connection instantly
+		go func(c net.Conn) {
+			defer c.Close()
+			scanner := bufio.NewScanner(c)
+			for scanner.Scan() {
+				fmt.Printf("\n🌐 [P2P Network Alert] Received data from remote node peer: %s\n", scanner.Text())
+			}
+		}(conn)
+	}
+}
+
 func main() {
 	fmt.Println("====================================================")
 	fmt.Println("💎 COVENANT STANDARD (CVN) HARDENED LEDGER RIG")
@@ -123,11 +153,13 @@ func main() {
 	currentBlock := blockchain[len(blockchain)-1]
 
 	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
-	initialBalance := GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node")
-	fmt.Printf("💰 Initial Wallet Balance: %.2f CVN\n", initialBalance)
+	fmt.Printf("💰 Initial Wallet Balance: %.2f CVN\n", GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node"))
 
-	fmt.Println("📡 Local Node Status: Operational (Standalone Verification Mode)")
-	fmt.Println("-----------------------------------------------------")
+	// Launching the Native TCP Server concurrently using a custom background GoRoutine thread
+	go StartTCPServer()
+
+	// Wait briefly to allow the socket to bind smoothly before starting mining logs
+	time.Sleep(500 * time.Millisecond)
 
 	for {
 		pendingTransactions := []Transaction{
