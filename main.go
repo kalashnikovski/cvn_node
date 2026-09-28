@@ -12,6 +12,11 @@ import (
 
 const BlockchainFile = "ledger_vault.json"
 
+// Hardcoded Seed Node Array - Ensures all nodes worldwide know exactly who to call
+var BootstrapSeeds = []string{
+	"127.0.0.1:8080", // Local fallback testing address
+}
+
 type Transaction struct {
 	Sender    string    `json:"sender"`
 	Recipient string    `json:"recipient"`
@@ -95,6 +100,68 @@ func GetAddressBalance(chain []Block, address string) float64 {
 	return balance
 }
 
+// HandleIncomingPeer processes network messages from incoming node connections
+func HandleIncomingPeer(conn net.Conn) {
+	defer conn.Close()
+	scanner := bufio.NewScanner(conn)
+	
+	for scanner.Scan() {
+		msg := scanner.Text()
+		
+		// If a new node calls for the blockchain history, stream our ledger file to them
+		if msg == "REQ_CHAIN_SYNC" {
+			chain := LoadChain()
+			data, _ := json.Marshal(chain)
+			fmt.Fprintln(conn, string(data))
+			fmt.Println("📡 [Network Layer] Successfully synchronized ledger history with remote peer.")
+		}
+	}
+}
+
+// StartTCPServer opens the communication gateway for incoming network miners
+func StartTCPServer() {
+	listener, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		fmt.Printf("⚠️  TCP Server Error: Failed to open listening socket: %v\n", err)
+		return
+	}
+	defer listener.Close()
+
+	fmt.Println("📡 Global TCP Subnetwork Online. Listening for miners on Port :8080...")
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+		go HandleIncomingPeer(conn)
+	}
+}
+
+// ConnectToNetwork attempts to connect to seed nodes to discover and sync with the active network
+func ConnectToNetwork() []Block {
+	fmt.Println("🔍 Attempting to connect to Bootstrap Seed Nodes...")
+	for _, seed := range BootstrapSeeds {
+		conn, err := net.DialTimeout("tcp", seed, 2*time.Second)
+		if err != nil {
+			continue
+		}
+		defer conn.Close()
+
+		// Requesting the master chain from the anchor node
+		fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
+		
+		var incomingChain []Block
+		decoder := json.NewDecoder(conn)
+		if err := decoder.Decode(&incomingChain); err == nil {
+			fmt.Printf("✅ Connected successfully! Synced chain height: %d blocks from peer [%s]\n", len(incomingChain)-1, seed)
+			return incomingChain
+		}
+	}
+	
+	fmt.Println("⚠️  No active seeds found. Operating as network anchor node baseline.")
+	return LoadChain()
+}
+
 func MineBlock(prevBlock Block, txs []Transaction) Block {
 	var newBlock Block
 	newBlock.Index = prevBlock.Index + 1
@@ -116,56 +183,24 @@ func MineBlock(prevBlock Block, txs []Transaction) Block {
 	return newBlock
 }
 
-// StartTCPServer handles concurrent incoming connections on a separate background thread
-func StartTCPServer() {
-	listener, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		fmt.Printf("⚠️  TCP Server Error: Failed to bind to Port 8080: %v\n", err)
-		return
-	}
-	defer listener.Close()
-
-	fmt.Println("📡 Native TCP Subnetwork Initialized. Listening continuously on Port :8080...")
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			continue
-		}
-
-		// Spin up a concurrent GoRoutine worker to handle each peer connection instantly
-		go func(c net.Conn) {
-			defer c.Close()
-			scanner := bufio.NewScanner(c)
-			for scanner.Scan() {
-				fmt.Printf("\n🌐 [P2P Network Alert] Received data from remote node peer: %s\n", scanner.Text())
-			}
-		}(conn)
-	}
-}
-
 func main() {
 	fmt.Println("====================================================")
 	fmt.Println("💎 COVENANT STANDARD (CVN) HARDENED LEDGER RIG")
 	fmt.Println("====================================================\n")
 
-	blockchain := LoadChain()
-	currentBlock := blockchain[len(blockchain)-1]
-
-	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
-	fmt.Printf("💰 Initial Wallet Balance: %.2f CVN\n", GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node"))
-
-	// Launching the Native TCP Server concurrently using a custom background GoRoutine thread
+	// Launch background listener socket thread
 	go StartTCPServer()
-
-	// Wait briefly to allow the socket to bind smoothly before starting mining logs
 	time.Sleep(500 * time.Millisecond)
+
+	// Attempt peer discovery and global chain state synchronization
+	blockchain := ConnectToNetwork()
+	currentBlock := blockchain[len(blockchain)-1]
 
 	for {
 		pendingTransactions := []Transaction{
 			{
 				Sender:    "COVENANT_STEWARD_ASSEMBLY",
-				Recipient: "Nikola_Continuous_Steward_Node",
+				Recipient: "Nikola_Global_Network_Node",
 				Amount:    50.0,
 				Witness:   "Communal_Peer_Witness_7",
 				Timestamp: time.Now(),
@@ -173,13 +208,14 @@ func main() {
 		}
 
 		newBlock := MineBlock(currentBlock, pendingTransactions)
+		
+		// Refresh local chain state before appending
+		blockchain = LoadChain()
 		blockchain = append(blockchain, newBlock)
 		currentBlock = newBlock
 
 		SaveChain(blockchain)
-
-		nikolaBalance := GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node")
-		fmt.Printf("💰 WALLET AUDIT: [Nikola_Continuous_Steward_Node] Balance: %.2f CVN\n", nikolaBalance)
+		fmt.Printf("💰 WALLET AUDIT: Current Balance: %.2f CVN\n", GetAddressBalance(blockchain, "Nikola_Global_Network_Node"))
 		fmt.Println("-----------------------------------------------------")
 
 		time.Sleep(1 * time.Second)
