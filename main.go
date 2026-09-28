@@ -58,7 +58,6 @@ func CreateGenesisBlock() Block {
 func SaveChain(chain []Block) {
 	data, err := json.MarshalIndent(chain, "", "  ")
 	if err != nil {
-		fmt.Printf("❌ Error serializing ledger data: %v\n", err)
 		return
 	}
 	_ = os.WriteFile(BlockchainFile, data, 0644)
@@ -66,7 +65,6 @@ func SaveChain(chain []Block) {
 
 func LoadChain() []Block {
 	if _, err := os.Stat(BlockchainFile); os.IsNotExist(err) {
-		// No file database exists yet, generate from Genesis
 		chain := []Block{CreateGenesisBlock()}
 		SaveChain(chain)
 		return chain
@@ -121,13 +119,15 @@ func main() {
 	fmt.Println("💎 COVENANT STANDARD (CVN) HARDENED LEDGER RIG")
 	fmt.Println("====================================================\n")
 
-	// Read existing database array directly off your local C-Drive storage
 	blockchain := LoadChain()
 	currentBlock := blockchain[len(blockchain)-1]
 
 	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
 	initialBalance := GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node")
 	fmt.Printf("💰 Initial Wallet Balance: %.2f CVN\n", initialBalance)
+
+	fmt.Println("📡 Local Node Status: Operational (Standalone Verification Mode)")
+	fmt.Println("-----------------------------------------------------")
 
 	for {
 		pendingTransactions := []Transaction{
@@ -144,7 +144,6 @@ func main() {
 		blockchain = append(blockchain, newBlock)
 		currentBlock = newBlock
 
-		// Instantly write newly mined data block parameters onto physical disk space
 		SaveChain(blockchain)
 
 		nikolaBalance := GetAddressBalance(blockchain, "Nikola_Continuous_Steward_Node")
