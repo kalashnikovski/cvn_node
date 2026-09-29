@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"       // 👉 FIXED: Locked in to parse incoming public IP streams
+	"io"
 	"net"
-	"net/http" // 👉 FIXED: Locked in to handle api.ipify.org external routing lookups
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -22,21 +22,21 @@ import (
 
 func RunWalletGUI() {
 	myApp := app.New()
-	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v2.2.6")
+	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v3.1.1")
 	myWindow.Resize(fyne.NewSize(550, 680))
 
 	statusLabel := widget.NewLabel("System Status: ENCRYPTED & SECURE")
-	
+
 	privKeyEntry := widget.NewEntry()
 	privKeyEntry.SetPlaceHolder("Enter or generate your Private Key (Hex)...")
-	
+
 	addressLabel := widget.NewLabel("Your Public Address: (Load private key or generate a new profile)")
 
 	balanceLabel := widget.NewLabel("CURRENT BALANCE: 0.00 CVN")
 	usdLabel := widget.NewLabel("Estimated Value: $0.00 USD (Synced Market Feed)")
 
 	nodeInput := widget.NewEntry()
-	nodeInput.SetText("202.137.175.220:8080") 
+	nodeInput.SetText("202.137.175.220:8080")
 	nodeInput.SetPlaceHolder("Target Node Net Address (e.g. public_ip:8080)...")
 
 	recipientInput := widget.NewEntry()
@@ -65,15 +65,15 @@ func RunWalletGUI() {
 
 		curve := elliptic.P256()
 		x, y := curve.ScalarBaseMult(privBytes)
-		
+
 		pubHex := fmt.Sprintf("%x%x", x, y)
 		addressHash := sha256.Sum256([]byte(pubHex))
 		walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
-		
+
 		if privHex == "f0ad7c762c6fe3bef73dd39a50bb1138d76e93e750878aeeb704da5f875ffa5d" {
 			walletAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
 		}
-		
+
 		addressLabel.SetText(fmt.Sprintf("Your Public Address: %s", walletAddress))
 	}
 
@@ -94,7 +94,7 @@ func RunWalletGUI() {
 
 	sendButton := widget.NewButton("🛡️ AUTHORIZE, CRYPTOGRAPHICALLY SIGN & BROADCAST", func() {
 		nodeTarget := strings.TrimSpace(nodeInput.Text)
-		senderPrivKey := strings.TrimSpace(privKeyEntry.Text) 
+		senderPrivKey := strings.TrimSpace(privKeyEntry.Text)
 		recipient := strings.TrimSpace(recipientInput.Text)
 		amountStr := strings.TrimSpace(amountInput.Text)
 		offeringStr := strings.TrimSpace(offeringInput.Text)
@@ -121,9 +121,10 @@ func RunWalletGUI() {
 			publicAddressHandle = strings.TrimSpace(publicAddressHandle[idx:])
 		}
 
-		nowTime := time.Now()
-		txDataToSign := fmt.Sprintf("%s%s%.4f%.4f%d", publicAddressHandle, recipient, amount, offering, nowTime.Unix())
-		
+		// PRODUCTION FIXED TIMELINE SEGMENT: Flatten timestamp immediately into absolute Unix Integer space to match miner logic
+		absoluteUnixTime := time.Now().Unix()
+		txDataToSign := fmt.Sprintf("%s%s%.4f%.4f%d", publicAddressHandle, recipient, amount, offering, absoluteUnixTime)
+
 		rCoord, sCoord, err := SignTransactionPayload(senderPrivKey, txDataToSign)
 		if err != nil {
 			networkLog.SetText(fmt.Sprintf("Cryptographic Failure: Signing pass failed -> %v", err))
@@ -137,7 +138,7 @@ func RunWalletGUI() {
 			FreeWillOffering: offering,
 			DataSizeKB:       1.0,
 			Witness:          "Public_ECDSA_Math_Validation_Pass",
-			Timestamp:        nowTime,
+			Timestamp:        time.Unix(absoluteUnixTime, 0), // Maps pristine, un-shifted timestamp bounds
 			SignatureR:       rCoord,
 			SignatureS:       sCoord,
 		}
@@ -171,13 +172,13 @@ func RunWalletGUI() {
 		defer conn.Close()
 
 		fmt.Fprintf(conn, "TX_BROADCAST:%s\n", string(txBytes))
-		
+
 		if resolvedTarget != nodeTarget {
 			networkLog.SetText(fmt.Sprintf("🚀 Loopback Broadcast Complete! Securely synced to public endpoint via port :%s!", targetPort))
 		} else {
 			networkLog.SetText(fmt.Sprintf("🚀 Successfully broadcasted signed transaction packet to node endpoint: %s!", nodeTarget))
 		}
-		
+
 		recipientInput.SetText("")
 		amountInput.SetText("")
 		offeringInput.SetText("")
@@ -225,7 +226,7 @@ func RunWalletGUI() {
 				if strings.Contains(publicAddressHandle, "CVN_") {
 					idx := strings.Index(publicAddressHandle, "CVN_")
 					publicAddressHandle = strings.TrimSpace(publicAddressHandle[idx:])
-					
+
 					currentBalance := GetAddressBalance(currentChain, publicAddressHandle)
 					balanceLabel.SetText(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", currentBalance))
 					usdLabel.SetText(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", currentBalance*0.025))

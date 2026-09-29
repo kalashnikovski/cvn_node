@@ -15,7 +15,7 @@ const CanonicalJubileeWindow = 49 * 365 * 24 * 60 * 60 // 49 Years in seconds
 const SimulationBurnVoid = "0x0000000000000000000000000000000000000000_BURN_VOID"
 
 // Time scale acceleration factor: 49 Years / 300 Real Seconds = 5,150,880x speedup
-const TimeCompressionFactor = CanonicalJubileeWindow / 300 
+const TimeCompressionFactor = CanonicalJubileeWindow / 300
 
 type SimTransaction struct {
 	Sender           string    `json:"sender"`
@@ -105,7 +105,7 @@ func RunJubileeSimulation() {
 
 		// Calculate precise virtual delay threshold delta markers
 		stagnantDurationSeconds := virtualNetworkTime - targetLastActive
-		
+
 		var currentRecipient = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
 		var stateAlert = "💓 STATE: ACTIVE VELOCITY"
 		var isBurned = false
@@ -151,9 +151,9 @@ func RunJubileeSimulation() {
 		simChain = append(simChain, nextBlock)
 
 		// Aggregate current tracking outputs to console screen
-		fmt.Printf("⏱️ Real Time: %.1fs | 📅 Virtual Years: %.2f / 49.00 | Block: #%d | %s\n", 
+		fmt.Printf("⏱️ Real Time: %.1fs | 📅 Virtual Years: %.2f / 49.00 | Block: #%d | %s\n",
 			realElapsed, yearsPassed, blockCount, stateAlert)
-		
+
 		if isBurned {
 			fmt.Printf("🔥 [BURN SUMMARY] Stagnant funds detected! Diverting 1,000.00 CVN straight into -> %s\n", SimulationBurnVoid)
 			data, _ := json.MarshalIndent(simChain, "", "  ")

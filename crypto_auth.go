@@ -23,7 +23,7 @@ func GenerateKeyPair() (string, string, error) {
 	privHex := hex.EncodeToString(privBytes)
 
 	pubHex := fmt.Sprintf("%x%x", privateKey.PublicKey.X, privateKey.PublicKey.Y)
-	
+
 	addressHash := sha256.Sum256([]byte(pubHex))
 	walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
 
