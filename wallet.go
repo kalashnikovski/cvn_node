@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"       // 👉 FIXED: Locked in to parse incoming public IP streams
 	"net"
-	"os" // Added to securely read Windows system variables
+	"net/http" // 👉 FIXED: Locked in to handle api.ipify.org external routing lookups
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +22,7 @@ import (
 
 func RunWalletGUI() {
 	myApp := app.New()
-	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v2.2.5")
+	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v2.2.6")
 	myWindow.Resize(fyne.NewSize(550, 680))
 
 	statusLabel := widget.NewLabel("System Status: ENCRYPTED & SECURE")
@@ -207,7 +209,6 @@ func RunWalletGUI() {
 		widget.NewLabel("=================================================="),
 	)
 
-	// 🔐 THE AUTO-PREFILL CHECKER: Reads secure variable state from Windows memory bounds instantly on launch
 	savedKey := os.Getenv("CVN_SECRET_KEY")
 	if savedKey != "" {
 		privKeyEntry.SetText(savedKey)

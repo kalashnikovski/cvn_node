@@ -100,7 +100,6 @@ func VerifyGenesisFreeze(chain []Block) bool {
 	if len(chain) == 0 {
 		return false
 	}
-	// FIX: Explicitly target index 0 to reference a single Block instead of the entire list slice
 	genesisBlock := chain[0]
 	if len(genesisBlock.Transactions) == 0 {
 		return false
@@ -332,9 +331,10 @@ func Assemble21WitnessGuardMatrix() []string {
 	}
 	return shuffled[:limit]
 }
+
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
-var newBlock Block
-newBlock.Index = prevBlock.Index + 1
+	var newBlock Block
+	newBlock.Index = prevBlock.Index + 1
 newBlock.Timestamp = time.Now().Unix()
 newBlock.Transactions = txs
 newBlock.PrevHash = prevBlock.Hash
@@ -377,6 +377,10 @@ if arg == "--wallet" {
 RunWalletGUI()
 return
 }
+if arg == "--simulate-jubilee" {
+RunJubileeSimulation()
+return
+}
 if arg == "--connect" && i+1 < len(os.Args) {
 ConnectTarget = os.Args[i+1]
 }
@@ -410,7 +414,6 @@ lastSeen = b.Timestamp
 }
 }
 }
-// 🕊️ THE CITY OF REFUGE LATENCY SHIELD:
 if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(CityOfRefugeWindow) {
 fmt.Printf("🕊️  [City of Refuge] Grace period active for node address [%s]. Protecting from latency drops.\n", tx.Sender)
 }
