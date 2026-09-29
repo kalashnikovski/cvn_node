@@ -5,10 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io" 
 	"math/rand"
-	"net"
-	"net/http"
+	"net"      
+	"net/http" 
 	"os"
 	"sort"
 	"strings"
@@ -19,25 +19,25 @@ import (
 const BlockchainFile = "ledger_vault.json"
 const TargetBlockTime = 10
 const MaxTotalSupplyCap = 2100000000.0
-const JubileeTimeWindow = 49 * 365 * 24 * 60 * 60
+const JubileeTimeWindow = 49 * 365 * 24 * 60 * 60 
 const BurnAddress = "0x0000000000000000000000000000000000000000_BURN_VOID"
 const CreatorTargetAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
-const CityOfRefugeWindow = 72 * 60 * 60
+const CityOfRefugeWindow = 72 * 60 * 60 
 
-const RequiredStakingBond = 500.00
-const SlasherPenaltyRate = 1.00
+const RequiredStakingBond = 500.00 
+const SlasherPenaltyRate  = 1.00   
 
 var (
 	GlobalMempool []Transaction
 	MempoolMutex  sync.Mutex
-	ConnectTarget string
-
-	CustomMinerAddress string = "Nikola_Global_Network_Node"
-
+	ConnectTarget string 
+	
+	CustomMinerAddress string = "Nikola_Global_Network_Node" 
+	
 	ActivePeerRoster []string
 	RosterMutex      sync.Mutex
-	LocalListenerIP  string = "202.137.175.220"
-
+	LocalListenerIP  string = "202.137.175.220" 
+	
 	ValidatorStakingPool map[string]float64
 	StakingPoolMutex     sync.Mutex
 )
@@ -58,8 +58,8 @@ type Transaction struct {
 	DataSizeKB       float64   `json:"data_size_kb"`
 	Witness          string    `json:"witness"`
 	Timestamp        time.Time `json:"timestamp"`
-	SignatureR       string    `json:"signature_r,omitempty"`
-	SignatureS       string    `json:"signature_s,omitempty"`
+	SignatureR       string    `json:"signature_r,omitempty"` 
+	SignatureS       string    `json:"signature_s,omitempty"` 
 }
 
 type Block struct {
@@ -70,7 +70,7 @@ type Block struct {
 	Hash         string        `json:"hash"`
 	Nonce        int64         `json:"nonce"`
 	Difficulty   int64         `json:"difficulty"`
-	GuardMatrix  []string      `json:"guard_matrix,omitempty"`
+	GuardMatrix  []string      `json:"guard_matrix,omitempty"` 
 }
 
 func CalculateHash(b Block) string {
@@ -109,16 +109,9 @@ func SaveChain(chain []Block) {
 }
 
 func VerifyGenesisFreeze(chain []Block) bool {
-	if len(chain) == 0 {
-		return false
-	}
-	genesisBlock := chain[0]
-	if len(genesisBlock.Transactions) == 0 {
-		return false
-	}
-	if genesisBlock.Transactions[0].Amount > MaxTotalSupplyCap {
-		return false
-	}
+	if len(chain) == 0 { return false }
+	if len(chain[0].Transactions) == 0 { return false }
+	if chain[0].Transactions[0].Amount > MaxTotalSupplyCap { return false }
 	return true
 }
 
@@ -177,29 +170,19 @@ func GetAddressBalance(chain []Block, address string) float64 {
 }
 
 func CalculateAdaptiveDifficulty(chain []Block) int64 {
-	if len(chain) < 2 {
-		return 4
-	}
+	if len(chain) < 2 { return 4 }
 	latestBlock := chain[len(chain)-1]
 	prevBlock := chain[len(chain)-2]
 	actualTimeElapsed := latestBlock.Timestamp - prevBlock.Timestamp
 	currentDiff := latestBlock.Difficulty
 
-	if currentDiff > 6 {
-		currentDiff = 6
-	}
-	if currentDiff < 3 {
-		currentDiff = 3
-	}
+	if currentDiff > 6 { currentDiff = 6 }
+	if currentDiff < 3 { currentDiff = 3 }
 
 	if actualTimeElapsed < TargetBlockTime {
-		if currentDiff < 6 {
-			return currentDiff + 1
-		}
+		if currentDiff < 6 { return currentDiff + 1 }
 	} else if actualTimeElapsed > (TargetBlockTime * 3) {
-		if currentDiff > 3 {
-			return currentDiff - 1
-		}
+		if currentDiff > 3 { return currentDiff - 1 }
 	}
 	return currentDiff
 }
@@ -211,9 +194,7 @@ func RegisterGossipPeer(peerAddr string) {
 	RosterMutex.Lock()
 	defer RosterMutex.Unlock()
 	for _, existing := range ActivePeerRoster {
-		if existing == peerAddr {
-			return
-		}
+		if existing == peerAddr { return }
 	}
 	ActivePeerRoster = append(ActivePeerRoster, peerAddr)
 	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", peerAddr)
@@ -224,7 +205,7 @@ func ExecuteSabbaticalSlash(validatorAddress string, reason string) {
 	stakedAmount := ValidatorStakingPool[validatorAddress]
 	if stakedAmount > 0 {
 		seizedBalance := stakedAmount * SlasherPenaltyRate
-		ValidatorStakingPool[validatorAddress] = 0
+		ValidatorStakingPool[validatorAddress] = 0 
 		StakingPoolMutex.Unlock()
 		fmt.Printf("⚡ [Sabbatical Slasher] MALICIOUS ACT DETECTED (%s)! Slashing address %s. Seizing %.2f CVN bond to Burn Void!\n", reason, validatorAddress, seizedBalance)
 	} else {
@@ -285,9 +266,7 @@ func StartTCPServer() {
 	fmt.Println("📡 Global TCP P2P Subnetwork Engine Online. Listening for incoming miners on Port :8080...")
 	for {
 		conn, err := listener.Accept()
-		if err != nil {
-			continue
-		}
+		if err != nil { continue }
 		go HandleIncomingPeer(conn)
 	}
 }
@@ -297,107 +276,19 @@ func StartPublicExplorerServer() {
 		http.ServeFile(w, r, "explorer.html")
 	})
 
-	// 👉 HARD LOCK FIXED: Ensured r is declared explicitly as *http.Request across the boundary
+	// 👉 HARDWARE STABILIZED INTERFACE: Directly streams the isolated audit.html file template cleanly
 	http.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		htmlPayload := `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Sovereign Ledger Account Statement</title>
-    <style>
-        body { font-family: -apple-system, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 30px; margin: 0; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 25px; }
-        .address-box { font-family: monospace; background-color: #161b22; padding: 15px; border-radius: 6px; border: 1px solid #30363d; font-size: 1.1rem; color: #fff; margin-bottom: 30px; word-break: break-all; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }
-        .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
-        .card h3 { margin: 0 0 10px 0; font-size: 0.9rem; color: #8b949e; text-transform: uppercase; }
-        .card .value { font-size: 1.8rem; font-weight: bold; }
-table { width: 100%; border-collapse: collapse; background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
-th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #30363d; }
-th { background-color: #21262d; color: #58a6ff; }
-.badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
-.badge.incoming { background-color: rgba(63, 185, 80, 0.15); color: #3fb950; }
-.badge.outgoing { background-color: rgba(248, 81, 73, 0.15); color: #f85149; }
-
-
-
-
-📊 Sovereign Ledger Account Statement
-Loading Address Profile Matrix...
-Calculated Address Balance
-0.00 CVN
-
-
-Total Transfers Received
-0
-
-
-Total Transfers Sent
-0
-
-📜 Isolated Account Transaction History
-Analyzing local ledger block history...
-Direction
-	Block Height
-	Counterparty Handle Address
-	Token Volume Value
-	Timestamp Parameters
-const urlParams = new URLSearchParams(window.location.search);
-const targetAddress = urlParams.get('address');
-if (!targetAddress) {
-document.getElementById('addr-display').innerText = "Error: No target address query parameters specified.";
-} else {
-document.getElementById('addr-display').innerText = "Target Account: " + targetAddress;
-fetchMetrics();
-}
-async function fetchMetrics() {
-try {
-const res = await fetch('/req_chain');
-const data = await res.json();
-const chain = data.blocks || [];
-let balance = 0.0; let countIn = 0; let countOut = 0; let html = "";
-chain.forEach(block => {
-if (block.transactions) {
-block.transactions.forEach(tx => {
-const isSender = tx.sender.toLowerCase() === targetAddress.toLowerCase();
-const isRecipient = tx.recipient.toLowerCase() === targetAddress.toLowerCase();
-if (isSender || isRecipient) {
-const dateStr = new Date(block.timestamp * 1000).toISOString().replace('T', ' ').substring(0, 19);
-if (isRecipient) {
-balance += tx.amount + tx.free_will_offering; countIn++;
-html += "INCOMING#" + block.index + "" + tx.sender + "+" + tx.amount.toFixed(2) + " CVN" + dateStr + "";
-}
-if (isSender) {
-balance -= (tx.amount + tx.free_will_offering); countOut++;
-html += "OUTGOING#" + block.index + "" + tx.recipient + "-" + tx.amount.toFixed(2) + " CVN" + dateStr + "";
-}
-}
-});
-}
-});
-document.getElementById('audit-balance').innerText = balance.toLocaleString(undefined, {minimumFractionDigits: 2}) + " CVN";
-document.getElementById('audit-in').innerText = countIn;
-document.getElementById('audit-out').innerText = countOut;
-if (html !== "") { document.getElementById('audit-table-body').innerHTML = html; }
-else { document.getElementById('audit-table-body').innerHTML = "No transactions found for this address inside active ledger blocks."; }
-} catch (e) { console.error(e); }
-}
-
-
-`
-		w.Write([]byte(htmlPayload))
+		http.ServeFile(w, r, "audit.html")
 	})
+
 	http.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		chain := LoadChain()
 		var totalMined float64 = 0.0
 		var burnedTokens float64 = 0.0
-		if len(chain) > 1 {
-			totalMined = float64(len(chain)-1) * 50.0
-		}
+		
+		if len(chain) > 1 { totalMined = float64(len(chain)-1) * 50.0 }
 		for _, block := range chain {
 			for _, tx := range block.Transactions {
 				if tx.Recipient == BurnAddress {
@@ -406,15 +297,13 @@ else { document.getElementById('audit-table-body').innerHTML = "No transactions 
 			}
 		}
 		circulatingSupply := totalMined - burnedTokens
-		if circulatingSupply < 0 {
-			circulatingSupply = 0
-		}
+		if circulatingSupply < 0 { circulatingSupply = 0 }
+
 		var totalRealEscrow float64 = 0.0
 		StakingPoolMutex.Lock()
-		for _, bond := range ValidatorStakingPool {
-			totalRealEscrow += bond
-		}
+		for _, bond := range ValidatorStakingPool { totalRealEscrow += bond }
 		StakingPoolMutex.Unlock()
+
 		responseData := map[string]interface{}{
 			"circulating_supply": circulatingSupply,
 			"blocks":             chain,
@@ -423,195 +312,169 @@ else { document.getElementById('audit-table-body').innerHTML = "No transactions 
 		data, _ := json.Marshal(responseData)
 		w.Write(data)
 	})
+
 	fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
 	go func() { _ = http.ListenAndServe("0.0.0.0:8081", nil) }()
 }
+
 func DialAndGossipWithSeedPeer(seedAddr string) {
-	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, httpErr := client.Get("ipify.org")
-	myExtIP := LocalListenerIP
-	if httpErr == nil {
-		defer resp.Body.Close()
-		ipBytes, _ := io.ReadAll(resp.Body)
-		myExtIP = strings.TrimSpace(string(ipBytes))
-	}
-	fmt.Fprintln(conn, "GOSSIP_PEER_DISCOVERY:"+myExtIP+":8080")
-	respLine, err := bufio.NewReader(conn).ReadString('\n')
-	if err == nil {
-		var sharedRoster []string
-		if json.Unmarshal([]byte(strings.TrimSpace(respLine)), &sharedRoster) == nil {
-			for _, externalNode := range sharedRoster {
-				RegisterGossipPeer(externalNode)
-			}
-		}
-	}
+conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
+if err != nil { return }
+defer conn.Close()
+client := &http.Client{Timeout: 3 * time.Second}
+resp, httpErr := client.Get("ipify.org")
+myExtIP := LocalListenerIP
+if httpErr == nil {
+defer resp.Body.Close()
+ipBytes, _ := io.ReadAll(resp.Body)
+myExtIP = strings.TrimSpace(string(ipBytes))
+}
+fmt.Fprintln(conn, "GOSSIP_PEER_DISCOVERY:"+myExtIP+":8080")
+respLine, err := bufio.NewReader(conn).ReadString('\n')
+if err == nil {
+var sharedRoster []string
+if json.Unmarshal([]byte(strings.TrimSpace(respLine)), &sharedRoster) == nil {
+for _, externalNode := range sharedRoster { RegisterGossipPeer(externalNode) }
+}
+}
 }
 func SyncChainFromSeedPeer(seedAddr string) {
-	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-	fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
-	respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
-	if err != nil {
-		return
-	}
-	var remoteChain []Block
-	if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
-		localChain := LoadChain()
-		if len(remoteChain) > len(localChain) {
-			SaveChain(remoteChain)
-		}
-	}
+conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
+if err != nil { return }
+defer conn.Close()
+fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
+respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
+if err != nil { return }
+var remoteChain []Block
+if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
+localChain := LoadChain()
+if len(remoteChain) > len(localChain) { SaveChain(remoteChain) }
+}
 }
 func Assemble21WitnessGuardMatrix() []string {
-	rand.Seed(time.Now().UnixNano())
-	shuffled := make([]string, len(NetworkWitnessRoster))
-	copy(shuffled, NetworkWitnessRoster)
-	rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
-	limit := 21
-	if len(shuffled) < limit {
-		limit = len(shuffled)
-	}
-	return shuffled[:limit]
+rand.Seed(time.Now().UnixNano())
+shuffled := make([]string, len(NetworkWitnessRoster))
+copy(shuffled, NetworkWitnessRoster)
+rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+limit := 21
+if len(shuffled) < limit { limit = len(shuffled) }
+return shuffled[:limit]
 }
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
-	var newBlock Block
-	newBlock.Index = prevBlock.Index + 1
-	newBlock.Timestamp = time.Now().Unix()
-	newBlock.Transactions = txs
-	newBlock.PrevHash = prevBlock.Hash
-	newBlock.Difficulty = currentDifficulty
-	if newBlock.Difficulty > 6 {
-		newBlock.Difficulty = 6
-	}
-	if newBlock.Difficulty < 3 {
-		newBlock.Difficulty = 3
-	}
-	newBlock.Nonce = 0
-	newBlock.GuardMatrix = Assemble21WitnessGuardMatrix()
-	targetPrefix := strings.Repeat("0", int(newBlock.Difficulty))
-	fmt.Printf("\n⚒️  PoD Active: Mining Block %d (Target Pattern: Starting with %d Zeros)...\n", newBlock.Index, newBlock.Difficulty)
-	startTime := time.Now()
-	for {
-		newBlock.Hash = CalculateHash(newBlock)
-		if newBlock.Nonce > 0 && newBlock.Nonce%500000 == 0 {
-			elapsed := time.Since(startTime).Seconds()
-			if elapsed == 0 {
-				elapsed = 0.001
-			}
-			hashRate := float64(newBlock.Nonce) / elapsed / 1000.0
-			fmt.Printf("   ⏳ Nonce: %d | Throughput: %.2f kH/s...\n", newBlock.Nonce, hashRate)
-		}
-		if int(newBlock.Difficulty) <= len(newBlock.Hash) && newBlock.Hash[:int(newBlock.Difficulty)] == targetPrefix {
-			totalElapsed := time.Since(startTime).Seconds()
-			if totalElapsed == 0 {
-				totalElapsed = 0.001
-			}
-			finalHashRate := float64(newBlock.Nonce) / totalElapsed / 1000.0
-			fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Speed: %.2f kH/s | Hash: %s\n", newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
-			break
-		}
-		newBlock.Nonce++
-	}
-	return newBlock
+var newBlock Block
+newBlock.Index = prevBlock.Index + 1
+newBlock.Timestamp = time.Now().Unix()
+newBlock.Transactions = txs
+newBlock.PrevHash = prevBlock.Hash
+newBlock.Difficulty = currentDifficulty
+if newBlock.Difficulty > 6 { newBlock.Difficulty = 6 }
+if newBlock.Difficulty < 3 { newBlock.Difficulty = 3 }
+newBlock.Nonce = 0
+newBlock.GuardMatrix = Assemble21WitnessGuardMatrix()
+targetPrefix := strings.Repeat("0", int(newBlock.Difficulty))
+fmt.Printf("\n⚒️  PoD Active: Mining Block %d (Target Pattern: Starting with %d Zeros)...\n", newBlock.Index, newBlock.Difficulty)
+startTime := time.Now()
+for {
+newBlock.Hash = CalculateHash(newBlock)
+if newBlock.Nonce > 0 && newBlock.Nonce%500000 == 0 {
+elapsed := time.Since(startTime).Seconds()
+if elapsed == 0 { elapsed = 0.001 }
+hashRate := float64(newBlock.Nonce) / elapsed / 1000.0
+fmt.Printf("   ⏳ Nonce: %d | Throughput: %.2f kH/s...\n", newBlock.Nonce, hashRate)
+}
+if int(newBlock.Difficulty) <= len(newBlock.Hash) && newBlock.Hash[:int(newBlock.Difficulty)] == targetPrefix {
+totalElapsed := time.Since(startTime).Seconds()
+if totalElapsed == 0 { totalElapsed = 0.001 }
+finalHashRate := float64(newBlock.Nonce) / totalElapsed / 1000.0
+fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Speed: %.2f kH/s | Hash: %s\n", newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
+break
+}
+newBlock.Nonce++
+}
+return newBlock
 }
 func main() {
-	ValidatorStakingPool = make(map[string]float64)
-	ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
-	ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
-	for i, arg := range os.Args {
-		if arg == "--wallet" {
-			RunWalletGUI()
-			return
-		}
-		if arg == "--simulate-jubilee" {
-			RunJubileeSimulation()
-			return
-		}
-		if arg == "--miner-address" && i+1 < len(os.Args) {
-			CustomMinerAddress = os.Args[i+1]
-		}
-		if arg == "--connect" && i+1 < len(os.Args) {
-			ConnectTarget = os.Args[i+1]
-		}
-	}
-	fmt.Println("====================================================")
-	fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
-	fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
-	fmt.Println("====================================================\n")
-	go StartTCPServer()
-	go StartPublicExplorerServer()
-	time.Sleep(200 * time.Millisecond)
-	if ConnectTarget != "" {
-		SyncChainFromSeedPeer(ConnectTarget)
-		go DialAndGossipWithSeedPeer(ConnectTarget)
-	}
-	blockchain := LoadChain()
-	currentBlock := blockchain[len(blockchain)-1]
-	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
-	for {
-		MempoolMutex.Lock()
-		activeMempool := make([]Transaction, len(GlobalMempool))
-		copy(activeMempool, GlobalMempool)
-		GlobalMempool = []Transaction{}
-		MempoolMutex.Unlock()
-		for i, tx := range activeMempool {
-			var lastSeen int64 = 0
-			for _, b := range blockchain {
-				for _, historicalTx := range b.Transactions {
-					if historicalTx.Sender == tx.Sender || historicalTx.Recipient == tx.Sender {
-						if b.Timestamp > lastSeen {
-							lastSeen = b.Timestamp
-						}
-					}
-				}
-			}
-			if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(CityOfRefugeWindow) {
-				fmt.Printf("🕊️  [City of Refuge] Grace period active for node address [%s].\n", tx.Sender)
-			}
-			if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(JubileeTimeWindow) {
-				activeMempool[i].Recipient = BurnAddress
-				activeMempool[i].FreeWillOffering = 0
-			}
-		}
-		sort.Slice(activeMempool, func(i, j int) bool {
-			if activeMempool[i].DataSizeKB == 0 {
-				activeMempool[i].DataSizeKB = 1.0
-			}
-			if activeMempool[j].DataSizeKB == 0 {
-				activeMempool[j].DataSizeKB = 1.0
-			}
-			return (activeMempool[i].FreeWillOffering / activeMempool[i].DataSizeKB) > (activeMempool[j].FreeWillOffering / activeMempool[j].DataSizeKB)
-		})
-		var totalBountyOfferings float64 = 0.0
-		for _, tx := range activeMempool {
-			totalBountyOfferings += tx.FreeWillOffering
-		}
-		coinbaseRewardTx := Transaction{
-			Sender:           "COVENANT_STEWARD_ASSEMBLY",
-			Recipient:        CustomMinerAddress,
-			Amount:           50.0,
-			FreeWillOffering: totalBountyOfferings,
-			DataSizeKB:       0.1,
-			Witness:          "Communal_Peer_Witness_7",
-			Timestamp:        time.Now(),
-		}
-		blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
-		nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
-		newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
-		blockchain = LoadChain()
-		blockchain = append(blockchain, newBlock)
-		currentBlock = newBlock
-		SaveChain(blockchain)
-		fmt.Printf("💰 LOCAL NODE REWARD AUDIT: Current Balance of %s: %.2f CVN\n", CustomMinerAddress, GetAddressBalance(blockchain, CustomMinerAddress))
-		fmt.Println("-----------------------------------------------------")
-		time.Sleep(3 * time.Second)
-	}
+ValidatorStakingPool = make(map[string]float64)
+ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
+ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
+for i, arg := range os.Args {
+if arg == "--wallet" {
+RunWalletGUI()
+return
+}
+if arg == "--simulate-jubilee" {
+RunJubileeSimulation()
+return
+}
+if arg == "--miner-address" && i+1 < len(os.Args) {
+CustomMinerAddress = os.Args[i+1]
+}
+if arg == "--connect" && i+1 < len(os.Args) {
+ConnectTarget = os.Args[i+1]
+}
+}
+fmt.Println("====================================================")
+fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
+fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
+fmt.Println("====================================================\n")
+go StartTCPServer()
+go StartPublicExplorerServer()
+time.Sleep(200 * time.Millisecond)
+if ConnectTarget != "" {
+SyncChainFromSeedPeer(ConnectTarget)
+go DialAndGossipWithSeedPeer(ConnectTarget)
+}
+blockchain := LoadChain()
+currentBlock := blockchain[len(blockchain)-1]
+fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+for {
+MempoolMutex.Lock()
+activeMempool := make([]Transaction, len(GlobalMempool))
+copy(activeMempool, GlobalMempool)
+GlobalMempool = []Transaction{}
+MempoolMutex.Unlock()
+for i, tx := range activeMempool {
+var lastSeen int64 = 0
+for _, b := range blockchain {
+for _, historicalTx := range b.Transactions {
+if historicalTx.Sender == tx.Sender || historicalTx.Recipient == tx.Sender {
+if b.Timestamp > lastSeen { lastSeen = b.Timestamp }
+}
+}
+}
+if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(CityOfRefugeWindow) {
+fmt.Printf("🕊️  [City of Refuge] Grace period active for node address [%s].\n", tx.Sender)
+}
+if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(JubileeTimeWindow) {
+activeMempool[i].Recipient = BurnAddress
+activeMempool[i].FreeWillOffering = 0
+}
+}
+sort.Slice(activeMempool, func(i, j int) bool {
+if activeMempool[i].DataSizeKB == 0 { activeMempool[i].DataSizeKB = 1.0 }
+if activeMempool[j].DataSizeKB == 0 { activeMempool[j].DataSizeKB = 1.0 }
+return (activeMempool[i].FreeWillOffering / activeMempool[i].DataSizeKB) > (activeMempool[j].FreeWillOffering / activeMempool[j].DataSizeKB)
+})
+var totalBountyOfferings float64 = 0.0
+for _, tx := range activeMempool { totalBountyOfferings += tx.FreeWillOffering }
+coinbaseRewardTx := Transaction{
+Sender:           "COVENANT_STEWARD_ASSEMBLY",
+Recipient:        CustomMinerAddress,
+Amount:           50.0,
+FreeWillOffering: totalBountyOfferings,
+DataSizeKB:       0.1,
+Witness:          "Communal_Peer_Witness_7",
+Timestamp:        time.Now(),
+}
+blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
+nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
+newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
+blockchain = LoadChain()
+blockchain = append(blockchain, newBlock)
+currentBlock = newBlock
+SaveChain(blockchain)
+fmt.Printf("💰 LOCAL NODE REWARD AUDIT: Current Balance of %s: %.2f CVN\n", CustomMinerAddress, GetAddressBalance(blockchain, CustomMinerAddress))
+fmt.Println("-----------------------------------------------------")
+time.Sleep(3 * time.Second)
+}
 }
