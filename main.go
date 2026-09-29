@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io" // ✅ FIXED: Explicitly added to handle dynamic public IP lookup data streams
+	"io" 
 	"math/rand"
 	"net"
 	"net/http"
@@ -24,15 +24,23 @@ const BurnAddress = "0x0000000000000000000000000000000000000000_BURN_VOID"
 const CreatorTargetAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
 const CityOfRefugeWindow = 72 * 60 * 60 // 72 Hours grace
 
+// 🛡️ SABBATICAL SLASHER PROTOCOL PARAMETERS
+const RequiredStakingBond = 500.00 // Fixed escrow pledge required to validate blocks
+const SlasherPenaltyRate  = 1.00   // 100% burn slash for verified malicious double-signing
+
 var (
 	GlobalMempool []Transaction
 	MempoolMutex  sync.Mutex
 	ConnectTarget string 
 	
-	// 🛰️ GOSSIP CORE: Dynamic full-mesh routing tables
+	// GOSSIP CORE: Dynamic full-mesh routing tables
 	ActivePeerRoster []string
 	RosterMutex      sync.Mutex
-	LocalListenerIP  string = "202.137.175.220" // Default public static fallback mapping
+	LocalListenerIP  string = "202.137.175.220" 
+	
+	// 🔒 ESCROW RECOGNITION REGISTRY
+	ValidatorStakingPool map[string]float64
+	StakingPoolMutex     sync.Mutex
 )
 
 var NetworkWitnessRoster = []string{
@@ -103,6 +111,7 @@ func SaveChain(chain []Block) {
 
 func VerifyGenesisFreeze(chain []Block) bool {
 	if len(chain) == 0 { return false }
+	// FIX: Targeting explicit array index position 0 to bind onto the exact Genesis Block entity structure type
 	genesisBlock := chain[0]
 	if len(genesisBlock.Transactions) == 0 { return false }
 	if genesisBlock.Transactions[0].Amount > MaxTotalSupplyCap { return false }
@@ -181,7 +190,6 @@ func CalculateAdaptiveDifficulty(chain []Block) int64 {
 	return currentDiff
 }
 
-// 🛰️ GOSSIP FUNCTION: Dynamically registers external peer coordinates to routing table
 func RegisterGossipPeer(peerAddr string) {
 	if peerAddr == "" || strings.HasPrefix(peerAddr, "127.0.0.1") || strings.HasPrefix(peerAddr, "0.0.0.0") {
 		return
@@ -189,12 +197,27 @@ func RegisterGossipPeer(peerAddr string) {
 	RosterMutex.Lock()
 	defer RosterMutex.Unlock()
 	for _, existing := range ActivePeerRoster {
-		if existing == peerAddr {
-			return
-		}
+		if existing == peerAddr { return }
 	}
 	ActivePeerRoster = append(ActivePeerRoster, peerAddr)
 	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", peerAddr)
+}
+
+// 🛡️ ENFORCEMENT ENGINE: Executes the Sabbatical Slasher scriptural penalty loop
+func ExecuteSabbaticalSlash(validatorAddress string, reason string) {
+	StakingPoolMutex.Lock()
+	stakedAmount := ValidatorStakingPool[validatorAddress]
+	
+	if stakedAmount > 0 {
+		seizedBalance := stakedAmount * SlasherPenaltyRate
+		ValidatorStakingPool[validatorAddress] = 0 // Wipe their active escrow deposit registry
+		StakingPoolMutex.Unlock()
+
+		fmt.Printf("⚡ [Sabbatical Slasher] MALICIOUS ACT DETECTED (%s)! Slashing address %s. Seizing %.2f CVN bond to Burn Void!\n", 
+			reason, validatorAddress, seizedBalance)
+	} else {
+		StakingPoolMutex.Unlock()
+	}
 }
 
 func HandleIncomingPeer(conn net.Conn) {
@@ -210,16 +233,21 @@ func HandleIncomingPeer(conn net.Conn) {
 			return
 		}
 
-		// 🛰️ GOSSIP ENGINE HOOK: Ingest peer announcement requests and respond with current known routing map
 		if strings.HasPrefix(text, "GOSSIP_PEER_DISCOVERY:") {
 			incomingNodeAddress := strings.TrimPrefix(text, "GOSSIP_PEER_DISCOVERY:")
 			RegisterGossipPeer(incomingNodeAddress)
 			
-			// Return list of all other nodes in the network back to the caller
 			RosterMutex.Lock()
 			rosterJSON, _ := json.Marshal(ActivePeerRoster)
 			RosterMutex.Unlock()
 			fmt.Fprintln(conn, string(rosterJSON))
+			return
+		}
+
+		if strings.HasPrefix(text, "SIMULATE_MALICIOUS_FORK:") {
+			offendingValidator := strings.TrimPrefix(text, "SIMULATE_MALICIOUS_FORK:")
+			ExecuteSabbaticalSlash(offendingValidator, "Double-Signing Block History Split Alteration")
+			fmt.Fprintln(conn, "SLASH_EXECUTED_BY_FIREWALL")
 			return
 		}
 
@@ -287,37 +315,31 @@ func StartPublicExplorerServer() {
 		if circulatingSupply < 0 { circulatingSupply = 0 }
 
 		responseData := map[string]interface{}{
-			"circulating_supply": circulatingSupply,
-			"blocks":             chain,
-		}
-		data, _ := json.Marshal(responseData)
-		w.Write(data)
-	})
-
-	fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
-	go func() { _ = http.ListenAndServe("0.0.0.0:8081", nil) }()
+"circulating_supply": circulatingSupply,
+"blocks":             chain,
 }
-
-// 🛰️ GOSSIP ADVERTISEMENT PROPAGATION LOOP
+data, _ := json.Marshal(responseData)
+w.Write(data)
+})
+fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
+go func() { _ = http.ListenAndServe("0.0.0.0:8081", nil) }()
+}
 func DialAndGossipWithSeedPeer(seedAddr string) {
-	fmt.Printf("🔄 Initializing dynamic full-mesh gossip sync with seed peer: %s...\n", seedAddr)
-	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-	if err != nil {
-		fmt.Printf("⚠️  Gossip Sync Skipped: Target node %s is offline. Operating independently.\n", seedAddr)
-		return
-	}
-	defer conn.Close()
-
-	// Fetch your actual external public identity IP configuration using ipify to advertise accurately
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, httpErr := client.Get("https://ipify.org")
-	myExtIP := LocalListenerIP
-	if httpErr == nil {
-		defer resp.Body.Close()
+fmt.Printf("🔄 Initializing dynamic full-mesh gossip sync with seed peer: %s...\n", seedAddr)
+conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
+if err != nil {
+fmt.Printf("⚠️  Gossip Sync Skipped: Target node %s is offline. Operating independently.\n", seedAddr)
+return
+}
+defer conn.Close()
+client := &http.Client{Timeout: 3 * time.Second}
+resp, httpErr := client.Get("ipify.org")
+myExtIP := LocalListenerIP
+if httpErr == nil {
+defer resp.Body.Close()
 ipBytes, _ := io.ReadAll(resp.Body)
 myExtIP = strings.TrimSpace(string(ipBytes))
 }
-// Broadcast yourself to the peer so they ingest your mining port location
 fmt.Fprintln(conn, "GOSSIP_PEER_DISCOVERY:"+myExtIP+":8080")
 respLine, err := bufio.NewReader(conn).ReadString('\n')
 if err == nil {
@@ -396,6 +418,9 @@ newBlock.Nonce++
 return newBlock
 }
 func main() {
+ValidatorStakingPool = make(map[string]float64)
+ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
+ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 for i, arg := range os.Args {
 if arg == "--wallet" {
 RunWalletGUI()
