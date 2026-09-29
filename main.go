@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io" // ✅ FIXED: Explicitly added to handle dynamic public IP lookup data streams
 	"math/rand"
 	"net"
 	"net/http"
@@ -21,15 +22,19 @@ const MaxTotalSupplyCap = 2100000000.0
 const JubileeTimeWindow = 49 * 365 * 24 * 60 * 60 // 49 Years in seconds
 const BurnAddress = "0x0000000000000000000000000000000000000000_BURN_VOID"
 const CreatorTargetAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
-const CityOfRefugeWindow = 72 * 60 * 60 // 72 Hours in seconds for mercy grace periods
+const CityOfRefugeWindow = 72 * 60 * 60 // 72 Hours grace
 
 var (
 	GlobalMempool []Transaction
 	MempoolMutex  sync.Mutex
 	ConnectTarget string 
+	
+	// 🛰️ GOSSIP CORE: Dynamic full-mesh routing tables
+	ActivePeerRoster []string
+	RosterMutex      sync.Mutex
+	LocalListenerIP  string = "202.137.175.220" // Default public static fallback mapping
 )
 
-// Network roster of active peer nodes for random Witness verification
 var NetworkWitnessRoster = []string{
 	"Peer_Witness_1", "Peer_Witness_2", "Peer_Witness_3", "Peer_Witness_4", "Peer_Witness_5",
 	"Peer_Witness_6", "Communal_Peer_Witness_7", "Peer_Witness_8", "Peer_Witness_9", "Peer_Witness_10",
@@ -58,7 +63,7 @@ type Block struct {
 	Hash         string        `json:"hash"`
 	Nonce        int64         `json:"nonce"`
 	Difficulty   int64         `json:"difficulty"`
-	GuardMatrix  []string      `json:"guard_matrix,omitempty"` // The 21-Witness consensus checkpoint
+	GuardMatrix  []string      `json:"guard_matrix,omitempty"` 
 }
 
 func CalculateHash(b Block) string {
@@ -97,16 +102,10 @@ func SaveChain(chain []Block) {
 }
 
 func VerifyGenesisFreeze(chain []Block) bool {
-	if len(chain) == 0 {
-		return false
-	}
+	if len(chain) == 0 { return false }
 	genesisBlock := chain[0]
-	if len(genesisBlock.Transactions) == 0 {
-		return false
-	}
-	if genesisBlock.Transactions[0].Amount > MaxTotalSupplyCap {
-		return false
-	}
+	if len(genesisBlock.Transactions) == 0 { return false }
+	if genesisBlock.Transactions[0].Amount > MaxTotalSupplyCap { return false }
 	return true
 }
 
@@ -165,33 +164,37 @@ func GetAddressBalance(chain []Block, address string) float64 {
 }
 
 func CalculateAdaptiveDifficulty(chain []Block) int64 {
-	if len(chain) < 2 {
-		return 4
-	}
+	if len(chain) < 2 { return 4 }
 	latestBlock := chain[len(chain)-1]
 	prevBlock := chain[len(chain)-2]
 	actualTimeElapsed := latestBlock.Timestamp - prevBlock.Timestamp
 	currentDiff := latestBlock.Difficulty
 
-	if currentDiff > 6 {
-		currentDiff = 6
-	}
-	if currentDiff < 3 {
-		currentDiff = 3
-	}
+	if currentDiff > 6 { currentDiff = 6 }
+	if currentDiff < 3 { currentDiff = 3 }
 
 	if actualTimeElapsed < TargetBlockTime {
-		if currentDiff < 6 {
-			fmt.Printf("💓 Organic Heartbeat: Blocks solving too fast (%ds vs target %ds). Scaling difficulty UP.\n", actualTimeElapsed, TargetBlockTime)
-			return currentDiff + 1
-		}
+		if currentDiff < 6 { return currentDiff + 1 }
 	} else if actualTimeElapsed > (TargetBlockTime * 3) {
-		if currentDiff > 3 {
-			fmt.Printf("💓 Organic Heartbeat: Blocks solving too slow (%ds vs target %ds). Scaling difficulty DOWN.\n", actualTimeElapsed, TargetBlockTime)
-			return currentDiff - 1
-		}
+		if currentDiff > 3 { return currentDiff - 1 }
 	}
 	return currentDiff
+}
+
+// 🛰️ GOSSIP FUNCTION: Dynamically registers external peer coordinates to routing table
+func RegisterGossipPeer(peerAddr string) {
+	if peerAddr == "" || strings.HasPrefix(peerAddr, "127.0.0.1") || strings.HasPrefix(peerAddr, "0.0.0.0") {
+		return
+	}
+	RosterMutex.Lock()
+	defer RosterMutex.Unlock()
+	for _, existing := range ActivePeerRoster {
+		if existing == peerAddr {
+			return
+		}
+	}
+	ActivePeerRoster = append(ActivePeerRoster, peerAddr)
+	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", peerAddr)
 }
 
 func HandleIncomingPeer(conn net.Conn) {
@@ -207,6 +210,19 @@ func HandleIncomingPeer(conn net.Conn) {
 			return
 		}
 
+		// 🛰️ GOSSIP ENGINE HOOK: Ingest peer announcement requests and respond with current known routing map
+		if strings.HasPrefix(text, "GOSSIP_PEER_DISCOVERY:") {
+			incomingNodeAddress := strings.TrimPrefix(text, "GOSSIP_PEER_DISCOVERY:")
+			RegisterGossipPeer(incomingNodeAddress)
+			
+			// Return list of all other nodes in the network back to the caller
+			RosterMutex.Lock()
+			rosterJSON, _ := json.Marshal(ActivePeerRoster)
+			RosterMutex.Unlock()
+			fmt.Fprintln(conn, string(rosterJSON))
+			return
+		}
+
 		if strings.HasPrefix(text, "TX_BROADCAST:") {
 			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
 			var tx Transaction
@@ -214,7 +230,7 @@ func HandleIncomingPeer(conn net.Conn) {
 				txData := fmt.Sprintf("%s%s%.4f%.4f%d", tx.Sender, tx.Recipient, tx.Amount, tx.FreeWillOffering, tx.Timestamp.Unix())
 				
 				if !VerifyTransactionSignature(tx.Sender, txData, tx.SignatureR, tx.SignatureS) {
-					fmt.Printf("🚨 [Cryptographic Firewall] BLOCKED FORGERY ATTEMPT! Invalid mathematical signature from node handle address: %s\n", tx.Sender)
+					fmt.Printf("🚨 [Cryptographic Firewall] BLOCKED FORGERY ATTEMPT! Invalid signature from: %s\n", tx.Sender)
 					fmt.Fprintln(conn, "TX_REJECTED_INVALID_SIGNATURE")
 					return
 				}
@@ -242,9 +258,7 @@ func StartTCPServer() {
 	fmt.Println("📡 Global TCP P2P Subnetwork Engine Online. Listening for incoming miners on Port :8080...")
 	for {
 		conn, err := listener.Accept()
-		if err != nil {
-			continue
-		}
+		if err != nil { continue }
 		go HandleIncomingPeer(conn)
 	}
 }
@@ -260,91 +274,101 @@ func StartPublicExplorerServer() {
 		var totalMined float64 = 0.0
 		var burnedTokens float64 = 0.0
 		
-		if len(chain) > 1 {
-			totalMined = float64(len(chain)-1) * 50.0
-		}
-		
+		if len(chain) > 1 { totalMined = float64(len(chain)-1) * 50.0 }
 		for _, block := range chain {
 			for _, tx := range block.Transactions {
-				if tx.Recipient == "0x0000000000000000000000000000000000000000_BURN_VOID" {
+				if tx.Recipient == BurnAddress {
 					burnedTokens += tx.Amount + tx.FreeWillOffering
 				}
 			}
 		}
 		
 		circulatingSupply := totalMined - burnedTokens
-		if circulatingSupply < 0 {
-			circulatingSupply = 0
-		}
+		if circulatingSupply < 0 { circulatingSupply = 0 }
 
 		responseData := map[string]interface{}{
 			"circulating_supply": circulatingSupply,
 			"blocks":             chain,
 		}
-		
 		data, _ := json.Marshal(responseData)
 		w.Write(data)
 	})
 
 	fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
-	go func() {
-		_ = http.ListenAndServe("0.0.0.0:8081", nil)
-	}()
+	go func() { _ = http.ListenAndServe("0.0.0.0:8081", nil) }()
 }
 
-func SyncChainFromSeedPeer(seedAddr string) {
-	fmt.Printf("🔄 Synchronizing data blocks from public seed peer endpoint: %s...\n", seedAddr)
+// 🛰️ GOSSIP ADVERTISEMENT PROPAGATION LOOP
+func DialAndGossipWithSeedPeer(seedAddr string) {
+	fmt.Printf("🔄 Initializing dynamic full-mesh gossip sync with seed peer: %s...\n", seedAddr)
 	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
 	if err != nil {
-		fmt.Printf("⚠️  Handshake Failure: Seed node %s is unreachable. Initializing local workspace instead.\n", seedAddr)
+		fmt.Printf("⚠️  Gossip Sync Skipped: Target node %s is offline. Operating independently.\n", seedAddr)
 		return
 	}
 	defer conn.Close()
 
-	fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
-	respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
-	if err != nil {
-		return
-	}
-
-	var remoteChain []Block
-	if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
-		localChain := LoadChain()
-		if len(remoteChain) > len(localChain) {
-			fmt.Printf("📈 Remote ledger state exhibits superior validation height (%d vs %d). Synchronizing files...\n", len(remoteChain), len(localChain))
-			SaveChain(remoteChain)
-		} else {
-			fmt.Println("✅ Local file ledger is already fully synchronized to top-tier network validation blocks.")
-		}
-	}
+	// Fetch your actual external public identity IP configuration using ipify to advertise accurately
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, httpErr := client.Get("https://ipify.org")
+	myExtIP := LocalListenerIP
+	if httpErr == nil {
+		defer resp.Body.Close()
+ipBytes, _ := io.ReadAll(resp.Body)
+myExtIP = strings.TrimSpace(string(ipBytes))
 }
-
+// Broadcast yourself to the peer so they ingest your mining port location
+fmt.Fprintln(conn, "GOSSIP_PEER_DISCOVERY:"+myExtIP+":8080")
+respLine, err := bufio.NewReader(conn).ReadString('\n')
+if err == nil {
+var sharedRoster []string
+if json.Unmarshal([]byte(strings.TrimSpace(respLine)), &sharedRoster) == nil {
+for _, externalNode := range sharedRoster {
+RegisterGossipPeer(externalNode)
+}
+}
+}
+}
+func SyncChainFromSeedPeer(seedAddr string) {
+fmt.Printf("🔄 Synchronizing data blocks from public seed peer endpoint: %s...\n", seedAddr)
+conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
+if err != nil {
+fmt.Printf("⚠️  Handshake Failure: Seed node %s is unreachable.\n", seedAddr)
+return
+}
+defer conn.Close()
+fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
+respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
+if err != nil { return }
+var remoteChain []Block
+if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
+localChain := LoadChain()
+if len(remoteChain) > len(localChain) {
+fmt.Printf("📈 Remote ledger state exhibits superior validation height (%d vs %d). Synchronizing files...\n", len(remoteChain), len(localChain))
+SaveChain(remoteChain)
+} else {
+fmt.Println("✅ Local file ledger is already fully synchronized to top-tier network validation blocks.")
+}
+}
+}
 func Assemble21WitnessGuardMatrix() []string {
-	rand.Seed(time.Now().UnixNano())
-	shuffled := make([]string, len(NetworkWitnessRoster))
-	copy(shuffled, NetworkWitnessRoster)
-	rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
-
-	limit := 21
-	if len(shuffled) < limit {
-		limit = len(shuffled)
-	}
-	return shuffled[:limit]
+rand.Seed(time.Now().UnixNano())
+shuffled := make([]string, len(NetworkWitnessRoster))
+copy(shuffled, NetworkWitnessRoster)
+rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+limit := 21
+if len(shuffled) < limit { limit = len(shuffled) }
+return shuffled[:limit]
 }
-
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
-	var newBlock Block
-	newBlock.Index = prevBlock.Index + 1
+var newBlock Block
+newBlock.Index = prevBlock.Index + 1
 newBlock.Timestamp = time.Now().Unix()
 newBlock.Transactions = txs
 newBlock.PrevHash = prevBlock.Hash
 newBlock.Difficulty = currentDifficulty
-if newBlock.Difficulty > 6 {
-newBlock.Difficulty = 6
-}
-if newBlock.Difficulty < 3 {
-newBlock.Difficulty = 3
-}
+if newBlock.Difficulty > 6 { newBlock.Difficulty = 6 }
+if newBlock.Difficulty < 3 { newBlock.Difficulty = 3 }
 newBlock.Nonce = 0
 newBlock.GuardMatrix = Assemble21WitnessGuardMatrix()
 targetPrefix := strings.Repeat("0", int(newBlock.Difficulty))
@@ -363,7 +387,7 @@ if int(newBlock.Difficulty) <= len(newBlock.Hash) && newBlock.Hash[:int(newBlock
 totalElapsed := time.Since(startTime).Seconds()
 if totalElapsed == 0 { totalElapsed = 0.001 }
 finalHashRate := float64(newBlock.Nonce) / totalElapsed / 1000.0
-fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Avg Speed: %.2f kH/s | Hash: %s\n",
+fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Speed: %.2f kH/s | Hash: %s\n",
 newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
 break
 }
@@ -386,13 +410,14 @@ ConnectTarget = os.Args[i+1]
 }
 }
 fmt.Println("====================================================")
-fmt.Println("💎 COVENANT STANDARD (CVN) ADAPTIVE HEARTBEAT RIG")
+fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
 fmt.Println("====================================================\n")
 go StartTCPServer()
 go StartPublicExplorerServer()
 time.Sleep(200 * time.Millisecond)
 if ConnectTarget != "" {
 SyncChainFromSeedPeer(ConnectTarget)
+go DialAndGossipWithSeedPeer(ConnectTarget)
 }
 blockchain := LoadChain()
 currentBlock := blockchain[len(blockchain)-1]
