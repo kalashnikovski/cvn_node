@@ -33,6 +33,9 @@ var (
 	MempoolMutex  sync.Mutex
 	ConnectTarget string 
 	
+	// 👉 NEW FLAG: Dynamic reward routing parameter mapping
+	CustomMinerAddress string = "Nikola_Global_Network_Node" // Standard fallback profile name
+	
 	// GOSSIP CORE: Dynamic full-mesh routing tables
 	ActivePeerRoster []string
 	RosterMutex      sync.Mutex
@@ -111,7 +114,6 @@ func SaveChain(chain []Block) {
 
 func VerifyGenesisFreeze(chain []Block) bool {
 	if len(chain) == 0 { return false }
-	// FIX: Targeting explicit array index position 0 to bind onto the exact Genesis Block entity structure type
 	genesisBlock := chain[0]
 	if len(genesisBlock.Transactions) == 0 { return false }
 	if genesisBlock.Transactions[0].Amount > MaxTotalSupplyCap { return false }
@@ -203,14 +205,13 @@ func RegisterGossipPeer(peerAddr string) {
 	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", peerAddr)
 }
 
-// 🛡️ ENFORCEMENT ENGINE: Executes the Sabbatical Slasher scriptural penalty loop
 func ExecuteSabbaticalSlash(validatorAddress string, reason string) {
 	StakingPoolMutex.Lock()
 	stakedAmount := ValidatorStakingPool[validatorAddress]
 	
 	if stakedAmount > 0 {
 		seizedBalance := stakedAmount * SlasherPenaltyRate
-		ValidatorStakingPool[validatorAddress] = 0 // Wipe their active escrow deposit registry
+		ValidatorStakingPool[validatorAddress] = 0 
 		StakingPoolMutex.Unlock()
 
 		fmt.Printf("⚡ [Sabbatical Slasher] MALICIOUS ACT DETECTED (%s)! Slashing address %s. Seizing %.2f CVN bond to Burn Void!\n", 
@@ -297,6 +298,7 @@ func StartPublicExplorerServer() {
 	})
 
 	http.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		chain := LoadChain()
 		var totalMined float64 = 0.0
@@ -314,23 +316,109 @@ func StartPublicExplorerServer() {
 		circulatingSupply := totalMined - burnedTokens
 		if circulatingSupply < 0 { circulatingSupply = 0 }
 
-		responseData := map[string]interface{}{
+		var totalRealEscrow float64 = 0.0
+		StakingPoolMutex.Lock()
+for _, bond := range ValidatorStakingPool { totalRealEscrow += bond }
+StakingPoolMutex.Unlock()
+responseData := map[string]interface{}{
 "circulating_supply": circulatingSupply,
 "blocks":             chain,
+"escrow_balance":     totalRealEscrow,
 }
 data, _ := json.Marshal(responseData)
 w.Write(data)
+})
+http.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+w.Header().Set("Content-Type", "text/html; charset=utf-8")
+fmt.Fprint(w, `
+
+
+
+Sovereign Ledger Account Statement
+
+body { font-family: -apple-system, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 30px; margin: 0; }
+.container { max-width: 1000px; margin: 0 auto; }
+h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 25px; }
+.address-box { font-family: monospace; background-color: #161b22; padding: 15px; border-radius: 6px; border: 1px solid #30363d; font-size: 1.1rem; color: #fff; margin-bottom: 30px; word-break: break-all; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }
+.card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+.card h3 { margin: 0 0 10px 0; font-size: 0.9rem; color: #8b949e; text-transform: uppercase; }
+.card .value { font-size: 1.8rem; font-weight: bold; }
+table { width: 100%; border-collapse: collapse; background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #30363d; }
+th { background-color: #21262d; color: #58a6ff; }
+.badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+.badge.incoming { background-color: rgba(63, 185, 80, 0.15); color: #3fb950; }
+.badge.outgoing { background-color: rgba(248, 81, 73, 0.15); color: #f85149; }
+
+
+
+
+📊 Sovereign Ledger Account Statement
+Loading Address Profile Matrix...
+Calculated Address Balance
+0.00 CVN
+
+
+Total Transfers Received
+0
+
+
+Total Transfers Sent
+0
+
+📜 Isolated Account Transaction History
+Direction	Block Height	Counterparty Handle Address	Token Volume Value	Timestamp Parameters
+const urlParams = new URLSearchParams(window.location.search);
+const targetAddress = urlParams.get('address');
+if (!targetAddress) {
+document.getElementById('addr-display').innerText = "Error: No target address query parameters specified.";
+} else {
+document.getElementById('addr-display').innerText = "Target Account: " + targetAddress;
+fetchMetrics();
+}
+async function fetchMetrics() {
+try {
+const res = await fetch('/req_chain');
+const data = await res.json();
+const chain = data.blocks || [];
+let balance = 0.0; let countIn = 0; let countOut = 0; let html = "";
+chain.forEach(block => {
+if (block.transactions) {
+block.transactions.forEach(tx => {
+const isSender = tx.sender.toLowerCase() === targetAddress.toLowerCase();
+const isRecipient = tx.recipient.toLowerCase() === targetAddress.toLowerCase();
+if (isSender || isRecipient) {
+const dateStr = new Date(block.timestamp * 1000).toISOString().replace('T', ' ').substring(0, 19);
+if (isRecipient) {
+balance += tx.amount + tx.free_will_offering; countIn++;
+html += "INCOMING#" + block.index + "" + tx.sender + "+" + tx.amount.toFixed(2) + " CVN" + dateStr + "";
+}
+if (isSender) {
+balance -= tx.amount + tx.free_will_offering; countOut++;
+html += "OUTGOING#" + block.index + "" + tx.recipient + "-" + tx.amount.toFixed(2) + " CVN" + dateStr + "";
+}
+}
+});
+}
+});
+document.getElementById('audit-balance').innerText = balance.toLocaleString(undefined, {minimumFractionDigits: 2}) + " CVN";
+document.getElementById('audit-in').innerText = countIn;
+document.getElementById('audit-out').innerText = countOut;
+if (html !== "") { document.getElementById('audit-table-body').innerHTML = html; }
+else { document.getElementById('audit-table-body').innerHTML = "No transactions found for this address inside active ledger blocks."; }
+} catch (e) { console.error(e); }
+}
+
+
+`)
 })
 fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
 go func() { _ = http.ListenAndServe("0.0.0.0:8081", nil) }()
 }
 func DialAndGossipWithSeedPeer(seedAddr string) {
-fmt.Printf("🔄 Initializing dynamic full-mesh gossip sync with seed peer: %s...\n", seedAddr)
 conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-if err != nil {
-fmt.Printf("⚠️  Gossip Sync Skipped: Target node %s is offline. Operating independently.\n", seedAddr)
-return
-}
+if err != nil { return }
 defer conn.Close()
 client := &http.Client{Timeout: 3 * time.Second}
 resp, httpErr := client.Get("ipify.org")
@@ -345,19 +433,13 @@ respLine, err := bufio.NewReader(conn).ReadString('\n')
 if err == nil {
 var sharedRoster []string
 if json.Unmarshal([]byte(strings.TrimSpace(respLine)), &sharedRoster) == nil {
-for _, externalNode := range sharedRoster {
-RegisterGossipPeer(externalNode)
-}
+for _, externalNode := range sharedRoster { RegisterGossipPeer(externalNode) }
 }
 }
 }
 func SyncChainFromSeedPeer(seedAddr string) {
-fmt.Printf("🔄 Synchronizing data blocks from public seed peer endpoint: %s...\n", seedAddr)
 conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-if err != nil {
-fmt.Printf("⚠️  Handshake Failure: Seed node %s is unreachable.\n", seedAddr)
-return
-}
+if err != nil { return }
 defer conn.Close()
 fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
 respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
@@ -365,12 +447,7 @@ if err != nil { return }
 var remoteChain []Block
 if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
 localChain := LoadChain()
-if len(remoteChain) > len(localChain) {
-fmt.Printf("📈 Remote ledger state exhibits superior validation height (%d vs %d). Synchronizing files...\n", len(remoteChain), len(localChain))
-SaveChain(remoteChain)
-} else {
-fmt.Println("✅ Local file ledger is already fully synchronized to top-tier network validation blocks.")
-}
+if len(remoteChain) > len(localChain) { SaveChain(remoteChain) }
 }
 }
 func Assemble21WitnessGuardMatrix() []string {
@@ -395,7 +472,6 @@ newBlock.Nonce = 0
 newBlock.GuardMatrix = Assemble21WitnessGuardMatrix()
 targetPrefix := strings.Repeat("0", int(newBlock.Difficulty))
 fmt.Printf("\n⚒️  PoD Active: Mining Block %d (Target Pattern: Starting with %d Zeros)...\n", newBlock.Index, newBlock.Difficulty)
-fmt.Printf("🔒 Guard Matrix Assembled: %d active signatures verified for finality verification.\n", len(newBlock.GuardMatrix))
 startTime := time.Now()
 for {
 newBlock.Hash = CalculateHash(newBlock)
@@ -409,8 +485,7 @@ if int(newBlock.Difficulty) <= len(newBlock.Hash) && newBlock.Hash[:int(newBlock
 totalElapsed := time.Since(startTime).Seconds()
 if totalElapsed == 0 { totalElapsed = 0.001 }
 finalHashRate := float64(newBlock.Nonce) / totalElapsed / 1000.0
-fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Speed: %.2f kH/s | Hash: %s\n",
-newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
+fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Speed: %.2f kH/s | Hash: %s\n", newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
 break
 }
 newBlock.Nonce++
@@ -430,12 +505,18 @@ if arg == "--simulate-jubilee" {
 RunJubileeSimulation()
 return
 }
+// 👉 READ FLAG: Captures dynamic miner input string fields parameters
+if arg == "--miner-address" && i+1 < len(os.Args) {
+CustomMinerAddress = os.Args[i+1]
+}
 if arg == "--connect" && i+1 < len(os.Args) {
 ConnectTarget = os.Args[i+1]
 }
 }
 fmt.Println("====================================================")
 fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
+// 👉 DISPLAY LOGS: Print active destination confirmation on bootup paths
+fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
 fmt.Println("====================================================\n")
 go StartTCPServer()
 go StartPublicExplorerServer()
@@ -458,17 +539,14 @@ var lastSeen int64 = 0
 for _, b := range blockchain {
 for _, historicalTx := range b.Transactions {
 if historicalTx.Sender == tx.Sender || historicalTx.Recipient == tx.Sender {
-if b.Timestamp > lastSeen {
-lastSeen = b.Timestamp
-}
+if b.Timestamp > lastSeen { lastSeen = b.Timestamp }
 }
 }
 }
 if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(CityOfRefugeWindow) {
-fmt.Printf("🕊️  [City of Refuge] Grace period active for node address [%s]. Protecting from latency drops.\n", tx.Sender)
+fmt.Printf("🕊️  [City of Refuge] Grace period active for node address [%s].\n", tx.Sender)
 }
 if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(JubileeTimeWindow) {
-fmt.Printf("⚠️ Jubilee State Triggered for Address [%s]! Rerouting offerings into Burn Address.\n", tx.Sender)
 activeMempool[i].Recipient = BurnAddress
 activeMempool[i].FreeWillOffering = 0
 }
@@ -476,17 +554,14 @@ activeMempool[i].FreeWillOffering = 0
 sort.Slice(activeMempool, func(i, j int) bool {
 if activeMempool[i].DataSizeKB == 0 { activeMempool[i].DataSizeKB = 1.0 }
 if activeMempool[j].DataSizeKB == 0 { activeMempool[j].DataSizeKB = 1.0 }
-scoreI := activeMempool[i].FreeWillOffering / activeMempool[i].DataSizeKB
-scoreJ := activeMempool[j].FreeWillOffering / activeMempool[j].DataSizeKB
-return scoreI > scoreJ
+return (activeMempool[i].FreeWillOffering / activeMempool[i].DataSizeKB) > (activeMempool[j].FreeWillOffering / activeMempool[j].DataSizeKB)
 })
 var totalBountyOfferings float64 = 0.0
-for _, tx := range activeMempool {
-totalBountyOfferings += tx.FreeWillOffering
-}
+for _, tx := range activeMempool { totalBountyOfferings += tx.FreeWillOffering }
+// 👉 DYNAMIC REWARD COINBASE BLOCK: Generates tokens directly to your inputted key address
 coinbaseRewardTx := Transaction{
 Sender:           "COVENANT_STEWARD_ASSEMBLY",
-Recipient:        "Nikola_Global_Network_Node",
+Recipient:        CustomMinerAddress,
 Amount:           50.0,
 FreeWillOffering: totalBountyOfferings,
 DataSizeKB:       0.1,
@@ -500,7 +575,7 @@ blockchain = LoadChain()
 blockchain = append(blockchain, newBlock)
 currentBlock = newBlock
 SaveChain(blockchain)
-fmt.Printf("💰 WALLET AUDIT: Current Balance: %.2f CVN\n", GetAddressBalance(blockchain, "Nikola_Global_Network_Node"))
+fmt.Printf("💰 LOCAL NODE REWARD AUDIT: Current Balance of %s: %.2f CVN\n", CustomMinerAddress, GetAddressBalance(blockchain, CustomMinerAddress))
 fmt.Println("-----------------------------------------------------")
 time.Sleep(3 * time.Second)
 }
