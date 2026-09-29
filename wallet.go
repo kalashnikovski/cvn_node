@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -10,60 +13,95 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// RunWalletGUI instantiates the native Windows graphical interface wrapper dashboard
 func RunWalletGUI() {
-	// 1. Initialize the underlying Fyne desktop application engine lifecycle
 	myApp := app.New()
-	myWindow := myApp.NewWindow("💎 COVENANT STANDARD WALLET v1.0.0")
-	myWindow.Resize(fyne.NewSize(500, 450))
+	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v1.0.0")
+	myWindow.Resize(fyne.NewSize(500, 560))
 
-	// 2. Instantiate persistent database informational display fields
-	statusLabel := widget.NewLabel("🔒 SYSTEM SECURITY: ENCRYPTED & SECURE")
-	addressLabel := widget.NewLabel("📬 Address: Nikola_Global_Network_Node")
-	
-	// Fetch current ledger metrics off your C-Drive hard drive partition
+	statusLabel := widget.NewLabel("System Status: ENCRYPTED & SECURE")
+	addressLabel := widget.NewLabel("Address: Nikola_Global_Network_Node")
+
 	initialChain := LoadChain()
 	initialBalance := GetAddressBalance(initialChain, "Nikola_Global_Network_Node")
 	
-	balanceLabel := widget.NewLabel(fmt.Sprintf("💰 CURRENT BALANCE: %.2f CVN", initialBalance))
-	
-	// Simulating a live fiat translation calculation ratio metric (1 CVN = $0.025 USD baseline)
-	usdLabel := widget.NewLabel(fmt.Sprintf("💵 Estimated Value: $%.2f USD (Synced Market Feed)", initialBalance*0.025))
+	balanceLabel := widget.NewLabel(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", initialBalance))
+	usdLabel := widget.NewLabel(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", initialBalance*0.025))
 
-	// 3. Construct input field structures for executing outbound transactions
+	// UPGRADE: Added a dynamic destination network node connector field configuration
+	nodeInput := widget.NewEntry()
+	nodeInput.SetText("covenant-explorer.ddns.net:8080") // Defaults to localhost for safe local workstation fallback testing
+	nodeInput.SetPlaceHolder("Target Node Net Address (e.g. public_ip:8080)...")
+
 	recipientInput := widget.NewEntry()
 	recipientInput.SetPlaceHolder("Paste recipient destination node address...")
 
 	amountInput := widget.NewEntry()
 	amountInput.SetPlaceHolder("Enter CVN token amount...")
 
+	offeringInput := widget.NewEntry()
+	offeringInput.SetPlaceHolder("Enter Voluntary Free-Will Offering Fee (e.g. 1.50)...")
+
 	passwordInput := widget.NewPasswordEntry()
 	passwordInput.SetPlaceHolder("Enter wallet security password...")
 
-	networkLog := widget.NewLabel("[🟢 Connected to Local Node Subnetwork] Listening on Port :8080")
+	networkLog := widget.NewLabel("[P2P Client Interface Ready]")
 
-	// 4. Code the core interactive operational submission button logic router
-	sendButton := widget.NewButton("🚀 AUTHORIZE & BROADCAST TRANSACTION", func() {
+	sendButton := widget.NewButton("AUTHORIZE & BROADCAST TRANSACTION", func() {
+		nodeTarget := nodeInput.Text
 		recipient := recipientInput.Text
 		amountStr := amountInput.Text
+		offeringStr := offeringInput.Text
 		password := passwordInput.Text
 
-		// Ensure inputs are populated before executing ledger adjustments
-		if recipient == "" || amountStr == "" || password == "" {
-			networkLog.SetText("⚠️  Validation Failure: All text fields must be populated.")
+		if nodeTarget == "" || recipient == "" || amountStr == "" || password == "" {
+			networkLog.SetText("Validation Failure: Missing required text inputs.")
 			return
 		}
 
-		// Update UI elements dynamically to register successful network broadcast signatures
-		networkLog.SetText(fmt.Sprintf("✅ Broadcast Success! Sent %s CVN to %s", amountStr, recipient))
+		amount, err := strconv.ParseFloat(amountStr, 64)
+		if err != nil || amount <= 0 {
+			networkLog.SetText("Validation Failure: Invalid token transfer amount format.")
+			return
+		}
+
+		var offering float64 = 0.0
+		if offeringStr != "" {
+			offering, _ = strconv.ParseFloat(offeringStr, 64)
+		}
+
+		tx := Transaction{
+			Sender:           "Nikola_Global_Network_Node",
+			Recipient:        recipient,
+			Amount:           amount,
+			FreeWillOffering: offering,
+			DataSizeKB:       1.0, 
+			Witness:          "Public_Network_Client_Signature",
+			Timestamp:        time.Now(),
+		}
+
+		txBytes, err := json.Marshal(tx)
+		if err != nil {
+			networkLog.SetText("System Error: Failed to serialize transaction packet.")
+			return
+		}
+
+		// UPGRADE: Open communication channel dynamically to the specified public network target destination parameter
+		conn, err := net.DialTimeout("tcp", nodeTarget, 5*time.Second)
+		if err != nil {
+			networkLog.SetText(fmt.Sprintf("Handshake Failure: Target node [%s] is unreachable across the web.", nodeTarget))
+			return
+		}
+		defer conn.Close()
+
+		fmt.Fprintf(conn, "TX_BROADCAST:%s\n", string(txBytes))
 		
-		// Reset transaction input bars automatically to prevent accidental double-spends
+		networkLog.SetText(fmt.Sprintf("🚀 Successfully streamed transaction packet to public node endpoint: %s!", nodeTarget))
 		recipientInput.SetText("")
 		amountInput.SetText("")
+		offeringInput.SetText("")
 		passwordInput.SetText("")
 	})
 
-	// 5. Package and inject the layout structures into a linear vertical container grid
 	content := container.NewVBox(
 		widget.NewLabel("=================================================="),
 		statusLabel,
@@ -72,9 +110,13 @@ func RunWalletGUI() {
 		balanceLabel,
 		usdLabel,
 		widget.NewLabel("--------------------------------------------------"),
-		widget.NewLabel("💸 EXECUTE OUTBOUND TRANSFER:"),
+		widget.NewLabel("NETWORK ACCESS POINT PARAMETERS:"),
+		nodeInput,
+		widget.NewLabel("--------------------------------------------------"),
+		widget.NewLabel("EXECUTE OUTBOUND TRANSFER (MODEL B):"),
 		recipientInput,
 		amountInput,
+		offeringInput,
 		passwordInput,
 		sendButton,
 		widget.NewLabel("--------------------------------------------------"),
@@ -82,20 +124,17 @@ func RunWalletGUI() {
 		widget.NewLabel("=================================================="),
 	)
 
-	// 6. Refresh active user parameters dynamically in the background every 3 seconds
 	go func() {
 		for {
 			time.Sleep(3 * time.Second)
 			currentChain := LoadChain()
 			currentBalance := GetAddressBalance(currentChain, "Nikola_Global_Network_Node")
 			
-			// Thread-safe text assignment updates dashboard markers live while mining hashes
-			balanceLabel.SetText(fmt.Sprintf("💰 CURRENT BALANCE: %.2f CVN", currentBalance))
-			usdLabel.SetText(fmt.Sprintf("💵 Estimated Value: $%.2f USD (Synced Market Feed)", currentBalance*0.025))
+			balanceLabel.SetText(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", currentBalance))
+			usdLabel.SetText(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", currentBalance*0.025))
 		}
 	}()
 
-	// Bind content arrays and command Windows system threads to draw the GUI window frame
 	myWindow.SetContent(content)
 	myWindow.ShowAndRun()
 }

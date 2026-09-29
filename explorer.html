@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Covenant Standard (CVN) Block Explorer</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b; padding-bottom: 20px; margin-bottom: 30px; }
+        h1 { margin: 0; color: #38bdf8; font-size: 28px; }
+        .badge { background-color: #0369a1; padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background-color: #1e293b; border-radius: 8px; padding: 20px; border: 1px solid #334155; }
+        .stat-title { color: #94a3b8; font-size: 14px; text-transform: uppercase; margin-bottom: 8px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #f1f5f9; }
+        .sync-btn { background-color: #0ea5e9; border: none; color: white; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .sync-btn:hover { background-color: #0284c7; }
+        .block-card { background-color: #1e293b; border-radius: 8px; padding: 20px; margin-bottom: 15px; border-left: 4px solid #38bdf8; border-top: 1px solid #334155; border-right: 1px solid #334155; border-bottom: 1px solid #334155; }
+        .block-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-weight: bold; }
+        .tx-box { background-color: #0f172a; border-radius: 6px; padding: 12px; margin-top: 10px; font-family: monospace; font-size: 13px; border: 1px solid #1e293b; }
+        .tx-line { margin-bottom: 6px; color: #cbd5e1; }
+        .tx-line:last-child { margin-bottom: 0; }
+        .highlight { color: #38bdf8; }
+        .witness-tag { display: inline-block; background-color: #0f172a; border: 1px solid #38bdf8; color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin: 2px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>💎 Covenant Standard Protocol Explorer</h1>
+                <div style="color: #64748b; margin-top: 5px;">Layer-1 Sovereign State Consensus Loop Dashboard</div>
+            </div>
+            <button class="sync-btn" onclick="fetchBlockchainData()">🔄 Refresh Ledger States</button>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-title">Current Block Height</div>
+                <div class="stat-value" id="stat-height">Loading...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Current Circulating Supply</div>
+                <div class="stat-value" id="stat-supply" style="color: #10b981;">0.00 CVN</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">Network Target Rhythm</div>
+                <div class="stat-value">10 Seconds</div>
+            </div>
+        </div>
+
+        <h2>🧱 Validated Ledger Chain Blocks</h2>
+        <div id="blockchain-render-target"></div>
+    </div>
+
+    <script>
+        async function fetchBlockchainData() {
+            try {
+                const response = await fetch('/req_chain');
+                const data = await response.json();
+                renderChain(data.blocks, data.circulating_supply);
+            } catch (err) {
+                document.getElementById('blockchain-render-target').innerHTML = 
+                    `<div class='stat-card' style='text-align: center; color: #ef4444;'>
+                        📡 Node Web Stream Initializing. Open Port :8081 or refresh to establish background handshake.
+                     </div>`;
+                document.getElementById('stat-height').innerText = "Active Link Pending";
+                document.getElementById('stat-supply').innerText = "Active Link Pending";
+            }
+        }
+
+        function renderChain(blocks, circulatingSupply) {
+            blocks.sort((a, b) => b.index - a.index); // Newest blocks first
+            
+            document.getElementById('stat-height').innerText = blocks.length > 0 ? blocks[0].index : 0;
+            document.getElementById('stat-supply').innerText = circulatingSupply.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN";
+            
+            let html = '';
+            blocks.forEach(block => {
+                let txHtml = '';
+                if(block.transactions && block.transactions.length > 0) {
+                    block.transactions.forEach(tx => {
+                        txHtml += `
+                            <div class="tx-line">
+                                💸 <span class="highlight">Sender:</span> ${tx.sender} | 
+                                <span class="highlight">Recipient:</span> ${tx.recipient} | 
+                                <span class="highlight">Value:</span> ${tx.amount.toFixed(2)} CVN | 
+                                <span class="highlight">Offering:</span> ${tx.free_will_offering ? tx.free_will_offering.toFixed(2) : '0.00'} CVN
+                            </div>`;
+                    });
+                } else {
+                    txHtml = '<div style="color: #64748b;">Zero transactions inside block space.</div>';
+                }
+
+                let witnessHtml = '';
+                if (block.guard_matrix) {
+                    block.guard_matrix.forEach(w => {
+                        witnessHtml += `<span class="witness-tag">🛡️ ${w}</span>`;
+                    });
+                }
+
+                html += `
+                    <div class="block-card">
+                        <div class="block-header">
+                            <span style="color: #38bdf8; font-size: 18px;">Block Height: #${block.index}</span>
+                            <span style="color: #94a3b8; font-size: 13px;">Timestamp: ${new Date(block.timestamp * 1000).toLocaleString()}</span>
+                        </div>
+                        <div style="margin-bottom: 8px; font-size: 14px; font-family: monospace; color: #cbd5e1;">
+                            <strong>Current Hash:</strong> ${block.hash}<br>
+                            <strong>Previous Hash:</strong> ${block.prev_hash}<br>
+                            <strong>Mining Nonce:</strong> <span style="color: #10b981;">${block.nonce}</span> | 
+                            <strong>Difficulty Target:</strong> ${block.difficulty}
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <strong>21-Witness Guard Signatures:</strong>
+                            <div style="margin-top: 5px;">${witnessHtml || '<span style="color:#64748b;">Genesis Signature Matrix Set</span>'}</div>
+                        </div>
+                        <div class="tx-box">
+                            <strong>Block Transaction Payload:</strong>
+                            <div style="margin-top: 8px;">${txHtml}</div>
+                        </div>
+                    </div>`;
+            });
+            document.getElementById('blockchain-render-target').innerHTML = html;
+        }
+
+        fetchBlockchainData();
+        setInterval(fetchBlockchainData, 5000); // Poll server every 5 seconds
+    </script>
+</body>
+</html>

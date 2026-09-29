@@ -1,1 +1,57 @@
-package main; import ("encoding/json"; "fmt"; "os"); type Transaction struct { Sender string `json:"sender"`; Recipient string `json:"recipient"`; Amount float64 `json:"amount"`; Witness string `json:"witness"`; Timestamp string `json:"timestamp"` }; type Block struct { Index int64 `json:"index"`; Timestamp int64 `json:"timestamp"`; Transactions []Transaction `json:"transactions"`; PrevHash string `json:"prev_hash"`; Hash string `json:"hash"`; Nonce int64 `json:"nonce"`; Difficulty int64 `json:"difficulty"` }; func main() { fmt.Println("=================================================================="); fmt.Println("?? COVENANT STANDARD PROTOCOL NETWORK AUDIT REPORT"); fmt.Println("====================================================\n"); data, err := os.ReadFile("ledger_vault.json"); if err != nil { fmt.Println("??  Error: Unable to locate local ledger database file."); return }; var chain []Block; if err := json.Unmarshal(data, &chain); err != nil { fmt.Println("??  Error: Database file format is unreadable."); return }; fmt.Printf("?? Current Global Block Height : %d Blocks Captured\n", len(chain)-1); var totalMinedSupply float64 = 0.0; for _, block := range chain { for _, tx := range block.Transactions { if tx.Sender == "GENESIS_VOID_REWARD_POOL" { totalMinedSupply += tx.Amount } } }; fmt.Printf("?? Total Programmatic Circulation : %.2f CVN\n", totalMinedSupply); fmt.Println("\n------------------------------------------------------------------"); fmt.Println("?? RECENT ON-CHAIN ACTIVITY LOG (LAST 5 BLOCKS):"); fmt.Println("------------------------------------------------------------------"); start := len(chain) - 5; if start < 0 { start = 0 }; for i := start; i < len(chain); i++ { b := chain[i]; fmt.Printf("?? BLOCK #%d | Hash: %s... | Diff: %d\n", b.Index, b.Hash[:20], b.Difficulty); for _, tx := range b.Transactions { fmt.Printf("   ?? Transfer: %.2f CVN | From: %s... -> To: %s...\n", tx.Amount, tx.Sender[:15], tx.Recipient[:15]); fmt.Printf("      Witness Verified By: %s\n", tx.Witness) }; fmt.Println(".-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-.-") }; fmt.Println("==================================================================") }
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+// AuditActiveLedger analyzes the ledger file to compute network health statistics
+func AuditActiveLedger() {
+	if _, err := os.Stat(BlockchainFile); os.IsNotExist(err) {
+		fmt.Println("📖 [Ledger Auditor] Scan skipped: No ledger_vault.json found yet.")
+		return
+	}
+
+	data, err := os.ReadFile(BlockchainFile)
+	if err != nil {
+		fmt.Printf("⚠️ [Ledger Auditor Error] Cannot read ledger: %v\n", err)
+		return
+	}
+
+	// Use an anonymous interface array map to entirely bypass struct compilation caching bottlenecks
+	var chain []map[string]interface{}
+	err = json.Unmarshal(data, &chain)
+	if err != nil {
+		fmt.Printf("⚠️ [Ledger Auditor Error] Malformed JSON data structure: %v\n", err)
+		return
+	}
+
+	var totalTransactions int = 0
+	var burnedTokens float64 = 0.0
+
+	for _, block := range chain {
+		if txs, ok := block["transactions"].([]interface{}); ok {
+			totalTransactions += len(txs)
+			for _, txRaw := range txs {
+				if tx, ok := txRaw.(map[string]interface{}); ok {
+					recipient, _ := tx["recipient"].(string)
+					if recipient == "0x0000000000000000000000000000000000000000_BURN_VOID" {
+						amount, _ := tx["amount"].(float64)
+						offering, _ := tx["free_will_offering"].(float64)
+						burnedTokens += amount + offering
+					}
+				}
+			}
+		}
+	}
+
+	fmt.Println("====================================================")
+	fmt.Println("📖 COVENANT STANDARD (CVN) ON-CHAIN METRICS AUDIT")
+	fmt.Println("====================================================")
+	fmt.Printf("📈 Total Validated Blocks:    %d\n", len(chain))
+	fmt.Printf("🔄 Total Network Velocity:    %d Transactions\n", totalTransactions)
+	fmt.Printf("🔥 Total Jubilee Burned Void: %.6f CVN\n", burnedTokens)
+	fmt.Printf("🪙 Net Circulating Supply:     %.6f CVN\n", 2100000000.0-burnedTokens)
+	fmt.Println("====================================================")
+}

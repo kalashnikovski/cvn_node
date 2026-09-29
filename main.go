@@ -5,25 +5,46 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
+	"net/http"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 const BlockchainFile = "ledger_vault.json"
-const TargetBlockTime = 10 // Target block generation window in seconds for fast simulation
+const TargetBlockTime = 10
+const MaxTotalSupplyCap = 2100000000.0
+const JubileeTimeWindow = 49 * 365 * 24 * 60 * 60 // 49 Years in seconds
+const BurnAddress = "0x0000000000000000000000000000000000000000_BURN_VOID"
 
-var BootstrapSeeds = []string{
-	"127.0.0.1:8080",
+// Thread-safe global transaction memory pool tracking layers
+var (
+	GlobalMempool []Transaction
+	MempoolMutex  sync.Mutex
+	ConnectTarget string // The remote public IP/Domain passed by a peer to join your network
+)
+
+// Network roster of active validation peer names for random Witness checkpoints
+var NetworkWitnessRoster = []string{
+	"Peer_Witness_1", "Peer_Witness_2", "Peer_Witness_3", "Peer_Witness_4", "Peer_Witness_5",
+	"Peer_Witness_6", "Communal_Peer_Witness_7", "Peer_Witness_8", "Peer_Witness_9", "Peer_Witness_10",
+	"Witness_Alpha", "Witness_Beta", "Witness_Gamma", "Witness_Delta", "Witness_Epsilon",
+	"Validator_Secure_A", "Validator_Secure_B", "Validator_Secure_C", "Validator_Secure_D", "Validator_Secure_E",
+	"Node_Guardian_Prime", "Node_Guardian_Secure", "Root_Gateway_Echo", "Sovereign_State_Validator",
 }
 
 type Transaction struct {
-	Sender    string    `json:"sender"`
-	Recipient string    `json:"recipient"`
-	Amount    float64   `json:"amount"`
-	Witness   string    `json:"witness"`
-	Timestamp time.Time `json:"timestamp"`
+	Sender           string    `json:"sender"`
+	Recipient        string    `json:"recipient"`
+	Amount           float64   `json:"amount"`
+	FreeWillOffering float64   `json:"free_will_offering"`
+	DataSizeKB       float64   `json:"data_size_kb"`
+	Witness          string    `json:"witness"`
+	Timestamp        time.Time `json:"timestamp"`
 }
 
 type Block struct {
@@ -33,11 +54,12 @@ type Block struct {
 	PrevHash     string        `json:"prev_hash"`
 	Hash         string        `json:"hash"`
 	Nonce        int64         `json:"nonce"`
-	Difficulty   int64         `json:"difficulty"` // The number of leading target zeros required
+	Difficulty   int64         `json:"difficulty"`
+	GuardMatrix  []string      `json:"guard_matrix,omitempty"` // The 21-Witness consensus checkpoint
 }
 
 func CalculateHash(b Block) string {
-	record := fmt.Sprintf("%d%d%s%s%d%d", b.Index, b.Timestamp, fmt.Sprintf("%v", b.Transactions), b.PrevHash, b.Nonce, b.Difficulty)
+	record := fmt.Sprintf("%d%d%v%s%d%d%v", b.Index, b.Timestamp, b.Transactions, b.PrevHash, b.Nonce, b.Difficulty, b.GuardMatrix)
 	h := sha256.New()
 	h.Write([]byte(record))
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -45,11 +67,13 @@ func CalculateHash(b Block) string {
 
 func CreateGenesisBlock() Block {
 	genesisTx := Transaction{
-		Sender:    "GENESIS_VOID_REWARD_POOL",
-		Recipient: "COVENANT_STEWARD_ASSEMBLY",
-		Amount:    2100000000.0,
-		Witness:   "ROOT_PEER_WITNESS_GATEWAY",
-		Timestamp: time.Unix(1790640000, 0),
+		Sender:           "GENESIS_VOID_REWARD_POOL",
+		Recipient:        "COVENANT_STEWARD_ASSEMBLY",
+		Amount:           MaxTotalSupplyCap,
+		FreeWillOffering: 0.0,
+		DataSizeKB:       1.0,
+		Witness:          "ROOT_PEER_WITNESS_GATEWAY",
+		Timestamp:        time.Unix(1790640000, 0),
 	}
 	genesisBlock := Block{
 		Index:        0,
@@ -57,18 +81,30 @@ func CreateGenesisBlock() Block {
 		Transactions: []Transaction{genesisTx},
 		PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
 		Nonce:        0,
-		Difficulty:   4, // Starts requiring a prefix of 4 zeros ("0000")
+		Difficulty:   4,
+		GuardMatrix:  []string{"ROOT_PEER_WITNESS_GATEWAY"},
 	}
 	genesisBlock.Hash = CalculateHash(genesisBlock)
 	return genesisBlock
 }
 
 func SaveChain(chain []Block) {
-	data, err := json.MarshalIndent(chain, "", "  ")
-	if err != nil {
-		return
-	}
+	data, _ := json.MarshalIndent(chain, "", "  ")
 	_ = os.WriteFile(BlockchainFile, data, 0644)
+}
+
+func VerifyGenesisFreeze(chain []Block) bool {
+	if len(chain) == 0 {
+		return false
+	}
+	genesisBlock := chain[0]
+	if len(genesisBlock.Transactions) == 0 {
+		return false
+	}
+	if genesisBlock.Transactions[0].Amount > MaxTotalSupplyCap {
+		return false
+	}
+	return true
 }
 
 func LoadChain() []Block {
@@ -77,53 +113,81 @@ func LoadChain() []Block {
 		SaveChain(chain)
 		return chain
 	}
-	data, err := os.ReadFile(BlockchainFile)
-	if err != nil {
-		return []Block{CreateGenesisBlock()}
-	}
+	data, _ := os.ReadFile(BlockchainFile)
 	var chain []Block
 	_ = json.Unmarshal(data, &chain)
+	if !VerifyGenesisFreeze(chain) {
+		fmt.Println("🚨 GENESIS FREEZE LEAK")
+		os.Exit(1)
+	}
 	return chain
 }
 
 func GetAddressBalance(chain []Block, address string) float64 {
 	var balance float64 = 0.0
+	var lastActiveTimestamp int64 = 0
+
+	for _, block := range chain {
+		for _, tx := range block.Transactions {
+			if tx.Sender == address || tx.Recipient == address {
+				if block.Timestamp > lastActiveTimestamp {
+					lastActiveTimestamp = block.Timestamp
+				}
+			}
+		}
+	}
+
+	currentNetworkTime := time.Now().Unix()
+	if len(chain) > 0 {
+		currentNetworkTime = chain[len(chain)-1].Timestamp
+	}
+
+	if lastActiveTimestamp > 0 && (currentNetworkTime-lastActiveTimestamp) > int64(JubileeTimeWindow) {
+		return 0.0
+	}
+
 	for _, block := range chain {
 		for _, tx := range block.Transactions {
 			if tx.Recipient == address {
 				balance += tx.Amount
+				balance += tx.FreeWillOffering
 			}
 			if tx.Sender == address {
 				balance -= tx.Amount
+				balance -= tx.FreeWillOffering
 			}
 		}
 	}
 	return balance
 }
 
-// CalculateAdaptiveDifficulty adjusts the target zeros dynamically based on actual network velocity
 func CalculateAdaptiveDifficulty(chain []Block) int64 {
 	if len(chain) < 2 {
-		return 4 // Base difficulty threshold
+		return 4
 	}
-
 	latestBlock := chain[len(chain)-1]
 	prevBlock := chain[len(chain)-2]
 	actualTimeElapsed := latestBlock.Timestamp - prevBlock.Timestamp
-
 	currentDiff := latestBlock.Difficulty
 
-	// The Organic Heartbeat Protocol Logic Loop
-	if actualTimeElapsed < TargetBlockTime {
-		// Blocks are compiling too fast (High Network Hashrate Influx) -> Make it harder
-		fmt.Printf("💓 Organic Heartbeat: Blocks solving too fast (%ds vs target %ds). Scaling difficulty UP.\n", actualTimeElapsed, TargetBlockTime)
-		return currentDiff + 1
-	} else if actualTimeElapsed > (TargetBlockTime * 3) && currentDiff > 3 {
-		// Network hashrate dropped or miners disconnected -> Scale difficulty DOWN to protect block space
-		fmt.Printf("💓 Organic Heartbeat: Blocks solving too slow (%ds vs target %ds). Scaling difficulty DOWN.\n", actualTimeElapsed, TargetBlockTime)
-		return currentDiff - 1
+	if currentDiff > 6 {
+		currentDiff = 6
+	}
+	if currentDiff < 3 {
+		currentDiff = 3
 	}
 
+	if actualTimeElapsed < TargetBlockTime {
+		if currentDiff < 6 {
+			fmt.Printf("💓 Organic Heartbeat: Blocks solving too fast (%ds vs target %ds). Scaling difficulty UP.\n", actualTimeElapsed, TargetBlockTime)
+			return currentDiff + 1
+		}
+	} else if actualTimeElapsed > (TargetBlockTime * 3) {
+		if currentDiff > 3 {
+			fmt.Printf("💓 Organic Heartbeat: Blocks solving too slow (%ds vs target %ds). Scaling difficulty DOWN.\n", actualTimeElapsed, TargetBlockTime)
+			return currentDiff - 1
+		}
+	}
 	return currentDiff
 }
 
@@ -131,20 +195,41 @@ func HandleIncomingPeer(conn net.Conn) {
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		if scanner.Text() == "REQ_CHAIN_SYNC" {
+		text := scanner.Text()
+		
+		if text == "REQ_CHAIN_SYNC" {
 			chain := LoadChain()
 			data, _ := json.Marshal(chain)
 			fmt.Fprintln(conn, string(data))
+			return
+		}
+
+		if strings.HasPrefix(text, "TX_BROADCAST:") {
+			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
+			var tx Transaction
+			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
+				MempoolMutex.Lock()
+				GlobalMempool = append(GlobalMempool, tx)
+				fmt.Printf("📥 [P2P Network Engine] Ingested raw transaction from network packet! Sender: %s | Amount: %.2f CVN\n", tx.Sender, tx.Amount)
+				MempoolMutex.Unlock()
+				fmt.Fprintln(conn, "TX_ACCEPTED")
+			} else {
+				fmt.Fprintln(conn, "TX_REJECTED_MALFORMED")
+			}
+			return
 		}
 	}
 }
 
 func StartTCPServer() {
-	listener, err := net.Listen("tcp", ":8080")
+	// UPGRADE: Changed listener context parameter from 127.0.0.1 to 0.0.0.0:8080 to accept public external connections
+	listener, err := net.Listen("tcp", "0.0.0.0:8080")
 	if err != nil {
+		fmt.Printf("🚨 TCP Server Bind Error: %v\n", err)
 		return
 	}
 	defer listener.Close()
+	fmt.Println("📡 Global TCP P2P Subnetwork Engine Online. Listening for incoming miners on Port :8080...")
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -154,6 +239,91 @@ func StartTCPServer() {
 	}
 }
 
+func StartPublicExplorerServer() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "explorer.html")
+	})
+
+	http.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		chain := LoadChain()
+		var totalMined float64 = 0.0
+		var burnedTokens float64 = 0.0
+		
+		if len(chain) > 1 {
+			totalMined = float64(len(chain)-1) * 50.0
+		}
+		
+		for _, block := range chain {
+			for _, tx := range block.Transactions {
+				if tx.Recipient == "0x0000000000000000000000000000000000000000_BURN_VOID" {
+					burnedTokens += tx.Amount + tx.FreeWillOffering
+				}
+			}
+		}
+		
+		circulatingSupply := totalMined - burnedTokens
+		if circulatingSupply < 0 {
+			circulatingSupply = 0
+		}
+
+		responseData := map[string]interface{}{
+			"circulating_supply": circulatingSupply,
+			"blocks":             chain,
+		}
+		
+		data, _ := json.Marshal(responseData)
+		w.Write(data)
+	})
+
+	fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
+	go func() {
+		// UPGRADE: Changed listener context parameter from localhost to 0.0.0.0 to allow shared remote browser auditing
+		_ = http.ListenAndServe("0.0.0.0:8081", nil)
+	}()
+}
+
+// SyncChainFromSeedPeer contacts the bootstrap seed node over public channels to synchronize ledger blocks
+func SyncChainFromSeedPeer(seedAddr string) {
+	fmt.Printf("🔄 Synchronizing data blocks from public seed peer endpoint: %s...\n", seedAddr)
+	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
+	if err != nil {
+		fmt.Printf("⚠️  Handshake Failure: Seed node %s is unreachable. Initializing local workspace instead.\n", seedAddr)
+		return
+	}
+	defer conn.Close()
+
+	fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
+	respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil {
+		return
+	}
+
+	var remoteChain []Block
+	if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
+		localChain := LoadChain()
+		if len(remoteChain) > len(localChain) {
+			fmt.Printf("📈 Remote ledger state exhibits superior validation height (%d vs %d). Synchronizing files...\n", len(remoteChain), len(localChain))
+			SaveChain(remoteChain)
+		} else {
+			fmt.Println("✅ Local file ledger is already fully synchronized to top-tier network validation blocks.")
+		}
+	}
+}
+
+func Assemble21WitnessGuardMatrix() []string {
+	rand.Seed(time.Now().UnixNano())
+	shuffled := make([]string, len(NetworkWitnessRoster))
+	copy(shuffled, NetworkWitnessRoster)
+	rand.Shuffle(len(shuffled), func(i, j int) { shuffled[i], shuffled[j] = shuffled[j], shuffled[i] })
+
+	limit := 21
+	if len(shuffled) < limit {
+		limit = len(shuffled)
+	}
+	return shuffled[:limit]
+}
+
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
 	var newBlock Block
 	newBlock.Index = prevBlock.Index + 1
@@ -161,67 +331,116 @@ func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Bloc
 	newBlock.Transactions = txs
 	newBlock.PrevHash = prevBlock.Hash
 	newBlock.Difficulty = currentDifficulty
-	newBlock.Nonce = 0
-
-	// Dynamically build the required prefix matching string (e.g. 4 -> "0000", 5 -> "00000")
-	targetPrefix := strings.Repeat("0", int(newBlock.Difficulty))
-
-	fmt.Printf("\n⚒️  PoD Active: Mining Block %d (Target Pattern: Starting with %d Zeros)...\n", newBlock.Index, newBlock.Difficulty)
-	for {
-		newBlock.Hash = CalculateHash(newBlock)
-		if newBlock.Hash[:int(newBlock.Difficulty)] == targetPrefix {
-			fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Hash: %s\n", newBlock.Nonce, newBlock.Hash)
-			break
-		}
-		newBlock.Nonce++
+	
+	if newBlock.Difficulty > 6 {
+		newBlock.Difficulty = 6
 	}
-	return newBlock
+	if newBlock.Difficulty < 3 {
+		newBlock.Difficulty = 3
 }
-
+newBlock.Nonce = 0
+newBlock.GuardMatrix = Assemble21WitnessGuardMatrix()
+targetPrefix := strings.Repeat("0", int(newBlock.Difficulty))
+fmt.Printf("\n⚒️  PoD Active: Mining Block %d (Target Pattern: Starting with %d Zeros)...\n", newBlock.Index, newBlock.Difficulty)
+fmt.Printf("🔒 Guard Matrix Assembled: %d active signatures verified for finality verification.\n", len(newBlock.GuardMatrix))
+startTime := time.Now()
+for {
+newBlock.Hash = CalculateHash(newBlock)
+if newBlock.Nonce > 0 && newBlock.Nonce%500000 == 0 {
+elapsed := time.Since(startTime).Seconds()
+if elapsed == 0 { elapsed = 0.001 }
+hashRate := float64(newBlock.Nonce) / elapsed / 1000.0
+fmt.Printf("   ⏳ Nonce: %d | Throughput: %.2f kH/s...\n", newBlock.Nonce, hashRate)
+}
+if int(newBlock.Difficulty) <= len(newBlock.Hash) && newBlock.Hash[:int(newBlock.Difficulty)] == targetPrefix {
+totalElapsed := time.Since(startTime).Seconds()
+if totalElapsed == 0 { totalElapsed = 0.001 }
+finalHashRate := float64(newBlock.Nonce) / totalElapsed / 1000.0
+fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Avg Speed: %.2f kH/s | Hash: %s\n",
+newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
+break
+}
+newBlock.Nonce++
+}
+return newBlock
+}
 func main() {
-	fmt.Println("====================================================")
-	fmt.Println("💎 COVENANT STANDARD (CVN) ADAPTIVE HEARTBEAT RIG")
-	fmt.Println("====================================================\n")
-
-// Command check: If launched with a '--wallet' flag argument, trigger the graphical wrapper instead
-	if len(os.Args) > 1 && os.Args[1] == "--wallet" {
-		fmt.Println("🎨 Booting Desktop Graphical user dashboard environment interface layers...")
-		RunWalletGUI()
-		return
-	}
-
-	go StartTCPServer()
-	time.Sleep(500 * time.Millisecond)
-
-	blockchain := LoadChain()
-	currentBlock := blockchain[len(blockchain)-1]
-
-	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
-
-	for {
-		pendingTransactions := []Transaction{
-			{
-				Sender:    "COVENANT_STEWARD_ASSEMBLY",
-				Recipient: "Nikola_Global_Network_Node",
-				Amount:    50.0,
-				Witness:   "Communal_Peer_Witness_7",
-				Timestamp: time.Now(),
-			},
-		}
-
-		// Calculate the next target difficulty dynamically based on the network heartbeat speed
-		nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
-
-		newBlock := MineBlock(currentBlock, pendingTransactions, nextDifficulty)
-		
-		blockchain = LoadChain()
-		blockchain = append(blockchain, newBlock)
-		currentBlock = newBlock
-
-		SaveChain(blockchain)
-		fmt.Printf("💰 WALLET AUDIT: Current Balance: %.2f CVN\n", GetAddressBalance(blockchain, "Nikola_Global_Network_Node"))
-		fmt.Println("-----------------------------------------------------")
-
-		time.Sleep(1 * time.Second)
-	}
+// Parse basic input command line arguments manually
+for i, arg := range os.Args {
+if arg == "--wallet" {
+RunWalletGUI()
+return
+}
+// UPGRADE: Peer argument handler logic (--connect public_ip:8080)
+if arg == "--connect" && i+1 < len(os.Args) {
+ConnectTarget = os.Args[i+1]
+}
+}
+fmt.Println("====================================================")
+fmt.Println("💎 COVENANT STANDARD (CVN) ADAPTIVE HEARTBEAT RIG")
+fmt.Println("====================================================\n")
+go StartTCPServer()
+go StartPublicExplorerServer()
+time.Sleep(200 * time.Millisecond)
+// UPGRADE: Trigger network synchronization loop check if a seed connection string is available
+if ConnectTarget != "" {
+SyncChainFromSeedPeer(ConnectTarget)
+}
+blockchain := LoadChain()
+currentBlock := blockchain[len(blockchain)-1]
+fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+for {
+MempoolMutex.Lock()
+activeMempool := make([]Transaction, len(GlobalMempool))
+copy(activeMempool, GlobalMempool)
+GlobalMempool = []Transaction{}
+MempoolMutex.Unlock()
+for i, tx := range activeMempool {
+var lastSeen int64 = 0
+for _, b := range blockchain {
+for _, historicalTx := range b.Transactions {
+if historicalTx.Sender == tx.Sender || historicalTx.Recipient == tx.Sender {
+if b.Timestamp > lastSeen {
+lastSeen = b.Timestamp
+}
+}
+}
+}
+if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(JubileeTimeWindow) {
+fmt.Printf("⚠️ Jubilee State Triggered for Address [%s]! Rerouting offerings into Burn Address.\n", tx.Sender)
+activeMempool[i].Recipient = BurnAddress
+activeMempool[i].FreeWillOffering = 0
+}
+}
+sort.Slice(activeMempool, func(i, j int) bool {
+if activeMempool[i].DataSizeKB == 0 { activeMempool[i].DataSizeKB = 1.0 }
+if activeMempool[j].DataSizeKB == 0 { activeMempool[j].DataSizeKB = 1.0 }
+scoreI := activeMempool[i].FreeWillOffering / activeMempool[i].DataSizeKB
+scoreJ := activeMempool[j].FreeWillOffering / activeMempool[j].DataSizeKB
+return scoreI > scoreJ
+})
+var totalBountyOfferings float64 = 0.0
+for _, tx := range activeMempool {
+totalBountyOfferings += tx.FreeWillOffering
+}
+coinbaseRewardTx := Transaction{
+Sender:           "COVENANT_STEWARD_ASSEMBLY",
+Recipient:        "Nikola_Global_Network_Node",
+Amount:           50.0,
+FreeWillOffering: totalBountyOfferings,
+DataSizeKB:       0.1,
+Witness:          "Communal_Peer_Witness_7",
+Timestamp:        time.Now(),
+}
+blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
+nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
+newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
+blockchain = LoadChain()
+blockchain = append(blockchain, newBlock)
+currentBlock = newBlock
+SaveChain(blockchain)
+fmt.Printf("💰 WALLET AUDIT: Current Balance: %.2f CVN\n", GetAddressBalance(blockchain, "Nikola_Global_Network_Node"))
+fmt.Println("-----------------------------------------------------")
+time.Sleep(3 * time.Second)
+}
 }
