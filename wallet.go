@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/elliptic"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -16,7 +19,7 @@ import (
 
 func RunWalletGUI() {
 	myApp := app.New()
-	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v2.1.1")
+	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v2.2.2")
 	myWindow.Resize(fyne.NewSize(550, 680))
 
 	statusLabel := widget.NewLabel("System Status: ENCRYPTED & SECURE")
@@ -43,6 +46,36 @@ func RunWalletGUI() {
 	offeringInput.SetPlaceHolder("Enter Voluntary Free-Will Offering Fee (e.g. 1.50)...")
 
 	networkLog := widget.NewLabel("[P2P Cryptographic Client Interface Ready]")
+
+	// FUNCTION: Dynamically extracts the true, unique deterministic public address from the hex private key
+	deriveAddressFromInput := func(privHex string) {
+		privHex = strings.TrimSpace(privHex)
+		if len(privHex) != 64 {
+			addressLabel.SetText("Your Public Address: (Invalid Private Key length - must be 64 hex characters)")
+			return
+		}
+
+		privBytes, err := hex.DecodeString(privHex)
+		if err != nil {
+			addressLabel.SetText("Your Public Address: (Invalid hex formatting characters)")
+			return
+		}
+
+		// Apply deterministic NIST P-256 curve mathematics to reverse-engineer public coordinates from secret seeds
+		curve := elliptic.P256()
+		x, y := curve.ScalarBaseMult(privBytes)
+		
+		pubHex := fmt.Sprintf("%x%x", x, y)
+		addressHash := sha256.Sum256([]byte(pubHex))
+		walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
+		
+		addressLabel.SetText(fmt.Sprintf("Your Public Address: %s", walletAddress))
+	}
+
+	// HOT-RELOAD LISTENER: Triggers real-time mathematical identity derivation instantly on changes
+	privKeyEntry.OnChanged = func(text string) {
+		deriveAddressFromInput(text)
+	}
 
 	genKeysButton := widget.NewButton("⚙️ GENERATE NEW SECURE WALLET PROFILE KEYPAIR", func() {
 		privHex, walletAddress, err := GenerateKeyPair()
@@ -78,7 +111,6 @@ func RunWalletGUI() {
 			offering, _ = strconv.ParseFloat(offeringStr, 64)
 		}
 
-		// Secure public address extraction pass utilizing robust trimming helpers
 		publicAddressHandle := addressLabel.Text
 		if strings.Contains(publicAddressHandle, "CVN_") {
 			idx := strings.Index(publicAddressHandle, "CVN_")
@@ -120,7 +152,6 @@ func RunWalletGUI() {
 		defer conn.Close()
 
 		fmt.Fprintf(conn, "TX_BROADCAST:%s\n", string(txBytes))
-		
 		networkLog.SetText(fmt.Sprintf("🚀 Successfully broadcasted signed transaction packet to node endpoint: %s!", nodeTarget))
 		recipientInput.SetText("")
 		amountInput.SetText("")
@@ -153,14 +184,11 @@ func RunWalletGUI() {
 		widget.NewLabel("=================================================="),
 	)
 
-	// UPGRADE: Bulletproof real-time background account balance lookup loop
 	go func() {
 		for {
 			time.Sleep(3 * time.Second)
 			if privKeyEntry.Text != "" {
 				currentChain := LoadChain()
-				
-				// Fix: Uses strict search tracking index parameters to strip text labels entirely
 				publicAddressHandle := addressLabel.Text
 				if strings.Contains(publicAddressHandle, "CVN_") {
 					idx := strings.Index(publicAddressHandle, "CVN_")
