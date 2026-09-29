@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
 const BlockchainFile = "ledger_vault.json"
+const TargetBlockTime = 10 // Target block generation window in seconds for fast simulation
 
-// Hardcoded Seed Node Array - Ensures all nodes worldwide know exactly who to call
 var BootstrapSeeds = []string{
-	"127.0.0.1:8080", // Local fallback testing address
+	"127.0.0.1:8080",
 }
 
 type Transaction struct {
@@ -32,7 +33,7 @@ type Block struct {
 	PrevHash     string        `json:"prev_hash"`
 	Hash         string        `json:"hash"`
 	Nonce        int64         `json:"nonce"`
-	Difficulty   int64         `json:"difficulty"`
+	Difficulty   int64         `json:"difficulty"` // The number of leading target zeros required
 }
 
 func CalculateHash(b Block) string {
@@ -56,7 +57,7 @@ func CreateGenesisBlock() Block {
 		Transactions: []Transaction{genesisTx},
 		PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
 		Nonce:        0,
-		Difficulty:   100000,
+		Difficulty:   4, // Starts requiring a prefix of 4 zeros ("0000")
 	}
 	genesisBlock.Hash = CalculateHash(genesisBlock)
 	return genesisBlock
@@ -100,34 +101,50 @@ func GetAddressBalance(chain []Block, address string) float64 {
 	return balance
 }
 
-// HandleIncomingPeer processes network messages from incoming node connections
+// CalculateAdaptiveDifficulty adjusts the target zeros dynamically based on actual network velocity
+func CalculateAdaptiveDifficulty(chain []Block) int64 {
+	if len(chain) < 2 {
+		return 4 // Base difficulty threshold
+	}
+
+	latestBlock := chain[len(chain)-1]
+	prevBlock := chain[len(chain)-2]
+	actualTimeElapsed := latestBlock.Timestamp - prevBlock.Timestamp
+
+	currentDiff := latestBlock.Difficulty
+
+	// The Organic Heartbeat Protocol Logic Loop
+	if actualTimeElapsed < TargetBlockTime {
+		// Blocks are compiling too fast (High Network Hashrate Influx) -> Make it harder
+		fmt.Printf("💓 Organic Heartbeat: Blocks solving too fast (%ds vs target %ds). Scaling difficulty UP.\n", actualTimeElapsed, TargetBlockTime)
+		return currentDiff + 1
+	} else if actualTimeElapsed > (TargetBlockTime * 3) && currentDiff > 3 {
+		// Network hashrate dropped or miners disconnected -> Scale difficulty DOWN to protect block space
+		fmt.Printf("💓 Organic Heartbeat: Blocks solving too slow (%ds vs target %ds). Scaling difficulty DOWN.\n", actualTimeElapsed, TargetBlockTime)
+		return currentDiff - 1
+	}
+
+	return currentDiff
+}
+
 func HandleIncomingPeer(conn net.Conn) {
 	defer conn.Close()
 	scanner := bufio.NewScanner(conn)
-	
 	for scanner.Scan() {
-		msg := scanner.Text()
-		
-		// If a new node calls for the blockchain history, stream our ledger file to them
-		if msg == "REQ_CHAIN_SYNC" {
+		if scanner.Text() == "REQ_CHAIN_SYNC" {
 			chain := LoadChain()
 			data, _ := json.Marshal(chain)
 			fmt.Fprintln(conn, string(data))
-			fmt.Println("📡 [Network Layer] Successfully synchronized ledger history with remote peer.")
 		}
 	}
 }
 
-// StartTCPServer opens the communication gateway for incoming network miners
 func StartTCPServer() {
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
-		fmt.Printf("⚠️  TCP Server Error: Failed to open listening socket: %v\n", err)
 		return
 	}
 	defer listener.Close()
-
-	fmt.Println("📡 Global TCP Subnetwork Online. Listening for miners on Port :8080...")
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -137,44 +154,22 @@ func StartTCPServer() {
 	}
 }
 
-// ConnectToNetwork attempts to connect to seed nodes to discover and sync with the active network
-func ConnectToNetwork() []Block {
-	fmt.Println("🔍 Attempting to connect to Bootstrap Seed Nodes...")
-	for _, seed := range BootstrapSeeds {
-		conn, err := net.DialTimeout("tcp", seed, 2*time.Second)
-		if err != nil {
-			continue
-		}
-		defer conn.Close()
-
-		// Requesting the master chain from the anchor node
-		fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
-		
-		var incomingChain []Block
-		decoder := json.NewDecoder(conn)
-		if err := decoder.Decode(&incomingChain); err == nil {
-			fmt.Printf("✅ Connected successfully! Synced chain height: %d blocks from peer [%s]\n", len(incomingChain)-1, seed)
-			return incomingChain
-		}
-	}
-	
-	fmt.Println("⚠️  No active seeds found. Operating as network anchor node baseline.")
-	return LoadChain()
-}
-
-func MineBlock(prevBlock Block, txs []Transaction) Block {
+func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
 	var newBlock Block
 	newBlock.Index = prevBlock.Index + 1
 	newBlock.Timestamp = time.Now().Unix()
 	newBlock.Transactions = txs
 	newBlock.PrevHash = prevBlock.Hash
-	newBlock.Difficulty = prevBlock.Difficulty
+	newBlock.Difficulty = currentDifficulty
 	newBlock.Nonce = 0
 
-	fmt.Printf("\n⚒️  Proof-of-Diligence Active: Mining Block %d... (Press Ctrl+C to stop)\n", newBlock.Index)
+	// Dynamically build the required prefix matching string (e.g. 4 -> "0000", 5 -> "00000")
+	targetPrefix := strings.Repeat("0", int(newBlock.Difficulty))
+
+	fmt.Printf("\n⚒️  PoD Active: Mining Block %d (Target Pattern: Starting with %d Zeros)...\n", newBlock.Index, newBlock.Difficulty)
 	for {
 		newBlock.Hash = CalculateHash(newBlock)
-		if newBlock.Hash[:4] == "0000" {
+		if newBlock.Hash[:int(newBlock.Difficulty)] == targetPrefix {
 			fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Hash: %s\n", newBlock.Nonce, newBlock.Hash)
 			break
 		}
@@ -185,16 +180,23 @@ func MineBlock(prevBlock Block, txs []Transaction) Block {
 
 func main() {
 	fmt.Println("====================================================")
-	fmt.Println("💎 COVENANT STANDARD (CVN) HARDENED LEDGER RIG")
+	fmt.Println("💎 COVENANT STANDARD (CVN) ADAPTIVE HEARTBEAT RIG")
 	fmt.Println("====================================================\n")
 
-	// Launch background listener socket thread
+// Command check: If launched with a '--wallet' flag argument, trigger the graphical wrapper instead
+	if len(os.Args) > 1 && os.Args[1] == "--wallet" {
+		fmt.Println("🎨 Booting Desktop Graphical user dashboard environment interface layers...")
+		RunWalletGUI()
+		return
+	}
+
 	go StartTCPServer()
 	time.Sleep(500 * time.Millisecond)
 
-	// Attempt peer discovery and global chain state synchronization
-	blockchain := ConnectToNetwork()
+	blockchain := LoadChain()
 	currentBlock := blockchain[len(blockchain)-1]
+
+	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
 
 	for {
 		pendingTransactions := []Transaction{
@@ -207,9 +209,11 @@ func main() {
 			},
 		}
 
-		newBlock := MineBlock(currentBlock, pendingTransactions)
+		// Calculate the next target difficulty dynamically based on the network heartbeat speed
+		nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
+
+		newBlock := MineBlock(currentBlock, pendingTransactions, nextDifficulty)
 		
-		// Refresh local chain state before appending
 		blockchain = LoadChain()
 		blockchain = append(blockchain, newBlock)
 		currentBlock = newBlock

@@ -5166,5 +5166,5071 @@
     "hash": "0000065146be985105edfa45e575629bc694b1e213d19b6ceabd02337dec526e",
     "nonce": 171233,
     "difficulty": 100000
+  },
+  {
+    "index": 304,
+    "timestamp": 1790639237,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:17.5896194+10:00"
+      }
+    ],
+    "prev_hash": "0000065146be985105edfa45e575629bc694b1e213d19b6ceabd02337dec526e",
+    "hash": "00002d345a8c6858f33b427c10bde29e996fe38dcff0da8713e3c4d1201e3d9e",
+    "nonce": 108908,
+    "difficulty": 100000
+  },
+  {
+    "index": 305,
+    "timestamp": 1790639238,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:18.9313041+10:00"
+      }
+    ],
+    "prev_hash": "00002d345a8c6858f33b427c10bde29e996fe38dcff0da8713e3c4d1201e3d9e",
+    "hash": "00002e785124d791be13127c859969984df0b20b0f579c0cd8fc69370deccb29",
+    "nonce": 44903,
+    "difficulty": 100000
+  },
+  {
+    "index": 306,
+    "timestamp": 1790639240,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:20.0752787+10:00"
+      }
+    ],
+    "prev_hash": "00002e785124d791be13127c859969984df0b20b0f579c0cd8fc69370deccb29",
+    "hash": "000081cbd7b91fb5a2eb3f8c796b2b73c73541e5a2e62fe10352cf0110f93cc1",
+    "nonce": 626,
+    "difficulty": 100000
+  },
+  {
+    "index": 307,
+    "timestamp": 1790639241,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:21.0826888+10:00"
+      }
+    ],
+    "prev_hash": "000081cbd7b91fb5a2eb3f8c796b2b73c73541e5a2e62fe10352cf0110f93cc1",
+    "hash": "0000f763e4c5b8961c48113931d30b7e699227e8700292f9282ac479cbae4ddc",
+    "nonce": 93551,
+    "difficulty": 100000
+  },
+  {
+    "index": 308,
+    "timestamp": 1790639242,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:22.3788378+10:00"
+      }
+    ],
+    "prev_hash": "0000f763e4c5b8961c48113931d30b7e699227e8700292f9282ac479cbae4ddc",
+    "hash": "000088992c83344dc357060d4f1f3b112151e21d51814313f504b5b2fc6e214a",
+    "nonce": 18209,
+    "difficulty": 100000
+  },
+  {
+    "index": 309,
+    "timestamp": 1790639243,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:23.439396+10:00"
+      }
+    ],
+    "prev_hash": "000088992c83344dc357060d4f1f3b112151e21d51814313f504b5b2fc6e214a",
+    "hash": "0000b5359967ef0fb3d4d4bc3e928aa7a1bd097684d43c4421d6263094c4a611",
+    "nonce": 125462,
+    "difficulty": 100000
+  },
+  {
+    "index": 310,
+    "timestamp": 1790639244,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:24.8253039+10:00"
+      }
+    ],
+    "prev_hash": "0000b5359967ef0fb3d4d4bc3e928aa7a1bd097684d43c4421d6263094c4a611",
+    "hash": "0000aa861eabd719c581129307f61ef26c5251c79ed31071db396a2b1225e08f",
+    "nonce": 150433,
+    "difficulty": 100000
+  },
+  {
+    "index": 311,
+    "timestamp": 1790639246,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:26.2916538+10:00"
+      }
+    ],
+    "prev_hash": "0000aa861eabd719c581129307f61ef26c5251c79ed31071db396a2b1225e08f",
+    "hash": "000039670cb9852dfa1abd4ad8073e071966d38732d2c0b528cd647a5772e95c",
+    "nonce": 29528,
+    "difficulty": 100000
+  },
+  {
+    "index": 312,
+    "timestamp": 1790639247,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:27.3835921+10:00"
+      }
+    ],
+    "prev_hash": "000039670cb9852dfa1abd4ad8073e071966d38732d2c0b528cd647a5772e95c",
+    "hash": "0000bafde249d19d6445c8e8a2227eb3ebb8262d362099f252c8f5fa3aa85a2b",
+    "nonce": 273262,
+    "difficulty": 100000
+  },
+  {
+    "index": 313,
+    "timestamp": 1790639249,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:29.2152949+10:00"
+      }
+    ],
+    "prev_hash": "0000bafde249d19d6445c8e8a2227eb3ebb8262d362099f252c8f5fa3aa85a2b",
+    "hash": "0000e612f996b067e3d812ad378404167835251d19b069364f570d52b6e21482",
+    "nonce": 9863,
+    "difficulty": 100000
+  },
+  {
+    "index": 314,
+    "timestamp": 1790639250,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:30.2497114+10:00"
+      }
+    ],
+    "prev_hash": "0000e612f996b067e3d812ad378404167835251d19b069364f570d52b6e21482",
+    "hash": "00008cac315d6370d840ffad346a5400940ef01ef0403e5a967f5e9cffd21af7",
+    "nonce": 38354,
+    "difficulty": 100000
+  },
+  {
+    "index": 315,
+    "timestamp": 1790639251,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:31.3718897+10:00"
+      }
+    ],
+    "prev_hash": "00008cac315d6370d840ffad346a5400940ef01ef0403e5a967f5e9cffd21af7",
+    "hash": "000079e25642223ff2d617db9e7ac4b94fd7353d7e2b66c9733136a9a1817f00",
+    "nonce": 539,
+    "difficulty": 100000
+  },
+  {
+    "index": 316,
+    "timestamp": 1790639252,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:32.378027+10:00"
+      }
+    ],
+    "prev_hash": "000079e25642223ff2d617db9e7ac4b94fd7353d7e2b66c9733136a9a1817f00",
+    "hash": "00001533e1bf9d2a400308d96017825b559509e2d691f2c8aa850f785d9dc897",
+    "nonce": 248,
+    "difficulty": 100000
+  },
+  {
+    "index": 317,
+    "timestamp": 1790639253,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:33.382915+10:00"
+      }
+    ],
+    "prev_hash": "00001533e1bf9d2a400308d96017825b559509e2d691f2c8aa850f785d9dc897",
+    "hash": "0000bb70f54f694fbb8a6563739f6bfeea7a2603cd9834257b8cdd3c536ca49b",
+    "nonce": 113294,
+    "difficulty": 100000
+  },
+  {
+    "index": 318,
+    "timestamp": 1790639254,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:34.7269917+10:00"
+      }
+    ],
+    "prev_hash": "0000bb70f54f694fbb8a6563739f6bfeea7a2603cd9834257b8cdd3c536ca49b",
+    "hash": "00008a04842827f91ea922525d172d6e253ea51a704e009faffd8af73c09b86b",
+    "nonce": 106293,
+    "difficulty": 100000
+  },
+  {
+    "index": 319,
+    "timestamp": 1790639256,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:36.0558983+10:00"
+      }
+    ],
+    "prev_hash": "00008a04842827f91ea922525d172d6e253ea51a704e009faffd8af73c09b86b",
+    "hash": "00008ef11230581de590eeb50ae5dd37d0bc3b1d8678ec16e7308c5edb378136",
+    "nonce": 53948,
+    "difficulty": 100000
+  },
+  {
+    "index": 320,
+    "timestamp": 1790639257,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:37.2293486+10:00"
+      }
+    ],
+    "prev_hash": "00008ef11230581de590eeb50ae5dd37d0bc3b1d8678ec16e7308c5edb378136",
+    "hash": "000090549b0e0c516d2ac15a4321b61d9c26a925b51052d6aa1d6496c7c8f6b0",
+    "nonce": 171186,
+    "difficulty": 100000
+  },
+  {
+    "index": 321,
+    "timestamp": 1790639258,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:38.7509446+10:00"
+      }
+    ],
+    "prev_hash": "000090549b0e0c516d2ac15a4321b61d9c26a925b51052d6aa1d6496c7c8f6b0",
+    "hash": "0000446f8c1e672ed1a3bceeb66b9d9865b21862ca76cd4d6cdb34278309fb63",
+    "nonce": 58662,
+    "difficulty": 100000
+  },
+  {
+    "index": 322,
+    "timestamp": 1790639260,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:40.1084016+10:00"
+      }
+    ],
+    "prev_hash": "0000446f8c1e672ed1a3bceeb66b9d9865b21862ca76cd4d6cdb34278309fb63",
+    "hash": "00007f38a504bcfb18d35227e09f3686927413d622afdd01f24ed590479f1b9a",
+    "nonce": 30874,
+    "difficulty": 100000
+  },
+  {
+    "index": 323,
+    "timestamp": 1790639261,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:41.2913692+10:00"
+      }
+    ],
+    "prev_hash": "00007f38a504bcfb18d35227e09f3686927413d622afdd01f24ed590479f1b9a",
+    "hash": "000036aff75b429339bdb7e6ad9a43e4e89e2cf5a9abe81bd4829f92898d027f",
+    "nonce": 86510,
+    "difficulty": 100000
+  },
+  {
+    "index": 324,
+    "timestamp": 1790639262,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:42.8013394+10:00"
+      }
+    ],
+    "prev_hash": "000036aff75b429339bdb7e6ad9a43e4e89e2cf5a9abe81bd4829f92898d027f",
+    "hash": "000068155fd5eb1fb6b31f09049cc22f4d34a98359c50c1c280048722457feb5",
+    "nonce": 70674,
+    "difficulty": 100000
+  },
+  {
+    "index": 325,
+    "timestamp": 1790639264,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:44.2399377+10:00"
+      }
+    ],
+    "prev_hash": "000068155fd5eb1fb6b31f09049cc22f4d34a98359c50c1c280048722457feb5",
+    "hash": "0000f339f1546461075d7eedd97a3ac1b8a09eca76c766be6156608a20f0bc38",
+    "nonce": 83120,
+    "difficulty": 100000
+  },
+  {
+    "index": 326,
+    "timestamp": 1790639265,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:45.4958592+10:00"
+      }
+    ],
+    "prev_hash": "0000f339f1546461075d7eedd97a3ac1b8a09eca76c766be6156608a20f0bc38",
+    "hash": "0000f2863030da92e272ef54f58a3f05df265897368768c0b520eb85c8b8c137",
+    "nonce": 95928,
+    "difficulty": 100000
+  },
+  {
+    "index": 327,
+    "timestamp": 1790639266,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:46.7999847+10:00"
+      }
+    ],
+    "prev_hash": "0000f2863030da92e272ef54f58a3f05df265897368768c0b520eb85c8b8c137",
+    "hash": "0000daeae8a6052105462246ce46348212b2ce2f5d7b61140d31ddfb25477c0f",
+    "nonce": 87945,
+    "difficulty": 100000
+  },
+  {
+    "index": 328,
+    "timestamp": 1790639268,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:48.0767216+10:00"
+      }
+    ],
+    "prev_hash": "0000daeae8a6052105462246ce46348212b2ce2f5d7b61140d31ddfb25477c0f",
+    "hash": "0000ee7e361b7a1565a0d0f0276e5d3bd39beb866217b28ccd6348097d6c0d7b",
+    "nonce": 62403,
+    "difficulty": 100000
+  },
+  {
+    "index": 329,
+    "timestamp": 1790639269,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:49.2746733+10:00"
+      }
+    ],
+    "prev_hash": "0000ee7e361b7a1565a0d0f0276e5d3bd39beb866217b28ccd6348097d6c0d7b",
+    "hash": "0000438a2a7e5d5d15301d75abd590b90b74de3c064ff2efbf0062f46b963b8c",
+    "nonce": 1688,
+    "difficulty": 100000
+  },
+  {
+    "index": 330,
+    "timestamp": 1790639270,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:50.2840628+10:00"
+      }
+    ],
+    "prev_hash": "0000438a2a7e5d5d15301d75abd590b90b74de3c064ff2efbf0062f46b963b8c",
+    "hash": "0000b1055a6de982cc2122ddeb7508f296601624b4fdd18890d8db6b877e8f4d",
+    "nonce": 31612,
+    "difficulty": 100000
+  },
+  {
+    "index": 331,
+    "timestamp": 1790639271,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:51.3899326+10:00"
+      }
+    ],
+    "prev_hash": "0000b1055a6de982cc2122ddeb7508f296601624b4fdd18890d8db6b877e8f4d",
+    "hash": "00002b9eed682641e63eb45f9b369c3aca6f28e3d7ab5b23aadf56b5c9925a08",
+    "nonce": 194459,
+    "difficulty": 100000
+  },
+  {
+    "index": 332,
+    "timestamp": 1790639273,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:53.0104868+10:00"
+      }
+    ],
+    "prev_hash": "00002b9eed682641e63eb45f9b369c3aca6f28e3d7ab5b23aadf56b5c9925a08",
+    "hash": "00005ce9b2d1f51c48e478fff41284798a74c8660932d5030f1ca3b93ccdafb1",
+    "nonce": 27570,
+    "difficulty": 100000
+  },
+  {
+    "index": 333,
+    "timestamp": 1790639274,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:54.1682859+10:00"
+      }
+    ],
+    "prev_hash": "00005ce9b2d1f51c48e478fff41284798a74c8660932d5030f1ca3b93ccdafb1",
+    "hash": "0000c96a23a576d0e4a09a676d0831380c13849e2971b2c66c1cbda8253ba8f6",
+    "nonce": 29467,
+    "difficulty": 100000
+  },
+  {
+    "index": 334,
+    "timestamp": 1790639275,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:47:55.3423036+10:00"
+      }
+    ],
+    "prev_hash": "0000c96a23a576d0e4a09a676d0831380c13849e2971b2c66c1cbda8253ba8f6",
+    "hash": "00003f68ce592171fade7ece8e65f4d972fa72331b59817ca6116d2c21e05fc6",
+    "nonce": 15952,
+    "difficulty": 100000
+  },
+  {
+    "index": 335,
+    "timestamp": 1790639466,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:06.9557991+10:00"
+      }
+    ],
+    "prev_hash": "00003f68ce592171fade7ece8e65f4d972fa72331b59817ca6116d2c21e05fc6",
+    "hash": "00003f67454a2d4007e9eef63a5970070836de6feb1b5525cf111a9cff9ea37c",
+    "nonce": 185731,
+    "difficulty": 100000
+  },
+  {
+    "index": 336,
+    "timestamp": 1790639469,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:09.1027984+10:00"
+      }
+    ],
+    "prev_hash": "00003f67454a2d4007e9eef63a5970070836de6feb1b5525cf111a9cff9ea37c",
+    "hash": "00001d1379f70e50bdc59c1668b23c58f3b7888979144d0a028ac7853240be77",
+    "nonce": 94472,
+    "difficulty": 100000
+  },
+  {
+    "index": 337,
+    "timestamp": 1790639470,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:10.6443378+10:00"
+      }
+    ],
+    "prev_hash": "00001d1379f70e50bdc59c1668b23c58f3b7888979144d0a028ac7853240be77",
+    "hash": "0000434e1ace37d8b51827e15c3fbaa141265603ac8ef6fc9e4a725e68e40696",
+    "nonce": 191193,
+    "difficulty": 100000
+  },
+  {
+    "index": 338,
+    "timestamp": 1790639472,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:12.7023881+10:00"
+      }
+    ],
+    "prev_hash": "0000434e1ace37d8b51827e15c3fbaa141265603ac8ef6fc9e4a725e68e40696",
+    "hash": "0000e892809f816b4a5997081412f3d19ae74feba0ecba1e79d56f679e740ba1",
+    "nonce": 153935,
+    "difficulty": 100000
+  },
+  {
+    "index": 339,
+    "timestamp": 1790639474,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:14.5667643+10:00"
+      }
+    ],
+    "prev_hash": "0000e892809f816b4a5997081412f3d19ae74feba0ecba1e79d56f679e740ba1",
+    "hash": "0000095ec4acedcd0d7941be6f4141bb15262ba1916fbdbb3ba469e71804e287",
+    "nonce": 26705,
+    "difficulty": 100000
+  },
+  {
+    "index": 340,
+    "timestamp": 1790639475,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:15.7367953+10:00"
+      }
+    ],
+    "prev_hash": "0000095ec4acedcd0d7941be6f4141bb15262ba1916fbdbb3ba469e71804e287",
+    "hash": "00004c3ae7a2cbcba7c571c2304bc62b210ca4ac2ce98f3250ee2528cc74f331",
+    "nonce": 389091,
+    "difficulty": 100000
+  },
+  {
+    "index": 341,
+    "timestamp": 1790639477,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:17.9291761+10:00"
+      }
+    ],
+    "prev_hash": "00004c3ae7a2cbcba7c571c2304bc62b210ca4ac2ce98f3250ee2528cc74f331",
+    "hash": "0000251f0b627a40c03fbb4e0627da5b0d012d2391b147ce40a70b1176132f23",
+    "nonce": 30180,
+    "difficulty": 100000
+  },
+  {
+    "index": 342,
+    "timestamp": 1790639479,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:19.0990852+10:00"
+      }
+    ],
+    "prev_hash": "0000251f0b627a40c03fbb4e0627da5b0d012d2391b147ce40a70b1176132f23",
+    "hash": "0000193e9be4de935d4dafad89a9f426a81b9a906b053a92dde625c38860883a",
+    "nonce": 1262,
+    "difficulty": 100000
+  },
+  {
+    "index": 343,
+    "timestamp": 1790639480,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:20.1116541+10:00"
+      }
+    ],
+    "prev_hash": "0000193e9be4de935d4dafad89a9f426a81b9a906b053a92dde625c38860883a",
+    "hash": "0000043b92c676a3f0b8b568df08392d6e2385de7f7cc065eead39cfab6793db",
+    "nonce": 24437,
+    "difficulty": 100000
+  },
+  {
+    "index": 344,
+    "timestamp": 1790639481,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:21.247621+10:00"
+      }
+    ],
+    "prev_hash": "0000043b92c676a3f0b8b568df08392d6e2385de7f7cc065eead39cfab6793db",
+    "hash": "0000d41e54479be877bf832ac2234418849af0c12c318beb48156d161d66ca60",
+    "nonce": 76185,
+    "difficulty": 100000
+  },
+  {
+    "index": 345,
+    "timestamp": 1790639482,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:22.6613274+10:00"
+      }
+    ],
+    "prev_hash": "0000d41e54479be877bf832ac2234418849af0c12c318beb48156d161d66ca60",
+    "hash": "00002f17167c3c2a05e290f1f2b5feb936915c320581d255be05923c214fa9a6",
+    "nonce": 144151,
+    "difficulty": 100000
+  },
+  {
+    "index": 346,
+    "timestamp": 1790639484,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:24.5689157+10:00"
+      }
+    ],
+    "prev_hash": "00002f17167c3c2a05e290f1f2b5feb936915c320581d255be05923c214fa9a6",
+    "hash": "00007af2806afe5cd31fc290bd5be36d127a005afc38e5a25aca1fd8e23ad660",
+    "nonce": 14141,
+    "difficulty": 100000
+  },
+  {
+    "index": 347,
+    "timestamp": 1790639485,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:25.6176077+10:00"
+      }
+    ],
+    "prev_hash": "00007af2806afe5cd31fc290bd5be36d127a005afc38e5a25aca1fd8e23ad660",
+    "hash": "0000a070a672ad8d3974b6981b4df1455a22fa6fab42014e5bad8888e9f7583e",
+    "nonce": 96311,
+    "difficulty": 100000
+  },
+  {
+    "index": 348,
+    "timestamp": 1790639486,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T09:51:26.916793+10:00"
+      }
+    ],
+    "prev_hash": "0000a070a672ad8d3974b6981b4df1455a22fa6fab42014e5bad8888e9f7583e",
+    "hash": "0000bfd3447a651ab6039590290f98b38649e9c47a1e528c4e19113cd4d7f212",
+    "nonce": 11826,
+    "difficulty": 100000
+  },
+  {
+    "index": 349,
+    "timestamp": 1790641909,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:49.9330756+10:00"
+      }
+    ],
+    "prev_hash": "0000bfd3447a651ab6039590290f98b38649e9c47a1e528c4e19113cd4d7f212",
+    "hash": "0000668cf6a0e18fee3019f42d68304a73866c470fb87f14acb2031e02f12366",
+    "nonce": 48352,
+    "difficulty": 100000
+  },
+  {
+    "index": 350,
+    "timestamp": 1790641911,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:51.0508241+10:00"
+      }
+    ],
+    "prev_hash": "0000668cf6a0e18fee3019f42d68304a73866c470fb87f14acb2031e02f12366",
+    "hash": "000062725a95c9cbd7223888dc2d8c1e085f76402a4c4790517ce5300073d56e",
+    "nonce": 44520,
+    "difficulty": 100000
+  },
+  {
+    "index": 351,
+    "timestamp": 1790641912,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:52.1633588+10:00"
+      }
+    ],
+    "prev_hash": "000062725a95c9cbd7223888dc2d8c1e085f76402a4c4790517ce5300073d56e",
+    "hash": "00006cd4f8479a39dd35545bcabd25ea556a11bdd5910104f2ff1378ec859ffe",
+    "nonce": 81852,
+    "difficulty": 100000
+  },
+  {
+    "index": 352,
+    "timestamp": 1790641913,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:53.3658639+10:00"
+      }
+    ],
+    "prev_hash": "00006cd4f8479a39dd35545bcabd25ea556a11bdd5910104f2ff1378ec859ffe",
+    "hash": "0000664136419a776478a536fc390ba4fbcb0ae4a5d946b5d1c5671a47c45207",
+    "nonce": 35862,
+    "difficulty": 100000
+  },
+  {
+    "index": 353,
+    "timestamp": 1790641914,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:54.4573837+10:00"
+      }
+    ],
+    "prev_hash": "0000664136419a776478a536fc390ba4fbcb0ae4a5d946b5d1c5671a47c45207",
+    "hash": "00002faca05e392b93b653273221375e7fc72ba31b0e560655d6a0e75d40c50f",
+    "nonce": 10601,
+    "difficulty": 100000
+  },
+  {
+    "index": 354,
+    "timestamp": 1790641915,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:55.4877317+10:00"
+      }
+    ],
+    "prev_hash": "00002faca05e392b93b653273221375e7fc72ba31b0e560655d6a0e75d40c50f",
+    "hash": "0000deb58cf62af5221e2e90c58b31e4493a9b8c06dc5cb246458d3728e83185",
+    "nonce": 84670,
+    "difficulty": 100000
+  },
+  {
+    "index": 355,
+    "timestamp": 1790641916,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:56.696634+10:00"
+      }
+    ],
+    "prev_hash": "0000deb58cf62af5221e2e90c58b31e4493a9b8c06dc5cb246458d3728e83185",
+    "hash": "0000ff771333c909dcd1880602071b9422a66bd0328c18b13dbb2221a2b7b4c9",
+    "nonce": 86017,
+    "difficulty": 100000
+  },
+  {
+    "index": 356,
+    "timestamp": 1790641917,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:57.9081269+10:00"
+      }
+    ],
+    "prev_hash": "0000ff771333c909dcd1880602071b9422a66bd0328c18b13dbb2221a2b7b4c9",
+    "hash": "000040130d7ccc8ea0b00ebb83044006c4ff2cd4282aa190bc69f57b4c7f8c1f",
+    "nonce": 35830,
+    "difficulty": 100000
+  },
+  {
+    "index": 357,
+    "timestamp": 1790641919,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:31:59.0037906+10:00"
+      }
+    ],
+    "prev_hash": "000040130d7ccc8ea0b00ebb83044006c4ff2cd4282aa190bc69f57b4c7f8c1f",
+    "hash": "0000191f84f75a23a3406e3bc9f47a91669f8a9fcbc46b9d3cac314572167f5f",
+    "nonce": 18887,
+    "difficulty": 100000
+  },
+  {
+    "index": 358,
+    "timestamp": 1790641920,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:00.0544672+10:00"
+      }
+    ],
+    "prev_hash": "0000191f84f75a23a3406e3bc9f47a91669f8a9fcbc46b9d3cac314572167f5f",
+    "hash": "00008d9bc1fb5f37f5eb20c631278e831e3bbc5c8c7d9d0e8e7837491874d909",
+    "nonce": 216326,
+    "difficulty": 100000
+  },
+  {
+    "index": 359,
+    "timestamp": 1790641921,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:01.5695624+10:00"
+      }
+    ],
+    "prev_hash": "00008d9bc1fb5f37f5eb20c631278e831e3bbc5c8c7d9d0e8e7837491874d909",
+    "hash": "0000476efec7f2bead5e00adc6017bcdb5780bdf0348827ad02e7ff6811e810d",
+    "nonce": 35651,
+    "difficulty": 100000
+  },
+  {
+    "index": 360,
+    "timestamp": 1790641922,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:02.658568+10:00"
+      }
+    ],
+    "prev_hash": "0000476efec7f2bead5e00adc6017bcdb5780bdf0348827ad02e7ff6811e810d",
+    "hash": "0000db445a47701246b5ff832602f3e13d20b229a1bf9073473c7d572a69cbc7",
+    "nonce": 59868,
+    "difficulty": 100000
+  },
+  {
+    "index": 361,
+    "timestamp": 1790641923,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:03.8018357+10:00"
+      }
+    ],
+    "prev_hash": "0000db445a47701246b5ff832602f3e13d20b229a1bf9073473c7d572a69cbc7",
+    "hash": "0000e0e6195e6e6ddfa9c67f4c5dd684d2a044ef970f35e8d48462d5789a5b39",
+    "nonce": 122125,
+    "difficulty": 100000
+  },
+  {
+    "index": 362,
+    "timestamp": 1790641925,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:05.0962257+10:00"
+      }
+    ],
+    "prev_hash": "0000e0e6195e6e6ddfa9c67f4c5dd684d2a044ef970f35e8d48462d5789a5b39",
+    "hash": "0000016a10ea43c854f7449e027a175b50f37e2d6f7f2a8f8f69f68df2855e7a",
+    "nonce": 25657,
+    "difficulty": 100000
+  },
+  {
+    "index": 363,
+    "timestamp": 1790641926,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:06.1700011+10:00"
+      }
+    ],
+    "prev_hash": "0000016a10ea43c854f7449e027a175b50f37e2d6f7f2a8f8f69f68df2855e7a",
+    "hash": "00003cf6f8f62a6662281f2cf04b1d4aee42aace189109775d2e0482bc94ede0",
+    "nonce": 7635,
+    "difficulty": 100000
+  },
+  {
+    "index": 364,
+    "timestamp": 1790641927,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:07.1938518+10:00"
+      }
+    ],
+    "prev_hash": "00003cf6f8f62a6662281f2cf04b1d4aee42aace189109775d2e0482bc94ede0",
+    "hash": "0000abf2f4654941b06fc4d02296a200c8f9b686fed5d68853a1d606acf1c949",
+    "nonce": 17956,
+    "difficulty": 100000
+  },
+  {
+    "index": 365,
+    "timestamp": 1790641928,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:08.2401305+10:00"
+      }
+    ],
+    "prev_hash": "0000abf2f4654941b06fc4d02296a200c8f9b686fed5d68853a1d606acf1c949",
+    "hash": "0000cf4ffd64c1b3b39debbfcb55416e8b36b88d83f7902a9812775dd475c41b",
+    "nonce": 149948,
+    "difficulty": 100000
+  },
+  {
+    "index": 366,
+    "timestamp": 1790641929,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:09.5859559+10:00"
+      }
+    ],
+    "prev_hash": "0000cf4ffd64c1b3b39debbfcb55416e8b36b88d83f7902a9812775dd475c41b",
+    "hash": "000024db55f32bb42f042b7e580b04e485453b41be3de1fb042f4f4dae005fc3",
+    "nonce": 133789,
+    "difficulty": 100000
+  },
+  {
+    "index": 367,
+    "timestamp": 1790641930,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:10.9041892+10:00"
+      }
+    ],
+    "prev_hash": "000024db55f32bb42f042b7e580b04e485453b41be3de1fb042f4f4dae005fc3",
+    "hash": "0000a09dc89998fe2a362449a6c9ce3a83c04ea49381cf46281d04cb0282605c",
+    "nonce": 2135,
+    "difficulty": 100000
+  },
+  {
+    "index": 368,
+    "timestamp": 1790641931,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:11.9158643+10:00"
+      }
+    ],
+    "prev_hash": "0000a09dc89998fe2a362449a6c9ce3a83c04ea49381cf46281d04cb0282605c",
+    "hash": "0000e638284a36e15e370349636a8e907ffafdafbb324d85812af75076a86428",
+    "nonce": 2443,
+    "difficulty": 100000
+  },
+  {
+    "index": 369,
+    "timestamp": 1790641932,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:12.9268698+10:00"
+      }
+    ],
+    "prev_hash": "0000e638284a36e15e370349636a8e907ffafdafbb324d85812af75076a86428",
+    "hash": "00001ea2f584d0d83606a2a28bcf1bec6961e3c526e3e9cee49029190b2d3a4e",
+    "nonce": 29185,
+    "difficulty": 100000
+  },
+  {
+    "index": 370,
+    "timestamp": 1790641934,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:14.0015373+10:00"
+      }
+    ],
+    "prev_hash": "00001ea2f584d0d83606a2a28bcf1bec6961e3c526e3e9cee49029190b2d3a4e",
+    "hash": "0000dbedf113db3007213cd715ba7ee8f4d95efff3b71c5a035e824e6c28dbb8",
+    "nonce": 16904,
+    "difficulty": 100000
+  },
+  {
+    "index": 371,
+    "timestamp": 1790641935,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:15.0483486+10:00"
+      }
+    ],
+    "prev_hash": "0000dbedf113db3007213cd715ba7ee8f4d95efff3b71c5a035e824e6c28dbb8",
+    "hash": "00009cc7b2c371162121c858393709399bf4eb0ba79fe807adcf1cd8accdb5a5",
+    "nonce": 65401,
+    "difficulty": 100000
+  },
+  {
+    "index": 372,
+    "timestamp": 1790641936,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:16.2059159+10:00"
+      }
+    ],
+    "prev_hash": "00009cc7b2c371162121c858393709399bf4eb0ba79fe807adcf1cd8accdb5a5",
+    "hash": "0000df90c947f4dae9e6f8b50b05152f2da49dcaeb446a5de6baa5bbb76de4b9",
+    "nonce": 30875,
+    "difficulty": 100000
+  },
+  {
+    "index": 373,
+    "timestamp": 1790641937,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:17.2850595+10:00"
+      }
+    ],
+    "prev_hash": "0000df90c947f4dae9e6f8b50b05152f2da49dcaeb446a5de6baa5bbb76de4b9",
+    "hash": "00001ec3184c59ee03f8f82c658d37ae02f9454e6c795bcbd886f1048298b69d",
+    "nonce": 30667,
+    "difficulty": 100000
+  },
+  {
+    "index": 374,
+    "timestamp": 1790641938,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:32:18.3623412+10:00"
+      }
+    ],
+    "prev_hash": "00001ec3184c59ee03f8f82c658d37ae02f9454e6c795bcbd886f1048298b69d",
+    "hash": "00007b9e2889e6c90c33abc654961d4865363f7ea7e5e405f986da51983045fe",
+    "nonce": 458943,
+    "difficulty": 100000
+  },
+  {
+    "index": 375,
+    "timestamp": 1790642714,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:14.4811043+10:00"
+      }
+    ],
+    "prev_hash": "00007b9e2889e6c90c33abc654961d4865363f7ea7e5e405f986da51983045fe",
+    "hash": "000053a2cb859fd4ade4826f50156c68cdceffe42f5abe695eb4d60cf9fbbb57",
+    "nonce": 7428,
+    "difficulty": 100000
+  },
+  {
+    "index": 376,
+    "timestamp": 1790642715,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:15.5055197+10:00"
+      }
+    ],
+    "prev_hash": "000053a2cb859fd4ade4826f50156c68cdceffe42f5abe695eb4d60cf9fbbb57",
+    "hash": "0000bee2b7d2097637de97e4d02a2740d7c4e3d960190dd60826d2c9282f93fc",
+    "nonce": 12992,
+    "difficulty": 100000
+  },
+  {
+    "index": 377,
+    "timestamp": 1790642716,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:16.5422321+10:00"
+      }
+    ],
+    "prev_hash": "0000bee2b7d2097637de97e4d02a2740d7c4e3d960190dd60826d2c9282f93fc",
+    "hash": "00009f82cc1575c083397c990ba917258c53c5f9783b2ce7e32300c501ea8dd2",
+    "nonce": 64691,
+    "difficulty": 100000
+  },
+  {
+    "index": 378,
+    "timestamp": 1790642717,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:17.7041021+10:00"
+      }
+    ],
+    "prev_hash": "00009f82cc1575c083397c990ba917258c53c5f9783b2ce7e32300c501ea8dd2",
+    "hash": "0000b4421c11319f436f0181dbf4c0eadf09e17a5dbc36119004d99a44106fad",
+    "nonce": 25445,
+    "difficulty": 100000
+  },
+  {
+    "index": 379,
+    "timestamp": 1790642718,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:18.7673025+10:00"
+      }
+    ],
+    "prev_hash": "0000b4421c11319f436f0181dbf4c0eadf09e17a5dbc36119004d99a44106fad",
+    "hash": "00001102f729de6e0322ab864bf9f10c67d80912d9c405eb0bb6e210e44d9d7b",
+    "nonce": 18965,
+    "difficulty": 100000
+  },
+  {
+    "index": 380,
+    "timestamp": 1790642719,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:19.8217848+10:00"
+      }
+    ],
+    "prev_hash": "00001102f729de6e0322ab864bf9f10c67d80912d9c405eb0bb6e210e44d9d7b",
+    "hash": "000036dfd7aa62ad311be0519de0aeabdf91cd71c66a27e23a37c99ac3096fa2",
+    "nonce": 27942,
+    "difficulty": 100000
+  },
+  {
+    "index": 381,
+    "timestamp": 1790642720,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:20.8954272+10:00"
+      }
+    ],
+    "prev_hash": "000036dfd7aa62ad311be0519de0aeabdf91cd71c66a27e23a37c99ac3096fa2",
+    "hash": "0000f022422378388ccd17200f1410260ef15f9752517f13e91483e1d000d950",
+    "nonce": 13802,
+    "difficulty": 100000
+  },
+  {
+    "index": 382,
+    "timestamp": 1790642721,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:21.9427856+10:00"
+      }
+    ],
+    "prev_hash": "0000f022422378388ccd17200f1410260ef15f9752517f13e91483e1d000d950",
+    "hash": "0000acb80556fd8e6e84a41b911fd3d7c9bd08ec0e26cf379dbad8f4306576dd",
+    "nonce": 311,
+    "difficulty": 100000
+  },
+  {
+    "index": 383,
+    "timestamp": 1790642722,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:22.9472036+10:00"
+      }
+    ],
+    "prev_hash": "0000acb80556fd8e6e84a41b911fd3d7c9bd08ec0e26cf379dbad8f4306576dd",
+    "hash": "0000f2c7b2aab0f15eb3b9bb123852090b8ae787ccff438b347b5c2aecd54bef",
+    "nonce": 17553,
+    "difficulty": 100000
+  },
+  {
+    "index": 384,
+    "timestamp": 1790642723,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:23.9941079+10:00"
+      }
+    ],
+    "prev_hash": "0000f2c7b2aab0f15eb3b9bb123852090b8ae787ccff438b347b5c2aecd54bef",
+    "hash": "0000e4ceeb19763ccf158be66541b21d1eeed64ad436ac54ba8405984a8c3a2e",
+    "nonce": 4613,
+    "difficulty": 100000
+  },
+  {
+    "index": 385,
+    "timestamp": 1790642725,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:25.0110331+10:00"
+      }
+    ],
+    "prev_hash": "0000e4ceeb19763ccf158be66541b21d1eeed64ad436ac54ba8405984a8c3a2e",
+    "hash": "0000c3a55f9d7d120b02e7f59af1565b393412966ad91595eb15d5a86d123fba",
+    "nonce": 18593,
+    "difficulty": 100000
+  },
+  {
+    "index": 386,
+    "timestamp": 1790642726,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:26.0641515+10:00"
+      }
+    ],
+    "prev_hash": "0000c3a55f9d7d120b02e7f59af1565b393412966ad91595eb15d5a86d123fba",
+    "hash": "000093caf123803a411709f4a174dadac32b8308154832bb75a6479775a1a02a",
+    "nonce": 49018,
+    "difficulty": 100000
+  },
+  {
+    "index": 387,
+    "timestamp": 1790642727,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:27.1841198+10:00"
+      }
+    ],
+    "prev_hash": "000093caf123803a411709f4a174dadac32b8308154832bb75a6479775a1a02a",
+    "hash": "0000a2e7263fd2fbd674638dd9ebf906a098f135f4ce92eeac12b652ec645a4b",
+    "nonce": 65131,
+    "difficulty": 100000
+  },
+  {
+    "index": 388,
+    "timestamp": 1790642728,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:28.3472893+10:00"
+      }
+    ],
+    "prev_hash": "0000a2e7263fd2fbd674638dd9ebf906a098f135f4ce92eeac12b652ec645a4b",
+    "hash": "000071386469e307db5f693356509429040e127433f66e7a09dee3c76f202f52",
+    "nonce": 13846,
+    "difficulty": 100000
+  },
+  {
+    "index": 389,
+    "timestamp": 1790642729,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:29.3839996+10:00"
+      }
+    ],
+    "prev_hash": "000071386469e307db5f693356509429040e127433f66e7a09dee3c76f202f52",
+    "hash": "0000d00abe28fc3e348b42c7c6baaabd3d41e6a027be33fcc2eb26cefd625355",
+    "nonce": 93294,
+    "difficulty": 100000
+  },
+  {
+    "index": 390,
+    "timestamp": 1790642730,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:30.6018536+10:00"
+      }
+    ],
+    "prev_hash": "0000d00abe28fc3e348b42c7c6baaabd3d41e6a027be33fcc2eb26cefd625355",
+    "hash": "00002aa0777ef346e7311990ed0f28a413b9d2c039513b94699ddfd3bba8aebb",
+    "nonce": 69225,
+    "difficulty": 100000
+  },
+  {
+    "index": 391,
+    "timestamp": 1790642731,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:31.7754801+10:00"
+      }
+    ],
+    "prev_hash": "00002aa0777ef346e7311990ed0f28a413b9d2c039513b94699ddfd3bba8aebb",
+    "hash": "0000bf83b0f5fb20255a0039c4456a05c26a8f51ec1069d123f18bc08d198046",
+    "nonce": 64041,
+    "difficulty": 100000
+  },
+  {
+    "index": 392,
+    "timestamp": 1790642732,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:32.9299062+10:00"
+      }
+    ],
+    "prev_hash": "0000bf83b0f5fb20255a0039c4456a05c26a8f51ec1069d123f18bc08d198046",
+    "hash": "0000c080eb7a9c16f6af805f4601e0fcdbd4f0db9a43b4bd30684600b725b15e",
+    "nonce": 19063,
+    "difficulty": 100000
+  },
+  {
+    "index": 393,
+    "timestamp": 1790642733,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:33.9797917+10:00"
+      }
+    ],
+    "prev_hash": "0000c080eb7a9c16f6af805f4601e0fcdbd4f0db9a43b4bd30684600b725b15e",
+    "hash": "00005a85f17fd82b160dfbd3cc0f05e5b9f8f966aa4361e918c5cffaf5917f27",
+    "nonce": 24690,
+    "difficulty": 100000
+  },
+  {
+    "index": 394,
+    "timestamp": 1790642735,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:35.0419336+10:00"
+      }
+    ],
+    "prev_hash": "00005a85f17fd82b160dfbd3cc0f05e5b9f8f966aa4361e918c5cffaf5917f27",
+    "hash": "00000dae043b19cb3484f46adf3b81cfe8d9932417dd0e3c533b3a5d4c62e0f0",
+    "nonce": 138056,
+    "difficulty": 100000
+  },
+  {
+    "index": 395,
+    "timestamp": 1790642736,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:36.3693086+10:00"
+      }
+    ],
+    "prev_hash": "00000dae043b19cb3484f46adf3b81cfe8d9932417dd0e3c533b3a5d4c62e0f0",
+    "hash": "000035a2bd02cdd700b4f1917725f90b65905208f5016d9f4403ee3247e30424",
+    "nonce": 36048,
+    "difficulty": 100000
+  },
+  {
+    "index": 396,
+    "timestamp": 1790642737,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:37.4605387+10:00"
+      }
+    ],
+    "prev_hash": "000035a2bd02cdd700b4f1917725f90b65905208f5016d9f4403ee3247e30424",
+    "hash": "0000619f023ec2e4e27cfef94431130b9dd18e791338d4860541088f7459720e",
+    "nonce": 76672,
+    "difficulty": 100000
+  },
+  {
+    "index": 397,
+    "timestamp": 1790642738,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:38.6498114+10:00"
+      }
+    ],
+    "prev_hash": "0000619f023ec2e4e27cfef94431130b9dd18e791338d4860541088f7459720e",
+    "hash": "00000c7c7c0232cd03bb9bc2b69d4c861698d2f5d70920e38ac727bdf7f69758",
+    "nonce": 90267,
+    "difficulty": 100000
+  },
+  {
+    "index": 398,
+    "timestamp": 1790642739,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:39.8707063+10:00"
+      }
+    ],
+    "prev_hash": "00000c7c7c0232cd03bb9bc2b69d4c861698d2f5d70920e38ac727bdf7f69758",
+    "hash": "0000f3725a50be81de80728ccf66eb246e4f2f26310bec14e06d6320c3314708",
+    "nonce": 153032,
+    "difficulty": 100000
+  },
+  {
+    "index": 399,
+    "timestamp": 1790642741,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:41.2312067+10:00"
+      }
+    ],
+    "prev_hash": "0000f3725a50be81de80728ccf66eb246e4f2f26310bec14e06d6320c3314708",
+    "hash": "0000bffcea28a86caece6cf75ef4000289955d1f56fe9bad5e0fe27ff29776c3",
+    "nonce": 36252,
+    "difficulty": 100000
+  },
+  {
+    "index": 400,
+    "timestamp": 1790642742,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:42.3231858+10:00"
+      }
+    ],
+    "prev_hash": "0000bffcea28a86caece6cf75ef4000289955d1f56fe9bad5e0fe27ff29776c3",
+    "hash": "00002c4c11006d8cc4007908232d4996c71417261d8104f87d0dab6a9e528a29",
+    "nonce": 57348,
+    "difficulty": 100000
+  },
+  {
+    "index": 401,
+    "timestamp": 1790642743,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:43.475213+10:00"
+      }
+    ],
+    "prev_hash": "00002c4c11006d8cc4007908232d4996c71417261d8104f87d0dab6a9e528a29",
+    "hash": "0000a8a5259d1ccee4a6ae80aeca84995c039af78be90bb9eabbde5c55620c1e",
+    "nonce": 157056,
+    "difficulty": 100000
+  },
+  {
+    "index": 402,
+    "timestamp": 1790642744,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:44.8590682+10:00"
+      }
+    ],
+    "prev_hash": "0000a8a5259d1ccee4a6ae80aeca84995c039af78be90bb9eabbde5c55620c1e",
+    "hash": "0000f7471b26b0586acd50fedaba6475e8d87b5076178c59e76537b82b1c6d3f",
+    "nonce": 113727,
+    "difficulty": 100000
+  },
+  {
+    "index": 403,
+    "timestamp": 1790642746,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:46.1363678+10:00"
+      }
+    ],
+    "prev_hash": "0000f7471b26b0586acd50fedaba6475e8d87b5076178c59e76537b82b1c6d3f",
+    "hash": "0000bc2fab0019782bef3a714b0bbdca76d0eb2ce537556462cede8455653024",
+    "nonce": 20206,
+    "difficulty": 100000
+  },
+  {
+    "index": 404,
+    "timestamp": 1790642747,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:47.1997843+10:00"
+      }
+    ],
+    "prev_hash": "0000bc2fab0019782bef3a714b0bbdca76d0eb2ce537556462cede8455653024",
+    "hash": "000078078aff2b2895686f291b7793845bfc3bc953f80096629689128837e9a0",
+    "nonce": 24505,
+    "difficulty": 100000
+  },
+  {
+    "index": 405,
+    "timestamp": 1790642748,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:48.2660551+10:00"
+      }
+    ],
+    "prev_hash": "000078078aff2b2895686f291b7793845bfc3bc953f80096629689128837e9a0",
+    "hash": "00002d34aabdd383def2927bced9236642a62e6d4c9bec54ce4999e7df21243b",
+    "nonce": 28042,
+    "difficulty": 100000
+  },
+  {
+    "index": 406,
+    "timestamp": 1790642749,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:49.3436225+10:00"
+      }
+    ],
+    "prev_hash": "00002d34aabdd383def2927bced9236642a62e6d4c9bec54ce4999e7df21243b",
+    "hash": "0000878097efc3416b2772df093921d5c736accfd4ab8950d82a1bb0571c9361",
+    "nonce": 248930,
+    "difficulty": 100000
+  },
+  {
+    "index": 407,
+    "timestamp": 1790642750,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:50.9242728+10:00"
+      }
+    ],
+    "prev_hash": "0000878097efc3416b2772df093921d5c736accfd4ab8950d82a1bb0571c9361",
+    "hash": "0000875f24b6e9ff7cdd8d94f0a11feb7bf4e750968cb9dac5341324725ef1a1",
+    "nonce": 252877,
+    "difficulty": 100000
+  },
+  {
+    "index": 408,
+    "timestamp": 1790642752,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:52.5079652+10:00"
+      }
+    ],
+    "prev_hash": "0000875f24b6e9ff7cdd8d94f0a11feb7bf4e750968cb9dac5341324725ef1a1",
+    "hash": "0000d0244feb53953d45ff16d265a971904f3780c2140aa6b153f6eea3634123",
+    "nonce": 148657,
+    "difficulty": 100000
+  },
+  {
+    "index": 409,
+    "timestamp": 1790642753,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:53.8543758+10:00"
+      }
+    ],
+    "prev_hash": "0000d0244feb53953d45ff16d265a971904f3780c2140aa6b153f6eea3634123",
+    "hash": "000064ff7d6ec9c5d42f9b7b8058f921a3dc48cb9aec418883c18abe6abd970c",
+    "nonce": 210622,
+    "difficulty": 100000
+  },
+  {
+    "index": 410,
+    "timestamp": 1790642755,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:55.3416309+10:00"
+      }
+    ],
+    "prev_hash": "000064ff7d6ec9c5d42f9b7b8058f921a3dc48cb9aec418883c18abe6abd970c",
+    "hash": "000000e462bda9f96c84aa2525df47a6528241712d599e4a759a92308930c7c2",
+    "nonce": 20964,
+    "difficulty": 100000
+  },
+  {
+    "index": 411,
+    "timestamp": 1790642756,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:56.3989272+10:00"
+      }
+    ],
+    "prev_hash": "000000e462bda9f96c84aa2525df47a6528241712d599e4a759a92308930c7c2",
+    "hash": "0000e670c6e363f3f1c6db7dc9694f26d43cd0a006cc4eadb072b9eaa95d07b3",
+    "nonce": 69192,
+    "difficulty": 100000
+  },
+  {
+    "index": 412,
+    "timestamp": 1790642757,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:57.5635717+10:00"
+      }
+    ],
+    "prev_hash": "0000e670c6e363f3f1c6db7dc9694f26d43cd0a006cc4eadb072b9eaa95d07b3",
+    "hash": "00008eb702d432a4ae26daa31487cfbe18f1f267f4ab8a5261e9cf78dc1c03c2",
+    "nonce": 54148,
+    "difficulty": 100000
+  },
+  {
+    "index": 413,
+    "timestamp": 1790642758,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:58.6883285+10:00"
+      }
+    ],
+    "prev_hash": "00008eb702d432a4ae26daa31487cfbe18f1f267f4ab8a5261e9cf78dc1c03c2",
+    "hash": "0000d4c4d6271efafea76ebed736306b2ff6aefd5ba4e4efaff2c463ece8d1a3",
+    "nonce": 42802,
+    "difficulty": 100000
+  },
+  {
+    "index": 414,
+    "timestamp": 1790642759,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:45:59.7992477+10:00"
+      }
+    ],
+    "prev_hash": "0000d4c4d6271efafea76ebed736306b2ff6aefd5ba4e4efaff2c463ece8d1a3",
+    "hash": "000075a16eae8e700deeaf33b2f775bb56b1bef69e6a1245d86facc2912baddf",
+    "nonce": 311708,
+    "difficulty": 100000
+  },
+  {
+    "index": 415,
+    "timestamp": 1790642761,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:01.5613424+10:00"
+      }
+    ],
+    "prev_hash": "000075a16eae8e700deeaf33b2f775bb56b1bef69e6a1245d86facc2912baddf",
+    "hash": "00009b62c5edf4e7af76c968c0ef3dfbc4358b5096036711f33f7814f0e229f3",
+    "nonce": 177349,
+    "difficulty": 100000
+  },
+  {
+    "index": 416,
+    "timestamp": 1790642762,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:02.9786888+10:00"
+      }
+    ],
+    "prev_hash": "00009b62c5edf4e7af76c968c0ef3dfbc4358b5096036711f33f7814f0e229f3",
+    "hash": "000057cc7a3401c81cd158f7ee04c3fbf67653687f474547529a039d99de8339",
+    "nonce": 7219,
+    "difficulty": 100000
+  },
+  {
+    "index": 417,
+    "timestamp": 1790642764,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:04.0020175+10:00"
+      }
+    ],
+    "prev_hash": "000057cc7a3401c81cd158f7ee04c3fbf67653687f474547529a039d99de8339",
+    "hash": "0000613b72a267dfb466ff773c03e1662269c6dd879c0ebf8be7605c4148f6e2",
+    "nonce": 82928,
+    "difficulty": 100000
+  },
+  {
+    "index": 418,
+    "timestamp": 1790642765,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:05.2042842+10:00"
+      }
+    ],
+    "prev_hash": "0000613b72a267dfb466ff773c03e1662269c6dd879c0ebf8be7605c4148f6e2",
+    "hash": "0000d02f0169b915dfcbac0ae60af4334f9a622de72a3826557e5cd2d8ab2fe9",
+    "nonce": 86069,
+    "difficulty": 100000
+  },
+  {
+    "index": 419,
+    "timestamp": 1790642766,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:06.4031363+10:00"
+      }
+    ],
+    "prev_hash": "0000d02f0169b915dfcbac0ae60af4334f9a622de72a3826557e5cd2d8ab2fe9",
+    "hash": "000044400b03fc04fadf97a3f9a7ffaf3dd7e5f410fc801a57546a55b91b3850",
+    "nonce": 34312,
+    "difficulty": 100000
+  },
+  {
+    "index": 420,
+    "timestamp": 1790642767,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:07.4974974+10:00"
+      }
+    ],
+    "prev_hash": "000044400b03fc04fadf97a3f9a7ffaf3dd7e5f410fc801a57546a55b91b3850",
+    "hash": "0000ded22a94fa46c0fb534e4b173b578ed8c0afe7405b41bc0eb564b9e658e0",
+    "nonce": 21202,
+    "difficulty": 100000
+  },
+  {
+    "index": 421,
+    "timestamp": 1790642768,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:08.5577692+10:00"
+      }
+    ],
+    "prev_hash": "0000ded22a94fa46c0fb534e4b173b578ed8c0afe7405b41bc0eb564b9e658e0",
+    "hash": "0000b867d41599926263bbc9c27f7d91e69c4d6df65963894fd812c61e73d1c0",
+    "nonce": 15422,
+    "difficulty": 100000
+  },
+  {
+    "index": 422,
+    "timestamp": 1790642769,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:09.6073224+10:00"
+      }
+    ],
+    "prev_hash": "0000b867d41599926263bbc9c27f7d91e69c4d6df65963894fd812c61e73d1c0",
+    "hash": "00004b0713c03f4937ce3f20dd28d2b4b5f43abfc88f6e5467acd588b3f78faa",
+    "nonce": 74257,
+    "difficulty": 100000
+  },
+  {
+    "index": 423,
+    "timestamp": 1790642770,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:10.7815152+10:00"
+      }
+    ],
+    "prev_hash": "00004b0713c03f4937ce3f20dd28d2b4b5f43abfc88f6e5467acd588b3f78faa",
+    "hash": "00006887f9c273231a66ff965a7d9d588869c9e06b8e71bba9ae630b5cb85c13",
+    "nonce": 3675,
+    "difficulty": 100000
+  },
+  {
+    "index": 424,
+    "timestamp": 1790642771,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:11.7980954+10:00"
+      }
+    ],
+    "prev_hash": "00006887f9c273231a66ff965a7d9d588869c9e06b8e71bba9ae630b5cb85c13",
+    "hash": "0000aaea6d86a44a9dfc12e4c1eb4c7c2fdd0636e6bec122e80329714d56af5d",
+    "nonce": 17973,
+    "difficulty": 100000
+  },
+  {
+    "index": 425,
+    "timestamp": 1790642772,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:12.8469507+10:00"
+      }
+    ],
+    "prev_hash": "0000aaea6d86a44a9dfc12e4c1eb4c7c2fdd0636e6bec122e80329714d56af5d",
+    "hash": "000036b78dd0e55ca1c2b26f27cde128b3bd41d906aa770f32b755061396c41e",
+    "nonce": 12444,
+    "difficulty": 100000
+  },
+  {
+    "index": 426,
+    "timestamp": 1790642773,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:13.8818893+10:00"
+      }
+    ],
+    "prev_hash": "000036b78dd0e55ca1c2b26f27cde128b3bd41d906aa770f32b755061396c41e",
+    "hash": "00000a60d39576c6844ae12672a2ba8d851ce6986ef821ec72bd5d3ce36929c6",
+    "nonce": 149545,
+    "difficulty": 100000
+  },
+  {
+    "index": 427,
+    "timestamp": 1790642775,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:15.2295597+10:00"
+      }
+    ],
+    "prev_hash": "00000a60d39576c6844ae12672a2ba8d851ce6986ef821ec72bd5d3ce36929c6",
+    "hash": "0000dac3bd9eac5512ad18632be0e5ca1564b866c3fdad01d09b820c8d19bb7d",
+    "nonce": 59089,
+    "difficulty": 100000
+  },
+  {
+    "index": 428,
+    "timestamp": 1790642776,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:16.3772197+10:00"
+      }
+    ],
+    "prev_hash": "0000dac3bd9eac5512ad18632be0e5ca1564b866c3fdad01d09b820c8d19bb7d",
+    "hash": "0000b980f26e46b35832717278e7cda44a9a5916d0c5d264e0e80f533e9927c5",
+    "nonce": 226896,
+    "difficulty": 100000
+  },
+  {
+    "index": 429,
+    "timestamp": 1790642777,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:17.9223194+10:00"
+      }
+    ],
+    "prev_hash": "0000b980f26e46b35832717278e7cda44a9a5916d0c5d264e0e80f533e9927c5",
+    "hash": "00004d092ba8f53955ebb257ebaaf8811c2394a66088c8d18fd99dcf6ce947bc",
+    "nonce": 78692,
+    "difficulty": 100000
+  },
+  {
+    "index": 430,
+    "timestamp": 1790642779,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:19.1095459+10:00"
+      }
+    ],
+    "prev_hash": "00004d092ba8f53955ebb257ebaaf8811c2394a66088c8d18fd99dcf6ce947bc",
+    "hash": "0000ed6f0b5e7e8156f9ea58aea94a56df79938557211643906ab4e5953c0295",
+    "nonce": 18975,
+    "difficulty": 100000
+  },
+  {
+    "index": 431,
+    "timestamp": 1790642780,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:20.1660051+10:00"
+      }
+    ],
+    "prev_hash": "0000ed6f0b5e7e8156f9ea58aea94a56df79938557211643906ab4e5953c0295",
+    "hash": "000049a7646b5da2478f00718bd3d07aa7a2a68b0d66062e672d7534bc16b715",
+    "nonce": 111,
+    "difficulty": 100000
+  },
+  {
+    "index": 432,
+    "timestamp": 1790642781,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:21.1713328+10:00"
+      }
+    ],
+    "prev_hash": "000049a7646b5da2478f00718bd3d07aa7a2a68b0d66062e672d7534bc16b715",
+    "hash": "00007d408a8c1f6821facfbba7d1f7db05922a70f7306740659d0907f9a66256",
+    "nonce": 45964,
+    "difficulty": 100000
+  },
+  {
+    "index": 433,
+    "timestamp": 1790642782,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:22.2860842+10:00"
+      }
+    ],
+    "prev_hash": "00007d408a8c1f6821facfbba7d1f7db05922a70f7306740659d0907f9a66256",
+    "hash": "000070720d3dceea6ad4ed2706dc93213723ee07fc1683e54d8793ac580a9db6",
+    "nonce": 25769,
+    "difficulty": 100000
+  },
+  {
+    "index": 434,
+    "timestamp": 1790642783,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:23.3524697+10:00"
+      }
+    ],
+    "prev_hash": "000070720d3dceea6ad4ed2706dc93213723ee07fc1683e54d8793ac580a9db6",
+    "hash": "0000505d14deedd280afc802b6c00f1dea6bda8962667c4adb460031c7d2fba6",
+    "nonce": 6556,
+    "difficulty": 100000
+  },
+  {
+    "index": 435,
+    "timestamp": 1790642784,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:24.3749205+10:00"
+      }
+    ],
+    "prev_hash": "0000505d14deedd280afc802b6c00f1dea6bda8962667c4adb460031c7d2fba6",
+    "hash": "00004ce1428ae0c2765f51603c7a40a64742d57cdaa840c876dbeeef31ac9b84",
+    "nonce": 84797,
+    "difficulty": 100000
+  },
+  {
+    "index": 436,
+    "timestamp": 1790642785,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:25.5867482+10:00"
+      }
+    ],
+    "prev_hash": "00004ce1428ae0c2765f51603c7a40a64742d57cdaa840c876dbeeef31ac9b84",
+    "hash": "000097b8ff9d4dfdabb9eaefc43f50936d24b24a2e9432addec5723f36c5dece",
+    "nonce": 9079,
+    "difficulty": 100000
+  },
+  {
+    "index": 437,
+    "timestamp": 1790642786,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:26.61626+10:00"
+      }
+    ],
+    "prev_hash": "000097b8ff9d4dfdabb9eaefc43f50936d24b24a2e9432addec5723f36c5dece",
+    "hash": "00009555440d8fecdb6c880abddf914ef3723ff6d6041dd420d30d50bd340dfc",
+    "nonce": 36352,
+    "difficulty": 100000
+  },
+  {
+    "index": 438,
+    "timestamp": 1790642787,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:27.7163619+10:00"
+      }
+    ],
+    "prev_hash": "00009555440d8fecdb6c880abddf914ef3723ff6d6041dd420d30d50bd340dfc",
+    "hash": "0000da42e5646b380dda738d46142df36f9dbcca8936d1b4266848783ad09da5",
+    "nonce": 1080,
+    "difficulty": 100000
+  },
+  {
+    "index": 439,
+    "timestamp": 1790642788,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:28.7227495+10:00"
+      }
+    ],
+    "prev_hash": "0000da42e5646b380dda738d46142df36f9dbcca8936d1b4266848783ad09da5",
+    "hash": "0000c994fe5225943fab3b49229a04e13001a5f7e050c1049e5705b696a6d41a",
+    "nonce": 70412,
+    "difficulty": 100000
+  },
+  {
+    "index": 440,
+    "timestamp": 1790642789,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:29.8959977+10:00"
+      }
+    ],
+    "prev_hash": "0000c994fe5225943fab3b49229a04e13001a5f7e050c1049e5705b696a6d41a",
+    "hash": "0000781a4491eb453eda8e42f2b88472d468a3bffce8a9eff55d3db70db7992b",
+    "nonce": 13267,
+    "difficulty": 100000
+  },
+  {
+    "index": 441,
+    "timestamp": 1790642790,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:30.9343087+10:00"
+      }
+    ],
+    "prev_hash": "0000781a4491eb453eda8e42f2b88472d468a3bffce8a9eff55d3db70db7992b",
+    "hash": "00000b7b4f18be693d80c6c8708a6dd881cdd0730e68f74e712c57500ec4b849",
+    "nonce": 33891,
+    "difficulty": 100000
+  },
+  {
+    "index": 442,
+    "timestamp": 1790642792,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:32.0177718+10:00"
+      }
+    ],
+    "prev_hash": "00000b7b4f18be693d80c6c8708a6dd881cdd0730e68f74e712c57500ec4b849",
+    "hash": "00003b430dd6930cc793ca04b4a371d614ea8d5b56abda7b878450ea25e9bca9",
+    "nonce": 1324,
+    "difficulty": 100000
+  },
+  {
+    "index": 443,
+    "timestamp": 1790642793,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:33.0284174+10:00"
+      }
+    ],
+    "prev_hash": "00003b430dd6930cc793ca04b4a371d614ea8d5b56abda7b878450ea25e9bca9",
+    "hash": "0000e04e6b173c1062d8e8a693e69b7d0e4a61b87411549673557d1996c7a565",
+    "nonce": 277066,
+    "difficulty": 100000
+  },
+  {
+    "index": 444,
+    "timestamp": 1790642794,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:34.6612969+10:00"
+      }
+    ],
+    "prev_hash": "0000e04e6b173c1062d8e8a693e69b7d0e4a61b87411549673557d1996c7a565",
+    "hash": "00001915caa51b5ad813993f8a0a7ba856a1d9c45f330797b3ed50cde616b3fc",
+    "nonce": 36479,
+    "difficulty": 100000
+  },
+  {
+    "index": 445,
+    "timestamp": 1790642795,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:35.82236+10:00"
+      }
+    ],
+    "prev_hash": "00001915caa51b5ad813993f8a0a7ba856a1d9c45f330797b3ed50cde616b3fc",
+    "hash": "0000b1b8aa184617cea52e093526d480264e0d65f4b4b808b3d174735dee1595",
+    "nonce": 77287,
+    "difficulty": 100000
+  },
+  {
+    "index": 446,
+    "timestamp": 1790642797,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:37.213202+10:00"
+      }
+    ],
+    "prev_hash": "0000b1b8aa184617cea52e093526d480264e0d65f4b4b808b3d174735dee1595",
+    "hash": "00008f80debcacbadeab4ec1bed757e7d9e3fc69e846b29142d52865af7537ab",
+    "nonce": 20473,
+    "difficulty": 100000
+  },
+  {
+    "index": 447,
+    "timestamp": 1790642798,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:38.3254322+10:00"
+      }
+    ],
+    "prev_hash": "00008f80debcacbadeab4ec1bed757e7d9e3fc69e846b29142d52865af7537ab",
+    "hash": "0000ec1e14abd032ad3d3104ce1815eae05ebcf77f6bb578dd18892dc7b79dc9",
+    "nonce": 25973,
+    "difficulty": 100000
+  },
+  {
+    "index": 448,
+    "timestamp": 1790642799,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:39.4789538+10:00"
+      }
+    ],
+    "prev_hash": "0000ec1e14abd032ad3d3104ce1815eae05ebcf77f6bb578dd18892dc7b79dc9",
+    "hash": "00001df6ee5c4420dfd8375d1ac7b3629aa408590098c50035728b164e29c841",
+    "nonce": 4070,
+    "difficulty": 100000
+  },
+  {
+    "index": 449,
+    "timestamp": 1790642800,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:40.4948241+10:00"
+      }
+    ],
+    "prev_hash": "00001df6ee5c4420dfd8375d1ac7b3629aa408590098c50035728b164e29c841",
+    "hash": "00009b02a0c42f9192b3c2425287a92000cb7ca3bd5b1e54d33df4e268f9c9e3",
+    "nonce": 115587,
+    "difficulty": 100000
+  },
+  {
+    "index": 450,
+    "timestamp": 1790642801,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:41.768151+10:00"
+      }
+    ],
+    "prev_hash": "00009b02a0c42f9192b3c2425287a92000cb7ca3bd5b1e54d33df4e268f9c9e3",
+    "hash": "0000aaef997c37b538bfe5d41bc6ba903d58395adc78a871b44aaf33dd9ed1f7",
+    "nonce": 61294,
+    "difficulty": 100000
+  },
+  {
+    "index": 451,
+    "timestamp": 1790642802,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:42.9255281+10:00"
+      }
+    ],
+    "prev_hash": "0000aaef997c37b538bfe5d41bc6ba903d58395adc78a871b44aaf33dd9ed1f7",
+    "hash": "000006263c18a870dfcf8d6a9912dfa97a5480ceaf161dc30720718f97c6e340",
+    "nonce": 68047,
+    "difficulty": 100000
+  },
+  {
+    "index": 452,
+    "timestamp": 1790642804,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:44.0902865+10:00"
+      }
+    ],
+    "prev_hash": "000006263c18a870dfcf8d6a9912dfa97a5480ceaf161dc30720718f97c6e340",
+    "hash": "0000ea0d0320a740ec724f4ee11813c591b54efc1f5afd49fc6dcfcabc12fb42",
+    "nonce": 49770,
+    "difficulty": 100000
+  },
+  {
+    "index": 453,
+    "timestamp": 1790642805,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:45.2101783+10:00"
+      }
+    ],
+    "prev_hash": "0000ea0d0320a740ec724f4ee11813c591b54efc1f5afd49fc6dcfcabc12fb42",
+    "hash": "0000c130321f5970772395709046027041a35ee4e4217cc2b25c785f5ecf5f27",
+    "nonce": 45344,
+    "difficulty": 100000
+  },
+  {
+    "index": 454,
+    "timestamp": 1790642806,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:46.3201927+10:00"
+      }
+    ],
+    "prev_hash": "0000c130321f5970772395709046027041a35ee4e4217cc2b25c785f5ecf5f27",
+    "hash": "00004adf9727f426cf28fbc28644159685c436b36f0a740edb9efc91b4683821",
+    "nonce": 62639,
+    "difficulty": 100000
+  },
+  {
+    "index": 455,
+    "timestamp": 1790642807,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:47.4695992+10:00"
+      }
+    ],
+    "prev_hash": "00004adf9727f426cf28fbc28644159685c436b36f0a740edb9efc91b4683821",
+    "hash": "0000cd6f1d00574a07b0139c21c7665838359075208db85b7704d2873c1b9934",
+    "nonce": 15481,
+    "difficulty": 100000
+  },
+  {
+    "index": 456,
+    "timestamp": 1790642808,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:48.5128469+10:00"
+      }
+    ],
+    "prev_hash": "0000cd6f1d00574a07b0139c21c7665838359075208db85b7704d2873c1b9934",
+    "hash": "00002df1961b46e0e05f2896632cf5a3a3dafd1d4441f7bdefb1ab633e80b85f",
+    "nonce": 60097,
+    "difficulty": 100000
+  },
+  {
+    "index": 457,
+    "timestamp": 1790642809,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:49.6628007+10:00"
+      }
+    ],
+    "prev_hash": "00002df1961b46e0e05f2896632cf5a3a3dafd1d4441f7bdefb1ab633e80b85f",
+    "hash": "000022ff0251f3915b6f860700701eacc15b3436784c41b4ffe77bce43ddc411",
+    "nonce": 26204,
+    "difficulty": 100000
+  },
+  {
+    "index": 458,
+    "timestamp": 1790642810,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:50.7325441+10:00"
+      }
+    ],
+    "prev_hash": "000022ff0251f3915b6f860700701eacc15b3436784c41b4ffe77bce43ddc411",
+    "hash": "0000ec9b530654cda2cca77e5e2a6df05380c798cecc5cca62fbfe3121a29d26",
+    "nonce": 114769,
+    "difficulty": 100000
+  },
+  {
+    "index": 459,
+    "timestamp": 1790642811,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:51.9979956+10:00"
+      }
+    ],
+    "prev_hash": "0000ec9b530654cda2cca77e5e2a6df05380c798cecc5cca62fbfe3121a29d26",
+    "hash": "0000863b4e4ee6a1e92a1aa95c222a32eefa222fde5593986bc31457c627aa3c",
+    "nonce": 54689,
+    "difficulty": 100000
+  },
+  {
+    "index": 460,
+    "timestamp": 1790642813,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:53.1475948+10:00"
+      }
+    ],
+    "prev_hash": "0000863b4e4ee6a1e92a1aa95c222a32eefa222fde5593986bc31457c627aa3c",
+    "hash": "000009b21cff7050f58de45ffc70a6b38357111a138f3fdbcb09e06775ceacc3",
+    "nonce": 1560,
+    "difficulty": 100000
+  },
+  {
+    "index": 461,
+    "timestamp": 1790642814,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:54.1584581+10:00"
+      }
+    ],
+    "prev_hash": "000009b21cff7050f58de45ffc70a6b38357111a138f3fdbcb09e06775ceacc3",
+    "hash": "0000210078193095cb8f99430d8d8332932467cbfb2ca982a221fd98cd921eba",
+    "nonce": 3753,
+    "difficulty": 100000
+  },
+  {
+    "index": 462,
+    "timestamp": 1790642815,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:55.1754512+10:00"
+      }
+    ],
+    "prev_hash": "0000210078193095cb8f99430d8d8332932467cbfb2ca982a221fd98cd921eba",
+    "hash": "00002474c92e42a77940aea2e43ce0f60b2f9ce472d6e15952dc2821755de9fc",
+    "nonce": 23071,
+    "difficulty": 100000
+  },
+  {
+    "index": 463,
+    "timestamp": 1790642816,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:56.2373856+10:00"
+      }
+    ],
+    "prev_hash": "00002474c92e42a77940aea2e43ce0f60b2f9ce472d6e15952dc2821755de9fc",
+    "hash": "00004db9c9aa5e622ff76439f29c26de5e1b9fd77c456f953064f02fe8dec5af",
+    "nonce": 142265,
+    "difficulty": 100000
+  },
+  {
+    "index": 464,
+    "timestamp": 1790642817,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:57.6018943+10:00"
+      }
+    ],
+    "prev_hash": "00004db9c9aa5e622ff76439f29c26de5e1b9fd77c456f953064f02fe8dec5af",
+    "hash": "00005ba6b80ea94cb998809b6990fd901114ff93f6b6b521e4b901f3fc7f84ea",
+    "nonce": 162919,
+    "difficulty": 100000
+  },
+  {
+    "index": 465,
+    "timestamp": 1790642818,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:46:58.9848835+10:00"
+      }
+    ],
+    "prev_hash": "00005ba6b80ea94cb998809b6990fd901114ff93f6b6b521e4b901f3fc7f84ea",
+    "hash": "0000369eb097d5c39c6559c82b463a2a9d26c8c37200284848e24a580b771424",
+    "nonce": 67460,
+    "difficulty": 100000
+  },
+  {
+    "index": 466,
+    "timestamp": 1790642820,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:00.147711+10:00"
+      }
+    ],
+    "prev_hash": "0000369eb097d5c39c6559c82b463a2a9d26c8c37200284848e24a580b771424",
+    "hash": "000009d63784d5d15ecb0a2ac4fa2cf66226603a5062ff19c680f4d129e20e21",
+    "nonce": 38259,
+    "difficulty": 100000
+  },
+  {
+    "index": 467,
+    "timestamp": 1790642821,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:01.2554496+10:00"
+      }
+    ],
+    "prev_hash": "000009d63784d5d15ecb0a2ac4fa2cf66226603a5062ff19c680f4d129e20e21",
+    "hash": "00006c0f29abce819ad5d8b192fe15a8328da4fe7611e24b162488b77d250d6a",
+    "nonce": 136891,
+    "difficulty": 100000
+  },
+  {
+    "index": 468,
+    "timestamp": 1790642822,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:02.5852425+10:00"
+      }
+    ],
+    "prev_hash": "00006c0f29abce819ad5d8b192fe15a8328da4fe7611e24b162488b77d250d6a",
+    "hash": "000077c73ca48bdd2f7272b4cf6a601761cc0eea865939d4d3e095039e6ea8c0",
+    "nonce": 44990,
+    "difficulty": 100000
+  },
+  {
+    "index": 469,
+    "timestamp": 1790642823,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:03.6976937+10:00"
+      }
+    ],
+    "prev_hash": "000077c73ca48bdd2f7272b4cf6a601761cc0eea865939d4d3e095039e6ea8c0",
+    "hash": "0000d9a3d20bed94f9560b5966e0b80240bf9864e2ca43f0bd8f0acd71a3be06",
+    "nonce": 75332,
+    "difficulty": 100000
+  },
+  {
+    "index": 470,
+    "timestamp": 1790642824,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:04.8719516+10:00"
+      }
+    ],
+    "prev_hash": "0000d9a3d20bed94f9560b5966e0b80240bf9864e2ca43f0bd8f0acd71a3be06",
+    "hash": "000055f85aafa4a3798295745af6119a2625fdd4fc22f03a7fcaba8c24a2a8b0",
+    "nonce": 133441,
+    "difficulty": 100000
+  },
+  {
+    "index": 471,
+    "timestamp": 1790642826,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:06.2029032+10:00"
+      }
+    ],
+    "prev_hash": "000055f85aafa4a3798295745af6119a2625fdd4fc22f03a7fcaba8c24a2a8b0",
+    "hash": "0000258557cde67553c9e40dd0ef856a5a95ae3632cd8340f236e04260094b36",
+    "nonce": 52824,
+    "difficulty": 100000
+  },
+  {
+    "index": 472,
+    "timestamp": 1790642827,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:07.3346794+10:00"
+      }
+    ],
+    "prev_hash": "0000258557cde67553c9e40dd0ef856a5a95ae3632cd8340f236e04260094b36",
+    "hash": "000007cfca5cca3bf823147c230110d80bed743a082b9a16339835c79f821955",
+    "nonce": 19768,
+    "difficulty": 100000
+  },
+  {
+    "index": 473,
+    "timestamp": 1790642828,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:08.3900557+10:00"
+      }
+    ],
+    "prev_hash": "000007cfca5cca3bf823147c230110d80bed743a082b9a16339835c79f821955",
+    "hash": "00007d9a4d88045f5a8f154b5452ec410e324eb7da3707a43e8ecd9e95156f29",
+    "nonce": 111496,
+    "difficulty": 100000
+  },
+  {
+    "index": 474,
+    "timestamp": 1790642829,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:09.6674063+10:00"
+      }
+    ],
+    "prev_hash": "00007d9a4d88045f5a8f154b5452ec410e324eb7da3707a43e8ecd9e95156f29",
+    "hash": "000033798852778898925fd89ed5cb5e623a9de1a53a6e0fd2193627877bd0b5",
+    "nonce": 47370,
+    "difficulty": 100000
+  },
+  {
+    "index": 475,
+    "timestamp": 1790642830,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:10.7952029+10:00"
+      }
+    ],
+    "prev_hash": "000033798852778898925fd89ed5cb5e623a9de1a53a6e0fd2193627877bd0b5",
+    "hash": "00003557c1fec5f533d792191bbcbf264bb36edba7afcd99ce3e0c4271d184dd",
+    "nonce": 132130,
+    "difficulty": 100000
+  },
+  {
+    "index": 476,
+    "timestamp": 1790642832,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:12.1095735+10:00"
+      }
+    ],
+    "prev_hash": "00003557c1fec5f533d792191bbcbf264bb36edba7afcd99ce3e0c4271d184dd",
+    "hash": "000065956bcfe66e7b865d89abda691be096167ce0510907658865da6ad80e5f",
+    "nonce": 25756,
+    "difficulty": 100000
+  },
+  {
+    "index": 477,
+    "timestamp": 1790642833,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:13.1847492+10:00"
+      }
+    ],
+    "prev_hash": "000065956bcfe66e7b865d89abda691be096167ce0510907658865da6ad80e5f",
+    "hash": "00006f52c45fd09fa33c314ddb5c2d84ea2699d0bd10652c7935b007db185286",
+    "nonce": 106148,
+    "difficulty": 100000
+  },
+  {
+    "index": 478,
+    "timestamp": 1790642834,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:14.4445992+10:00"
+      }
+    ],
+    "prev_hash": "00006f52c45fd09fa33c314ddb5c2d84ea2699d0bd10652c7935b007db185286",
+    "hash": "000085d0cba4f4d9b421b0ad3c1b3b76649f92e5a34750c5d04b0622011e3f42",
+    "nonce": 7438,
+    "difficulty": 100000
+  },
+  {
+    "index": 479,
+    "timestamp": 1790642835,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:15.4705257+10:00"
+      }
+    ],
+    "prev_hash": "000085d0cba4f4d9b421b0ad3c1b3b76649f92e5a34750c5d04b0622011e3f42",
+    "hash": "00009ebbcc59d329a5f72a138c08e1bdac6822173a1e819cc036ce94e6edfc8c",
+    "nonce": 111128,
+    "difficulty": 100000
+  },
+  {
+    "index": 480,
+    "timestamp": 1790642836,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:16.7360234+10:00"
+      }
+    ],
+    "prev_hash": "00009ebbcc59d329a5f72a138c08e1bdac6822173a1e819cc036ce94e6edfc8c",
+    "hash": "00004c5897ceec20b41046369141941795d0ac4390fab3ac9743ce8cceae7602",
+    "nonce": 2131,
+    "difficulty": 100000
+  },
+  {
+    "index": 481,
+    "timestamp": 1790642837,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:17.7461851+10:00"
+      }
+    ],
+    "prev_hash": "00004c5897ceec20b41046369141941795d0ac4390fab3ac9743ce8cceae7602",
+    "hash": "00004cf7bd8cca80f8614990d987be63550e2c9c09cc810f28ba1a947d7f405b",
+    "nonce": 22904,
+    "difficulty": 100000
+  },
+  {
+    "index": 482,
+    "timestamp": 1790642838,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:18.8066722+10:00"
+      }
+    ],
+    "prev_hash": "00004cf7bd8cca80f8614990d987be63550e2c9c09cc810f28ba1a947d7f405b",
+    "hash": "00003957320ef851dfad6e8786fc0a2560cf572c42c8bcca0bdcb98903b9c278",
+    "nonce": 5613,
+    "difficulty": 100000
+  },
+  {
+    "index": 483,
+    "timestamp": 1790642839,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:19.8277615+10:00"
+      }
+    ],
+    "prev_hash": "00003957320ef851dfad6e8786fc0a2560cf572c42c8bcca0bdcb98903b9c278",
+    "hash": "00007ce8f7d47f4ee83f9903b720c073c19ffc8f6533d5d10bba4ed321110ad9",
+    "nonce": 41632,
+    "difficulty": 100000
+  },
+  {
+    "index": 484,
+    "timestamp": 1790642840,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:20.9378374+10:00"
+      }
+    ],
+    "prev_hash": "00007ce8f7d47f4ee83f9903b720c073c19ffc8f6533d5d10bba4ed321110ad9",
+    "hash": "00002c68fc54e823178f06da0b102c59ad8dd331ab7499ad5408de5e2c900fa6",
+    "nonce": 5217,
+    "difficulty": 100000
+  },
+  {
+    "index": 485,
+    "timestamp": 1790642841,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:21.956251+10:00"
+      }
+    ],
+    "prev_hash": "00002c68fc54e823178f06da0b102c59ad8dd331ab7499ad5408de5e2c900fa6",
+    "hash": "000072e48ea840d905d2b98ba3b521e08a024dd259d0470ada017a7a15f17974",
+    "nonce": 10284,
+    "difficulty": 100000
+  },
+  {
+    "index": 486,
+    "timestamp": 1790642842,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:22.9887052+10:00"
+      }
+    ],
+    "prev_hash": "000072e48ea840d905d2b98ba3b521e08a024dd259d0470ada017a7a15f17974",
+    "hash": "00001000c4a26dc44377edf7565214093290a0d1b0558de3c548250a6fc03281",
+    "nonce": 65234,
+    "difficulty": 100000
+  },
+  {
+    "index": 487,
+    "timestamp": 1790642844,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:24.1448084+10:00"
+      }
+    ],
+    "prev_hash": "00001000c4a26dc44377edf7565214093290a0d1b0558de3c548250a6fc03281",
+    "hash": "000029c8d6a6a7b3690175d5d7658fafccd892ec4ec1ca14d28c122ad9336fdc",
+    "nonce": 59563,
+    "difficulty": 100000
+  },
+  {
+    "index": 488,
+    "timestamp": 1790642845,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:25.2972629+10:00"
+      }
+    ],
+    "prev_hash": "000029c8d6a6a7b3690175d5d7658fafccd892ec4ec1ca14d28c122ad9336fdc",
+    "hash": "00003a7a4d33d5ae0fab92bd3bc08e0cbaa4fd444fd886a107040c4b3529b97d",
+    "nonce": 4575,
+    "difficulty": 100000
+  },
+  {
+    "index": 489,
+    "timestamp": 1790642846,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:26.314298+10:00"
+      }
+    ],
+    "prev_hash": "00003a7a4d33d5ae0fab92bd3bc08e0cbaa4fd444fd886a107040c4b3529b97d",
+    "hash": "0000437ffe6d5acceff626360d1868da6172d89821a0a31dc3e313c1c81a8032",
+    "nonce": 112505,
+    "difficulty": 100000
+  },
+  {
+    "index": 490,
+    "timestamp": 1790642847,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:27.583148+10:00"
+      }
+    ],
+    "prev_hash": "0000437ffe6d5acceff626360d1868da6172d89821a0a31dc3e313c1c81a8032",
+    "hash": "0000e96cf6a6b44cd1d6daec5bbe4d8620fcc984c4915f0b700cd840b9266891",
+    "nonce": 203710,
+    "difficulty": 100000
+  },
+  {
+    "index": 491,
+    "timestamp": 1790642849,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:29.0540463+10:00"
+      }
+    ],
+    "prev_hash": "0000e96cf6a6b44cd1d6daec5bbe4d8620fcc984c4915f0b700cd840b9266891",
+    "hash": "0000818282faabad5b79c6c934eb9710dd8b2caf537bf4cb29db717a51a9df99",
+    "nonce": 96158,
+    "difficulty": 100000
+  },
+  {
+    "index": 492,
+    "timestamp": 1790642850,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:30.2827822+10:00"
+      }
+    ],
+    "prev_hash": "0000818282faabad5b79c6c934eb9710dd8b2caf537bf4cb29db717a51a9df99",
+    "hash": "00000c3aad4e2889eb20dd546b1cd890c5833951cb1bd90d1099aef74aad373a",
+    "nonce": 72346,
+    "difficulty": 100000
+  },
+  {
+    "index": 493,
+    "timestamp": 1790642851,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:31.4585197+10:00"
+      }
+    ],
+    "prev_hash": "00000c3aad4e2889eb20dd546b1cd890c5833951cb1bd90d1099aef74aad373a",
+    "hash": "000089c8186cfd0399c5f08e8807c80eeec3886f39ea5275f3f8fd060c3d852d",
+    "nonce": 62877,
+    "difficulty": 100000
+  },
+  {
+    "index": 494,
+    "timestamp": 1790642852,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:32.6105042+10:00"
+      }
+    ],
+    "prev_hash": "000089c8186cfd0399c5f08e8807c80eeec3886f39ea5275f3f8fd060c3d852d",
+    "hash": "00008331487cc84520fc0fee3b2fbf052d0290c214709c608a30da2fbd445821",
+    "nonce": 13564,
+    "difficulty": 100000
+  },
+  {
+    "index": 495,
+    "timestamp": 1790642853,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:33.6515918+10:00"
+      }
+    ],
+    "prev_hash": "00008331487cc84520fc0fee3b2fbf052d0290c214709c608a30da2fbd445821",
+    "hash": "00007a0625e94f7c6cea8f3033ba81ac9cc72f66c9c4a4d8b99f8a9566527f81",
+    "nonce": 138221,
+    "difficulty": 100000
+  },
+  {
+    "index": 496,
+    "timestamp": 1790642855,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:35.0062903+10:00"
+      }
+    ],
+    "prev_hash": "00007a0625e94f7c6cea8f3033ba81ac9cc72f66c9c4a4d8b99f8a9566527f81",
+    "hash": "0000169d48759768a700fb84acc9051d1f7deaadcb4a918ed46f115653d13c30",
+    "nonce": 130157,
+    "difficulty": 100000
+  },
+  {
+    "index": 497,
+    "timestamp": 1790642856,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:36.3333608+10:00"
+      }
+    ],
+    "prev_hash": "0000169d48759768a700fb84acc9051d1f7deaadcb4a918ed46f115653d13c30",
+    "hash": "0000bd3b317018b7bcec70b1535332f4e71c9ce4d1543f94342afe43fc3891bf",
+    "nonce": 194094,
+    "difficulty": 100000
+  },
+  {
+    "index": 498,
+    "timestamp": 1790642857,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:37.7913053+10:00"
+      }
+    ],
+    "prev_hash": "0000bd3b317018b7bcec70b1535332f4e71c9ce4d1543f94342afe43fc3891bf",
+    "hash": "000081f531a5b76b6bcab868806216c9b8b361bb239826acf81fe49ceb0e91c4",
+    "nonce": 89804,
+    "difficulty": 100000
+  },
+  {
+    "index": 499,
+    "timestamp": 1790642859,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:39.006122+10:00"
+      }
+    ],
+    "prev_hash": "000081f531a5b76b6bcab868806216c9b8b361bb239826acf81fe49ceb0e91c4",
+    "hash": "0000dbf12d957a6feb1fe3c348cab6e29d31b5aa248d8b31c044dc4cbcbb5987",
+    "nonce": 19344,
+    "difficulty": 100000
+  },
+  {
+    "index": 500,
+    "timestamp": 1790642860,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:40.0664402+10:00"
+      }
+    ],
+    "prev_hash": "0000dbf12d957a6feb1fe3c348cab6e29d31b5aa248d8b31c044dc4cbcbb5987",
+    "hash": "0000ff7d199b1e80292e374aece4d6f5deda8267ff5e2d72e5a0ed00574c758e",
+    "nonce": 31981,
+    "difficulty": 100000
+  },
+  {
+    "index": 501,
+    "timestamp": 1790642861,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:41.1494875+10:00"
+      }
+    ],
+    "prev_hash": "0000ff7d199b1e80292e374aece4d6f5deda8267ff5e2d72e5a0ed00574c758e",
+    "hash": "0000f816eece8d210fc5e08d11b977518cdec9f427064e0e655efa320a96612f",
+    "nonce": 18466,
+    "difficulty": 100000
+  },
+  {
+    "index": 502,
+    "timestamp": 1790642862,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:42.1992811+10:00"
+      }
+    ],
+    "prev_hash": "0000f816eece8d210fc5e08d11b977518cdec9f427064e0e655efa320a96612f",
+    "hash": "0000485b8c75ad98c76bdf9c9de1d65cfbf0c0f17d7bdb658eedfedfda6c3932",
+    "nonce": 165719,
+    "difficulty": 100000
+  },
+  {
+    "index": 503,
+    "timestamp": 1790642863,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:43.6007085+10:00"
+      }
+    ],
+    "prev_hash": "0000485b8c75ad98c76bdf9c9de1d65cfbf0c0f17d7bdb658eedfedfda6c3932",
+    "hash": "00004ac9eaf1dcef5bae1855a4040b2aac4c49b60498960c58e9fa3a58646064",
+    "nonce": 53709,
+    "difficulty": 100000
+  },
+  {
+    "index": 504,
+    "timestamp": 1790642864,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:44.7282826+10:00"
+      }
+    ],
+    "prev_hash": "00004ac9eaf1dcef5bae1855a4040b2aac4c49b60498960c58e9fa3a58646064",
+    "hash": "0000a6a24e07d71a2cdb96bf1fe087fdde9da991012017b2d78bc5051c7284e4",
+    "nonce": 11135,
+    "difficulty": 100000
+  },
+  {
+    "index": 505,
+    "timestamp": 1790642865,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:45.7620126+10:00"
+      }
+    ],
+    "prev_hash": "0000a6a24e07d71a2cdb96bf1fe087fdde9da991012017b2d78bc5051c7284e4",
+    "hash": "0000f6c909a76bda02c8f88b8419237bd0cebfbc6db112cdbec6e3c7de777b91",
+    "nonce": 11043,
+    "difficulty": 100000
+  },
+  {
+    "index": 506,
+    "timestamp": 1790642866,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:46.7944685+10:00"
+      }
+    ],
+    "prev_hash": "0000f6c909a76bda02c8f88b8419237bd0cebfbc6db112cdbec6e3c7de777b91",
+    "hash": "0000c6ee292ab653a45a6d9b60c9b4e696199580a04ccaa0919f8ff77ba9dd2b",
+    "nonce": 291834,
+    "difficulty": 100000
+  },
+  {
+    "index": 507,
+    "timestamp": 1790642868,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:48.4693351+10:00"
+      }
+    ],
+    "prev_hash": "0000c6ee292ab653a45a6d9b60c9b4e696199580a04ccaa0919f8ff77ba9dd2b",
+    "hash": "0000f539f566c020fd97fe7d154cc9d29747e94cf317e3ea93923b8a31f74861",
+    "nonce": 57975,
+    "difficulty": 100000
+  },
+  {
+    "index": 508,
+    "timestamp": 1790642869,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:49.6147379+10:00"
+      }
+    ],
+    "prev_hash": "0000f539f566c020fd97fe7d154cc9d29747e94cf317e3ea93923b8a31f74861",
+    "hash": "0000265f24f0c90e9d62e2962c7c831feccaec91cbe10274f707b110e36d9b7f",
+    "nonce": 14192,
+    "difficulty": 100000
+  },
+  {
+    "index": 509,
+    "timestamp": 1790642870,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:50.656005+10:00"
+      }
+    ],
+    "prev_hash": "0000265f24f0c90e9d62e2962c7c831feccaec91cbe10274f707b110e36d9b7f",
+    "hash": "00005f8520b0c203c136564ad4ecc5c4db7edc583b945fba14c6df93614a3b41",
+    "nonce": 34730,
+    "difficulty": 100000
+  },
+  {
+    "index": 510,
+    "timestamp": 1790642871,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:51.7494869+10:00"
+      }
+    ],
+    "prev_hash": "00005f8520b0c203c136564ad4ecc5c4db7edc583b945fba14c6df93614a3b41",
+    "hash": "0000c0ad0697c2283a4ffb8461bee12e664c837cbd1a0581d5c5bb65680ad320",
+    "nonce": 89622,
+    "difficulty": 100000
+  },
+  {
+    "index": 511,
+    "timestamp": 1790642872,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:52.9672773+10:00"
+      }
+    ],
+    "prev_hash": "0000c0ad0697c2283a4ffb8461bee12e664c837cbd1a0581d5c5bb65680ad320",
+    "hash": "0000ff24b4818b719c6dde62709f6eb4512b90cd4f49b490c668e0998bf5b71d",
+    "nonce": 75766,
+    "difficulty": 100000
+  },
+  {
+    "index": 512,
+    "timestamp": 1790642874,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:54.1532971+10:00"
+      }
+    ],
+    "prev_hash": "0000ff24b4818b719c6dde62709f6eb4512b90cd4f49b490c668e0998bf5b71d",
+    "hash": "000020342ca0211578fffa22b51b244a02ddc4a91e2e0f96cac190be7b74f94c",
+    "nonce": 39798,
+    "difficulty": 100000
+  },
+  {
+    "index": 513,
+    "timestamp": 1790642875,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:55.2509124+10:00"
+      }
+    ],
+    "prev_hash": "000020342ca0211578fffa22b51b244a02ddc4a91e2e0f96cac190be7b74f94c",
+    "hash": "000061562838ca495e59b9efc6dd20826b154db5019a79fab4146a3a92a2aa09",
+    "nonce": 188225,
+    "difficulty": 100000
+  },
+  {
+    "index": 514,
+    "timestamp": 1790642876,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:56.6871305+10:00"
+      }
+    ],
+    "prev_hash": "000061562838ca495e59b9efc6dd20826b154db5019a79fab4146a3a92a2aa09",
+    "hash": "00004424d84d12c59ca219556a92bafcf87c4e7fc545945caa8d614f236d236b",
+    "nonce": 24484,
+    "difficulty": 100000
+  },
+  {
+    "index": 515,
+    "timestamp": 1790642877,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:57.7589723+10:00"
+      }
+    ],
+    "prev_hash": "00004424d84d12c59ca219556a92bafcf87c4e7fc545945caa8d614f236d236b",
+    "hash": "00000c7adb83e7c0fecd0bcef8432776dbbe6b09ea547109e31ab894d99661d4",
+    "nonce": 20668,
+    "difficulty": 100000
+  },
+  {
+    "index": 516,
+    "timestamp": 1790642878,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:58.8158953+10:00"
+      }
+    ],
+    "prev_hash": "00000c7adb83e7c0fecd0bcef8432776dbbe6b09ea547109e31ab894d99661d4",
+    "hash": "000005eb5dfbbd443561030fb5ad4713929d848cbc4679245f6d64ac5110423f",
+    "nonce": 33309,
+    "difficulty": 100000
+  },
+  {
+    "index": 517,
+    "timestamp": 1790642879,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:47:59.9076905+10:00"
+      }
+    ],
+    "prev_hash": "000005eb5dfbbd443561030fb5ad4713929d848cbc4679245f6d64ac5110423f",
+    "hash": "00008dfec9d12db55691adb9b31b7ba7ba3d900dce2a511f166cc46a40f332cb",
+    "nonce": 66260,
+    "difficulty": 100000
+  },
+  {
+    "index": 518,
+    "timestamp": 1790642881,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:01.0776301+10:00"
+      }
+    ],
+    "prev_hash": "00008dfec9d12db55691adb9b31b7ba7ba3d900dce2a511f166cc46a40f332cb",
+    "hash": "000056e4b75b9047611e20845c5f99013f34b9368726aaf4f29ac211c3f6cf57",
+    "nonce": 10837,
+    "difficulty": 100000
+  },
+  {
+    "index": 519,
+    "timestamp": 1790642882,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:02.1085831+10:00"
+      }
+    ],
+    "prev_hash": "000056e4b75b9047611e20845c5f99013f34b9368726aaf4f29ac211c3f6cf57",
+    "hash": "0000204bdb7c95461ddfa86b92cc0f2efb1ac5a409c29a33320794365fb0d730",
+    "nonce": 5809,
+    "difficulty": 100000
+  },
+  {
+    "index": 520,
+    "timestamp": 1790642883,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:03.8628681+10:00"
+      }
+    ],
+    "prev_hash": "0000204bdb7c95461ddfa86b92cc0f2efb1ac5a409c29a33320794365fb0d730",
+    "hash": "0000a1084c594feb938fc05ae9f7b9d2870c56cd6cd5dd9b80fb8ec2b401d240",
+    "nonce": 4734,
+    "difficulty": 100000
+  },
+  {
+    "index": 521,
+    "timestamp": 1790642915,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:35.7070267+10:00"
+      }
+    ],
+    "prev_hash": "0000a1084c594feb938fc05ae9f7b9d2870c56cd6cd5dd9b80fb8ec2b401d240",
+    "hash": "00002152366d03880cd50e16e201ee0e004dfd33c5f030a04b5364db807ce191",
+    "nonce": 271608,
+    "difficulty": 100000
+  },
+  {
+    "index": 522,
+    "timestamp": 1790642917,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:37.3335737+10:00"
+      }
+    ],
+    "prev_hash": "00002152366d03880cd50e16e201ee0e004dfd33c5f030a04b5364db807ce191",
+    "hash": "0000c3bd8f7057830d26956b47f8ec122587311bbb8901efd5542922b353801c",
+    "nonce": 6363,
+    "difficulty": 100000
+  },
+  {
+    "index": 523,
+    "timestamp": 1790642918,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:38.3554604+10:00"
+      }
+    ],
+    "prev_hash": "0000c3bd8f7057830d26956b47f8ec122587311bbb8901efd5542922b353801c",
+    "hash": "00001cd78ad80135454ee02105963e9f9d7a92d7f92d1f94edb2640b1f3bbe6d",
+    "nonce": 60310,
+    "difficulty": 100000
+  },
+  {
+    "index": 524,
+    "timestamp": 1790642919,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:39.5077687+10:00"
+      }
+    ],
+    "prev_hash": "00001cd78ad80135454ee02105963e9f9d7a92d7f92d1f94edb2640b1f3bbe6d",
+    "hash": "000008ad1831f67c331ba9d758d0bfbf3309c45327e5e3824b9bd2a35bdb0e0c",
+    "nonce": 42606,
+    "difficulty": 100000
+  },
+  {
+    "index": 525,
+    "timestamp": 1790642920,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:40.6136489+10:00"
+      }
+    ],
+    "prev_hash": "000008ad1831f67c331ba9d758d0bfbf3309c45327e5e3824b9bd2a35bdb0e0c",
+    "hash": "0000028ef8cf642cb9f59e89ef32aff18bb0459bb08582c582871399364a981f",
+    "nonce": 125551,
+    "difficulty": 100000
+  },
+  {
+    "index": 526,
+    "timestamp": 1790642921,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:41.9140276+10:00"
+      }
+    ],
+    "prev_hash": "0000028ef8cf642cb9f59e89ef32aff18bb0459bb08582c582871399364a981f",
+    "hash": "0000219df5a251ac4c247f272017b98703914ece2b0cb2bf1493a21356e53088",
+    "nonce": 171633,
+    "difficulty": 100000
+  },
+  {
+    "index": 527,
+    "timestamp": 1790642923,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:43.3450494+10:00"
+      }
+    ],
+    "prev_hash": "0000219df5a251ac4c247f272017b98703914ece2b0cb2bf1493a21356e53088",
+    "hash": "0000f2f66a6b2051adb6a42c058b0ee7eb9d5bfe75974c15cf50a15522c6c710",
+    "nonce": 3422,
+    "difficulty": 100000
+  },
+  {
+    "index": 528,
+    "timestamp": 1790642924,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:44.3608278+10:00"
+      }
+    ],
+    "prev_hash": "0000f2f66a6b2051adb6a42c058b0ee7eb9d5bfe75974c15cf50a15522c6c710",
+    "hash": "0000087271f5e1fdcf2ef908a2ffb1df2dfec912bc93fb3729ee1651ca768770",
+    "nonce": 41670,
+    "difficulty": 100000
+  },
+  {
+    "index": 529,
+    "timestamp": 1790642925,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:45.4657385+10:00"
+      }
+    ],
+    "prev_hash": "0000087271f5e1fdcf2ef908a2ffb1df2dfec912bc93fb3729ee1651ca768770",
+    "hash": "0000ea4ac41ac43fd5654fbc11e975f57a1919881ef682bcdea73348c99cb9a7",
+    "nonce": 132143,
+    "difficulty": 100000
+  },
+  {
+    "index": 530,
+    "timestamp": 1790642926,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:46.7809085+10:00"
+      }
+    ],
+    "prev_hash": "0000ea4ac41ac43fd5654fbc11e975f57a1919881ef682bcdea73348c99cb9a7",
+    "hash": "0000550a25e7811a88d1848e4aa2dadec395cb991f5eaa4b9575be3eb3e1ecc4",
+    "nonce": 171516,
+    "difficulty": 100000
+  },
+  {
+    "index": 531,
+    "timestamp": 1790642928,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:48.1873796+10:00"
+      }
+    ],
+    "prev_hash": "0000550a25e7811a88d1848e4aa2dadec395cb991f5eaa4b9575be3eb3e1ecc4",
+    "hash": "000056d39ccc3ce87cfa811717e88cc13ca17252cd8ca81dd3d3140e1fbdab3d",
+    "nonce": 98131,
+    "difficulty": 100000
+  },
+  {
+    "index": 532,
+    "timestamp": 1790642929,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:49.4195524+10:00"
+      }
+    ],
+    "prev_hash": "000056d39ccc3ce87cfa811717e88cc13ca17252cd8ca81dd3d3140e1fbdab3d",
+    "hash": "000033357c5ca3e808b8600c7cfa353deaf8994c122ad65fb6d3ded3048b7d4a",
+    "nonce": 61173,
+    "difficulty": 100000
+  },
+  {
+    "index": 533,
+    "timestamp": 1790642930,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:50.5820187+10:00"
+      }
+    ],
+    "prev_hash": "000033357c5ca3e808b8600c7cfa353deaf8994c122ad65fb6d3ded3048b7d4a",
+    "hash": "00002eb2110222229c64925703813ccbe369107338a05d1ba53cd4a7eb4dc3f2",
+    "nonce": 47898,
+    "difficulty": 100000
+  },
+  {
+    "index": 534,
+    "timestamp": 1790642931,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:51.7062894+10:00"
+      }
+    ],
+    "prev_hash": "00002eb2110222229c64925703813ccbe369107338a05d1ba53cd4a7eb4dc3f2",
+    "hash": "00006dcf989b1415aaa3d52e0f34391de07138ce03c0a5771f76baf0e43ef574",
+    "nonce": 9077,
+    "difficulty": 100000
+  },
+  {
+    "index": 535,
+    "timestamp": 1790642932,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:52.7521612+10:00"
+      }
+    ],
+    "prev_hash": "00006dcf989b1415aaa3d52e0f34391de07138ce03c0a5771f76baf0e43ef574",
+    "hash": "000096f4879859e88871ed24995cc84ceaf5e128aa206f0ff540ae5290465d09",
+    "nonce": 13443,
+    "difficulty": 100000
+  },
+  {
+    "index": 536,
+    "timestamp": 1790642933,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:53.7896857+10:00"
+      }
+    ],
+    "prev_hash": "000096f4879859e88871ed24995cc84ceaf5e128aa206f0ff540ae5290465d09",
+    "hash": "000027697c84c98863c9da5881184bfb4818399504d79d794ea9ceb239e29b71",
+    "nonce": 243390,
+    "difficulty": 100000
+  },
+  {
+    "index": 537,
+    "timestamp": 1790642935,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:55.3732473+10:00"
+      }
+    ],
+    "prev_hash": "000027697c84c98863c9da5881184bfb4818399504d79d794ea9ceb239e29b71",
+    "hash": "0000ad6e7e48c2a02259a7313e9eb58f4de4c0a7e751aef22f443f1480bbcf0b",
+    "nonce": 2081,
+    "difficulty": 100000
+  },
+  {
+    "index": 538,
+    "timestamp": 1790642936,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:56.3882691+10:00"
+      }
+    ],
+    "prev_hash": "0000ad6e7e48c2a02259a7313e9eb58f4de4c0a7e751aef22f443f1480bbcf0b",
+    "hash": "000033c9f824b23a50bc107a7b7de839c81751c72ab026153a99757b709046f6",
+    "nonce": 118369,
+    "difficulty": 100000
+  },
+  {
+    "index": 539,
+    "timestamp": 1790642937,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:57.6656479+10:00"
+      }
+    ],
+    "prev_hash": "000033c9f824b23a50bc107a7b7de839c81751c72ab026153a99757b709046f6",
+    "hash": "0000c289ea9a799e719328d3f9830282fa6b728a19886d6faff16e515c2a96f7",
+    "nonce": 51525,
+    "difficulty": 100000
+  },
+  {
+    "index": 540,
+    "timestamp": 1790642938,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:58.7944778+10:00"
+      }
+    ],
+    "prev_hash": "0000c289ea9a799e719328d3f9830282fa6b728a19886d6faff16e515c2a96f7",
+    "hash": "0000a4e04cc8fc8fa5b7a96dd04a612b842978028b362cb274d0973ef1511117",
+    "nonce": 11941,
+    "difficulty": 100000
+  },
+  {
+    "index": 541,
+    "timestamp": 1790642939,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:48:59.8328397+10:00"
+      }
+    ],
+    "prev_hash": "0000a4e04cc8fc8fa5b7a96dd04a612b842978028b362cb274d0973ef1511117",
+    "hash": "0000bb2d0736049797bb8bc1d6435c6f61c22221193e7682721e6d9cc5a66618",
+    "nonce": 54130,
+    "difficulty": 100000
+  },
+  {
+    "index": 542,
+    "timestamp": 1790642940,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:00.9646144+10:00"
+      }
+    ],
+    "prev_hash": "0000bb2d0736049797bb8bc1d6435c6f61c22221193e7682721e6d9cc5a66618",
+    "hash": "0000ab229411a732815d8f06c0cb48912d47509742063088cce4340471e1721e",
+    "nonce": 89579,
+    "difficulty": 100000
+  },
+  {
+    "index": 543,
+    "timestamp": 1790642942,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:02.1858485+10:00"
+      }
+    ],
+    "prev_hash": "0000ab229411a732815d8f06c0cb48912d47509742063088cce4340471e1721e",
+    "hash": "0000016e20b58ca6c244fd06645336055769cf31af084e81b6652ca47557e324",
+    "nonce": 41850,
+    "difficulty": 100000
+  },
+  {
+    "index": 544,
+    "timestamp": 1790642943,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:03.288347+10:00"
+      }
+    ],
+    "prev_hash": "0000016e20b58ca6c244fd06645336055769cf31af084e81b6652ca47557e324",
+    "hash": "00005359c1e8a8181b409ac3c8df339668d87b2398b53c09b6d4bb265e39c949",
+    "nonce": 18718,
+    "difficulty": 100000
+  },
+  {
+    "index": 545,
+    "timestamp": 1790642944,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:04.3377944+10:00"
+      }
+    ],
+    "prev_hash": "00005359c1e8a8181b409ac3c8df339668d87b2398b53c09b6d4bb265e39c949",
+    "hash": "00005916fa294748997db551fc476f30c34ffb44edcc912498b1f9b25d28d0b7",
+    "nonce": 70818,
+    "difficulty": 100000
+  },
+  {
+    "index": 546,
+    "timestamp": 1790642945,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:05.5093902+10:00"
+      }
+    ],
+    "prev_hash": "00005916fa294748997db551fc476f30c34ffb44edcc912498b1f9b25d28d0b7",
+    "hash": "00008cd7a2ad393496e418e0d7659b3bf47befa2e20cc0e8cf7bb97a59861737",
+    "nonce": 133232,
+    "difficulty": 100000
+  },
+  {
+    "index": 547,
+    "timestamp": 1790642946,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:06.8325512+10:00"
+      }
+    ],
+    "prev_hash": "00008cd7a2ad393496e418e0d7659b3bf47befa2e20cc0e8cf7bb97a59861737",
+    "hash": "0000690cbb8ac14729cf9ebb94cafc533232cbb4164183d209b793c4ab72ca8a",
+    "nonce": 6759,
+    "difficulty": 100000
+  },
+  {
+    "index": 548,
+    "timestamp": 1790642947,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:07.8570828+10:00"
+      }
+    ],
+    "prev_hash": "0000690cbb8ac14729cf9ebb94cafc533232cbb4164183d209b793c4ab72ca8a",
+    "hash": "000013b41f8f7b3aca0d12ecb4d305a276e87bc7b48a2dd7dcc7aad02f7a8c5c",
+    "nonce": 173287,
+    "difficulty": 100000
+  },
+  {
+    "index": 549,
+    "timestamp": 1790642949,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:09.3135884+10:00"
+      }
+    ],
+    "prev_hash": "000013b41f8f7b3aca0d12ecb4d305a276e87bc7b48a2dd7dcc7aad02f7a8c5c",
+    "hash": "00007a25eb84c158904277ebf97c79b563cb6f84c8d7882cc2ab8d70b2d2db81",
+    "nonce": 74550,
+    "difficulty": 100000
+  },
+  {
+    "index": 550,
+    "timestamp": 1790642950,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:10.5077568+10:00"
+      }
+    ],
+    "prev_hash": "00007a25eb84c158904277ebf97c79b563cb6f84c8d7882cc2ab8d70b2d2db81",
+    "hash": "00005f7e2f9c396aa66a29edf39f4e09e2ea3fda93b6e42c8768ca50a20b110c",
+    "nonce": 8788,
+    "difficulty": 100000
+  },
+  {
+    "index": 551,
+    "timestamp": 1790642951,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:11.5414444+10:00"
+      }
+    ],
+    "prev_hash": "00005f7e2f9c396aa66a29edf39f4e09e2ea3fda93b6e42c8768ca50a20b110c",
+    "hash": "0000414a590c615b61a57552945ce1a2d63435fd599adadb37c585adb34beaeb",
+    "nonce": 99624,
+    "difficulty": 100000
+  },
+  {
+    "index": 552,
+    "timestamp": 1790642952,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:12.7808645+10:00"
+      }
+    ],
+    "prev_hash": "0000414a590c615b61a57552945ce1a2d63435fd599adadb37c585adb34beaeb",
+    "hash": "0000f47aa5ea040687f28771e243abf406d857deac7cec36faca81db02d0b5b1",
+    "nonce": 80880,
+    "difficulty": 100000
+  },
+  {
+    "index": 553,
+    "timestamp": 1790642953,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:13.97359+10:00"
+      }
+    ],
+    "prev_hash": "0000f47aa5ea040687f28771e243abf406d857deac7cec36faca81db02d0b5b1",
+    "hash": "000016642e5e0de51b1482479fa74f1ce4bffe0bb62a17ed4127e6f68532579b",
+    "nonce": 25334,
+    "difficulty": 100000
+  },
+  {
+    "index": 554,
+    "timestamp": 1790642955,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:15.0490769+10:00"
+      }
+    ],
+    "prev_hash": "000016642e5e0de51b1482479fa74f1ce4bffe0bb62a17ed4127e6f68532579b",
+    "hash": "000014cc0216fecf07ca7ba17044de09744683c11922e1c2b90b5318d115ea71",
+    "nonce": 29131,
+    "difficulty": 100000
+  },
+  {
+    "index": 555,
+    "timestamp": 1790642956,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:16.133802+10:00"
+      }
+    ],
+    "prev_hash": "000014cc0216fecf07ca7ba17044de09744683c11922e1c2b90b5318d115ea71",
+    "hash": "000059a8c3a565b7b95a0cb185e768e325db87f8a175591bdbd12cd33be69e2e",
+    "nonce": 8357,
+    "difficulty": 100000
+  },
+  {
+    "index": 556,
+    "timestamp": 1790642957,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:17.1606744+10:00"
+      }
+    ],
+    "prev_hash": "000059a8c3a565b7b95a0cb185e768e325db87f8a175591bdbd12cd33be69e2e",
+    "hash": "00003d1edef4d78ea4198e4e8fdc050f82712d1004654f92fd744e0ea7130cb2",
+    "nonce": 73181,
+    "difficulty": 100000
+  },
+  {
+    "index": 557,
+    "timestamp": 1790642958,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:18.3513587+10:00"
+      }
+    ],
+    "prev_hash": "00003d1edef4d78ea4198e4e8fdc050f82712d1004654f92fd744e0ea7130cb2",
+    "hash": "0000a6aa4ef2f0ae91c5bb328ea58b95d535a2692d96faaaeb125422ae8494cc",
+    "nonce": 91491,
+    "difficulty": 100000
+  },
+  {
+    "index": 558,
+    "timestamp": 1790642959,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:19.5968206+10:00"
+      }
+    ],
+    "prev_hash": "0000a6aa4ef2f0ae91c5bb328ea58b95d535a2692d96faaaeb125422ae8494cc",
+    "hash": "000002dd6e1a377306269d9defeb8486e14b001d394481112fdfdb2c9d8645ff",
+    "nonce": 38599,
+    "difficulty": 100000
+  },
+  {
+    "index": 559,
+    "timestamp": 1790642960,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:20.7060246+10:00"
+      }
+    ],
+    "prev_hash": "000002dd6e1a377306269d9defeb8486e14b001d394481112fdfdb2c9d8645ff",
+    "hash": "00003dc8ab73db34f4314f002bb3bf9c30f177a958e75ffb04c4271964f64371",
+    "nonce": 81060,
+    "difficulty": 100000
+  },
+  {
+    "index": 560,
+    "timestamp": 1790642961,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:21.9082427+10:00"
+      }
+    ],
+    "prev_hash": "00003dc8ab73db34f4314f002bb3bf9c30f177a958e75ffb04c4271964f64371",
+    "hash": "00005b0dbf7ecfe53e41a20e9960476caaf476c9027c87988b36896d3f49d199",
+    "nonce": 33798,
+    "difficulty": 100000
+  },
+  {
+    "index": 561,
+    "timestamp": 1790642963,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:23.0004584+10:00"
+      }
+    ],
+    "prev_hash": "00005b0dbf7ecfe53e41a20e9960476caaf476c9027c87988b36896d3f49d199",
+    "hash": "0000aa620e89cf12800daacc2a13122afc051f38a18d885e099a4a549c0f07a0",
+    "nonce": 37407,
+    "difficulty": 100000
+  },
+  {
+    "index": 562,
+    "timestamp": 1790642964,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:24.0969206+10:00"
+      }
+    ],
+    "prev_hash": "0000aa620e89cf12800daacc2a13122afc051f38a18d885e099a4a549c0f07a0",
+    "hash": "0000fc97175e0cfad97b76a5afc5efb361a116b1eedc9fe4841d0c1a851789b1",
+    "nonce": 30720,
+    "difficulty": 100000
+  },
+  {
+    "index": 563,
+    "timestamp": 1790642965,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:25.1896685+10:00"
+      }
+    ],
+    "prev_hash": "0000fc97175e0cfad97b76a5afc5efb361a116b1eedc9fe4841d0c1a851789b1",
+    "hash": "0000261bd4d0139d6d447e736d2bc6099a6ba67ebb8474705d9d6d6f175f21a0",
+    "nonce": 41872,
+    "difficulty": 100000
+  },
+  {
+    "index": 564,
+    "timestamp": 1790642966,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:26.3016484+10:00"
+      }
+    ],
+    "prev_hash": "0000261bd4d0139d6d447e736d2bc6099a6ba67ebb8474705d9d6d6f175f21a0",
+    "hash": "00008814c88cc360651b97f5254eefabf89fccb27ea523a9a991c3f47d050a7b",
+    "nonce": 171316,
+    "difficulty": 100000
+  },
+  {
+    "index": 565,
+    "timestamp": 1790642967,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:27.7429027+10:00"
+      }
+    ],
+    "prev_hash": "00008814c88cc360651b97f5254eefabf89fccb27ea523a9a991c3f47d050a7b",
+    "hash": "00002945393be4356bf979241a1c59464ac06167b2e33e35de4c00f364f50a2a",
+    "nonce": 27965,
+    "difficulty": 100000
+  },
+  {
+    "index": 566,
+    "timestamp": 1790642968,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:28.820899+10:00"
+      }
+    ],
+    "prev_hash": "00002945393be4356bf979241a1c59464ac06167b2e33e35de4c00f364f50a2a",
+    "hash": "0000c13c5add285dc3633339faf047c53f34ba4e5d1843046df88bd6bb0de411",
+    "nonce": 25380,
+    "difficulty": 100000
+  },
+  {
+    "index": 567,
+    "timestamp": 1790642969,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:29.887442+10:00"
+      }
+    ],
+    "prev_hash": "0000c13c5add285dc3633339faf047c53f34ba4e5d1843046df88bd6bb0de411",
+    "hash": "00001b03fdac29d2af167fc0c02fe0cbc30a174e91d3c2545adad4d3e674da4d",
+    "nonce": 13149,
+    "difficulty": 100000
+  },
+  {
+    "index": 568,
+    "timestamp": 1790642970,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:30.9281602+10:00"
+      }
+    ],
+    "prev_hash": "00001b03fdac29d2af167fc0c02fe0cbc30a174e91d3c2545adad4d3e674da4d",
+    "hash": "0000fbf158b4b533dfe60d24f231600364f5f85e7a401d7e2bf8c491156a6401",
+    "nonce": 397199,
+    "difficulty": 100000
+  },
+  {
+    "index": 569,
+    "timestamp": 1790642972,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:32.8579235+10:00"
+      }
+    ],
+    "prev_hash": "0000fbf158b4b533dfe60d24f231600364f5f85e7a401d7e2bf8c491156a6401",
+    "hash": "000011c617a8359ac7c614588574f725d0d0f83f8a02204659086e23c173bc13",
+    "nonce": 65683,
+    "difficulty": 100000
+  },
+  {
+    "index": 570,
+    "timestamp": 1790642974,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:34.2766541+10:00"
+      }
+    ],
+    "prev_hash": "000011c617a8359ac7c614588574f725d0d0f83f8a02204659086e23c173bc13",
+    "hash": "000044cb1ae9f9703af3a7ed16fdb6a70a3d61335dd26dadaa9f3cc3956ed866",
+    "nonce": 20904,
+    "difficulty": 100000
+  },
+  {
+    "index": 571,
+    "timestamp": 1790642975,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:35.3950408+10:00"
+      }
+    ],
+    "prev_hash": "000044cb1ae9f9703af3a7ed16fdb6a70a3d61335dd26dadaa9f3cc3956ed866",
+    "hash": "0000b98eafd4d7dd1d1d4cd73b0e43279d35198eacbba7407cb801e88e1dd4bf",
+    "nonce": 6984,
+    "difficulty": 100000
+  },
+  {
+    "index": 572,
+    "timestamp": 1790642976,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:36.4515708+10:00"
+      }
+    ],
+    "prev_hash": "0000b98eafd4d7dd1d1d4cd73b0e43279d35198eacbba7407cb801e88e1dd4bf",
+    "hash": "0000dcfbe6e0f2f8b3d9dcbc140711e9d52c2ce7424a9a030b789e5230eafad7",
+    "nonce": 128874,
+    "difficulty": 100000
+  },
+  {
+    "index": 573,
+    "timestamp": 1790642978,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:38.2947026+10:00"
+      }
+    ],
+    "prev_hash": "0000dcfbe6e0f2f8b3d9dcbc140711e9d52c2ce7424a9a030b789e5230eafad7",
+    "hash": "0000fc7ea2ef33507e1276ba32427b8690b1ea1a54a1b833cbcb5d7ace3f27e5",
+    "nonce": 74009,
+    "difficulty": 100000
+  },
+  {
+    "index": 574,
+    "timestamp": 1790642979,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:39.5308088+10:00"
+      }
+    ],
+    "prev_hash": "0000fc7ea2ef33507e1276ba32427b8690b1ea1a54a1b833cbcb5d7ace3f27e5",
+    "hash": "0000789f455987b7713486e0ad21e807a69eb8d96e0f84a6eae634ba09b8963f",
+    "nonce": 25086,
+    "difficulty": 100000
+  },
+  {
+    "index": 575,
+    "timestamp": 1790642980,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:40.6001765+10:00"
+      }
+    ],
+    "prev_hash": "0000789f455987b7713486e0ad21e807a69eb8d96e0f84a6eae634ba09b8963f",
+    "hash": "00004e0fc67cbe0883e2932c7f1ca76da0896576b29f18dd0baf17483cdef6e6",
+    "nonce": 2718,
+    "difficulty": 100000
+  },
+  {
+    "index": 576,
+    "timestamp": 1790642981,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:41.6131477+10:00"
+      }
+    ],
+    "prev_hash": "00004e0fc67cbe0883e2932c7f1ca76da0896576b29f18dd0baf17483cdef6e6",
+    "hash": "00003aaad200434014ad13449e0f658160545c5ec8f642eacdee3a2c44868faf",
+    "nonce": 192158,
+    "difficulty": 100000
+  },
+  {
+    "index": 577,
+    "timestamp": 1790642983,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:43.0685538+10:00"
+      }
+    ],
+    "prev_hash": "00003aaad200434014ad13449e0f658160545c5ec8f642eacdee3a2c44868faf",
+    "hash": "0000f18f0f63e051a01988ce4b9eaa0c8a5530e5bfd4d7d606e05274bad3df74",
+    "nonce": 15225,
+    "difficulty": 100000
+  },
+  {
+    "index": 578,
+    "timestamp": 1790642984,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:44.1161295+10:00"
+      }
+    ],
+    "prev_hash": "0000f18f0f63e051a01988ce4b9eaa0c8a5530e5bfd4d7d606e05274bad3df74",
+    "hash": "00005116bf79100547c3bd437fdb728e1e08645de963ed5a5a42a3dc9959e811",
+    "nonce": 58727,
+    "difficulty": 100000
+  },
+  {
+    "index": 579,
+    "timestamp": 1790642985,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:45.265924+10:00"
+      }
+    ],
+    "prev_hash": "00005116bf79100547c3bd437fdb728e1e08645de963ed5a5a42a3dc9959e811",
+    "hash": "00005e8709210c6dd799896591b055dc824aa514e568411ca50db83c5fc4f80b",
+    "nonce": 32803,
+    "difficulty": 100000
+  },
+  {
+    "index": 580,
+    "timestamp": 1790642986,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:46.3529386+10:00"
+      }
+    ],
+    "prev_hash": "00005e8709210c6dd799896591b055dc824aa514e568411ca50db83c5fc4f80b",
+    "hash": "00007e837af8a45257919aca33d601736546123da454e40aca9be8865b9606b1",
+    "nonce": 15903,
+    "difficulty": 100000
+  },
+  {
+    "index": 581,
+    "timestamp": 1790642987,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:47.3991174+10:00"
+      }
+    ],
+    "prev_hash": "00007e837af8a45257919aca33d601736546123da454e40aca9be8865b9606b1",
+    "hash": "0000a0f83664ceaa45624268f03f6dc78839ea3a185dad092eab9b157c1824d3",
+    "nonce": 56204,
+    "difficulty": 100000
+  },
+  {
+    "index": 582,
+    "timestamp": 1790642988,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:48.538868+10:00"
+      }
+    ],
+    "prev_hash": "0000a0f83664ceaa45624268f03f6dc78839ea3a185dad092eab9b157c1824d3",
+    "hash": "000081efb055a0897012a4316222e341e1b89d9c4e2f4e1685abaeb4c9fb3999",
+    "nonce": 70252,
+    "difficulty": 100000
+  },
+  {
+    "index": 583,
+    "timestamp": 1790642989,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:49.711285+10:00"
+      }
+    ],
+    "prev_hash": "000081efb055a0897012a4316222e341e1b89d9c4e2f4e1685abaeb4c9fb3999",
+    "hash": "0000f0e21fc1bfa33ede6404756128be427d9d4a49bea97ea96909f183819cd0",
+    "nonce": 214324,
+    "difficulty": 100000
+  },
+  {
+    "index": 584,
+    "timestamp": 1790642991,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:51.2133835+10:00"
+      }
+    ],
+    "prev_hash": "0000f0e21fc1bfa33ede6404756128be427d9d4a49bea97ea96909f183819cd0",
+    "hash": "0000be36da28f6ba64f4875d2bd11d894e1c796e99823d4b162d51d6ebd6f6e7",
+    "nonce": 316844,
+    "difficulty": 100000
+  },
+  {
+    "index": 585,
+    "timestamp": 1790642992,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:52.9712242+10:00"
+      }
+    ],
+    "prev_hash": "0000be36da28f6ba64f4875d2bd11d894e1c796e99823d4b162d51d6ebd6f6e7",
+    "hash": "0000b8ee1ab63d1b196dd171172645e40652803a73fd2fc10a3386358279e9da",
+    "nonce": 80368,
+    "difficulty": 100000
+  },
+  {
+    "index": 586,
+    "timestamp": 1790642994,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:54.176692+10:00"
+      }
+    ],
+    "prev_hash": "0000b8ee1ab63d1b196dd171172645e40652803a73fd2fc10a3386358279e9da",
+    "hash": "0000056ed3b8f6c0cf9f7b66148ce3562605fec28d2884004408f06a5e8ed0e2",
+    "nonce": 50116,
+    "difficulty": 100000
+  },
+  {
+    "index": 587,
+    "timestamp": 1790642995,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:55.3041689+10:00"
+      }
+    ],
+    "prev_hash": "0000056ed3b8f6c0cf9f7b66148ce3562605fec28d2884004408f06a5e8ed0e2",
+    "hash": "00000441407c0ab691e77570cad8149110d82fdea0c4965038927352d41c7609",
+    "nonce": 10241,
+    "difficulty": 100000
+  },
+  {
+    "index": 588,
+    "timestamp": 1790642996,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:56.3359876+10:00"
+      }
+    ],
+    "prev_hash": "00000441407c0ab691e77570cad8149110d82fdea0c4965038927352d41c7609",
+    "hash": "00000ee22393b1c5fd23ed08b8032a89dc9e9e8e312359d9ee891af7a7405c85",
+    "nonce": 15949,
+    "difficulty": 100000
+  },
+  {
+    "index": 589,
+    "timestamp": 1790642997,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:57.3806298+10:00"
+      }
+    ],
+    "prev_hash": "00000ee22393b1c5fd23ed08b8032a89dc9e9e8e312359d9ee891af7a7405c85",
+    "hash": "0000ce68539487bd48d83e6379dac3f32281846a5b79661e5f789f297905a33c",
+    "nonce": 127456,
+    "difficulty": 100000
+  },
+  {
+    "index": 590,
+    "timestamp": 1790642998,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:58.695667+10:00"
+      }
+    ],
+    "prev_hash": "0000ce68539487bd48d83e6379dac3f32281846a5b79661e5f789f297905a33c",
+    "hash": "0000d1727c1bbba569ba56fc4d5813caa0c3d0cbc170cbd1081b0a6fe5c386dd",
+    "nonce": 50772,
+    "difficulty": 100000
+  },
+  {
+    "index": 591,
+    "timestamp": 1790642999,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:49:59.8189772+10:00"
+      }
+    ],
+    "prev_hash": "0000d1727c1bbba569ba56fc4d5813caa0c3d0cbc170cbd1081b0a6fe5c386dd",
+    "hash": "000016622c210da61b1d717cb7ef10b3ad81f524bbe3bdbbcce0dfb17b38089b",
+    "nonce": 37938,
+    "difficulty": 100000
+  },
+  {
+    "index": 592,
+    "timestamp": 1790643000,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:00.9185554+10:00"
+      }
+    ],
+    "prev_hash": "000016622c210da61b1d717cb7ef10b3ad81f524bbe3bdbbcce0dfb17b38089b",
+    "hash": "00001238e4244cb22b5886353a407ff037b7ed95e268abddf1f6e2786bf790c8",
+    "nonce": 87809,
+    "difficulty": 100000
+  },
+  {
+    "index": 593,
+    "timestamp": 1790643002,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:02.1267543+10:00"
+      }
+    ],
+    "prev_hash": "00001238e4244cb22b5886353a407ff037b7ed95e268abddf1f6e2786bf790c8",
+    "hash": "0000d22ae13dde041c2446b0a32f9a7c0d8449f2a7176f7dfac4d4095c8c52bc",
+    "nonce": 4954,
+    "difficulty": 100000
+  },
+  {
+    "index": 594,
+    "timestamp": 1790643003,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:03.1457163+10:00"
+      }
+    ],
+    "prev_hash": "0000d22ae13dde041c2446b0a32f9a7c0d8449f2a7176f7dfac4d4095c8c52bc",
+    "hash": "0000c09f91883e580eabc644a284142673f79186ab240cf7a81fd64e92bf1be4",
+    "nonce": 14878,
+    "difficulty": 100000
+  },
+  {
+    "index": 595,
+    "timestamp": 1790643004,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:04.1882452+10:00"
+      }
+    ],
+    "prev_hash": "0000c09f91883e580eabc644a284142673f79186ab240cf7a81fd64e92bf1be4",
+    "hash": "0000e494760a8c49a3bd7011a488bfae96d7cd488e6e2bde0daaa614181236d9",
+    "nonce": 89177,
+    "difficulty": 100000
+  },
+  {
+    "index": 596,
+    "timestamp": 1790643005,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:05.4127003+10:00"
+      }
+    ],
+    "prev_hash": "0000e494760a8c49a3bd7011a488bfae96d7cd488e6e2bde0daaa614181236d9",
+    "hash": "00006870c8e4075a2c63264b1e3ed817b92af2210c7ddae637dcb4c32c266bdb",
+    "nonce": 133844,
+    "difficulty": 100000
+  },
+  {
+    "index": 597,
+    "timestamp": 1790643006,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:06.7298914+10:00"
+      }
+    ],
+    "prev_hash": "00006870c8e4075a2c63264b1e3ed817b92af2210c7ddae637dcb4c32c266bdb",
+    "hash": "0000e4eb8498153f9ee73b99658d8e2affefbf4d7f470d3d76189d67fd85cfad",
+    "nonce": 67225,
+    "difficulty": 100000
+  },
+  {
+    "index": 598,
+    "timestamp": 1790643007,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:07.89693+10:00"
+      }
+    ],
+    "prev_hash": "0000e4eb8498153f9ee73b99658d8e2affefbf4d7f470d3d76189d67fd85cfad",
+    "hash": "000071ec054a01770047d9f8c1a9370068151f131824e2adc9961c405ce71d18",
+    "nonce": 213353,
+    "difficulty": 100000
+  },
+  {
+    "index": 599,
+    "timestamp": 1790643009,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:09.4097783+10:00"
+      }
+    ],
+    "prev_hash": "000071ec054a01770047d9f8c1a9370068151f131824e2adc9961c405ce71d18",
+    "hash": "0000256583540181ca031d391226a3726f958b570c385f6385f696ae3e01721f",
+    "nonce": 48444,
+    "difficulty": 100000
+  },
+  {
+    "index": 600,
+    "timestamp": 1790643010,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:10.5277109+10:00"
+      }
+    ],
+    "prev_hash": "0000256583540181ca031d391226a3726f958b570c385f6385f696ae3e01721f",
+    "hash": "00006428fec463644ef0c29a5c574e42b2357d5a5d57a05ba0492187c87be609",
+    "nonce": 101827,
+    "difficulty": 100000
+  },
+  {
+    "index": 601,
+    "timestamp": 1790643011,
+    "transactions": [
+      {
+        "sender": "COVENANT_STEWARD_ASSEMBLY",
+        "recipient": "Nikola_Global_Network_Node",
+        "amount": 50,
+        "witness": "Communal_Peer_Witness_7",
+        "timestamp": "2026-09-29T10:50:11.7926503+10:00"
+      }
+    ],
+    "prev_hash": "00006428fec463644ef0c29a5c574e42b2357d5a5d57a05ba0492187c87be609",
+    "hash": "00003cd728b9e7b170ce15fba22ba24fd4cf9ee1f38d1ccc9f82ada660baa70a",
+    "nonce": 18096,
+    "difficulty": 100000
   }
 ]
