@@ -1,5 +1,5 @@
 @echo off
-title Covenant Standard Node Miner Rig v3.0.0
+title Covenant Standard Node Miner Rig v3.0.1
 color 0B
 echo ==================================================================
 echo 💎 COVENANT STANDARD (CVN) LAYER-1 CONSENSUS CORE ENGINE 💎
@@ -19,4 +19,7 @@ if %errorlevel% neq 0 (
     echo.
     echo 🚨 ERROR: The blockchain core engine encountered a launch obstacle.
     echo Please verify that your local Go toolchain is properly installed.
-    pause
+)
+echo.
+echo ⏸️ Terminal held open for diagnostic inspection.
+pause

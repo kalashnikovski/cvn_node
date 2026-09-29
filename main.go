@@ -21,6 +21,7 @@ const MaxTotalSupplyCap = 2100000000.0
 const JubileeTimeWindow = 49 * 365 * 24 * 60 * 60 // 49 Years in seconds
 const BurnAddress = "0x0000000000000000000000000000000000000000_BURN_VOID"
 const CreatorTargetAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
+const CityOfRefugeWindow = 72 * 60 * 60 // 72 Hours in seconds for mercy grace periods
 
 var (
 	GlobalMempool []Transaction
@@ -99,6 +100,7 @@ func VerifyGenesisFreeze(chain []Block) bool {
 	if len(chain) == 0 {
 		return false
 	}
+	// FIX: Explicitly target index 0 to reference a single Block instead of the entire list slice
 	genesisBlock := chain[0]
 	if len(genesisBlock.Transactions) == 0 {
 		return false
@@ -211,8 +213,9 @@ func HandleIncomingPeer(conn net.Conn) {
 			var tx Transaction
 			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
 				txData := fmt.Sprintf("%s%s%.4f%.4f%d", tx.Sender, tx.Recipient, tx.Amount, tx.FreeWillOffering, tx.Timestamp.Unix())
+				
 				if !VerifyTransactionSignature(tx.Sender, txData, tx.SignatureR, tx.SignatureS) {
-					fmt.Printf("🛡️  [P2P Network Engine] Rejected Forge Attempt! Invalid Signature from address %s\n", tx.Sender)
+					fmt.Printf("🚨 [Cryptographic Firewall] BLOCKED FORGERY ATTEMPT! Invalid mathematical signature from node handle address: %s\n", tx.Sender)
 					fmt.Fprintln(conn, "TX_REJECTED_INVALID_SIGNATURE")
 					return
 				}
@@ -329,13 +332,12 @@ func Assemble21WitnessGuardMatrix() []string {
 	}
 	return shuffled[:limit]
 }
-
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
-	var newBlock Block
-	newBlock.Index = prevBlock.Index + 1
-	newBlock.Timestamp = time.Now().Unix()
-	newBlock.Transactions = txs
-	newBlock.PrevHash = prevBlock.Hash
+var newBlock Block
+newBlock.Index = prevBlock.Index + 1
+newBlock.Timestamp = time.Now().Unix()
+newBlock.Transactions = txs
+newBlock.PrevHash = prevBlock.Hash
 newBlock.Difficulty = currentDifficulty
 if newBlock.Difficulty > 6 {
 newBlock.Difficulty = 6
@@ -397,21 +399,6 @@ activeMempool := make([]Transaction, len(GlobalMempool))
 copy(activeMempool, GlobalMempool)
 GlobalMempool = []Transaction{}
 MempoolMutex.Unlock()
-// 👑 THE SOVEREIGN MIGRATOR LOOP: Hardcoded system migration transition pass
-legacyBalance := GetAddressBalance(blockchain, "Nikola_Global_Network_Node")
-if legacyBalance > 0 {
-fmt.Printf("👑 [Sovereign Migrator] Found legacy equity pool balance: %.2f CVN. Formulating migration block transfer...\n", legacyBalance)
-migrationTx := Transaction{
-Sender:           "Nikola_Global_Network_Node",
-Recipient:        CreatorTargetAddress,
-Amount:           legacyBalance,
-FreeWillOffering: 0.0,
-DataSizeKB:       0.1,
-Witness:          "SOVEREIGN_CREATOR_MIGRATION_PASS",
-Timestamp:        time.Now(),
-}
-activeMempool = append([]Transaction{migrationTx}, activeMempool...)
-}
 for i, tx := range activeMempool {
 var lastSeen int64 = 0
 for _, b := range blockchain {
@@ -422,6 +409,10 @@ lastSeen = b.Timestamp
 }
 }
 }
+}
+// 🕊️ THE CITY OF REFUGE LATENCY SHIELD:
+if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(CityOfRefugeWindow) {
+fmt.Printf("🕊️  [City of Refuge] Grace period active for node address [%s]. Protecting from latency drops.\n", tx.Sender)
 }
 if lastSeen > 0 && (time.Now().Unix()-lastSeen) > int64(JubileeTimeWindow) {
 fmt.Printf("⚠️ Jubilee State Triggered for Address [%s]! Rerouting offerings into Burn Address.\n", tx.Sender)
