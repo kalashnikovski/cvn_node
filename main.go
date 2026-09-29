@@ -20,15 +20,15 @@ const TargetBlockTime = 10
 const MaxTotalSupplyCap = 2100000000.0
 const JubileeTimeWindow = 49 * 365 * 24 * 60 * 60 // 49 Years in seconds
 const BurnAddress = "0x0000000000000000000000000000000000000000_BURN_VOID"
+const CreatorTargetAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
 
-// Thread-safe global transaction memory pool tracking layers
 var (
 	GlobalMempool []Transaction
 	MempoolMutex  sync.Mutex
-	ConnectTarget string // The remote public IP/Domain passed by a peer to join your network
+	ConnectTarget string 
 )
 
-// Network roster of active validation peer names for random Witness checkpoints
+// Network roster of active peer nodes for random Witness verification
 var NetworkWitnessRoster = []string{
 	"Peer_Witness_1", "Peer_Witness_2", "Peer_Witness_3", "Peer_Witness_4", "Peer_Witness_5",
 	"Peer_Witness_6", "Communal_Peer_Witness_7", "Peer_Witness_8", "Peer_Witness_9", "Peer_Witness_10",
@@ -45,6 +45,8 @@ type Transaction struct {
 	DataSizeKB       float64   `json:"data_size_kb"`
 	Witness          string    `json:"witness"`
 	Timestamp        time.Time `json:"timestamp"`
+	SignatureR       string    `json:"signature_r,omitempty"` 
+	SignatureS       string    `json:"signature_s,omitempty"` 
 }
 
 type Block struct {
@@ -208,9 +210,16 @@ func HandleIncomingPeer(conn net.Conn) {
 			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
 			var tx Transaction
 			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
+				txData := fmt.Sprintf("%s%s%.4f%.4f%d", tx.Sender, tx.Recipient, tx.Amount, tx.FreeWillOffering, tx.Timestamp.Unix())
+				if !VerifyTransactionSignature(tx.Sender, txData, tx.SignatureR, tx.SignatureS) {
+					fmt.Printf("🛡️  [P2P Network Engine] Rejected Forge Attempt! Invalid Signature from address %s\n", tx.Sender)
+					fmt.Fprintln(conn, "TX_REJECTED_INVALID_SIGNATURE")
+					return
+				}
+
 				MempoolMutex.Lock()
 				GlobalMempool = append(GlobalMempool, tx)
-				fmt.Printf("📥 [P2P Network Engine] Ingested raw transaction from network packet! Sender: %s | Amount: %.2f CVN\n", tx.Sender, tx.Amount)
+				fmt.Printf("📥 [P2P Network Engine] Ingested verified cryptographic transaction! Sender: %s | Amount: %.2f CVN\n", tx.Sender, tx.Amount)
 				MempoolMutex.Unlock()
 				fmt.Fprintln(conn, "TX_ACCEPTED")
 			} else {
@@ -222,7 +231,6 @@ func HandleIncomingPeer(conn net.Conn) {
 }
 
 func StartTCPServer() {
-	// UPGRADE: Changed listener context parameter from 127.0.0.1 to 0.0.0.0:8080 to accept public external connections
 	listener, err := net.Listen("tcp", "0.0.0.0:8080")
 	if err != nil {
 		fmt.Printf("🚨 TCP Server Bind Error: %v\n", err)
@@ -278,12 +286,10 @@ func StartPublicExplorerServer() {
 
 	fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
 	go func() {
-		// UPGRADE: Changed listener context parameter from localhost to 0.0.0.0 to allow shared remote browser auditing
 		_ = http.ListenAndServe("0.0.0.0:8081", nil)
 	}()
 }
 
-// SyncChainFromSeedPeer contacts the bootstrap seed node over public channels to synchronize ledger blocks
 func SyncChainFromSeedPeer(seedAddr string) {
 	fmt.Printf("🔄 Synchronizing data blocks from public seed peer endpoint: %s...\n", seedAddr)
 	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
@@ -330,13 +336,12 @@ func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Bloc
 	newBlock.Timestamp = time.Now().Unix()
 	newBlock.Transactions = txs
 	newBlock.PrevHash = prevBlock.Hash
-	newBlock.Difficulty = currentDifficulty
-	
-	if newBlock.Difficulty > 6 {
-		newBlock.Difficulty = 6
-	}
-	if newBlock.Difficulty < 3 {
-		newBlock.Difficulty = 3
+newBlock.Difficulty = currentDifficulty
+if newBlock.Difficulty > 6 {
+newBlock.Difficulty = 6
+}
+if newBlock.Difficulty < 3 {
+newBlock.Difficulty = 3
 }
 newBlock.Nonce = 0
 newBlock.GuardMatrix = Assemble21WitnessGuardMatrix()
@@ -365,13 +370,11 @@ newBlock.Nonce++
 return newBlock
 }
 func main() {
-// Parse basic input command line arguments manually
 for i, arg := range os.Args {
 if arg == "--wallet" {
 RunWalletGUI()
 return
 }
-// UPGRADE: Peer argument handler logic (--connect public_ip:8080)
 if arg == "--connect" && i+1 < len(os.Args) {
 ConnectTarget = os.Args[i+1]
 }
@@ -382,7 +385,6 @@ fmt.Println("====================================================\n")
 go StartTCPServer()
 go StartPublicExplorerServer()
 time.Sleep(200 * time.Millisecond)
-// UPGRADE: Trigger network synchronization loop check if a seed connection string is available
 if ConnectTarget != "" {
 SyncChainFromSeedPeer(ConnectTarget)
 }
@@ -395,6 +397,21 @@ activeMempool := make([]Transaction, len(GlobalMempool))
 copy(activeMempool, GlobalMempool)
 GlobalMempool = []Transaction{}
 MempoolMutex.Unlock()
+// 👑 THE SOVEREIGN MIGRATOR LOOP: Hardcoded system migration transition pass
+legacyBalance := GetAddressBalance(blockchain, "Nikola_Global_Network_Node")
+if legacyBalance > 0 {
+fmt.Printf("👑 [Sovereign Migrator] Found legacy equity pool balance: %.2f CVN. Formulating migration block transfer...\n", legacyBalance)
+migrationTx := Transaction{
+Sender:           "Nikola_Global_Network_Node",
+Recipient:        CreatorTargetAddress,
+Amount:           legacyBalance,
+FreeWillOffering: 0.0,
+DataSizeKB:       0.1,
+Witness:          "SOVEREIGN_CREATOR_MIGRATION_PASS",
+Timestamp:        time.Now(),
+}
+activeMempool = append([]Transaction{migrationTx}, activeMempool...)
+}
 for i, tx := range activeMempool {
 var lastSeen int64 = 0
 for _, b := range blockchain {

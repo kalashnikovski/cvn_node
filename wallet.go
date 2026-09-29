@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -15,21 +16,21 @@ import (
 
 func RunWalletGUI() {
 	myApp := app.New()
-	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v1.0.0")
-	myWindow.Resize(fyne.NewSize(500, 560))
+	myWindow := myApp.NewWindow("COVENANT STANDARD WALLET v2.1.1")
+	myWindow.Resize(fyne.NewSize(550, 680))
 
 	statusLabel := widget.NewLabel("System Status: ENCRYPTED & SECURE")
-	addressLabel := widget.NewLabel("Address: Nikola_Global_Network_Node")
-
-	initialChain := LoadChain()
-	initialBalance := GetAddressBalance(initialChain, "Nikola_Global_Network_Node")
 	
-	balanceLabel := widget.NewLabel(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", initialBalance))
-	usdLabel := widget.NewLabel(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", initialBalance*0.025))
+	privKeyEntry := widget.NewEntry()
+	privKeyEntry.SetPlaceHolder("Enter or generate your Private Key (Hex)...")
+	
+	addressLabel := widget.NewLabel("Your Public Address: (Load private key or generate a new profile)")
 
-	// UPGRADE: Added a dynamic destination network node connector field configuration
+	balanceLabel := widget.NewLabel("CURRENT BALANCE: 0.00 CVN")
+	usdLabel := widget.NewLabel("Estimated Value: $0.00 USD (Synced Market Feed)")
+
 	nodeInput := widget.NewEntry()
-	nodeInput.SetText("covenant-explorer.ddns.net:8080") // Defaults to localhost for safe local workstation fallback testing
+	nodeInput.SetText("202.137.175.220:8080") 
 	nodeInput.SetPlaceHolder("Target Node Net Address (e.g. public_ip:8080)...")
 
 	recipientInput := widget.NewEntry()
@@ -41,20 +42,28 @@ func RunWalletGUI() {
 	offeringInput := widget.NewEntry()
 	offeringInput.SetPlaceHolder("Enter Voluntary Free-Will Offering Fee (e.g. 1.50)...")
 
-	passwordInput := widget.NewPasswordEntry()
-	passwordInput.SetPlaceHolder("Enter wallet security password...")
+	networkLog := widget.NewLabel("[P2P Cryptographic Client Interface Ready]")
 
-	networkLog := widget.NewLabel("[P2P Client Interface Ready]")
+	genKeysButton := widget.NewButton("⚙️ GENERATE NEW SECURE WALLET PROFILE KEYPAIR", func() {
+		privHex, walletAddress, err := GenerateKeyPair()
+		if err != nil {
+			networkLog.SetText(fmt.Sprintf("Keypair Generation Failure: %v", err))
+			return
+		}
+		privKeyEntry.SetText(privHex)
+		addressLabel.SetText(fmt.Sprintf("Your Public Address: %s", walletAddress))
+		networkLog.SetText("✅ Fresh ECDSA P-256 profile keys computed safely inside runtime memory.")
+	})
 
-	sendButton := widget.NewButton("AUTHORIZE & BROADCAST TRANSACTION", func() {
+	sendButton := widget.NewButton("🛡️ AUTHORIZE, CRYPTOGRAPHICALLY SIGN & BROADCAST", func() {
 		nodeTarget := nodeInput.Text
+		senderPrivKey := privKeyEntry.Text
 		recipient := recipientInput.Text
 		amountStr := amountInput.Text
 		offeringStr := offeringInput.Text
-		password := passwordInput.Text
 
-		if nodeTarget == "" || recipient == "" || amountStr == "" || password == "" {
-			networkLog.SetText("Validation Failure: Missing required text inputs.")
+		if nodeTarget == "" || senderPrivKey == "" || recipient == "" || amountStr == "" {
+			networkLog.SetText("Validation Failure: Missing required transaction entries.")
 			return
 		}
 
@@ -69,42 +78,63 @@ func RunWalletGUI() {
 			offering, _ = strconv.ParseFloat(offeringStr, 64)
 		}
 
+		// Secure public address extraction pass utilizing robust trimming helpers
+		publicAddressHandle := addressLabel.Text
+		if strings.Contains(publicAddressHandle, "CVN_") {
+			idx := strings.Index(publicAddressHandle, "CVN_")
+			publicAddressHandle = strings.TrimSpace(publicAddressHandle[idx:])
+		}
+
+		nowTime := time.Now()
+		txDataToSign := fmt.Sprintf("%s%s%.4f%.4f%d", publicAddressHandle, recipient, amount, offering, nowTime.Unix())
+		
+		rCoord, sCoord, err := SignTransactionPayload(senderPrivKey, txDataToSign)
+		if err != nil {
+			networkLog.SetText(fmt.Sprintf("Cryptographic Failure: Signing pass failed -> %v", err))
+			return
+		}
+
 		tx := Transaction{
-			Sender:           "Nikola_Global_Network_Node",
+			Sender:           publicAddressHandle,
 			Recipient:        recipient,
 			Amount:           amount,
 			FreeWillOffering: offering,
-			DataSizeKB:       1.0, 
-			Witness:          "Public_Network_Client_Signature",
-			Timestamp:        time.Now(),
+			DataSizeKB:       1.0,
+			Witness:          "Public_ECDSA_Math_Validation_Pass",
+			Timestamp:        nowTime,
+			SignatureR:       rCoord,
+			SignatureS:       sCoord,
 		}
 
 		txBytes, err := json.Marshal(tx)
 		if err != nil {
-			networkLog.SetText("System Error: Failed to serialize transaction packet.")
+			networkLog.SetText("System Error: Failed to serialize encrypted transaction structure.")
 			return
 		}
 
-		// UPGRADE: Open communication channel dynamically to the specified public network target destination parameter
 		conn, err := net.DialTimeout("tcp", nodeTarget, 5*time.Second)
 		if err != nil {
-			networkLog.SetText(fmt.Sprintf("Handshake Failure: Target node [%s] is unreachable across the web.", nodeTarget))
+			networkLog.SetText(fmt.Sprintf("Handshake Failure: Node entry endpoint [%s] is currently unreachable.", nodeTarget))
 			return
 		}
 		defer conn.Close()
 
 		fmt.Fprintf(conn, "TX_BROADCAST:%s\n", string(txBytes))
 		
-		networkLog.SetText(fmt.Sprintf("🚀 Successfully streamed transaction packet to public node endpoint: %s!", nodeTarget))
+		networkLog.SetText(fmt.Sprintf("🚀 Successfully broadcasted signed transaction packet to node endpoint: %s!", nodeTarget))
 		recipientInput.SetText("")
 		amountInput.SetText("")
 		offeringInput.SetText("")
-		passwordInput.SetText("")
 	})
 
 	content := container.NewVBox(
 		widget.NewLabel("=================================================="),
 		statusLabel,
+		widget.NewLabel("--------------------------------------------------"),
+		widget.NewLabel("🔒 CRYPTOGRAPHIC WALLET INITIALIZATION UTILITY:"),
+		genKeysButton,
+		widget.NewLabel("Private Key (Hex Signature Authorization Secret):"),
+		privKeyEntry,
 		addressLabel,
 		widget.NewLabel("--------------------------------------------------"),
 		balanceLabel,
@@ -117,21 +147,30 @@ func RunWalletGUI() {
 		recipientInput,
 		amountInput,
 		offeringInput,
-		passwordInput,
 		sendButton,
 		widget.NewLabel("--------------------------------------------------"),
 		networkLog,
 		widget.NewLabel("=================================================="),
 	)
 
+	// UPGRADE: Bulletproof real-time background account balance lookup loop
 	go func() {
 		for {
 			time.Sleep(3 * time.Second)
-			currentChain := LoadChain()
-			currentBalance := GetAddressBalance(currentChain, "Nikola_Global_Network_Node")
-			
-			balanceLabel.SetText(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", currentBalance))
-			usdLabel.SetText(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", currentBalance*0.025))
+			if privKeyEntry.Text != "" {
+				currentChain := LoadChain()
+				
+				// Fix: Uses strict search tracking index parameters to strip text labels entirely
+				publicAddressHandle := addressLabel.Text
+				if strings.Contains(publicAddressHandle, "CVN_") {
+					idx := strings.Index(publicAddressHandle, "CVN_")
+					publicAddressHandle = strings.TrimSpace(publicAddressHandle[idx:])
+					
+					currentBalance := GetAddressBalance(currentChain, publicAddressHandle)
+					balanceLabel.SetText(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", currentBalance))
+					usdLabel.SetText(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", currentBalance*0.025))
+				}
+			}
 		}
 	}()
 
