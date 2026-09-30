@@ -645,6 +645,48 @@ func MonitorNetworkDensity() {
 		}
 	}
 }
+// RunAutomatedPeerDiscovery background-crawls the mesh networks to exchange active node routing tables
+func RunAutomatedPeerDiscovery() {
+	fmt.Println("🛰️  [Discovery Engine] Automated background Gossip Peer discovery loop activated.")
+	
+	for {
+		time.Sleep(200 * time.Second) // Query the mesh network periodically
+
+		RosterMutex.Lock()
+		if len(ActivePeerRoster) == 0 {
+			RosterMutex.Unlock()
+			continue
+		}
+		// Safely clone the current roster profile to avoid deadlocks while firing threads
+		peerSnapshot := make([]string, len(ActivePeerRoster))
+		copy(peerSnapshot, ActivePeerRoster)
+		RosterMutex.Unlock()
+
+		// High-speed concurrent query sweep: Ask each active peer for their roster list
+		for _, peer := range peerSnapshot {
+			go func(peerAddr string) {
+				conn, err := net.DialTimeout("tcp", peerAddr, 3*time.Second)
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+
+				// Inform the remote node to return their shared network addresses array maps
+				fmt.Fprintln(conn, "GOSSIP_PEER_DISCOVERY:"+LocalListenerIP+":8080")
+				
+				respLine, err := bufio.NewReader(conn).ReadString('\n')
+				if err == nil {
+					var sharedRoster []string
+					if json.Unmarshal([]byte(strings.TrimSpace(respLine)), &sharedRoster) == nil {
+						for _, discoveredNode := range sharedRoster {
+							RegisterGossipPeer(discoveredNode)
+						}
+					}
+				}
+			}(peer)
+		}
+	}
+}
 
 func main() {
 	ValidatorStakingPool = make(map[string]float64)
@@ -731,6 +773,8 @@ func main() {
 	go StartTCPServer()
 	go StartPublicExplorerServer()
 	go MonitorNetworkDensity()
+	go RunAutomatedPeerDiscovery() // 👈 ACTIVATES THE BACKGROUND NESTED PEER CRAWLER
+
 	
 	time.Sleep(200 * time.Millisecond)
 	if ConnectTarget != "" {
