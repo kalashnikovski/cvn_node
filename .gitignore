@@ -1,0 +1,31 @@
+# ============================================================================
+# COVENANT STANDARD (CVN) - LOCAL RUNTIME EXCLUSIONS
+# ============================================================================
+
+# Local Data Ledgers & Vault Storage
+ledger_vault.json
+evolved_vault.txt
+network_health_summary.log
+
+# Node Hardware Profile Configs
+miner_config.json
+
+# Local Compiled Binaries
+cvn_node.exe
+cvn_node
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go Workspace & Dependency Artifacts
+bin/
+pkg/
+obj/
+.go/
+vendor/
+
+# Operating System Cache Files
+.DS_Store
+Thumbs.db
