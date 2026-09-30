@@ -1,128 +1,72 @@
-\# 💎 The Covenant Standard (CVN) Protocol v3
-
-
+# 💎 The Covenant Standard (CVN) Protocol v3
 
 An open-source, multi-threaded Layer-1 sovereign state engine featuring automated macroeconomic velocity controls, a randomized 21-Witness validation pass tier, and an ASIC-neutral consensus model built entirely in Go.
 
+---
 
-
-\---
-
-
-
-\## 📜 Core Architectural \& Scriptural Tokenomics
-
-
+## 📜 Core Architectural & Scriptural Tokenomics
 
 The CVN network enforces an un-alterable, algorithmic token framework translating ancestral socioeconomic protection parameters directly into hardened, functional software mechanics:
 
+1. **The Sabbatical Jubilee State Loop:** To prevent wealth ossification and resource hoarding, the ledger scans unspent outputs using a **49-Year Canonical Boundary**. Balances that remain stagnant without network velocity or transactional movement for 49 years lose consensus validation weight (decremented to 0%), and future transaction offerings are programmatically routed into a permanent cryptographic burn void (`0x0000000000000000000000000000000000000000_BURN_VOID`).
+2. **Model B Free-Will Offerings:** Network transactions bypass rigid, mandatory minimum baseline gas structures. The priority engine evaluates a voluntary score metric (`FreeWillOffering / DataSizeKB`), naturally incentivizing distributed desktop operators via genuine corporate volition rather than centralized enforcement.
+3. **The 21-Witness Guard Matrix:** Block generation requires verification confirmations from 21 randomly selected active network node identities before permanent local database storage updates execute, driving the mathematical probability of double-spends to absolute zero.
 
+---
 
-1\. \*\*The Sabbatical Jubilee State Loop:\*\* To prevent wealth ossification and resource hoarding, the ledger scans unspent outputs using a \*\*49-Year Canonical Boundary\*\*. Balances that remain stagnant without network velocity or transactional movement for 49 years lose consensus validation weight (decremented to 0%), and future transaction offerings are programmatically routed into a permanent cryptographic burn void (`0x0000000000000000000000000000000000000000\_BURN\_VOID`).
+## 🛠️ Workspace Installation & Compilation Guide
 
-2\. \*\*Model B Free-Will Offerings:\*\* Network transactions bypass rigid, mandatory minimum baseline gas structures. The priority engine evaluates a voluntary score metric (`FreeWillOffering / DataSizeKB`), naturally incentivizing distributed desktop operators via genuine corporate volition rather than centralized enforcement.
+### Prerequisites
+- Go Runtime environment toolchain installed locally (`v1.20+` recommended)
+- CGO Compiler environment tools enabled (`gcc` C-compiler context parameters)
 
-3\. \*\*The 21-Witness Guard Matrix:\*\* Block generation requires verification confirmations from 21 randomly selected active network node identities before permanent local database storage updates execute, driving the mathematical probability of double-spends to absolute zero.
-
-
-
-\---
-
-
-
-\## 🛠️ Workspace Installation \& Compilation Guide
-
-
-
-\### Prerequisites
-
-\- Go Runtime environment toolchain installed locally (`v1.27+` recommended)
-
-\- CGO Compiler environment enabled (`gcc` context parameters)
-
-
-
+### 1. Clone the Workspace
 Clone the repository workspace folder directory down to your machine:
-
 ```bash
-
 git clone https://github.com
-
-cd cvn\_node
-
+cd cvn_node
 ```
 
-
-
-Initialize local tracking checksum signatures and fetch layout components:
-
+### 2. Fetch Dependencies
+Initialize local tracking checksum signatures and fetch layout module components:
 ```bash
-
 go mod tidy
-
 ```
 
-
-
-\---
-
-
-
-\## 🚀 Running the Public P2P Node Space
-
-
-
-\### 1. Launch a Main Independent Local Seed Miner Rig
-
-To start your own independent mining engine listening for peer connections on your local network boundaries:
-
+### 3. Compile the High-Performance Native Binary
+Compile your source code files into a single, high-speed standalone binary executable file before starting nodes:
 ```powershell
-
-$env:CGO\_ENABLED="1"; go run .
-
+# Windows PowerShell Build Command
+$env:CGO_ENABLED="1"; go build .
 ```
 
+---
 
+## 🚀 Running the Universal Core Node Matrix
 
-\### 2. Join the Existing Live Global Seed Node
+The ecosystem includes automated desktop scripts to handle user onboarding instantly with zero command line configuration friction.
 
-To boot your local miner rig and automatically connect across the public web to synchronize the active ledger transaction block database from the primary seed node:
-
+### ⚒️ Launching the Mining Node Engine
+Simply execute the universal batch script file inside your project directory:
 ```powershell
-
-$env:CGO\_ENABLED="1"; go run . --connect 202.137.175.220:8080
-
+.\LaunchMiner.bat
 ```
+- **Automated First-Time Onboarding:** If the script detects no pre-existing setup, it will automatically call the cryptographic key generator, output a fresh, unique **Private Key (Hex)** and **Wallet Address (`CVN_...`)** onto your screen, save a local profile configuration (`miner_config.json`), and start mining instantly.
+- **Interactive Multi-Profile Routing:** On subsequent launches, the script will show your active profile address. You can press `[ENTER]` directly to resume mining, or type `NEW` to safely clear the file and register a completely different address signature target.
 
-
-
-\### 🎨 Spanning the Visual Desktop Wallet Panel
-
-To open your local Fyne GUI visual transaction management panel, execute this command flag parameter inside a separate console window:
-
+### 🎨 Spanning the Visual Desktop Wallet
+To spin up your Fyne graphical interface transaction management panel, run the wallet script inside a separate terminal window:
 ```powershell
-
-$env:CGO\_ENABLED="1"; go run . --wallet
-
+.\LaunchWallet.bat
 ```
+- Paste your secret **Private Key (Hex)** generated during your node onboarding into the key entry box to load your identity coordinates and track your **Current Balance** updates live every 3 seconds.
 
-Once open, adjust the \*\*Network Access Point Parameter\*\* box to target an active running node address (e.g. `202.137.175.220:8080`) to stream transaction broadcasts securely over public channels.
-
-
-
-\### 🌐 Live On-Chain Metric Auditing
-
+### 🌐 Live On-Chain Metric Auditing
 Open a standard browser window on your machine to monitor active validated block generation data heights, network velocity, and Jubilee burn void accumulation:
+- **Local Dashboard UI:** `http://localhost:8081`
+- **Isolated Account Statement Sheets:** `http://localhost:8081/audit?address=YOUR_CVN_ADDRESS`
 
-\- \*\*Local Dashboard:\*\* `http://localhost:8081`
+---
 
-\- \*\*Public Explorer Feed:\*\* `http://202.137.175.220:8081`
-
-
-
-\---
-
-\*\*Author:\*\* Nikola Trajanovski (`kalashnikovski`)  
-
-\*\*License:\*\* Open-Source MIT Permissions Framework Core
-
+**Author:** Nikola Trajanovski (`kalashnikovski`)  
+**License:** Open-Source MIT Permissions Framework Core
