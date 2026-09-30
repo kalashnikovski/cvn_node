@@ -247,7 +247,13 @@ func HandleIncomingPeer(conn net.Conn) {
 			fmt.Fprintln(conn, string(rosterJSON))
 			return
 		}
-		if strings.HasPrefix(text, "TX_BROADCAST:") {
+				if strings.HasPrefix(text, "BLOCK_PROPAGATE:") {
+			payload := strings.TrimPrefix(text, "BLOCK_PROPAGATE:")
+			ProcessInboundBlock(payload)
+			return
+		}
+
+						if strings.HasPrefix(text, "TX_BROADCAST:") {
 			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
 			var tx Transaction
 			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
@@ -264,6 +270,75 @@ func HandleIncomingPeer(conn net.Conn) {
 		}
 	}
 }
+
+// ============================================================================
+// NEW NETWORK BLOCK PROPAGATION CORE
+// ============================================================================
+
+// BroadcastNewBlock serializes a newly mined block and streams it to all connected peers
+func BroadcastNewBlock(newBlock Block) {
+	RosterMutex.Lock()
+	peers := make([]string, len(ActivePeerRoster))
+	copy(peers, ActivePeerRoster)
+	RosterMutex.Unlock()
+
+	payload, err := json.Marshal(newBlock)
+	if err != nil {
+		fmt.Printf("⚠️ [P2P Engine] Error serializing block propagation data: %v\n", err)
+		return
+	}
+	broadcastMsg := "BLOCK_PROPAGATE:" + string(payload)
+
+	for _, peer := range peers {
+		go func(peerAddr string) {
+			conn, err := net.DialTimeout("tcp", peerAddr, 3*time.Second)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+			fmt.Fprintln(conn, broadcastMsg)
+		}(peer)
+	}
+	fmt.Printf("🛰️ [Gossip Mesh Network] Propagated Block #%d across %d active routing targets.\n", newBlock.Index, len(peers))
+}
+
+// ProcessInboundBlock validates an externally broadcasted block before committing it to disk
+func ProcessInboundBlock(payload string) {
+	var remoteBlock Block
+	if err := json.Unmarshal([]byte(payload), &remoteBlock); err != nil {
+		fmt.Println("⚠️ [Consensus Core] Received malformed inbound block structure.")
+		return
+	}
+
+	blockchain := LoadChain()
+	currentBlock := blockchain[len(blockchain)-1]
+
+	if remoteBlock.Index <= currentBlock.Index {
+		return
+	}
+
+	if remoteBlock.PrevHash != currentBlock.Hash {
+		fmt.Printf("🚨 [Consensus Alert] Block #%d rejected: Discontinuity with current local tip.\n", remoteBlock.Index)
+		return
+	}
+
+	recalculatedHash := CalculateHash(remoteBlock)
+	targetPrefix := strings.Repeat("0", int(remoteBlock.Difficulty))
+	if !strings.HasPrefix(recalculatedHash, targetPrefix) || remoteBlock.Hash != recalculatedHash {
+		fmt.Printf("🚨 [Consensus Alert] Block #%d rejected: Failed Proof-of-Diligence puzzle solutions.\n", remoteBlock.Index)
+		return
+	}
+
+	blockchain = append(blockchain, remoteBlock)
+	SaveChain(blockchain)
+
+	fmt.Printf("🎉 NEW BLOCK ACCEPTED FROM MESH NETWORK! Height: #%d | Hash: %s\n", remoteBlock.Index, remoteBlock.Hash)
+	go BroadcastNewBlock(remoteBlock)
+}
+
+// ============================================================================
+// END OF NEW NETWORK PROPAGATION CORE
+// ============================================================================
 
 func StartTCPServer() {
 	listener, err := net.Listen("tcp", "0.0.0.0:8080")
@@ -482,20 +557,19 @@ DataSizeKB:       0.1,
 Witness:          "Communal_Peer_Witness_7",
 Timestamp:        time.Now(),
 }
-blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
-nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
-newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
-blockchain = LoadChain()
-blockchain = append(blockchain, newBlock)
-currentBlock = newBlock
-SaveChain(blockchain)
-fmt.Printf("💰 LOCAL NODE REWARD AUDIT: Current Balance of %s: %.2f CVN\n", CustomMinerAddress, GetAddressBalance(blockchain, CustomMinerAddress))
-fmt.Println("-----------------------------------------------------")
-time.Sleep(3 * time.Second)
+		blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
+		nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
+		newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
+		
+		// CRITICAL FIX: Instantly broadcast your newly solved block to the rest of the world!
+		go BroadcastNewBlock(newBlock)
+
+		blockchain = LoadChain()
+		blockchain = append(blockchain, newBlock)
+		currentBlock = newBlock
+		SaveChain(blockchain)
+		fmt.Printf("💰 LOCAL NODE REWARD AUDIT: Current Balance of %s: %.2f CVN\n", CustomMinerAddress, GetAddressBalance(blockchain, CustomMinerAddress))
+		fmt.Println("-----------------------------------------------------")
+		time.Sleep(3 * time.Second)
+	}
 }
-}
-
-
-
-
-

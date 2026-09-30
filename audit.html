@@ -4,17 +4,18 @@
     <meta charset="UTF-8">
     <title>Sovereign Ledger Account Statement</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 30px; margin: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 30px; margin: 0; }
         .container { max-width: 1000px; margin: 0 auto; }
-        h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 25px; font-size: 1.8rem; }
-        .address-box { font-family: monospace; background-color: #161b22; padding: 15px; border-radius: 6px; border: 1px solid #30363d; font-size: 1.1rem; color: #fff; margin-bottom: 30px; word-break: break-all; }
+        h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 25px; font-size: 1.8rem; display: flex; align-items: center; gap: 10px; }
+        .address-box { font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; background-color: #161b22; padding: 15px; border-radius: 6px; border: 1px solid #30363d; font-size: 1.1rem; color: #fff; margin-bottom: 30px; word-break: break-all; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }
         .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-        .card h3 { margin: 0 0 10px 0; font-size: 0.9rem; color: #8b949e; text-transform: uppercase; }
+        .card h3 { margin: 0 0 10px 0; font-size: 0.9rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
         .card .value { font-size: 1.8rem; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #30363d; }
         th { background-color: #21262d; color: #58a6ff; font-weight: 600; }
+        .refuge-badge { display: inline-block; margin-top: 10px; padding: 6px 12px; background-color: rgba(88,166,255,0.15); color: #58a6ff; border-radius: 6px; font-weight: bold; font-size: 0.85rem; border: 1px solid rgba(88,166,255,0.3); }
     </style>
 </head>
 <body>
@@ -26,6 +27,7 @@
         <div class="card">
             <h3>Calculated Balance Yield</h3>
             <div id="audit-balance" class="value" style="color:#3fb950;">0.00 CVN</div>
+            <div id="refuge-status" style="display:none;" class="refuge-badge">🕊️ City of Refuge Active</div>
         </div>
         <div class="card">
             <h3>Total Receipts Count</h3>
@@ -57,6 +59,12 @@
 <script>
     const urlParams = new URLSearchParams(window.location.search);
     const targetAddress = urlParams.get('address');
+    
+    // 49-Year Canonical Stagnation Boundary (Jubilee Rule matching main.go)
+    const JUBILEE_WINDOW_SECONDS = 49 * 365 * 24 * 60 * 60;
+    // 72-Hour City of Refuge Grace Harbor Window matching main.go
+    const REFUGE_WINDOW_SECONDS = 72 * 60 * 60;
+
     if (!targetAddress) {
         document.getElementById('target-addr').innerText = "Error: No target address specified.";
     } else {
@@ -69,34 +77,89 @@
             const res = await fetch(window.location.origin + '/req_chain');
             const data = await res.json();
             const chain = data.blocks || [];
-            let balance = 0.0; let countIn = 0; let countOut = 0; let html = "";
             
+            let balance = 0.0; 
+            let countIn = 0; 
+            let countOut = 0; 
+            let html = "";
+            let lastActiveTimestamp = 0;
+
+            // Pass 1: Find the latest chronological activity to calibrate Jubilee and Refuge states
             chain.forEach(block => {
                 if (block.transactions) {
                     block.transactions.forEach(tx => {
-                        const isSender = tx.sender.toLowerCase() === targetAddress.toLowerCase();
-                        const isRecipient = tx.recipient.toLowerCase() === targetAddress.toLowerCase();
-                        if (isSender || isRecipient) {
-                            const dateStr = new Date(block.timestamp * 1000).toISOString().replace('T', ' ').substring(0, 19);
-                            if (isRecipient) {
-                                balance += tx.amount; countIn++;
-                                html += "<tr><td><span style='padding:4px 8px; border-radius:4px; font-weight:bold; background-color:rgba(63,185,80,0.15); color:#3fb950;'>INCOMING</span></td><td style='font-weight:bold; color:#58a6ff;'>#" + block.index + "</td><td style='font-family:monospace;'>" + tx.sender + "</td><td style='color:#3fb950; font-weight:bold;'>+" + tx.amount.toFixed(2) + " CVN</td><td>" + dateStr + " UTC</td></tr>";
-                            }
-                            if (isSender) {
-                                balance -= tx.amount; countOut++;
-                                html += "<tr><td><span style='padding:4px 8px; border-radius:4px; font-weight:bold; background-color:rgba(248,81,73,0.15); color:#f85149;'>OUTGOING</span></td><td style='font-weight:bold; color:#58a6ff;'>#" + block.index + "</td><td style='font-family:monospace;'>" + tx.recipient + "</td><td style='color:#f85149; font-weight:bold;'>-" + tx.amount.toFixed(2) + " CVN</td><td>" + dateStr + " UTC</td></tr>";
+                        if (tx.sender.toLowerCase() === targetAddress.toLowerCase() || 
+                            tx.recipient.toLowerCase() === targetAddress.toLowerCase()) {
+                            if (block.timestamp > lastActiveTimestamp) {
+                                lastActiveTimestamp = block.timestamp;
                             }
                         }
                     });
                 }
             });
 
-            document.getElementById('audit-balance').innerText = balance.toLocaleString(undefined, {minimumFractionDigits: 2}) + " CVN";
+            // Calibrate network current time tip
+            let currentNetworkTime = Math.floor(Date.now() / 1000);
+            if (chain.length > 0) {
+                currentNetworkTime = chain[chain.length - 1].timestamp;
+            }
+
+            // Evaluate state parameters
+            const isJubileeTriggered = lastActiveTimestamp > 0 && (currentNetworkTime - lastActiveTimestamp) > JUBILEE_WINDOW_SECONDS;
+            const isRefugeTriggered = lastActiveTimestamp > 0 && (currentNetworkTime - lastActiveTimestamp) <= REFUGE_WINDOW_SECONDS;
+
+            // Pass 2: Process transaction streams and calculate balances factoring in Free-Will Offerings
+            chain.forEach(block => {
+                if (block.transactions) {
+                    block.transactions.forEach(tx => {
+                        const isSender = tx.sender.toLowerCase() === targetAddress.toLowerCase();
+                        const isRecipient = tx.recipient.toLowerCase() === targetAddress.toLowerCase();
+                        
+                        if (isSender || isRecipient) {
+                            const dateStr = new Date(block.timestamp * 1000).toISOString().replace('T', ' ').substring(0, 19);
+                            
+                            // Formulate total value adding base reward plus Model B voluntary tips
+                            const totalTxValue = tx.amount + (tx.free_will_offering || 0);
+
+                            if (isRecipient) {
+                                if (!isJubileeTriggered) { balance += totalTxValue; }
+                                countIn++;
+                                html += "<tr><td><span style='padding:4px 8px; border-radius:4px; font-weight:bold; background-color:rgba(63,185,80,0.15); color:#3fb950;'>INCOMING</span></td><td style='font-weight:bold; color:#58a6ff;'>#" + block.index + "</td><td style='font-family:monospace;'>" + tx.sender + "</td><td style='color:#3fb950; font-weight:bold;'>+" + totalTxValue.toFixed(2) + " CVN</td><td>" + dateStr + " UTC</td></tr>";
+                            }
+                            if (isSender) {
+                                if (!isJubileeTriggered) { balance -= totalTxValue; }
+                                countOut++;
+                                html += "<tr><td><span style='padding:4px 8px; border-radius:4px; font-weight:bold; background-color:rgba(248,81,73,0.15); color:#f85149;'>OUTGOING</span></td><td style='font-weight:bold; color:#58a6ff;'>#" + block.index + "</td><td style='font-family:monospace;'>" + tx.recipient + "</td><td style='color:#f85149; font-weight:bold;'>-" + totalTxValue.toFixed(2) + " CVN</td><td>" + dateStr + " UTC</td></tr>";
+                            }
+                        }
+                    });
+                }
+            });
+
+            // Commit calculations to visual interface
+            if (isJubileeTriggered) {
+                document.getElementById('audit-balance').innerText = "0.00 CVN (RESET BY JUBILEE)";
+                document.getElementById('audit-balance').style.color = "#ffa657";
+            } else {
+                document.getElementById('audit-balance').innerText = balance.toLocaleString(undefined, {minimumFractionDigits: 2}) + " CVN";
+                document.getElementById('audit-balance').style.color = "#3fb950";
+            }
+
+            if (isRefugeTriggered && !isJubileeTriggered) {
+                document.getElementById('refuge-status').style.display = "inline-block";
+            }
+
             document.getElementById('audit-in').innerText = countIn;
             document.getElementById('audit-out').innerText = countOut;
-            if (html !== "") { document.getElementById('audit-table-body').innerHTML = html; }
-            else { document.getElementById('audit-table-body').innerHTML = "<tr><td colspan='5' style='text-align:center; color:#8b949e; padding:20px;'>No active transaction footprint tracked inside ledger files.</td></tr>"; }
-        } catch (e) { console.error(e); }
+            
+            if (html !== "") { 
+                document.getElementById('audit-table-body').innerHTML = html; 
+            } else { 
+                document.getElementById('audit-table-body').innerHTML = "<tr><td colspan='5' style='text-align:center; color:#8b949e; padding:20px;'>No active transaction footprint tracked inside ledger files.</td></tr>"; 
+            }
+        } catch (e) { 
+            console.error(e); 
+        }
     }
 </script>
 </body>
