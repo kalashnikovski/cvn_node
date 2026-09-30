@@ -11,7 +11,7 @@ func RunSecurityChecks(chain []Block) bool {
 	}
 
 	fmt.Println("🛡️  [Security Harness] Sabbatical Slasher monitoring loop active.")
-	
+
 	// Scan blocks to verify chronological consistency and hash link integrity
 	for i := 1; i < len(chain); i++ {
 		currentBlock := chain[i]
