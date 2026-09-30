@@ -14,6 +14,30 @@ The CVN network enforces an un-alterable, algorithmic token framework translatin
 
 ---
 
+## 🧬 Structural Migration: Account Model vs. Bitcoin-Style UTXO
+
+The Covenant Standard Protocol v3 operates on a hardened **Unspent Transaction Output (UTXO) data graph structure** to match the foundational cryptographic integrity of early cypherpunk architecture.
+
+Use code with caution.
+┌──────────────────────────────────────┐     ┌──────────────────────────────────────┐
+│        LEGACY ACCOUNT MODEL          │     │        MODERN UTXO CASH GRAPH        │
+├──────────────────────────────────────┤     ├──────────────────────────────────────┤
+│ Address: CVN_c43b46...               │     │ TxID_A: [Output 0: 50.00 CVN] (Unspent)
+│ Total Balance: 200.00 CVN            │ ──> │ TxID_B: [Output 1: 15.50 CVN] (Unspent)
+│ (Blind state addition/subtraction)   │     │ TxID_C: [Output 0: 10.00 CVN] (Spent)
+└──────────────────────────────────────┘     └──────────────────────────────────────┘
+
+#### Key Architectural Distinctions for Core Contributors:
+
+1. **Digital Cash Clumps vs. Account Balances:** Coins do not sit statically under an account address string. Instead, they exist as individual, atomic cryptographic outputs (`UTXOOutput`) floating on the public ledger. To spend tokens, a transaction must explicitly reference and consume a historical, unspent output as an `UTXOInput`, proving legal ownership via ECDSA signature hashes.
+2. **Deterministic Coin Fracturing & Change Routing:** Because UTXO outputs cannot be partially spent or broken in half inside the database vault, they must be consumed in their entirety. If a user holds a `50.00 CVN` unspent coinbase chunk and wishes to transfer `10.00 CVN` to a peer, the engine executes a protocol-enforced fracturing split:
+   * **Output 0:** `10.00 CVN` routed cleanly to the recipient's target address.
+   * **Output 1 (The Change):** `40.00 CVN` cryptographically routed straight **back to the sender's own public address** as a brand-new, unspent cash profile.
+3. **High-Speed Non-Blocking Balance Sweeps:** The node and visual client interface (`wallet.go`) bypass raw state table calculations entirely. Current address balances are derived natively via a full ledger scan—accumulating all generated outputs matching the user's address and deleting any that appear in a subsequent transaction's input list.
+4. **Hardened Supply-Cap Immutability:** Initial token allocation limits are permanently locked inside a neutral, un-spendable system identifier (`RESERVE_POOL_UNALLOCATED_SUPPLY`). Tokens cannot be created out of thin air or manipulated via state injection; new spendable supply is strictly introduced into circulation via verified CPU Proof-of-Diligence (PoD) block mining rewards.
+
+---
+
 ## 🛠️ Workspace Installation & Compilation Guide
 
 ### Prerequisites
@@ -59,11 +83,13 @@ To spin up your Fyne graphical interface transaction management panel, run the w
 ```powershell
 .\LaunchWallet.bat
 ```
-- Paste your secret **Private Key (Hex)** generated during your node onboarding into the key entry box to load your identity coordinates and track your **Current Balance** updates live every 3 seconds.
+- Paste your secret **Private Key (Hex)** generated during your node onboarding into the key entry box to load your identity coordinates and track your **Current Balance** updates live every 3 seconds via full unspent history sweeps.
 
 ### 🌐 Live On-Chain Metric Auditing
 Open a standard browser window on your machine to monitor active validated block generation data heights, network velocity, and Jubilee burn void accumulation:
 - **Local Dashboard UI:** `http://localhost:8081`
+- **Mempool Queue Endpoint:** `http://localhost:8081/req_mempool`
+- **Chain Architecture Telemetry:** `http://localhost:8081/req_chain`
 - **Isolated Account Statement Sheets:** `http://localhost:8081/audit?address=YOUR_CVN_ADDRESS`
 
 ---
