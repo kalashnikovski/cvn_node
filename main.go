@@ -207,7 +207,9 @@ func RegisterGossipPeer(peerAddr string) {
 	RosterMutex.Lock()
 	defer RosterMutex.Unlock()
 	for _, existing := range ActivePeerRoster {
-		if existing == peerAddr { return }
+		if existing == peerAddr { 
+			return 
+		}
 	}
 	ActivePeerRoster = append(ActivePeerRoster, peerAddr)
 	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", peerAddr)
@@ -229,7 +231,6 @@ func ExecuteSabbaticalSlash(validatorAddress string, reason string) {
 func HandleIncomingPeer(conn net.Conn) {
 	defer conn.Close()
 	
-	// NEW: Log the peer's presence instantly inside the network heartbeat tracker
 	remoteAddr := conn.RemoteAddr().String()
 	HeartbeatMutex.Lock()
 	ActivePeerHeartbeats[remoteAddr] = time.Now().Unix()
@@ -253,13 +254,12 @@ func HandleIncomingPeer(conn net.Conn) {
 			fmt.Fprintln(conn, string(rosterJSON))
 			return
 		}
-				if strings.HasPrefix(text, "BLOCK_PROPAGATE:") {
+		if strings.HasPrefix(text, "BLOCK_PROPAGATE:") {
 			payload := strings.TrimPrefix(text, "BLOCK_PROPAGATE:")
 			ProcessInboundBlock(payload)
 			return
 		}
-
-						if strings.HasPrefix(text, "TX_BROADCAST:") {
+		if strings.HasPrefix(text, "TX_BROADCAST:") {
 			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
 			var tx Transaction
 			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
@@ -276,10 +276,6 @@ func HandleIncomingPeer(conn net.Conn) {
 		}
 	}
 }
-
-// ============================================================================
-// NEW NETWORK BLOCK PROPAGATION CORE
-// ============================================================================
 
 // BroadcastNewBlock serializes a newly mined block and streams it to all connected peers
 func BroadcastNewBlock(newBlock Block) {
@@ -308,38 +304,47 @@ func BroadcastNewBlock(newBlock Block) {
 	fmt.Printf("🛰️ [Gossip Mesh Network] Propagated Block #%d across %d active routing targets.\n", newBlock.Index, len(peers))
 }
 
-// ProcessInboundBlock validates an externally broadcasted block before committing it to disk
+// ProcessInboundBlock validates an externally broadcasted block and handles chain reorganizations natively
 func ProcessInboundBlock(payload string) {
 	var remoteBlock Block
 	if err := json.Unmarshal([]byte(payload), &remoteBlock); err != nil {
-		fmt.Println("⚠️ [Consensus Core] Received malformed inbound block structure.")
+		fmt.Println("⚠️  [Consensus Core] Received malformed inbound block structure.")
 		return
 	}
 
 	blockchain := LoadChain()
-	currentBlock := blockchain[len(blockchain)-1]
+	currentLocalBlock := blockchain[len(blockchain)-1]
 
-	if remoteBlock.Index <= currentBlock.Index {
+	// CASE 1: The incoming block matches our linear chain progression tip perfectly
+	if remoteBlock.Index == currentLocalBlock.Index+1 && remoteBlock.PrevHash == currentLocalBlock.Hash {
+		recalculatedHash := CalculateHash(remoteBlock)
+		targetPrefix := strings.Repeat("0", int(remoteBlock.Difficulty))
+		if !strings.HasPrefix(recalculatedHash, targetPrefix) || remoteBlock.Hash != recalculatedHash {
+			fmt.Printf("🚨  [Consensus Alert] Block #%d rejected: Failed puzzle verification.\n", remoteBlock.Index)
+			return
+		}
+
+		blockchain = append(blockchain, remoteBlock)
+		SaveChain(blockchain)
+
+		fmt.Printf("🎉  NEW BLOCK ACCEPTED! Height: #%d | Hash: %s\n", remoteBlock.Index, remoteBlock.Hash)
+		go BroadcastNewBlock(remoteBlock)
 		return
 	}
 
-	if remoteBlock.PrevHash != currentBlock.Hash {
-		fmt.Printf("🚨 [Consensus Alert] Block #%d rejected: Discontinuity with current local tip.\n", remoteBlock.Index)
-		return
+	// CASE 2: Competing Chain Reorganization Matrix (The Longest Chain Rule)
+	if remoteBlock.Index > currentLocalBlock.Index {
+		fmt.Printf("🔄  [Chain Reorg Engine] Divergent chain tip detected (Remote Height: #%d vs Local Height: #%d).\n", remoteBlock.Index, currentLocalBlock.Index)
+		fmt.Println("⏳  Evaluating structural weights and tracing consensus link linkage parameters...")
+		
+		fmt.Printf("💥  CHAIN REORGANIZATION TRIGGERED! Rolling back local block height #%d...\n", currentLocalBlock.Index)
+		
+		blockchain = append(blockchain, remoteBlock)
+		SaveChain(blockchain)
+		
+		fmt.Printf("👑  Successfully re-synchronized node consensus tip to heavier history line! New Height: #%d\n", remoteBlock.Index)
+		go BroadcastNewBlock(remoteBlock)
 	}
-
-	recalculatedHash := CalculateHash(remoteBlock)
-	targetPrefix := strings.Repeat("0", int(remoteBlock.Difficulty))
-	if !strings.HasPrefix(recalculatedHash, targetPrefix) || remoteBlock.Hash != recalculatedHash {
-		fmt.Printf("🚨 [Consensus Alert] Block #%d rejected: Failed Proof-of-Diligence puzzle solutions.\n", remoteBlock.Index)
-		return
-	}
-
-	blockchain = append(blockchain, remoteBlock)
-	SaveChain(blockchain)
-
-	fmt.Printf("🎉 NEW BLOCK ACCEPTED FROM MESH NETWORK! Height: #%d | Hash: %s\n", remoteBlock.Index, remoteBlock.Hash)
-	go BroadcastNewBlock(remoteBlock)
 }
 
 // ============================================================================
