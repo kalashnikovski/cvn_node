@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time" // Included cleanly to define block time signatures
 )
 
 // RunSecurityChecks performs structural threat vector testing on processed blocks
@@ -35,7 +36,14 @@ func RunSecurityChecks(chain []Block) bool {
 	return true
 }
 
-// LogSlasherSeizure footprints rogue mining cartels violating staking signatures
+// LogSlasherSeizure footprint logs the automated Sabbatical Slasher penalization state details
 func LogSlasherSeizure(minerAddress string, bondAmount float64) {
-	fmt.Printf("⚖️  [Slasher Action] Covert Manipulation Loop Flagged! Seizing %.2f CVN bond from address: %s\n", bondAmount, minerAddress)
+	fmt.Printf("\n⚖️  [Sabbatical Slasher] COVERT MANIPULATION LOOP FLAGGED!\n")
+	fmt.Printf("🛑 Violator Node ID: %s\n", minerAddress)
+	fmt.Printf("🔥 ACTION: Seizing %.2f CVN bond and routing directly to the Burn Void.\n\n", bondAmount)
+}
+
+// javaTimeToTime maps raw Unix integers safely into pristine time.Time objects
+func javaTimeToTime(unixTime int64) time.Time {
+	return time.Unix(unixTime, 0)
 }
