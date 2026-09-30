@@ -573,7 +573,6 @@ func main() {
 	ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 	ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 
-		// AUTOMATED USER PROFILE ONBOARDING PASS
 	if data, err := os.ReadFile(ProfileConfigFile); err == nil {
 		var savedCfg MinerConfig
 		if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
@@ -596,18 +595,24 @@ func main() {
 			fmt.Printf("💰 YOUR WALLET ADDRESS:    %s\n", walletAddress)
 			fmt.Println("⚠️  CRITICAL: Save your Private Key safely! You will need to paste it")
 			fmt.Println("   into wallet.go to access and spend your mined block rewards.")
-			fmt.Println("====================================================================\n")
+			fmt.Println("====================================================================")
 		}
 	}
 
-	for i, arg := range os.Args {
+	for i := 0; i < len(os.Args); i++ {
+		arg := os.Args[i]
 		if arg == "--wallet" {
 			RunWalletGUI()
 			return
 		}
-				if arg == "--miner-address" && i+1 < len(os.Args) {
+		if arg == "--miner-address" && i+1 < len(os.Args) {
 			inputAddress := strings.TrimSpace(os.Args[i+1])
 			
+			// FILTER ACCIDENTAL BATCH VARIABLE LEAKS
+			if inputAddress == "=" || inputAddress == "" {
+				continue
+			}
+
 			// 1. Enforce strict character parameters and network signature prefixes
 			isValid := true
 			if !strings.HasPrefix(inputAddress, "CVN_") || len(inputAddress) != 44 {
@@ -639,16 +644,17 @@ func main() {
 			cfgBytes, _ := json.MarshalIndent(newCfg, "", "  ")
 			_ = os.WriteFile(ProfileConfigFile, cfgBytes, 0644)
 		}
-
 		if arg == "--connect" && i+1 < len(os.Args) {
 			ConnectTarget = os.Args[i+1]
 		}
 	}
+
 	fmt.Println("====================================================")
 	fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
 	fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
-	fmt.Println("====================================================\n")
-	
+	fmt.Println("====================================================")
+
+
 	go StartTCPServer()
 	go StartPublicExplorerServer()
 	go MonitorNetworkDensity()
@@ -658,15 +664,18 @@ func main() {
 		SyncChainFromSeedPeer(ConnectTarget)
 		go DialAndGossipWithSeedPeer(ConnectTarget)
 	}
+
 	blockchain := LoadChain()
 	currentBlock := blockchain[len(blockchain)-1]
 	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+
 	for {
 		MempoolMutex.Lock()
 		activeMempool := make([]Transaction, len(GlobalMempool))
 		copy(activeMempool, GlobalMempool)
 		GlobalMempool = []Transaction{}
 		MempoolMutex.Unlock()
+
 		for i, tx := range activeMempool {
 			var lastSeen int64 = 0
 			for _, b := range blockchain {
@@ -684,7 +693,8 @@ func main() {
 				activeMempool[i].FreeWillOffering = 0
 			}
 		}
-				// 1. Establish data scale baselines to prevent divide-by-zero errors
+
+		// 1. Establish data scale baselines to prevent divide-by-zero errors
 		for i := range activeMempool {
 			if activeMempool[i].DataSizeKB <= 0 { activeMempool[i].DataSizeKB = 1.0 }
 		}
@@ -698,6 +708,7 @@ func main() {
 
 		var totalBountyOfferings float64 = 0.0
 		for _, tx := range activeMempool { totalBountyOfferings += tx.FreeWillOffering }
+
 		coinbaseRewardTx := Transaction{
 			Sender:           "COVENANT_STEWARD_ASSEMBLY",
 			Recipient:        CustomMinerAddress,
@@ -707,6 +718,7 @@ func main() {
 			Witness:          "Communal_Peer_Witness_7",
 			Timestamp:        time.Now(),
 		}
+
 		blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
 		nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
 		newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
@@ -717,6 +729,7 @@ func main() {
 		blockchain = append(blockchain, newBlock)
 		currentBlock = newBlock
 		SaveChain(blockchain)
+
 		fmt.Printf("💰 LOCAL NODE REWARD AUDIT: Current Balance of %s: %.2f CVN\n", CustomMinerAddress, GetAddressBalance(blockchain, CustomMinerAddress))
 		fmt.Println("-----------------------------------------------------")
 		time.Sleep(3 * time.Second)
