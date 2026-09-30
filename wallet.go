@@ -31,7 +31,6 @@ func RunWalletGUI() {
 	privKeyEntry.SetPlaceHolder("Enter or generate your Private Key (Hex)...")
 
 	addressLabel := widget.NewLabel("Your Public Address: (Load private key or generate a new profile)")
-
 	balanceLabel := widget.NewLabel("CURRENT BALANCE: 0.00 CVN")
 	usdLabel := widget.NewLabel("Estimated Value: $0.00 USD (Synced Market Feed)")
 
@@ -50,16 +49,21 @@ func RunWalletGUI() {
 
 	networkLog := widget.NewLabel("[P2P Cryptographic Client Interface Ready]")
 
+	// Shared placeholder to hold public key coordinates during derivation cycles
+	var currentPublicKeyHex string
+
 	deriveAddressFromInput := func(privHex string) {
 		privHex = strings.TrimSpace(privHex)
 		if len(privHex) != 64 {
 			addressLabel.SetText("Your Public Address: (Invalid Private Key length - must be 64 hex characters)")
+			currentPublicKeyHex = ""
 			return
 		}
 
 		privBytes, err := hex.DecodeString(privHex)
 		if err != nil {
 			addressLabel.SetText("Your Public Address: (Invalid hex formatting characters)")
+			currentPublicKeyHex = ""
 			return
 		}
 
@@ -67,6 +71,8 @@ func RunWalletGUI() {
 		x, y := curve.ScalarBaseMult(privBytes)
 
 		pubHex := fmt.Sprintf("%x%x", x, y)
+		currentPublicKeyHex = pubHex
+
 		addressHash := sha256.Sum256([]byte(pubHex))
 		walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
 
@@ -121,7 +127,6 @@ func RunWalletGUI() {
 			publicAddressHandle = strings.TrimSpace(publicAddressHandle[idx:])
 		}
 
-		// PRODUCTION FIXED TIMELINE SEGMENT: Flatten timestamp immediately into absolute Unix Integer space to match miner logic
 		absoluteUnixTime := time.Now().Unix()
 		txDataToSign := fmt.Sprintf("%s%s%.4f%.4f%d", publicAddressHandle, recipient, amount, offering, absoluteUnixTime)
 
@@ -137,8 +142,8 @@ func RunWalletGUI() {
 			Amount:           amount,
 			FreeWillOffering: offering,
 			DataSizeKB:       1.0,
-			Witness:          "Public_ECDSA_Math_Validation_Pass",
-			Timestamp:        time.Unix(absoluteUnixTime, 0), // Maps pristine, un-shifted timestamp bounds
+			Witness:          currentPublicKeyHex, 
+			Timestamp:        time.Unix(absoluteUnixTime, 0),
 			SignatureR:       rCoord,
 			SignatureS:       sCoord,
 		}
@@ -149,35 +154,40 @@ func RunWalletGUI() {
 			return
 		}
 
-		resolvedTarget := nodeTarget
-		targetIP, targetPort, splitErr := net.SplitHostPort(nodeTarget)
-		if splitErr == nil {
-			client := &http.Client{Timeout: 3 * time.Second}
-			resp, httpErr := client.Get("https://ipify.org")
-			if httpErr == nil {
-				defer resp.Body.Close()
-				myPublicIPBytes, _ := io.ReadAll(resp.Body)
-				myPublicIP := strings.TrimSpace(string(myPublicIPBytes))
-				if targetIP == myPublicIP || targetIP == "covenant-explorer.ddns.net" {
-					resolvedTarget = "127.0.0.1:" + targetPort
+		// NON-BLOCKING NETWORK ROUTER
+		networkLog.SetText("⏳ Resolving destination routing signatures...")
+		go func(target string, jsonPayload []byte) {
+			resolvedTarget := target
+			targetIP, targetPort, splitErr := net.SplitHostPort(target)
+			
+			if splitErr == nil {
+				client := &http.Client{Timeout: 2 * time.Second}
+				resp, httpErr := client.Get("https://ipify.org")
+				if httpErr == nil {
+					defer resp.Body.Close()
+					myPublicIPBytes, _ := io.ReadAll(resp.Body)
+					myPublicIP := strings.TrimSpace(string(myPublicIPBytes))
+					if targetIP == myPublicIP || targetIP == "covenant-explorer.ddns.net" {
+						resolvedTarget = "127.0.0.1:" + targetPort
+					}
 				}
 			}
-		}
 
-		conn, err := net.DialTimeout("tcp", resolvedTarget, 5*time.Second)
-		if err != nil {
-			networkLog.SetText(fmt.Sprintf("Handshake Failure: Node entry endpoint [%s] is currently unreachable.", nodeTarget))
-			return
-		}
-		defer conn.Close()
+			conn, err := net.DialTimeout("tcp", resolvedTarget, 4*time.Second)
+			if err != nil {
+				networkLog.SetText(fmt.Sprintf("Handshake Failure: Entry endpoint [%s] is offline.", target))
+				return
+			}
+			defer conn.Close()
 
-		fmt.Fprintf(conn, "TX_BROADCAST:%s\n", string(txBytes))
+			fmt.Fprintf(conn, "TX_BROADCAST:%s\n", string(jsonPayload))
 
-		if resolvedTarget != nodeTarget {
-			networkLog.SetText(fmt.Sprintf("🚀 Loopback Broadcast Complete! Securely synced to public endpoint via port :%s!", targetPort))
-		} else {
-			networkLog.SetText(fmt.Sprintf("🚀 Successfully broadcasted signed transaction packet to node endpoint: %s!", nodeTarget))
-		}
+			if resolvedTarget != target {
+				networkLog.SetText(fmt.Sprintf("🚀 Loopback Sync Complete via port :%s!", targetPort))
+			} else {
+				networkLog.SetText(fmt.Sprintf("🚀 Successfully broadcasted signed transaction packet to node: %s!", target))
+			}
+		}(nodeTarget, txBytes)
 
 		recipientInput.SetText("")
 		amountInput.SetText("")
@@ -228,8 +238,12 @@ func RunWalletGUI() {
 					publicAddressHandle = strings.TrimSpace(publicAddressHandle[idx:])
 
 					currentBalance := GetAddressBalance(currentChain, publicAddressHandle)
-					balanceLabel.SetText(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", currentBalance))
-					usdLabel.SetText(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", currentBalance*0.025))
+					
+					// FIX APPLIED: Safe cross-thread queue synchronization via native Fyne scheduler loop
+					fyne.Do(func() {
+						balanceLabel.SetText(fmt.Sprintf("CURRENT BALANCE: %.2f CVN", currentBalance))
+						usdLabel.SetText(fmt.Sprintf("Estimated Value: $%.2f USD (Synced Market Feed)", currentBalance*0.025))
+					})
 				}
 			}
 		}
