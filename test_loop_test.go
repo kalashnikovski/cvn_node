@@ -1,14 +1,14 @@
-package main // Keep package main so it shares the Transaction struct metrics
+package main
 
 import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"testing" // 👈 Add this package import
+	"testing"
 	"time"
 )
 
-// Change the function name to start with 'Test' so Go's testing tool detects it
+// TestAutomatedTransactionLoop executes an automated multi-user stress test against the active UTXO node
 func TestAutomatedTransactionLoop(t *testing.T) {
 	fmt.Println("====================================================")
 	fmt.Println("🧪 CVN CORE MESH NETWORK INTEGRATION SYSTEM TEST")
@@ -25,15 +25,28 @@ func TestAutomatedTransactionLoop(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		fmt.Printf("🚀 [Loop Pass %d/5] Structuring transaction payload...", i)
 
+		absoluteUnixTime := time.Now().Unix()
+		txVol := float64(i) * 10.5
+
 		tx := Transaction{
-			Sender:           senderWallet,
-			Recipient:        mockRecipient,
-			Amount:           float64(i) * 10.5,
+			ID: fmt.Sprintf("TX_TEST_LOOP_%d_%d", i, absoluteUnixTime),
+			Inputs: []UTXOInput{
+				{
+					TxID:      "DUMMY_MOCK_HISTORICAL_UTXO_SOURCE_HASH_ID",
+					OutputIdx: 0,
+					Signature: "ECDSA_SIGNED_INTEGRATION_TEST_INPUT_PROOF",
+				},
+			},
+			Outputs: []UTXOOutput{
+				{
+					Recipient: mockRecipient,
+					Amount:    txVol,
+				},
+			},
 			FreeWillOffering: 1.50, // Enforcing Model B Free-Will incentives
 			DataSizeKB:       1.0,
 			Witness:          "INTEGRATION_TEST_DUMMY_PUBLIC_KEY_COORDINATES",
-			Timestamp:        time.Now(),
-			SignatureR:       "81a3b5c7d9e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7", // Mock signature coords
+			SignatureR:       "81a3b5c7d9e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7",
 			SignatureS:       "92b4c6d8e0f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8",
 		}
 
@@ -62,7 +75,4 @@ func TestAutomatedTransactionLoop(t *testing.T) {
 	fmt.Println("\n====================================================")
 	fmt.Println("🏁 AUTOMATED TRANSACTION INGESTION TEST COMPLETE")
 	fmt.Println("====================================================")
-	fmt.Println("🔎 NEXT STEPS FOR AUDITING:")
-	fmt.Println("1. Look at your Miner console window. Did it say '[P2P Network Engine] Ingested verified cryptographic transaction!'?")
-	fmt.Println("2. Look at your Browser Explorer dashboard (http://localhost:8081). Did the 'Total Network Velocity' count rise?")
 }
