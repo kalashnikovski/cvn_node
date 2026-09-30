@@ -1,1 +1,111 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Covenant Standard - Block Explorer</title><style>body { font-family: -apple-system, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 40px; text-align: center; margin: 0; }.container { max-width: 900px; margin: 50px auto; background: #161b22; padding: 40px; border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }h1 { color: #58a6ff; font-size: 2.2rem; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; }p { color: #8b949e; font-size: 1.1rem; margin-bottom: 30px; }.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }.card { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 25px; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }.card h3 { margin: 0 0 10px 0; font-size: 0.85rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }.card .val { font-size: 1.8rem; font-weight: bold; color: #fff; }.search-container { margin-top: 30px; background: #21262d; padding: 30px; border-radius: 8px; border: 1px solid #30363d; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }.search-container h2 { margin: 0 0 15px 0; font-size: 1.3rem; color: #58a6ff; display: flex; align-items: center; gap: 8px; }.input-group { display: flex; gap: 12px; }input { flex: 1; background: #0d1117; border: 1px solid #30363d; padding: 14px; border-radius: 6px; color: #fff; font-family: monospace; font-size: 1rem; }input:focus { border-color: #58a6ff; outline: none; box-shadow: 0 0 0 3px rgba(88,166,255,0.15); }button { background: #238636; color: white; border: none; padding: 14px 28px; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: background 0.2s; }button:hover { background: #2ea043; }</style><script>if (window.top !== window.self) { window.top.location.replace(window.self.location.href); }async function updateStats() { try { const res = await fetch("/req_chain"); const data = await res.json(); document.getElementById("circ-supply").innerText = (data.circulating_supply || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; document.getElementById("block-height").innerText = "#" + (data.blocks ? data.blocks.length - 1 : 0); document.getElementById("escrow-vol").innerText = (data.escrow_balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; } catch(e) { console.error(e); } }setInterval(updateStats, 3000);window.onload = updateStats;function runAudit() { const addr = document.getElementById("wallet-input").value.trim(); if(addr) { window.open("/audit?address=" + addr, "_blank"); } }</script></head><body><div class="container"><h1>📊 Covenant Standard Network Dashboard</h1><p>Sovereign Layer-1 Consensus Core Engine Node Matrix</p><div class="grid"><div class="card"><h3>Current Block Height</h3><div id="block-height" class="val">#---</div></div><div class="card"><h3>Total Circulating Supply</h3><div id="circ-supply" class="val">--- CVN</div></div><div class="card"><h3>Locked Escrow Bonds</h3><div id="escrow-vol" class="val">--- CVN</div></div></div><div class="search-container"><h2>📜 Isolated Ledger Account Statement Lookup</h2><div class="input-group"><input type="text" id="wallet-input" placeholder="Enter public CVN address signature string..."><button onclick="runAudit()">Audit Address</button></div></div></div></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Covenant Standard - Block Explorer</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d1117; color: #c9d1d9; padding: 40px; text-align: center; margin: 0; }
+        .container { max-width: 950px; margin: 50px auto; background: #161b22; padding: 40px; border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        h1 { color: #58a6ff; font-size: 2.2rem; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        p { color: #8b949e; font-size: 1.1rem; margin-bottom: 30px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .card { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 25px; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .card h3 { margin: 0 0 10px 0; font-size: 0.85rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card .val { font-size: 1.8rem; font-weight: bold; color: #fff; }
+        .queue-container { margin-top: 30px; background: #21262d; padding: 30px; border-radius: 8px; border: 1px solid #30363d; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .queue-container h2 { margin: 0 0 15px 0; font-size: 1.3rem; color: #58a6ff; display: flex; align-items: center; gap: 8px; }
+        table { width: 100%; border-collapse: collapse; background-color: #161b22; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #30363d; font-size: 0.95rem; }
+        th { background-color: #30363d; color: #58a6ff; font-weight: 600; }
+        .score-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; background-color: rgba(218,165,32,0.15); color: #daaf3c; font-family: monospace; }
+        .search-container { margin-top: 30px; background: #21262d; padding: 30px; border-radius: 8px; border: 1px solid #30363d; text-align: left; }
+        .input-group { display: flex; gap: 12px; }
+        input { flex: 1; background: #0d1117; border: 1px solid #30363d; padding: 14px; border-radius: 6px; color: #fff; font-family: monospace; font-size: 1rem; }
+        button { background: #238636; color: white; border: none; padding: 14px 28px; border-radius: 6px; font-weight: bold; font-size: 1rem; cursor: pointer; }
+    </style>
+    <script>
+        if (window.top !== window.self) { window.top.location.replace(window.self.location.href); }
+        
+        async function updateStats() { 
+            try { 
+                const res = await fetch("/req_chain"); 
+                const data = await res.json(); 
+                document.getElementById("circ-supply").innerText = (data.circulating_supply || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
+                document.getElementById("block-height").innerText = "#" + (data.blocks ? data.blocks.length - 1 : 0); 
+                document.getElementById("escrow-vol").innerText = (data.escrow_balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
+            } catch(e) { console.error(e); } 
+            
+            try {
+                const queueRes = await fetch("/req_mempool");
+                const queueData = await queueRes.json();
+                
+                // Sort array chronologically by higher priority score descending
+                queueData.sort((a, b) => b.priority_score - a.priority_score);
+                
+                let html = "";
+                if (queueData.length === 0) {
+                    html = "<tr><td colspan='5' style='text-align:center; color:#8b949e; padding:20px;'>Voluntary offering priority queue is empty. Awaiting mesh broadcasts...</td></tr>";
+                } else {
+                    queueData.forEach(tx => {
+                        html += `<tr>
+                            <td style="font-family:monospace;">${tx.sender.substring(0,12)}...</td>
+                            <td style="font-family:monospace;">${tx.recipient.substring(0,12)}...</td>
+                            <td style="font-weight:bold; color:#fff;">${tx.amount.toFixed(2)} CVN</td>
+                            <td style="color:#8b949e;">${tx.free_will_offering.toFixed(2)} CVN (${tx.data_size_kb.toFixed(1)} KB)</td>
+                            <td><span class="score-badge">${tx.priority_score.toFixed(4)} CVN/KB</span></td>
+                        </tr>`;
+                    });
+                }
+                document.getElementById("queue-table-body").innerHTML = html;
+            } catch(e) { console.error(e); }
+        }
+        
+        setInterval(updateStats, 3000);
+        window.onload = updateStats;
+        
+        function runAudit() { 
+            const addr = document.getElementById("wallet-input").value.trim(); 
+            if(addr) { window.open("/audit?address=" + addr, "_blank"); } 
+        }
+    </script>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Covenant Standard Network Dashboard</h1>
+    <p>Sovereign Layer-1 Consensus Core Engine Node Matrix</p>
+    
+    <div class="grid">
+        <div class="card"><h3>Current Block Height</h3><div id="block-height" class="val">#---</div></div>
+        <div class="card"><h3>Total Circulating Supply</h3><div id="circ-supply" class="val">--- CVN</div></div>
+        <div class="card"><h3>Locked Escrow Bonds</h3><div id="escrow-vol" class="val">--- CVN</div></div>
+    </div>
+
+    <!-- NEW: Model B Priority Queue Estimation Visualizer Dashboard Box -->
+    <div class="queue-container">
+        <h2>⚖️ Model B Voluntary Priority Pool (Mempool Queue)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Sender Address</th>
+                    <th>Recipient Target</th>
+                    <th>Token Volume</th>
+                    <th>Offering Fee (Size)</th>
+                    <th>Calculated Rank Index</th>
+                </tr>
+            </thead>
+            <tbody id="queue-table-body">
+                <tr><td colspan="5" style="text-align:center; color:#8b949e;">Connecting pool channels...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="search-container">
+        <h2>📜 Isolated Ledger Account Statement Lookup</h2>
+        <div class="input-group">
+            <input type="text" id="wallet-input" placeholder="Enter public CVN address signature string...">
+            <button onclick="runAudit()">Audit Address</button>
+        </div>
+    </div>
+</div>
+</body>
+</html>

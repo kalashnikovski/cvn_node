@@ -364,20 +364,58 @@ func StartTCPServer() {
 func StartPublicExplorerServer() {
 	mux := http.NewServeMux()
 
-mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != "" { http.NotFound(w, r); return }
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		http.ServeFile(w, r, "explorer.html")
 	})
 
-mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		http.ServeFile(w, r, "audit.html")
 	})
 
-mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
+	// HANDLER 1: Handles the live memory priority pool lookup feed cleanly
+	mux.HandleFunc("/req_mempool", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		
+		MempoolMutex.Lock()
+		queueSnapshot := make([]Transaction, len(GlobalMempool))
+		copy(queueSnapshot, GlobalMempool)
+		MempoolMutex.Unlock()
+
+		type QueueItem struct {
+			Sender    string  `json:"sender"`
+			Recipient string  `json:"recipient"`
+			Amount    float64 `json:"amount"`
+			Offering  float64 `json:"free_will_offering"`
+			SizeKB    float64 `json:"data_size_kb"`
+			Score     float64 `json:"priority_score"`
+		}
+
+		var payload []QueueItem = []QueueItem{}
+		for _, tx := range queueSnapshot {
+			size := tx.DataSizeKB
+			if size <= 0 { size = 1.0 }
+			
+			payload = append(payload, QueueItem{
+				Sender:    tx.Sender,
+				Recipient: tx.Recipient,
+				Amount:    tx.Amount,
+				Offering:  tx.FreeWillOffering,
+				SizeKB:    size,
+				Score:     tx.FreeWillOffering / size,
+			})
+		}
+
+		json.NewEncoder(w).Encode(payload)
+	})
+
+	// HANDLER 2: Handles core on-chain tokenomics telemetry calculations
+	mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
+
 		chain := LoadChain()
 		var totalMined float64 = 0.0
 		var burnedTokens float64 = 0.0
@@ -386,15 +424,17 @@ mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
 			for _, tx := range block.Transactions {
 				if tx.Recipient == BurnAddress {
 					burnedTokens += tx.Amount + tx.FreeWillOffering
-					}
 				}
 			}
+		}
 		circulatingSupply := totalMined - burnedTokens
 		if circulatingSupply < 0 { circulatingSupply = 0 }
+		
 		var totalRealEscrow float64 = 0.0
 		StakingPoolMutex.Lock()
 		for _, bond := range ValidatorStakingPool { totalRealEscrow += bond }
 		StakingPoolMutex.Unlock()
+		
 		responseData := map[string]interface{}{
 			"circulating_supply": circulatingSupply,
 			"blocks":             chain,
@@ -404,7 +444,7 @@ mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
 		w.Write(data)
 	})
 
-	fmt.Println("?? Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
+	fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
 	go func() { _ = http.ListenAndServe("0.0.0.0:8081", mux) }()
 }
 
