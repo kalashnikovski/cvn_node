@@ -229,6 +229,13 @@ func ExecuteSabbaticalSlash(validatorAddress string, reason string) {
 func HandleIncomingPeer(conn net.Conn) {
 	defer conn.Close()
 	
+	// HARD-FORK FIREWALL: Enforce a strict 15-second lifetime limit per network interaction loop
+	// This physically stops slow or dead connections from hanging and exhausting your PC sockets!
+	err := conn.SetDeadline(time.Now().Add(15 * time.Second))
+	if err != nil {
+		return
+	}
+	
 	remoteAddr := conn.RemoteAddr().String()
 	HeartbeatMutex.Lock()
 	ActivePeerHeartbeats[remoteAddr] = time.Now().Unix()
@@ -236,6 +243,7 @@ func HandleIncomingPeer(conn net.Conn) {
 
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
+
 		text := scanner.Text()
 		if text == "REQ_CHAIN_SYNC" {
 			chain := LoadChain()
