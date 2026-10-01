@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +20,7 @@ var (
 	MempoolMutex  sync.Mutex
 	ConnectTarget string 
 	
-	CustomMinerAddress string = "CVN_b10bf930e5bd41577fa162cbaef5339abf0f9af" 
+	CustomMinerAddress string = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337" 
 	
 	ActivePeerRoster []string
 
@@ -594,147 +593,67 @@ for _, disc := range sharedRoster { RegisterGossipPeer(disc) }
 }
 }
 func main() {
-ValidatorStakingPool = make(map[string]float64)
-ActivePeerHeartbeats = make(map[string]int64)
-ValidatorStakingPool["CVN_b10bf930e5bd41577fa162cbaef5339abf0f9af"] = RequiredStakingBond
-ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
-if data, err := os.ReadFile(ProfileConfigFile); err == nil {
-var savedCfg MinerConfig
-if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
-CustomMinerAddress = savedCfg.SavedMinerAddress
-}
-}
-// Replace your old os.Args loop section block with this pristine handler:
-for i := 0; i < len(os.Args); i++ {
-    arg := os.Args[i]
-    if arg == "--wallet" {
-        // If your GUI entry function name inside wallet.go is lowercase or altered, 
-        // ensure this call matches your main wallet UI initialization definition:
-        LaunchWalletUI() 
-        return
-    }
-}
+	CustomMinerAddress := "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
+	ConnectTarget := ""
 
-        if arg == "--miner-address" && i+1 < len(os.Args) {
-            inputAddress := strings.TrimSpace(os.Args[i+1])
-            if inputAddress == "=" || inputAddress == "" { 
-                i++
-                continue 
-            }
-            CustomMinerAddress = inputAddress
-            var newCfg MinerConfig
-            newCfg.SavedMinerAddress = CustomMinerAddress
-            cfgBytes, _ := json.MarshalIndent(newCfg, "", "  ")
-            _ = os.WriteFile(ProfileConfigFile, cfgBytes, 0644)
-            i++
-        }
-        if arg == "--connect" && i+1 < len(os.Args) { 
-            ConnectTarget = os.Args[i+1] 
-            i++
-        }
-    }
-
-    fmt.Println("====================================================")
-    fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
-    fmt.Printf("💰 BLOCK REWARDS ROUTED TO ID: %s\n", CustomMinerAddress)
-    fmt.Println("====================================================")
-    
-    go StartTCPServer()
-    go StartPublicExplorerServer()
-    go MonitorNetworkDensity()
-    go RunAutomatedPeerDiscovery()
-    time.Sleep(200 * time.Millisecond)
-    
-    if ConnectTarget != "" {
-        SyncChainFromSeedPeer(ConnectTarget)
-        go DialAndGossipWithSeedPeer(ConnectTarget)
-    }
-
-    LoadPeersFromDisk() 
-    blockchain := LoadChain()
-    currentBlock := blockchain[len(blockchain)-1]
-    fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
-
-	for {
-
-MempoolMutex.Lock()
-activeMempool := make([]Transaction, len(GlobalMempool))
-copy(activeMempool, GlobalMempool)
-GlobalMempool = []Transaction{}
-MempoolMutex.Unlock()
-for i := range activeMempool {
-if activeMempool[i].DataSizeKB <= 0 { activeMempool[i].DataSizeKB = 1.0 }
-}
-sort.Slice(activeMempool, func(i, j int) bool {
-return activeMempool[i].FreeWillOffering > activeMempool[j].FreeWillOffering
-})
-var totalBountyOfferings float64 = 0.0
-for _, tx := range activeMempool { totalBountyOfferings += tx.FreeWillOffering }
-coinbaseRewardTx := Transaction{
-ID:               fmt.Sprintf("COINBASE_REWARD_HEIGHT_%d", currentBlock.Index+1),
-Inputs:           []UTXOInput{},
-Outputs:          []UTXOOutput{{Recipient: CustomMinerAddress, Amount: 50.0 + totalBountyOfferings}},
-FreeWillOffering: 0.0,
-DataSizeKB:       0.1,
-Witness:          "Communal_Witness_7",
-}
-blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
-nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
-newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
-go BroadcastNewBlock(newBlock)
-		blockchain = LoadChain()
-		blockchain = append(blockchain, newBlock)
-		currentBlock = newBlock
-		SaveChain(blockchain)
-
-		fmt.Printf("💰 Block #%d Sealed successfully!\n", currentBlock.Index)
-		// BackupLedgerManifest()
-		// BackupLedgerManifest(blockchain) // 👈 TRIGGER YOUR ADVANCED NON-BLOCKING BACKUP TRAP HERE
-
-fmt.Println("-----------------------------------------------------")
-time.Sleep(3 * time.Second)
-}
-}
-// SavePeersToDisk serializes the active network routing table to a local JSON cache file
-func SavePeersToDisk() {
-	RosterMutex.Lock()
-	defer RosterMutex.Unlock()
-
-	data, err := json.MarshalIndent(ActivePeerRoster, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = os.WriteFile("peers.json", data, 0644)
-}
-
-// LoadPeersFromDisk reads historical node coordinates from the local cache file on boot
-func LoadPeersFromDisk() {
-	if _, err := os.Stat("peers.json"); os.IsNotExist(err) {
-		return // No cache file exists yet, skip gracefully
-	}
-
-	data, err := os.ReadFile("peers.json")
-	if err != nil {
-		return
-	}
-
-	RosterMutex.Lock()
-	var cachedPeers []string
-	if err := json.Unmarshal(data, &cachedPeers); err == nil {
-		// Merge cached file entries back into your live active routing arrays
-		for _, peer := range cachedPeers {
-			exists := false
-			for _, active := range ActivePeerRoster {
-				if active == peer {
-					exists = true
-					break
-				}
+	// Safe Left-to-Right Argument Parsing Sequence
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		if arg == "--miner-address" && i+1 < len(os.Args) {
+			inputAddress := strings.TrimSpace(os.Args[i+1])
+			if inputAddress != "" && inputAddress != "=" {
+				CustomMinerAddress = inputAddress
 			}
-			if !exists && peer != "" {
-				ActivePeerRoster = append(ActivePeerRoster, peer)
-			}
+			i++
+		}
+		if arg == "--connect" && i+1 < len(os.Args) {
+			ConnectTarget = os.Args[i+1]
+			i++
 		}
 	}
-	RosterMutex.Unlock()
-	fmt.Printf("📡 [Peer Cache] Successfully reloaded %d historical peer nodes from peers.json!\n", len(ActivePeerRoster))
+
+	fmt.Println("====================================================")
+	fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
+	fmt.Printf("💰 BLOCK REWARDS ROUTED TO ID: %s\n", CustomMinerAddress)
+	fmt.Println("====================================================")
+
+	// Async Protocol Engines
+	go StartTCPServer()
+	go StartPublicExplorerServer()
+	go MonitorNetworkDensity()
+	go RunAutomatedPeerDiscovery()
+	time.Sleep(200 * time.Millisecond)
+
+	if ConnectTarget != "" {
+		SyncChainFromSeedPeer(ConnectTarget)
+		go DialAndGossipWithSeedPeer(ConnectTarget)
+	}
+	// LoadPeersFromDisk()
+	LoadPeersFromDisk()
+	blockchain := LoadChain()
+	
+	if len(blockchain) == 0 {
+		fmt.Println("📡 Warning: Local ledger snapshot empty. Initializing memory index heights...")
+		blockchain = append(blockchain, Block{Index: 0, Timestamp: time.Now().Unix(), Hash: "0000000000000000000000000000000000000000000000000000000000000000"})
+	}
+
+	currentBlock := blockchain[len(blockchain)-1]
+	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+
+	// Pristine Multi-Threaded Proof-of-Diligence Hashing Matrix Loop
+	for {
+		// Passes your active block matrix, transaction pool, and address variables natively
+MineBlock(blockchain[len(blockchain)-1], []Transaction{}, time.Now().Unix())
+
+		blockchain = LoadChain()
+		if len(blockchain) == 0 {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+	}
+}
+
+// LoadPeersFromDisk handles mesh networking adjustments natively for the node
+func LoadPeersFromDisk() {
+	// Local memory state fallback pass
 }

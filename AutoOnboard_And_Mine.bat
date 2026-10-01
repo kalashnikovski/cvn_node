@@ -65,11 +65,13 @@ echo =================================================================
 echo 🚀 SPINNING UP NATIVE PERSONAL MINER + NODE MATRIX ENVIRONMENT...
 echo =================================================================
 echo.
-:: Force-writes your personal wallet address directly into the config file before booting
-echo CVN_b10bf930e5bd41577fa162cbaef5339abf0f9af> my_crypto_address.txt
-.\cvn_node.exe
+:: Force-writes your active, verified target wallet address to disk cache
+echo CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337> my_crypto_address.txt
+:: Clean build pass: run main.go using only its direct file dependencies
+go run main.go crypto_auth.go read_ledger.go security_harness.go
 pause
 exit /b
+
 
 :CHOSEN_WALLET
 cls
