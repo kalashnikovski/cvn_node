@@ -257,10 +257,26 @@ func HandleIncomingPeer(conn net.Conn) {
 			ProcessInboundBlock(payload)
 			return
 		}
-		if strings.HasPrefix(text, "TX_BROADCAST:") {
+				if strings.HasPrefix(text, "TX_BROADCAST:") {
 			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
 			var tx Transaction
 			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
+				
+				// HARD-FORK FIX: Intercept malformed and fake address formats instantly
+				isValidAddress := true
+				for _, out := range tx.Outputs {
+					if !strings.HasPrefix(out.Recipient, "CVN_") || len(out.Recipient) != 44 {
+						isValidAddress = false
+						break
+					}
+				}
+
+				if !isValidAddress {
+					fmt.Println("⚠️  [Security Firewall] Blocked inbound transaction: Malformed recipient signature detected!")
+					fmt.Fprintln(conn, "TX_REJECTED_INVALID_ADDRESS")
+					return
+				}
+
 				MempoolMutex.Lock()
 				GlobalMempool = append(GlobalMempool, tx)
 				MempoolMutex.Unlock()
@@ -270,6 +286,7 @@ func HandleIncomingPeer(conn net.Conn) {
 			}
 			return
 		}
+
 	}
 }
 
