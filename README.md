@@ -47,7 +47,7 @@ Use code with caution.
 ### 1. Clone the Workspace
 Clone the repository workspace folder directory down to your machine:
 ```bash
-git clone https://github.com
+git clone https://github.com/kalashnikovski/cvn_node
 cd cvn_node
 ```
 
@@ -87,12 +87,27 @@ To spin up your Fyne graphical interface transaction management panel, run the w
 
 ### 🌐 Live On-Chain Metric Auditing
 Open a standard browser window on your machine to monitor active validated block generation data heights, network velocity, and Jubilee burn void accumulation:
-- **Local Dashboard UI:** `http://localhost:8081`
-- **Mempool Queue Endpoint:** `http://localhost:8081/req_mempool`
-- **Chain Architecture Telemetry:** `http://localhost:8081/req_chain`
-- **Isolated Account Statement Sheets:** `http://localhost:8081/audit?address=YOUR_CVN_ADDRESS`
+- **Local Dashboard UI:** `http://202.137.175.220:8081`
+- **Mempool Queue Endpoint:** `http://202.137.175.220:8081/req_mempool`
+- **Chain Architecture Telemetry:** `http://202.137.175.220:8081/req_chain`
+- **Isolated Account Statement Sheets:** `http://202.137.175.220:8081/audit?address=YOUR_CVN_ADDRESS`
 
 ---
+
+---
+
+## 📺 Node Console Diagnostics & Terminal Text Overlap
+
+When running the Proof-of-Diligence (PoD) hashing engine on high-core-count multi-threaded CPUs (such as the AMD Ryzen 9 7950X3D), the console window buffer may occasionally experience a temporary text-wrapping or layout rendering overlap. 
+
+### Why This Happens:
+When successive block puzzles (e.g., 4-Zero or 5-Zero targets) are solved within fractions of a second back-to-back, the Go processing threads emit console update packets faster than the standard Windows Host/PowerShell console rendering engine can clear its line display buffer. When the miner advances immediately to a heavy 6-Zero target block, trailing decimal fragments from previous block timers can temporarily freeze inside the active throughput columns, resulting in ghost readouts (e.g., showing an artificial drop to `0.20 kH/s`).
+
+### How to Resolve:
+* **Automatic Catch-Up:** This is a purely visual display artifact. The underlying cryptographic processing loop remains unthrottled and executes at maximum capacity. As the nonce counter scales past the first few iterations on a heavy block, the string buffer resets naturally and your true baseline hashrate (e.g., `~550+ kH/s`) will display cleanly.
+* **Manual Refresh:** If you want to violently force-flush the terminal display buffer lines back into perfect alignment instantly, click inside the active mining console screen and execute a clean `Clear-Host` or window layout refresh pass.
+* **Remote Analytics Auditing:** To monitor worker throughput and database integrity cleanly without relying on local terminal window loops, you can parse the raw JSON data matrices directly via your local network interface strings at `/req_chain` or use standard headless telemetry dashboards.
+
 
 **Author:** Nikola Trajanovski (`kalashnikovski`)  
 **License:** Open-Source MIT Permissions Framework Core
