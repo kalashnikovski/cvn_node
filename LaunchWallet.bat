@@ -1,22 +1,19 @@
 @echo off
-title Covenant Standard Desktop Wallet Launcher
-
-echo ====================================================================
-echo 💎 COVENANT STANDARD (CVN) LAYER-1 GRAPHICAL WALLET MANAGEMENT UTILITY
-echo ====================================================================
+title Covenant Standard Client Wallet UI
+cls
+echo =================================================================
+echo 🪙 INITIALIZING GRAPHICAL CLIENT WALLET APPLICATION MATRIX...
+echo =================================================================
 echo.
+cd /d "C:\ollama\cvn_node"
 
-echo [1/2] Initializing secure runtime variables...
-echo [2/2] Spanning Fyne GUI Cryptographic Client Application Interface...
-echo.
+:: Isolated build pass: main.go is stripped to ensure wallet GUI compilation succeeds flat
+go run wallet.go structures.go crypto_auth.go read_ledger.go security_harness.go backup_vault.go --wallet
 
-:: Launch the binary using the explicit wallet flag parameter natively. 
-:: Go will intercept this variable and run your RunWalletGUI() thread block cleanly.
-cvn_node.exe --wallet
-
-if %ERRORLEVEL% NEQ 0 (
+if %errorlevel% neq 0 (
     echo.
-    echo ⚡ ERROR: The graphical window application encountered an unexpected boundary obstacle.
-    echo 👉 Ensure your graphics hardware layout is active and your environment toolchains are built.
+    echo ⚠️ ERROR: The graphical window closed or hit an environment exception.
+    echo Verify your Fyne GUI dependencies are mapped correctly.
+    echo.
     pause
 )

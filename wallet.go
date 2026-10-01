@@ -313,3 +313,9 @@ func RunWalletGUI() {
 	myWindow.SetContent(content)
 	myWindow.ShowAndRun()
 }
+// Main entry point switch added to boot the graphical user interface on demand
+func main() {
+    // If your wallet script uses a different setup function name (like RunWalletGUI or StartWallet),
+    // update this internal line to match your file's native GUI initializer.
+    RunWalletGUI()
+}
