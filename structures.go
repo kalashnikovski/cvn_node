@@ -58,15 +58,23 @@ func LoadChain() []Block {
 }
 
 // Fixes wallet.go:302 by matching the multi-argument wallet helper signature
+// Overwrite your existing GetAddressBalance function block inside structures.go with this:
 func GetAddressBalance(chain []Block, addr string) float64 {
-	balance := 0.0
+	var balance float64 = 0.0
 	for _, b := range chain {
 		for _, tx := range b.Transactions {
+			// Track historical block reward distributions natively
 			if tx.Sender == addr {
 				balance -= tx.Amount
 			}
 			if tx.Recipient == addr {
 				balance += tx.Amount
+			}
+			// Track advanced UTXO cash graph outputs explicitly
+			for _, out := range tx.Outputs {
+				if out.Recipient == addr {
+					balance += out.Amount
+				}
 			}
 		}
 	}
