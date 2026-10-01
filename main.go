@@ -21,9 +21,10 @@ var (
 	MempoolMutex  sync.Mutex
 	ConnectTarget string 
 	
-	CustomMinerAddress string = "Nikola_Global_Network_Node" 
+	CustomMinerAddress string = "CVN_a2cad5d775493c0f84cddd1926a840315c398b534" 
 	
 	ActivePeerRoster []string
+
 	RosterMutex      sync.Mutex
 	LocalListenerIP  string = "202.137.175.220" 
 	
