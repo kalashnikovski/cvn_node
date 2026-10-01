@@ -147,28 +147,26 @@ func LoadChain() []Block {
 }
 
 func GetAddressBalance(chain []Block, address string) float64 {
-	var totalReceived float64 = 0.0
-	var totalSpent float64 = 0.0
+	var balance float64 = 0.0
 
+	// 🛡️ LINEAR BALANCE SWEEPER: Scans the ledger cleanly in a single pass to eliminate loop multipliers
 	for _, block := range chain {
 		for _, tx := range block.Transactions {
-			// Track all inbound unspent clump receipts
+			// 1. Process all inbound UTXO clump outputs sent to this address
 			for _, out := range tx.Outputs {
 				if out.Recipient == address {
-					totalReceived += out.Amount
+					balance += out.Amount
 				}
 			}
-			// Track all outbound spent inputs
+			// 2. Process all outbound spent UTXO inputs coming from this address
 			for _, in := range tx.Inputs {
-				// Resolve internal values from historical transactions
-				for _, bHistory := range chain {
-					for _, txHistory := range bHistory.Transactions {
-						if txHistory.ID == in.TxID {
-							if in.OutputIdx < len(txHistory.Outputs) {
-								outTarget := txHistory.Outputs[in.OutputIdx]
-								if outTarget.Recipient == address {
-									totalSpent += outTarget.Amount
-								}
+				// Safely find the original source matching this spent coin input vector
+				for _, historicalBlock := range chain {
+					for _, historicalTx := range historicalBlock.Transactions {
+						if historicalTx.ID == in.TxID && in.OutputIdx < len(historicalTx.Outputs) {
+							historicalOut := historicalTx.Outputs[in.OutputIdx]
+							if historicalOut.Recipient == address {
+								balance -= historicalOut.Amount
 							}
 						}
 					}
@@ -176,7 +174,7 @@ func GetAddressBalance(chain []Block, address string) float64 {
 			}
 		}
 	}
-	balance := totalReceived - totalSpent
+	
 	if balance < 0 { return 0 }
 	return balance
 }

@@ -1,19 +1,6 @@
 @echo off
-title Covenant Standard Client Wallet UI
-cls
-echo =================================================================
-echo 🪙 INITIALIZING GRAPHICAL CLIENT WALLET APPLICATION MATRIX...
-echo =================================================================
-echo.
-cd /d "C:\ollama\cvn_node"
-
-:: Isolated build pass: main.go is stripped to ensure wallet GUI compilation succeeds flat
-go run wallet.go structures.go crypto_auth.go read_ledger.go security_harness.go backup_vault.go --wallet
-
-if %errorlevel% neq 0 (
-    echo.
-    echo ⚠️ ERROR: The graphical window closed or hit an environment exception.
-    echo Verify your Fyne GUI dependencies are mapped correctly.
-    echo.
-    pause
-)
+title Covenant Standard Wallet GUI Launcher
+color 0B
+echo ??? Initializing Outbound Cryptographic UTXO Wallet Interface...
+cvn_node.exe --wallet
+if %ERRORLEVEL% NEQ 0 ( pause )

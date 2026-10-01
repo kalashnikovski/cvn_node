@@ -31,19 +31,23 @@
             try { 
                 const res = await fetch("/req_chain"); 
                 const data = await res.json(); 
+                
+                // Parse and update circulating supply and escrow metrics cleanly
                 document.getElementById("circ-supply").innerText = (data.circulating_supply || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
-                document.getElementById("block-height").innerText = "#" + (data.blocks ? data.blocks.length - 1 : 0); 
                 document.getElementById("escrow-vol").innerText = (data.escrow_balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
                 
-                // --- NEW: Parse raw ledger state array into rolling history rows ---
+                // Fix the Summary Box height bug by reading actual index metadata properties
                 if (data.blocks && data.blocks.length > 0) {
                     const blockArray = data.blocks;
-                    // Reverse the array copy to process the newest generated blocks first
-                    const displayBlocks = [...blockArray].reverse().slice(0, 10);
+                    const highestBlock = blockArray[blockArray.length - 1];
+                    const trueHeight = highestBlock.Index !== undefined ? highestBlock.Index : (highestBlock.index !== undefined ? highestBlock.index : blockArray.length - 1);
                     
+                    document.getElementById("block-height").innerText = "#" + trueHeight;
+                    
+                    // Parse rolling history table list array
+                    const displayBlocks = [...blockArray].reverse().slice(0, 10);
                     let blockHtml = "";
                     displayBlocks.forEach(b => {
-                        // Normalize potential casing fields across system migrations
                         const index = b.Index !== undefined ? b.Index : (b.index !== undefined ? b.index : 0);
                         const hash = b.Hash || b.hash || "0000000000000000000000...";
                         const timestamp = b.Timestamp || b.timestamp || 0;
@@ -59,6 +63,8 @@
                         </tr>`;
                     });
                     document.getElementById("block-table-body").innerHTML = blockHtml;
+                } else {
+                    document.getElementById("block-height").innerText = "#" + (data.block_height || 0);
                 }
             } catch(e) { console.error(e); } 
             
@@ -126,7 +132,7 @@
         </table>
     </div>
 
-    <!-- NEW: Recent Block History Ledger Grid (Surgically Placed Directly Below Model B) -->
+    <!-- Recent Block History Ledger Grid -->
     <div class="block-container">
         <h2>🛰️ Latest Blocks Mined (Rolling History)</h2>
         <table>

@@ -1,5 +1,7 @@
 @echo off
-title Covenant Standard Node Operator Gateway v3
+:: 🗺️ MASTER HARDCODE FIX: Permanently locks the Administrator terminal to your true project folder
+cd /d C:\ollama\cvn_node
+title Covenant Standard Node Operator Gateway v3.8
 cls
 echo =================================================================
 echo 🛰️ COVENANT STANDARD (CVN) PROTOCOL AUTOMATED ONBOARDING SYSTEM
@@ -18,20 +20,22 @@ if %errorlevel% neq 0 (
 
 :: --- STEP 2: Native Multithreaded Compilation Backplane ---
 echo [2/3] Compiling standalone executable file natively with CGO flags...
-go build -o cvn_node.exe main.go
+:: Groups all modular dependency files into a single unified binary build
+go build -o cvn_node.exe .
 if %errorlevel% neq 0 (
-    echo ⚠️ WARNING: main.go has syntax errors, but the gateway is auto-recovering...
-    echo Bypassing main compiler locks to preserve wallet app stability...
+    echo ⚠️ ERROR: Compilation failed! Please verify your Go source code layout files.
+    pause
+    exit /b
 )
-echo ✅ Initialization pass checked.
+echo ✅ Initialization pass checked. Unified binary compiled with 100%% success!
 echo.
 
 :: --- STEP 3: Identity & Ledger Synchronization ---
 echo [3/3] Synchronizing master database history chains...
-if exist ledger_vault_backup.json (
-    echo ✅ Local backup ledger loaded cleanly into RAM memory array matrices.
+if exist ledger_vault.json (
+    echo ✅ Local production master ledger vault verified safely on disk.
 ) else (
-    echo 📡 Core backup file missing. Initializing new fallback ledger snapshot...
+    echo 📡 Core ledger file missing. Initializing new fallback ledger snapshot...
 )
 echo.
 echo =================================================================
@@ -43,7 +47,7 @@ echo.
 echo Select your desired network node routing profile allocation task:
 echo -----------------------------------------------------------------
 echo ⛏️  1. Launch Hashing Core Threads (Start Personal Miner + Node)
-echo 🪙  2. Launch Graphical Client Wallet (Access Your Balance App)
+echo 🪙  2. Launch Lightweight Client Wallet (Access Your Balance Console)
 echo ❌  3. Exit Operator Gateway (Safely Close Terminal Sandbox)
 echo -----------------------------------------------------------------
 echo.
@@ -65,13 +69,10 @@ echo =================================================================
 echo 🚀 SPINNING UP NATIVE PERSONAL MINER + NODE MATRIX ENVIRONMENT...
 echo =================================================================
 echo.
-:: Force-writes your active, verified target wallet address to disk cache
-echo CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337> my_crypto_address.txt
-:: Clean build pass: run main.go using only its direct file dependencies
-go run main.go crypto_auth.go read_ledger.go security_harness.go
+:: 👉 FIXED MENU ROUTE: Launches your clean compiled production binary natively
+cvn_node.exe
 pause
 exit /b
-
 
 :CHOSEN_WALLET
 cls
@@ -79,16 +80,14 @@ echo =================================================================
 echo 📡 DISPATCHING CRYPTOGRAPHIC CLIENT WALLET APPLICATION SHELL...
 echo =================================================================
 echo.
-:: Forces the gateway to run your clean, isolated LaunchWallet shortcut script
-if exist LaunchWallet.bat (
-    start cmd /c "LaunchWallet.bat"
-) else (
-    echo ⚠️ Error: LaunchWallet.bat is missing from the directory.
-    pause
-)
+:: 👉 FIXED MENU ROUTE: Launches your compiled binary core explicitly targeting the wallet console argument
+cvn_node.exe --wallet
+echo.
+echo.
+echo Press [ENTER] to return to the gateway control menu...
+pause >nul
 cls
 goto MENU_PROMPT
-
 
 :EXIT_GATEWAY
 cls
