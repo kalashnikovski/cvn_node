@@ -12,12 +12,13 @@
         .card { background: #21262d; border: 1px solid #30363d; border-radius: 8px; padding: 25px; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .card h3 { margin: 0 0 10px 0; font-size: 0.85rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
         .card .val { font-size: 1.8rem; font-weight: bold; color: #fff; }
-        .queue-container { margin-top: 30px; background: #21262d; padding: 30px; border-radius: 8px; border: 1px solid #30363d; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .queue-container h2 { margin: 0 0 15px 0; font-size: 1.3rem; color: #58a6ff; display: flex; align-items: center; gap: 8px; }
+        .queue-container, .block-container { margin-top: 30px; background: #21262d; padding: 30px; border-radius: 8px; border: 1px solid #30363d; text-align: left; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .queue-container h2, .block-container h2 { margin: 0 0 15px 0; font-size: 1.3rem; color: #58a6ff; display: flex; align-items: center; gap: 8px; }
         table { width: 100%; border-collapse: collapse; background-color: #161b22; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
         th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #30363d; font-size: 0.95rem; }
         th { background-color: #30363d; color: #58a6ff; font-weight: 600; }
         .score-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; background-color: rgba(218,165,32,0.15); color: #daaf3c; font-family: monospace; }
+        .height-badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; background-color: rgba(88,166,255,0.1); color: #58a6ff; font-family: monospace; }
         .search-container { margin-top: 30px; background: #21262d; padding: 30px; border-radius: 8px; border: 1px solid #30363d; text-align: left; }
         .input-group { display: flex; gap: 12px; }
         input { flex: 1; background: #0d1117; border: 1px solid #30363d; padding: 14px; border-radius: 6px; color: #fff; font-family: monospace; font-size: 1rem; }
@@ -33,6 +34,32 @@
                 document.getElementById("circ-supply").innerText = (data.circulating_supply || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
                 document.getElementById("block-height").innerText = "#" + (data.blocks ? data.blocks.length - 1 : 0); 
                 document.getElementById("escrow-vol").innerText = (data.escrow_balance || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
+                
+                // --- NEW: Parse raw ledger state array into rolling history rows ---
+                if (data.blocks && data.blocks.length > 0) {
+                    const blockArray = data.blocks;
+                    // Reverse the array copy to process the newest generated blocks first
+                    const displayBlocks = [...blockArray].reverse().slice(0, 10);
+                    
+                    let blockHtml = "";
+                    displayBlocks.forEach(b => {
+                        // Normalize potential casing fields across system migrations
+                        const index = b.Index !== undefined ? b.Index : (b.index !== undefined ? b.index : 0);
+                        const hash = b.Hash || b.hash || "0000000000000000000000...";
+                        const timestamp = b.Timestamp || b.timestamp || 0;
+                        const txs = b.Transactions || b.transactions || [];
+                        
+                        const blockTimeStr = timestamp > 0 ? new Date(timestamp * 1000).toLocaleTimeString() : "Genesis Epoch";
+                        
+                        blockHtml += `<tr>
+                            <td><span class="height-badge">#${index}</span></td>
+                            <td style="font-family:monospace; color:#8b949e; max-width:280px; text-truncate; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${hash}</td>
+                            <td>${blockTimeStr}</td>
+                            <td style="font-weight:600; color:#fff;">${txs.length} Transactions</td>
+                        </tr>`;
+                    });
+                    document.getElementById("block-table-body").innerHTML = blockHtml;
+                }
             } catch(e) { console.error(e); } 
             
             try {
@@ -80,7 +107,7 @@
         <div class="card"><h3>Locked Escrow Bonds</h3><div id="escrow-vol" class="val">--- CVN</div></div>
     </div>
 
-    <!-- NEW: Model B Priority Queue Estimation Visualizer Dashboard Box -->
+    <!-- Model B Priority Queue Estimation Visualizer Dashboard Box -->
     <div class="queue-container">
         <h2>⚖️ Model B Voluntary Priority Pool (Mempool Queue)</h2>
         <table>
@@ -95,6 +122,24 @@
             </thead>
             <tbody id="queue-table-body">
                 <tr><td colspan="5" style="text-align:center; color:#8b949e;">Connecting pool channels...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- NEW: Recent Block History Ledger Grid (Surgically Placed Directly Below Model B) -->
+    <div class="block-container">
+        <h2>🛰️ Latest Blocks Mined (Rolling History)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Height</th>
+                    <th>Block Hash Signature</th>
+                    <th>Timestamp</th>
+                    <th>Transactions</th>
+                </tr>
+            </thead>
+            <tbody id="block-table-body">
+                <tr><td colspan="4" style="text-align:center; color:#8b949e;">Fetching rolling chain segments...</td></tr>
             </tbody>
         </table>
     </div>
