@@ -408,9 +408,20 @@ func main() {
 ValidatorStakingPool = make(map[string]float64)
 ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
-CustomMinerAddress := "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
-ConnectTarget := ""
+// Default fallback to your secure creator seed profile address string layout
+CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
+ConnectTarget = ""
+
+// 👉 THE DECENTRALIZATION PATCH: Dynamically loads the remote miner's unique local address profile on boot!
+if data, err := os.ReadFile(ProfileConfigFile); err == nil {
+	var savedCfg MinerConfig
+	if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
+		CustomMinerAddress = savedCfg.SavedMinerAddress
+	}
+}
+
 for i := 1; i < len(os.Args); i++ {
+
 arg := os.Args[i]
 if arg == "--wallet" {
 RunWalletGUI()
