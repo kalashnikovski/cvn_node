@@ -21,7 +21,7 @@ var (
 	MempoolMutex  sync.Mutex
 	ConnectTarget string 
 	
-	CustomMinerAddress string = "CVN_a2cad5d775493c0f84cddd1926a840315c398b534" 
+	CustomMinerAddress string = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337" 
 	
 	ActivePeerRoster []string
 
@@ -271,14 +271,16 @@ func HandleIncomingPeer(conn net.Conn) {
 			var tx Transaction
 			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
 				
-				// HARD-FORK FIX: Intercept malformed and fake address formats instantly
+								// HARD-FORK FIX: Intercept malformed formats while validating 44-45 char key structures
 				isValidAddress := true
 				for _, out := range tx.Outputs {
-					if !strings.HasPrefix(out.Recipient, "CVN_") || len(out.Recipient) != 44 {
+					addressLen := len(out.Recipient)
+					if !strings.HasPrefix(out.Recipient, "CVN_") || addressLen < 44 || addressLen > 45 {
 						isValidAddress = false
 						break
 					}
 				}
+
 
 				if !isValidAddress {
 					fmt.Println("⚠️  [Security Firewall] Blocked inbound transaction: Malformed recipient signature detected!")
@@ -623,10 +625,14 @@ if ConnectTarget != "" {
 SyncChainFromSeedPeer(ConnectTarget)
 go DialAndGossipWithSeedPeer(ConnectTarget)
 }
-blockchain := LoadChain()
-currentBlock := blockchain[len(blockchain)-1]
-fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
-for {
+	// HARD-FORK FIREWALL: Reload historical peer network connections from disk cache file on startup
+	LoadPeersFromDisk() 
+
+	blockchain := LoadChain()
+	currentBlock := blockchain[len(blockchain)-1]
+	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+	for {
+
 MempoolMutex.Lock()
 activeMempool := make([]Transaction, len(GlobalMempool))
 copy(activeMempool, GlobalMempool)
@@ -663,4 +669,47 @@ go BroadcastNewBlock(newBlock)
 fmt.Println("-----------------------------------------------------")
 time.Sleep(3 * time.Second)
 }
+}
+// SavePeersToDisk serializes the active network routing table to a local JSON cache file
+func SavePeersToDisk() {
+	RosterMutex.Lock()
+	defer RosterMutex.Unlock()
+
+	data, err := json.MarshalIndent(ActivePeerRoster, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile("peers.json", data, 0644)
+}
+
+// LoadPeersFromDisk reads historical node coordinates from the local cache file on boot
+func LoadPeersFromDisk() {
+	if _, err := os.Stat("peers.json"); os.IsNotExist(err) {
+		return // No cache file exists yet, skip gracefully
+	}
+
+	data, err := os.ReadFile("peers.json")
+	if err != nil {
+		return
+	}
+
+	RosterMutex.Lock()
+	var cachedPeers []string
+	if err := json.Unmarshal(data, &cachedPeers); err == nil {
+		// Merge cached file entries back into your live active routing arrays
+		for _, peer := range cachedPeers {
+			exists := false
+			for _, active := range ActivePeerRoster {
+				if active == peer {
+					exists = true
+					break
+				}
+			}
+			if !exists && peer != "" {
+				ActivePeerRoster = append(ActivePeerRoster, peer)
+			}
+		}
+	}
+	RosterMutex.Unlock()
+	fmt.Printf("📡 [Peer Cache] Successfully reloaded %d historical peer nodes from peers.json!\n", len(ActivePeerRoster))
 }
