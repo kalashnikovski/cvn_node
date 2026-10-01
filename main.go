@@ -604,39 +604,57 @@ if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
 CustomMinerAddress = savedCfg.SavedMinerAddress
 }
 }
+// Replace your old os.Args loop section block with this pristine handler:
 for i := 0; i < len(os.Args); i++ {
-arg := os.Args[i]
-if arg == "--wallet" { RunWalletGUI(); return }
-if arg == "--miner-address" && i+1 < len(os.Args) {
-inputAddress := strings.TrimSpace(os.Args[i+1])
-if inputAddress == "=" || inputAddress == "" { continue }
-CustomMinerAddress = inputAddress
-var newCfg MinerConfig
-newCfg.SavedMinerAddress = CustomMinerAddress
-cfgBytes, _ := json.MarshalIndent(newCfg, "", "  ")
-_ = os.WriteFile(ProfileConfigFile, cfgBytes, 0644)
+    arg := os.Args[i]
+    if arg == "--wallet" {
+        // If your GUI entry function name inside wallet.go is lowercase or altered, 
+        // ensure this call matches your main wallet UI initialization definition:
+        LaunchWalletUI() 
+        return
+    }
 }
-if arg == "--connect" && i+1 < len(os.Args) { ConnectTarget = os.Args[i+1] }
-}
-fmt.Println("====================================================")
-fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
-fmt.Printf("💰 BLOCK REWARDS ROUTED TO ID: %s\n", CustomMinerAddress)
-fmt.Println("====================================================")
-go StartTCPServer()
-go StartPublicExplorerServer()
-go MonitorNetworkDensity()
-go RunAutomatedPeerDiscovery()
-time.Sleep(200 * time.Millisecond)
-if ConnectTarget != "" {
-SyncChainFromSeedPeer(ConnectTarget)
-go DialAndGossipWithSeedPeer(ConnectTarget)
-}
-	// HARD-FORK FIREWALL: Reload historical peer network connections from disk cache file on startup
-	LoadPeersFromDisk() 
 
-	blockchain := LoadChain()
-	currentBlock := blockchain[len(blockchain)-1]
-	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+        if arg == "--miner-address" && i+1 < len(os.Args) {
+            inputAddress := strings.TrimSpace(os.Args[i+1])
+            if inputAddress == "=" || inputAddress == "" { 
+                i++
+                continue 
+            }
+            CustomMinerAddress = inputAddress
+            var newCfg MinerConfig
+            newCfg.SavedMinerAddress = CustomMinerAddress
+            cfgBytes, _ := json.MarshalIndent(newCfg, "", "  ")
+            _ = os.WriteFile(ProfileConfigFile, cfgBytes, 0644)
+            i++
+        }
+        if arg == "--connect" && i+1 < len(os.Args) { 
+            ConnectTarget = os.Args[i+1] 
+            i++
+        }
+    }
+
+    fmt.Println("====================================================")
+    fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
+    fmt.Printf("💰 BLOCK REWARDS ROUTED TO ID: %s\n", CustomMinerAddress)
+    fmt.Println("====================================================")
+    
+    go StartTCPServer()
+    go StartPublicExplorerServer()
+    go MonitorNetworkDensity()
+    go RunAutomatedPeerDiscovery()
+    time.Sleep(200 * time.Millisecond)
+    
+    if ConnectTarget != "" {
+        SyncChainFromSeedPeer(ConnectTarget)
+        go DialAndGossipWithSeedPeer(ConnectTarget)
+    }
+
+    LoadPeersFromDisk() 
+    blockchain := LoadChain()
+    currentBlock := blockchain[len(blockchain)-1]
+    fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+
 	for {
 
 MempoolMutex.Lock()
@@ -670,7 +688,8 @@ go BroadcastNewBlock(newBlock)
 		SaveChain(blockchain)
 
 		fmt.Printf("💰 Block #%d Sealed successfully!\n", currentBlock.Index)
-		BackupLedgerManifest(blockchain) // 👈 TRIGGER YOUR ADVANCED NON-BLOCKING BACKUP TRAP HERE
+		// BackupLedgerManifest()
+		// BackupLedgerManifest(blockchain) // 👈 TRIGGER YOUR ADVANCED NON-BLOCKING BACKUP TRAP HERE
 
 fmt.Println("-----------------------------------------------------")
 time.Sleep(3 * time.Second)
