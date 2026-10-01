@@ -45,8 +45,8 @@ func RunJubileeSimulation() {
 	fmt.Println("💎 CVN MACROECONOMIC JUBILEE STATE SIMULATOR")
 	fmt.Println("====================================================")
 	fmt.Println("⏳ Compress timeline: 49 Years -> 5 Minutes (5,150,880x Speedup)")
-	fmt.Println("🚀 Tracking target address: CVN_c43b46... [Creator Equity Pool]")
-	fmt.Println("----------------------------------------------------\n")
+	fmt.Print("🚀 Tracking target address: CVN_c43b46... [Creator Equity Pool]\n")
+	fmt.Println("----------------------------------------------------")
 
 	// 1. Formulate the initial mock ledger state
 	genesisTime := time.Now().Add(-1 * time.Second)
@@ -78,7 +78,7 @@ func RunJubileeSimulation() {
 	for range ticker.C {
 		realElapsed := time.Since(startTime).Seconds()
 		if realElapsed >= 300 {
-			fmt.Println("\n🏁 SIMULATION COMPLETE: 5-minute milestone reached. 49 network years passed.")
+			fmt.Println("🏁 SIMULATION COMPLETE: 5-minute milestone reached. 49 network years passed.")
 			break
 		}
 
@@ -158,7 +158,7 @@ func RunJubileeSimulation() {
 			fmt.Printf("🔥 [BURN SUMMARY] Stagnant funds detected! Diverting 1,000.00 CVN straight into -> %s\n", SimulationBurnVoid)
 			data, _ := json.MarshalIndent(simChain, "", "  ")
 			_ = os.WriteFile(SimulatedLedgerFile, data, 0644)
-			fmt.Println("\n💾 [Ledger Vault Locked] Simulation block history written safely to jubilee_simulation_ledger.json")
+			fmt.Println("💾 [Ledger Vault Locked] Simulation block history written safely to jubilee_simulation_ledger.json")
 			break
 		}
 
