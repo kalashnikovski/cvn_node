@@ -40,7 +40,7 @@ func CalculateSimHash(b SimBlock) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func RunJubileeSimulation() {
+func main() {
 	fmt.Println("====================================================")
 	fmt.Println("💎 CVN MACROECONOMIC JUBILEE STATE SIMULATOR")
 	fmt.Println("====================================================")
