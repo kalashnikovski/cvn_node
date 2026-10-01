@@ -21,7 +21,7 @@ var (
 	MempoolMutex  sync.Mutex
 	ConnectTarget string 
 	
-	CustomMinerAddress string = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337" 
+	CustomMinerAddress string = "CVN_b10bf930e5bd41577fa162cbaef5339abf0f9af" 
 	
 	ActivePeerRoster []string
 
@@ -399,7 +399,13 @@ w.Header().Set("Content-Type", "application/json")
 chain := LoadChain()
 var totalMined float64 = 0.0
 var burnedTokens float64 = 0.0
-if len(chain) > 1 { totalMined = float64(len(chain)-1) * 50.0 }
+// Forces the engine to dynamically combine your historical 1024 epoch baseline with new blocks
+if len(chain) > 1 { 
+    totalMined = 51200.0 + (float64(len(chain) - 1) * 50.0) 
+} else {
+    totalMined = 51200.0
+}
+
 for _, b := range chain {
 for _, tx := range b.Transactions {
 for _, out := range tx.Outputs {
@@ -590,7 +596,7 @@ for _, disc := range sharedRoster { RegisterGossipPeer(disc) }
 func main() {
 ValidatorStakingPool = make(map[string]float64)
 ActivePeerHeartbeats = make(map[string]int64)
-ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
+ValidatorStakingPool["CVN_b10bf930e5bd41577fa162cbaef5339abf0f9af"] = RequiredStakingBond
 ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 if data, err := os.ReadFile(ProfileConfigFile); err == nil {
 var savedCfg MinerConfig
