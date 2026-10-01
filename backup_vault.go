@@ -4,32 +4,39 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 )
 
-// BackupLedgerManifest automatically clones the ledger vault state to protect data equity
+var BackupMutex sync.Mutex
+
+// BackupLedgerManifest non-blockingly updates ONE single static backup file
 func BackupLedgerManifest(chain []Block) {
 	if len(chain) == 0 {
 		return
 	}
 
-	backupFileName := fmt.Sprintf("ledger_vault_backup_height_%d.json", chain[len(chain)-1].Index)
+	// Spin the backup process completely out into a background worker thread
+	go func(blocks []Block) {
+		BackupMutex.Lock()
+		defer BackupMutex.Unlock()
 
-	data, err := json.MarshalIndent(chain, "", "  ")
-	if err != nil {
-		fmt.Printf("⚠️ [Backup Engine Failure] Could not serialize data: %v\n", err)
-		return
-	}
+		// FIXED: Enforce a single static file name so it overwrites instead of multiplying!
+		backupFileName := "ledger_vault_backup.json"
 
-	err = os.WriteFile(backupFileName, data, 0644)
-	if err != nil {
-		fmt.Printf("⚠️ [Backup Engine Failure] Write permission denied: %v\n", err)
-		return
-	}
+		// Serialize the blocks array cleanly into the backup data slot
+		data, err := json.MarshalIndent(blocks, "", "  ")
+		if err != nil {
+			fmt.Printf("⚠️ [Backup Engine Alert] Serialization failure: %v\n", err)
+			return
+		}
 
-	fmt.Printf("💾 [Archive Vault] Structural snapshot created successfully: %s\n", backupFileName)
-}
+		// Overwrite the single file safely on disk
+		err = os.WriteFile(backupFileName, data, 0644)
+		if err != nil {
+			fmt.Printf("⚠️ [Backup Engine Alert] Write permissions blocked: %v\n", err)
+			return
+		}
 
-// CleanOldSnapshots runs an internal pruning pass to prevent local disk exhaustion
-func CleanOldSnapshots() {
-	fmt.Println("🧹 [Archive Vault] Maintenance scan active. Retaining canonical state history profiles.")
+		fmt.Printf("💾 [Archive Vault] Single ledger snapshot updated cleanly to: %s\n", backupFileName)
+	}(chain)
 }

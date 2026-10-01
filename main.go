@@ -626,11 +626,14 @@ blockPayload := append([]Transaction{coinbaseRewardTx}, activeMempool...)
 nextDifficulty := CalculateAdaptiveDifficulty(blockchain)
 newBlock := MineBlock(currentBlock, blockPayload, nextDifficulty)
 go BroadcastNewBlock(newBlock)
-blockchain = LoadChain()
-blockchain = append(blockchain, newBlock)
-currentBlock = newBlock
-SaveChain(blockchain)
-fmt.Printf("💰 Block #%d Sealed successfully!\n", currentBlock.Index)
+		blockchain = LoadChain()
+		blockchain = append(blockchain, newBlock)
+		currentBlock = newBlock
+		SaveChain(blockchain)
+
+		fmt.Printf("💰 Block #%d Sealed successfully!\n", currentBlock.Index)
+		BackupLedgerManifest(blockchain) // 👈 TRIGGER YOUR ADVANCED NON-BLOCKING BACKUP TRAP HERE
+
 fmt.Println("-----------------------------------------------------")
 time.Sleep(3 * time.Second)
 }
