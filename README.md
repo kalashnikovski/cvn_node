@@ -1,6 +1,6 @@
 @
 # COVENANT STANDARD (CVN) PROTOCOL - CORE NODE MATRIX
-[![Discord Shield](https://shields.io)](https://discord.gg)
+[![Discord Shield](https://shields.io)](https://discord.gg/xE2egYbumx)
 
 > **URGENT PROTOCOL BANNER UPDATE (v16.5.0):** We have officially decentralized block reward routing protocols! If you cloned the repository or initiated your personal mining threads prior to October 2nd, 2026, please immediately stop your active terminal loops, execute a **`git pull`** to absorb the latest master code changes, and reboot using the updated onboarding gateway. This ensures your computer's CPU threads cleanly route mined rewards directly onto your own unique public wallet keys rather than default fallback creator seed anchors.
 
