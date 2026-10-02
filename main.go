@@ -291,6 +291,23 @@ func StartPublicExplorerServer() {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		http.ServeFile(w, r, "audit.html")
 	})
+	mux.HandleFunc("/inject_tx", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var tx Transaction
+		if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+			http.Error(w, "Malformed transaction payload data", http.StatusBadRequest)
+			return
+		}
+		MempoolMutex.Lock()
+		GlobalMempool = append(GlobalMempool, tx)
+		MempoolMutex.Unlock()
+		fmt.Printf("📦 [MEMPOOL INGEST] Received 1 new transaction from wallet client console cleanly!\n")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("✅ Ingestion successful"))
+	})
 
 	mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -413,12 +430,7 @@ CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
 ConnectTarget = ""
 
 // 👉 THE DECENTRALIZATION PATCH: Dynamically loads the remote miner's unique local address profile on boot!
-if data, err := os.ReadFile(ProfileConfigFile); err == nil {
-	var savedCfg MinerConfig
-	if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
-		CustomMinerAddress = savedCfg.SavedMinerAddress
-	}
-}
+
 
 for i := 1; i < len(os.Args); i++ {
 
@@ -461,9 +473,13 @@ currentBlock := blockchain[len(blockchain)-1]
 fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
 for {
 MempoolMutex.Lock()
-activeMempool := make([]Transaction, len(GlobalMempool))
-copy(activeMempool, GlobalMempool)
-GlobalMempool = []Transaction{}
+var activeMempool []Transaction
+if len(GlobalMempool) > 0 {
+    activeMempool = make([]Transaction, len(GlobalMempool))
+    copy(activeMempool, GlobalMempool)
+    GlobalMempool = []Transaction{}
+    fmt.Printf("📦 [MINER CORE] Sweeping %d transactions from mempool cache straight into block payload...\n", len(activeMempool))
+}
 MempoolMutex.Unlock()
 sort.Slice(activeMempool, func(i, j int) bool {
 if activeMempool[i].DataSizeKB == 0 { activeMempool[i].DataSizeKB = 1.0 }
