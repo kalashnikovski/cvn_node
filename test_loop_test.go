@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -66,5 +69,47 @@ func TestAdversarialDoubleSpendAttack(t *testing.T) {
 	fmt.Fprintf(conn2, "TX_BROADCAST:%s\n", string(txBytes2))
 	conn2.Close()
 	fmt.Println("🔥 [ATTACK] Transaction #2 (Double-Spend) fired down the network sockets!")
+	fmt.Println("====================================================")
+}
+
+// BenchmarkPoDDifficultyClamps tests local hardware capacity against the protocol's strict target rules
+func BenchmarkPoDDifficultyClamps(b *testing.B) {
+	fmt.Println("\n====================================================")
+	fmt.Println("⚒️  CVN LAYER-1 PROFILER: HARDWARE BENCHMARK HARNESS")
+	fmt.Println("====================================================")
+
+	mockPayload := "BENCHMARK_PROFILING_BLOCK_DATA_FRAME_V3"
+	testDifficulties := []int{4, 5, 6}
+
+	for _, diff := range testDifficulties {
+		targetPrefix := strings.Repeat("0", diff)
+		fmt.Printf("📋 Profiling Hash Efficiency for Ceiling Clamp: %d Zeros...\n", diff)
+
+		var nonce uint64 = 0
+		startTime := time.Now()
+
+		for {
+			inputStr := fmt.Sprintf("%s_%d", mockPayload, nonce)
+			hashBytes := sha256.Sum256([]byte(inputStr))
+			hashHex := hex.EncodeToString(hashBytes[:])
+
+			if hashHex[:diff] == targetPrefix {
+				elapsed := time.Since(startTime).Seconds()
+				if elapsed == 0 { elapsed = 0.001 }
+				
+				hashRate := float64(nonce) / elapsed / 1000.0
+				fmt.Printf("   🎉 Target Solved! Nonce: %d | Time: %.3fs | Local Throughput: %.2f kH/s\n", nonce, elapsed, hashRate)
+				break
+			}
+			nonce++
+			
+			if nonce > 15000000 {
+				elapsed := time.Since(startTime).Seconds()
+				hashRate := float64(nonce) / elapsed / 1000.0
+				fmt.Printf("   🛑 Profile Boundary Limit Hit at 15M hashes | Speed: %.2f kH/s\n", hashRate)
+				break
+			}
+		}
+	}
 	fmt.Println("====================================================")
 }
