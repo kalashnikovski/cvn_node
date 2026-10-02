@@ -10,23 +10,36 @@ echo.
 set "CONFIG_FILE=miner_config.json"
 set "CHOSEN_ADDRESS="
 
-:: 1. If an identity file exists, alert the operator and provide options
+:: 1. If an identity file is missing, invoke the profile creator
+if not exist "%CONFIG_FILE%" (
+    echo 📡 NO PROFILE DETECTED: Running automated wizard...
+    cvn_node.exe --generate-profile
+    echo.
+    echo ✅ miner_config.json profile built successfully!
+    echo --------------------------------------------------------------------
+)
+
+:: 2. Provide runtime routing configuration selections
 if exist "%CONFIG_FILE%" (
     echo 🔑 Pre-existing wallet identity configuration profile detected.
     echo --------------------------------------------------------------------
     echo * Press [ENTER] directly to keep mining on your pre-loaded profile.
-    echo * Type "NEW" to clear this profile and register a different address.
+    echo * Type NEW to clear this profile and register a different address.
     echo --------------------------------------------------------------------
     set /p "USER_CHOICE=Select your path: "
     
-    set "USER_CHOICE=!USER_CHOICE: =!"
-    if /i "!USER_CHOICE!"=="NEW" (
-        echo.
-        echo 🧹 Clearing local profile configurations...
-        del "%CONFIG_FILE%" >nul 2>&1
-    ) else if not "!USER_CHOICE!"=="" (
-        :: If they typed or pasted a specific address directly into the prompt
-        set "CHOSEN_ADDRESS=!USER_CHOICE!"
+    if defined USER_CHOICE (
+        set "USER_CHOICE=!USER_CHOICE: =!"
+        if /i "!USER_CHOICE!"=="NEW" (
+            echo.
+            echo 🧹 Clearing local profile configurations...
+            del "%CONFIG_FILE%" >nul 2>&1
+            echo Profile cleared. Run LaunchMiner.bat again to generate a new identity.
+            pause
+            exit /b
+        ) else (
+            set "CHOSEN_ADDRESS=!USER_CHOICE!"
+        )
     )
 )
 
@@ -35,11 +48,10 @@ echo [1/2] Activating hardware compilation acceleration paths...
 echo [2/2] Launching Proof-of-Diligence (PoD) Mining Engine...
 echo.
 
-:: 2. Fire execution parameters safely based on the operator's choice
+:: 3. Execute the node binary safely matching input choices
 if not "!CHOSEN_ADDRESS!"=="" (
     cvn_node.exe --miner-address !CHOSEN_ADDRESS!
 ) else (
-    :: If they hit Enter, let Go handles reading or auto-generating profiles natively!
     cvn_node.exe
 )
 
