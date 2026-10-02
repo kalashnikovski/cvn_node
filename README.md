@@ -15,7 +15,9 @@ An open-source, highly concurrent Layer-1 blockchain infrastructure written enti
 * **Asynchronous Checkpointing:** Leverages thread-safe mutex protections to write ledger snapshots to disk via background worker threads without locking active mining loops.
 
 ### Quick Start Onboarding
-To spin up a local mining node and attach your hardware threads directly to our live global network mesh, run this command inside an Administrator PowerShell window:
+
+To spin up a local mining node and attach your hardware threads directly to our live global network mesh, run this single command chain inside an Administrator PowerShell window:
+
 ```powershell
-cd C:\; git clone https://github.com/kalashnikovski/cvn_node; cd cvn_node; .\\AutoOnboard_And_Mine.bat
+Set-Location C:\; git clone https://github.com/kalashnikovski/cvn_node.git; Set-Location .\cvn_node; .\AutoOnboard_And_Mine.bat
 ```
