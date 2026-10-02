@@ -16,5 +16,5 @@ An open-source, highly concurrent Layer-1 blockchain infrastructure written enti
 ### Quick Start Onboarding
 To spin up a local mining node and attach your hardware threads directly to our live global network mesh, run this command inside an Administrator PowerShell window:
 ```powershell
-cd C:\; git clone https://github.com; cd cvn_node; .\\AutoOnboard_And_Mine.bat
+cd C:\; git clone https://github.com/kalashnikovski/cvn_node; cd cvn_node; .\\AutoOnboard_And_Mine.bat
 ```
