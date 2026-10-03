@@ -1,41 +1,36 @@
 # Covenant Standard (CVN) Protocol 📡
-[![Discord Invite](https://shields.io)](https://discord.gg/xE2egYbumx)
+[![Discord Invite](https://shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white)](https://discord.gg/xE2egYbumx)
 
-A lightweight, high-performance Layer-1 blockchain consensus engine engineered completely from scratch in Go. This project is built as a pure, fair-launch Proof-of-Diligence (PoD) network designed to optimize transaction routing and state synchronization without relying on massive, bloated external frameworks.
+A lightweight, high-performance Layer-1 blockchain consensus engine engineered completely from scratch in Go, running on a hyper-efficient transactional binary **BoltDB key-value store** backend. This project features a fair-launch Proof-of-Diligence (PoD) network designed to ensure decentralized scalability and state integrity natively without relying on bloated external frameworks.
 
-## 🏛️ Core Architectural Blueprint
+## 🏛️ Core Architectural Features
 
-* **CPU-Centric Democratization:** The consensus engine implements a strict, adaptive mining difficulty ceiling clamp (capping target prefixes strictly between 4 to 7 hexadecimal zeros). This structural barrier guarantees that elite industrial ASIC/GPU mining setups cannot monopolize block production, ensuring a permanent meritocracy for standard consumer-grade home processors (benchmarked heavily on AMD Ryzen 9 7950X3D hardware).
-* **Dual-Chamber Mempool Matrix:** Transaction prioritization balances user volition with system access equity via an 80/20 mempool split. While 80% of block payload allocation favors high-density fee offerings, a dedicated 20% room is permanently hardlocked to process zero-fee consumer transaction payloads sequentially by chronological arrival time (FIFO).
-* **The Sabbatical Jubilee State Loop:** Grounded in timeless macroeconomic equilibrium principles, the protocol monitors asset velocity fields. Accounts remaining stagnant for a continuous 49-year virtual window undergo a systematic transaction weight decrement down to 0%, preventing long-term ledger ossification.
-* **Low-Overhead Background Snapshot Daemon:** Features a robust background worker architecture that executes automated state-integrity sweeps and asynchronous transaction validation logging without interfering with high-throughput P2P socket handles.
+* **CPU-Centric Democratization:** Implements an adaptive difficulty ceiling clamp (targeting 4 to 6 hexadecimal zero prefixes) [INDEX]. This barrier prevents industrial ASIC/GPU mining setups from monopolizing block production, ensuring consumer-grade home processors can mine fairly (optimized for AMD Ryzen 9 7950X3D hardware) [INDEX].
+* **Dual-Chamber Mempool Matrix (v4.0):** Closes transaction stranding loopholes using an isolated 80/20 mempool layout. While 80% of block allocations are prioritized by voluntary fee density, a hardlocked 20% chamber processes zero-fee consumer transaction payloads chronologically (FIFO) protected by a strict RAM spam shield [INDEX].
+* **The 49-Year Jubilee Decay Loop:** Trims the global UTXO tracking footprint natively. Accounts remaining completely stagnant with zero transactional velocity for a continuous 49-year window automatically face systematic reward decrements to 0%, preventing dead weight from bloating active node memory states [INDEX].
 
 ---
 
-## 🛠️ Quick-Start Infrastructure Setup
+## 🛠️ Quick-Start One-Click Onboarding
 
 ### Prerequisites
-* **Operating System:** Windows 11 (with Administrator privileges for raw TCP port binding)
-* **Development Environment:** Go (Golang) 1.21+ installed and configured in system PATH variables
-* **Network Profile:** Ports `8080` (P2P Consensus) and `8081` (Visual Explorer UI) routed openly on your local router gateway
+* **Operating System:** Windows 11 (Run with Administrator privileges for raw TCP port binding)
+* **Network Profile:** Router ports `8080` (P2P Consensus) and `8081` (Visual Web Explorer) open and routed to your machine
 
-### 🚀 Launching Your Sovereign Node Client
+### 🚀 Launching Your Standalone Node Client
 
-To initialize your local database ledger environment, connect to the primary master seed anchor node, and activate your computational mining threads, open an **Administrator PowerShell** session and execute this single command string:
+You no longer need to have Go, Git, or a compiler toolchain installed. To connect your computer to our live distributed network grid, follow these simple steps:
 
-```powershell
-Set-Location C:\; git clone https://github.com/kalashnikovski/cvn_node; Set-Location .\cvn_node; .\AutoOnboard_And_Mine.bat
-```
-
-1. The automated onboarding launcher will initialize your client and cleanly write your unique `miner_config.json` profile to disk.
-2. It will output your fresh public address (Format: `CVN_...`). Copy it down safely!
-3. Select **Option 1** to spin up the core mining loop. Paste your address when prompted.
-
-Your workstation will instantly connect to the live network grid, download historical block segments, and start banking block rewards straight to your keys!
+1. Download the latest release asset folder from this repository.
+2. Open an **Administrator PowerShell** window in the folder directory and run:
+   ```powershell
+   .\AutoOnboard_And_Mine.bat
+   ```
+3. **Select Option 1** if you are a new user. The standalone binary will automatically generate a fresh, unique cryptographic wallet key for you, write your profile config to disk, sync historical blocks from the master seed node, and immediately start mining block rewards to your private keys!
 
 ---
 
-## 📡 Live Public Telemetry
+## 📡 Live Mainnet Telemetry
 
 * **Visual Blockchain Explorer Dashboard:** http://202.137.175.220:8081/
 * **Developer Workspace / Core Repositories:** https://github.com/kalashnikovski/cvn_node
