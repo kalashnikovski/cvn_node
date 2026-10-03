@@ -197,6 +197,54 @@ var (
 	ValidatorStakingPool map[string]float64
 	StakingPoolMutex     sync.Mutex
 )
+// 🔒 STATE BALANCE CACHE MATRIX: Eliminates the linear nested loop scan tax
+var (
+	StateBalanceCache      = make(map[string]float64)
+	BalanceCacheMutex      sync.RWMutex
+)
+
+// RebuildStateBalanceCache runs once on startup to fast-index all account yields from BoltDB
+func RebuildStateBalanceCache() {
+	BalanceCacheMutex.Lock()
+	defer BalanceCacheMutex.Unlock()
+
+	// Clear out any old records
+	StateBalanceCache = make(map[string]float64)
+
+	err := GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("Blocks"))
+		if b == nil { return nil }
+
+		return b.ForEach(func(k, v []byte) error {
+			var block Block
+			if json.Unmarshal(v, &block) == nil {
+				for _, t := range block.Transactions {
+					// 1. Process spent input debits
+					if t.ID != "TX_GENESIS_INITIAL_POOL" && !strings.HasPrefix(t.ID, "TX_COINBASE_") {
+						// Debit the sender's account for the total output value + fee
+						var totalDebit float64
+						for _, out := range t.Outputs {
+							totalDebit += out.Amount
+						}
+						totalDebit += t.FreeWillOffering
+						StateBalanceCache[t.Witness] -= totalDebit
+					}
+
+					// 2. Process received output credits
+					for _, out := range t.Outputs {
+						StateBalanceCache[out.Recipient] += out.Amount
+					}
+				}
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		fmt.Printf("⚠️  Failed to seed State Balance Cache: %v\n", err)
+	} else {
+		fmt.Println("✨ State Balance Cache successfully generated from compressed binary buckets!")
+	}
+}
 
 var NetworkWitnessRoster = []string{
 	"Peer_Witness_1", "Peer_Witness_2", "Peer_Witness_3", "Peer_Witness_4", "Peer_Witness_5",
@@ -358,36 +406,17 @@ func LoadFullChainSlice() []Block {
 	return fullChain
 }
 
-func GetAddressBalance(address string) float64 {
-	var balance float64 = 0.0
-	chain := LoadFullChainSlice()
+// GetAddressBalance reads directly from the State Cache Matrix in microseconds
+func GetAddressBalance(targetAddress string) float64 {
+	BalanceCacheMutex.RLock()
+	defer BalanceCacheMutex.RUnlock()
 
-for _, block := range chain {
-for _, tx := range block.Transactions {
-for _, out := range tx.Outputs {
-if out.Recipient == address {
-balance += out.Amount
+	if balance, exists := StateBalanceCache[targetAddress]; exists {
+		return balance
+	}
+	return 0.0
 }
-}
-for _, in := range tx.Inputs {
-for _, historicalBlock := range chain {
-for _, historicalTx := range historicalBlock.Transactions {
-if historicalTx.ID == in.TxID && in.OutputIdx < len(historicalTx.Outputs) {
-historicalOut := historicalTx.Outputs[in.OutputIdx]
-if historicalOut.Recipient == address {
-balance -= historicalOut.Amount
-}
-}
-}
-}
-}
-}
-}
-if balance < 0 {
-return 0
-}
-return balance
-}
+
 func CalculateAdaptiveDifficulty() int64 {
 var currentDiff int64 = 4
 _ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
