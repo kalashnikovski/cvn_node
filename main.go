@@ -33,6 +33,8 @@ const CityOfRefugeWindow = 72 * 60 * 60
 const RequiredStakingBond = 500.00
 const SlasherPenaltyRate = 1.00
 const MaxMempoolZeroFeeSpamCap = 1000 // Inbound RAM buffer threshold protector
+// 🔒 PROTOCOL BLOCK-SIZE BACKBONE CONSTRAINT
+const MaxBlockPayloadSizeBytes = 1024 * 1024 // 1MB Absolute Hard Ceiling Cap
 
 // Core UTXO and Block Engine Variables
 type UTXOInput struct {
@@ -204,6 +206,20 @@ var NetworkWitnessRoster = []string{
 	"Node_Guardian_Prime", "Node_Guardian_Secure", "Root_Gateway_Echo", "Sovereign_State_Validator",
 }
 
+// ValidateBlockSize checks if the incoming block payload adheres to the strict 1MB protocol ceiling
+func ValidateBlockSize(b Block) bool {
+	blockBytes, err := json.Marshal(b)
+	if err != nil {
+		fmt.Printf("⚠️  [PROTOCOL SHIELD] Failed to serialize Block %d for size evaluation: %v\n", b.Index, err)
+		return false
+	}
+	currentSize := len(blockBytes)
+	if currentSize > MaxBlockPayloadSizeBytes {
+		fmt.Printf("🚨 [CRITICAL PROTOCOL EXPLOIT] Block %d rejected! Payload size (%d bytes) exceeds the 1MB protocol limit (%d bytes).\n", b.Index, currentSize, MaxBlockPayloadSizeBytes)
+		return false
+	}
+	return true
+}
 	
 func CreateGenesisBlock() Block {
 	genesisTx := Transaction{
@@ -548,58 +564,103 @@ func StartPublicExplorerServer() {
 }
 
 func DialAndGossipWithSeedPeer(seedAddr string) {
-conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-if err != nil {
-return
+	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
+	if err != nil { return }
+	defer conn.Close()
+	
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, httpErr := client.Get("https://ipify.org")
+	
+	var myExtIP string
+	if httpErr == nil {
+		defer resp.Body.Close()
+		ipBytes, _ := io.ReadAll(resp.Body)
+		myExtIP = strings.TrimSpace(string(ipBytes))
+	}
+	
+	// 🔒 SECURITY BOUNDARY FIX: If API lookups fail, exit immediately instead of cloning the seed's IP
+	if myExtIP == "" || strings.HasPrefix(myExtIP, "127.0.0.1") || strings.HasPrefix(myExtIP, "0.0.0.0") {
+		fmt.Println("⚠️  [GOSSIP SHIELD] External IP identification trace timed out. Aborting network broadcast registration to prevent address collisions.")
+		return
+	}
+	
+	fmt.Fprintln(conn, "GOSSIP_PEER_DISCOVERY:"+myExtIP+":8080")
+	respLine, err := bufio.NewReader(conn).ReadString('\n')
+	if err == nil {
+		var sharedRoster []string
+		if json.Unmarshal([]byte(strings.TrimSpace(respLine)), &sharedRoster) == nil {
+			for _, externalNode := range sharedRoster {
+				RegisterGossipPeer(externalNode)
+			}
+		}
+	}
 }
-defer conn.Close()
-client := &http.Client{Timeout: 3 * time.Second}
-resp, httpErr := client.Get("ipify.org") // Cleaned up target endpoint lookup string link mapping
-myExtIP := LocalListenerIP
-if httpErr == nil {
-defer resp.Body.Close()
-ipBytes, _ := io.ReadAll(resp.Body)
-myExtIP = strings.TrimSpace(string(ipBytes))
-}
-fmt.Fprintln(conn, "GOSSIP_PEER_DISCOVERY:"+myExtIP+":8080")
-respLine, err := bufio.NewReader(conn).ReadString('\n')
-if err == nil {
-var sharedRoster []string
-if json.Unmarshal([]byte(strings.TrimSpace(respLine)), &sharedRoster) == nil {
-for _, externalNode := range sharedRoster {
-RegisterGossipPeer(externalNode)
-}
-}
-}
-}
+
 func SyncChainFromSeedPeer(seedAddr string) {
-conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-if err != nil {
-return
+	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
+	if err != nil { return }
+	defer conn.Close()
+	
+	fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
+	respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil { return }
+	
+	var remoteChain []Block
+	if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
+		if len(remoteChain) == 0 { return }
+		
+		// 🔒 CRITICAL SECURITY AUDIT: Validate entire remote lineage before saving
+		var lastValidHash string = remoteChain[0].Hash // Genesis Baseline
+		
+		for i := 1; i < len(remoteChain); i++ {
+			block := remoteChain[i]
+			
+			// 1. Verify cryptographic lineage pointer link
+			if block.PrevHash != lastValidHash {
+				fmt.Printf("🚨 [CONSENSUS AUDIT REJECTION] Malicious chain structure detected at Block %d! Broken hash link pointer.\n", block.Index)
+				return
+			}
+			
+			// 2. Recalculate hash internally to catch spoofed content payloads
+			recalculatedHash := CalculateHash(block)
+			if block.Hash != recalculatedHash {
+				fmt.Printf("🚨 [CONSENSUS AUDIT REJECTION] Malicious block content payload caught at Block %d! Hash validation mismatch.\n", block.Index)
+				return
+			}
+						// Verify that the incoming block size does not break our 1MB rule
+			if !ValidateBlockSize(block) {
+				fmt.Printf("🚨 [CONSENSUS AUDIT REJECTION] Malicious block size caught at Block %d! Over-sized data drop.\n", block.Index)
+				return
+			}
+
+			// 3. Verify Proof-of-Diligence zero-prefix rules
+			targetPrefix := strings.Repeat("0", int(block.Difficulty))
+			if len(block.Hash) < int(block.Difficulty) || block.Hash[:int(block.Difficulty)] != targetPrefix {
+				fmt.Printf("🚨 [CONSENSUS AUDIT REJECTION] Malicious block caught at Block %d! Failed difficulty work target.\n", block.Index)
+				return
+			}
+			
+			lastValidHash = block.Hash
+		}
+		
+		// If the entire chain passes the security gauntlet, evaluate length
+		localHeight := GetLatestBlock().Index
+		if int64(len(remoteChain)-1) > localHeight {
+			fmt.Printf("👑 Verified valid blockchain payload received from network peer! Advancing ledger height to Block %d...\n", remoteChain[len(remoteChain)-1].Index)
+			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+				b := tx.Bucket([]byte("Blocks"))
+				meta := tx.Bucket([]byte("Metadata"))
+				for _, block := range remoteChain {
+					blockData, _ := json.Marshal(block)
+					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
+				}
+				_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(int64(len(remoteChain)-1), 10)))
+				return nil
+			})
+		}
+	}
 }
-defer conn.Close()
-fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
-respBytes, err := bufio.NewReader(conn).ReadBytes('\n')
-if err != nil {
-return
-}
-var remoteChain []Block
-if err := json.Unmarshal(respBytes, &remoteChain); err == nil {
-localHeight := GetLatestBlock().Index
-if int64(len(remoteChain)-1) > localHeight {
-_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-b := tx.Bucket([]byte("Blocks"))
-meta := tx.Bucket([]byte("Metadata"))
-for _, block := range remoteChain {
-blockData, _ := json.Marshal(block)
-_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
-}
-_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(int64(len(remoteChain)-1), 10)))
-return nil
-})
-}
-}
-}
+
 func Assemble21WitnessGuardMatrix() []string {
 rSource := rand.NewSource(time.Now().UnixNano())
 rEngine := rand.New(rSource)
