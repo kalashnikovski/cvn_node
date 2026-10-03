@@ -68,6 +68,14 @@ type Block struct {
 	GuardMatrix  []string      `json:"guard_matrix,omitempty"`
 }
 
+// CalculateHash processes a block structure into a unique SHA-256 string digest
+func CalculateHash(b Block) string {
+	record := fmt.Sprintf("%d%d%v%s%d%d%v", b.Index, b.Timestamp, b.Transactions, b.PrevHash, b.Nonce, b.Difficulty, b.GuardMatrix)
+	h := sha256.New()
+	h.Write([]byte(record))
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
 type MinerConfig struct {
 	SavedMinerAddress string `json:"saved_miner_address"`
 }
@@ -89,6 +97,14 @@ func NewDualChamberMempool(maxSpamCap int) *DualChamberMempool {
 }
 
 func (dm *DualChamberMempool) PushTransaction(tx Transaction) bool {
+	// 🔒 INTEGRATED CRYPTOGRAPHIC FIREWALL: Reconstruct transaction hash and verify via crypto_auth.go
+	msgRecord := fmt.Sprintf("%s%v%v%.8f", tx.ID, tx.Inputs, tx.Outputs, tx.FreeWillOffering)
+	
+	// Pass data fields straight into your existing four-string verification arguments in crypto_auth.go
+	if !VerifyTransactionSignature(msgRecord, tx.Witness, tx.SignatureR, tx.SignatureS) {
+		return false // Instantly drop forged or unsigned payloads out of memory buffers!
+	}
+
 	dm.Lock()
 	defer dm.Unlock()
 
@@ -104,6 +120,7 @@ func (dm *DualChamberMempool) PushTransaction(tx Transaction) bool {
 	dm.ZeroFeeChamber = append(dm.ZeroFeeChamber, tx)
 	return true
 }
+
 
 func (dm *DualChamberMempool) AssembleBlockPayload(maxTxCount int) []Transaction {
 	dm.Lock()
@@ -187,13 +204,7 @@ var NetworkWitnessRoster = []string{
 	"Node_Guardian_Prime", "Node_Guardian_Secure", "Root_Gateway_Echo", "Sovereign_State_Validator",
 }
 
-func CalculateHash(b Block) string {
-	record := fmt.Sprintf("%d%d%v%s%d%d%v", b.Index, b.Timestamp, b.Transactions, b.PrevHash, b.Nonce, b.Difficulty, b.GuardMatrix)
-	h := sha256.New()
-	h.Write([]byte(record))
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
+	
 func CreateGenesisBlock() Block {
 	genesisTx := Transaction{
 		ID:     "TX_GENESIS_INITIAL_POOL",
