@@ -1,0 +1,36 @@
+﻿name: Upload Production Release Assets
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    name: Compile Standalone Executable
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Source Code Repository Context
+        uses: actions/checkout@v4
+
+      - name: Initialize Stable Go Toolchain Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Execute High-Performance Standalone Compilation
+        run: |
+          $env:CGO_ENABLED="0"
+          go build -ldflags="-s -w" -o cvn_node.exe .
+
+      - name: Package Executable Binary Inside Compressed Release Zip
+        run: |
+          Compress-Archive -Path cvn_node.exe, AutoOnboard_And_Mine.bat, README.md -DestinationPath cvn_node_windows.zip
+
+      - name: Publish Compiled Production Assets Directly to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: cvn_node_windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
