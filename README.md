@@ -5,9 +5,9 @@ A lightweight, high-performance Layer-1 blockchain consensus engine engineered c
 
 ## 🏛️ Core Architectural Features
 
-* **CPU-Centric Democratization:** Implements an adaptive difficulty ceiling clamp (targeting 4 to 6 hexadecimal zero prefixes) [INDEX]. This barrier prevents industrial ASIC/GPU mining setups from monopolizing block production, ensuring consumer-grade home processors can mine fairly (optimized for AMD Ryzen 9 7950X3D hardware) [INDEX].
-* **Dual-Chamber Mempool Matrix (v4.0):** Closes transaction stranding loopholes using an isolated 80/20 mempool layout. While 80% of block allocations are prioritized by voluntary fee density, a hardlocked 20% chamber processes zero-fee consumer transaction payloads chronologically (FIFO) protected by a strict RAM spam shield [INDEX].
-* **The 49-Year Jubilee Decay Loop:** Trims the global UTXO tracking footprint natively. Accounts remaining completely stagnant with zero transactional velocity for a continuous 49-year window automatically face systematic reward decrements to 0%, preventing dead weight from bloating active node memory states [INDEX].
+* **CPU-Centric Democratization:** Implements an adaptive difficulty ceiling clamp (targeting 4 to 6 hexadecimal zero prefixes) [INDEX]. This barrier prevents industrial ASIC/GPU mining setups from monopolizing block production, ensuring consumer-grade home processors can mine fairly (optimized for AMD Ryzen 9 7950X3D hardware).
+* **Dual-Chamber Mempool Matrix (v4.0):** Closes transaction stranding loopholes using an isolated 80/20 mempool layout. While 80% of block allocations are prioritized by voluntary fee density, a hardlocked 20% chamber processes zero-fee consumer transaction payloads chronologically (FIFO) protected by a strict RAM spam shield.
+* **The 49-Year Jubilee Decay Loop:** Trims the global UTXO tracking footprint natively. Accounts remaining completely stagnant with zero transactional velocity for a continuous 49-year window automatically face systematic reward decrements to 0%, preventing dead weight from bloating active node memory states.
 
 ---
 
