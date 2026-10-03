@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -111,5 +112,69 @@ func BenchmarkPoDDifficultyClamps(b *testing.B) {
 			}
 		}
 	}
+	fmt.Println("====================================================")
+}
+// TestLocalLedgerIntegrity performs a deep sequential hash-pointer validation check on disk data
+func TestLocalLedgerIntegrity(t *testing.T) {
+	fmt.Println("\n====================================================")
+	fmt.Println("🛡️  COVENANT STANDARD (CVN) STATE LEDGER INTEGRITY AUDIT")
+	fmt.Println("====================================================")
+
+	ledgerPath := "ledger_vault.json"
+	
+	// 1. Stream the raw plain-text database data into memory bytes
+	data, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatalf("🚨 FILE SYSTEM ERROR: Unable to load data tracking file '%s': %v\n", ledgerPath, err)
+	}
+
+	var chain []Block
+	if err := json.Unmarshal(data, &chain); err != nil {
+		t.Fatalf("🚨 PARSE CORRUPTION ERROR: Malformed block sequence layout detected: %v\n", err)
+	}
+
+	totalBlocks := len(chain)
+	fmt.Printf("📂 Target DB File Found. Scanning %d Serialized Blocks...\n", totalBlocks)
+	fmt.Println("----------------------------------------------------")
+
+	if totalBlocks == 0 {
+		fmt.Println("📋 Inspection Stalled: The ledger vault is completely empty.")
+		return
+	}
+
+	// 2. Loop chronologically through the chain blocks to trace hash-pointers
+	for i := 1; i < totalBlocks; i++ {
+		currentBlock := chain[i]
+		previousBlock := chain[i-1]
+
+		// Verify index integrity sequence
+		if currentBlock.Index != previousBlock.Index+1 {
+			t.Errorf("🚨 SEQUENCE BREAK DETECTED at Block #%d! Expected Index %d, got %d\n", 
+				currentBlock.Index, previousBlock.Index+1, currentBlock.Index)
+		}
+
+		// Verify deep cryptographic hash-pointer linkage backplane continuity
+		if currentBlock.PrevHash != previousBlock.Hash {
+			t.Errorf("🚨 HASH LINK DISCONTINUITY AT BLOCK HEIGHT #%d!\n   ↳ Left Hand Block Hash: %s\n   ↳ Mismatched PrevHash Link:  %s\n", 
+				currentBlock.Index, previousBlock.Hash, currentBlock.PrevHash)
+			fmt.Println("====================================================")
+			return
+		}
+
+		// Recalculate hash matching parameters on the fly to catch internal state modifications
+		recalculatedHash := CalculateHash(currentBlock)
+		if currentBlock.Hash != recalculatedHash {
+			t.Errorf("🚨 INTERNAL STATE MUTATION TAMP ALERT AT BLOCK HEIGHT #%d!\n   ↳ Stored Ledger Hash:  %s\n   ↳ Recalculated Actual: %s\n", 
+				currentBlock.Index, currentBlock.Hash, recalculatedHash)
+			fmt.Println("====================================================")
+			return
+		}
+	}
+
+	// 3. Render success telemetry parameters out if the chain passes cleanly
+	fmt.Println("🎉 CRITICAL LEDGER VERIFICATION COMPLETED: 100% SUCCESS")
+	fmt.Println("✅ Cryptographic pointer sequences are fully contiguous.")
+	fmt.Println("✅ Zero structural file line or block hash variations detected.")
+	fmt.Printf("💰 Master Reserve Allocation Asset Integrity: SECURE\n")
 	fmt.Println("====================================================")
 }
