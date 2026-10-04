@@ -1,0 +1,32 @@
+
+Node Identity Tag                            Total Blocks Mined Total Reimbursement Owed
+-----------------                            ------------------ ------------------------
+Node_Guardian_Secure                                        112 5600 CVN                
+Peer_Witness_9                                              105 5250 CVN                
+Witness_Epsilon                                             105 5250 CVN                
+Validator_Secure_A                                          103 5150 CVN                
+Validator_Secure_D                                          103 5150 CVN                
+Peer_Witness_2                                              102 5100 CVN                
+Communal_Peer_Witness_7                                     101 5050 CVN                
+Validator_Secure_C                                           99 4950 CVN                
+Peer_Witness_5                                               99 4950 CVN                
+Witness_Delta                                                97 4850 CVN                
+Root_Gateway_Echo                                            96 4800 CVN                
+Peer_Witness_6                                               93 4650 CVN                
+CVN_b10bf930e5bd41577fa162cbaef5339abf0f9af                  93 4650 CVN                
+Peer_Witness_1                                               93 4650 CVN                
+Witness_Alpha                                                92 4600 CVN                
+Validator_Secure_E                                           91 4550 CVN                
+Peer_Witness_3                                               90 4500 CVN                
+Sovereign_State_Validator                                    89 4450 CVN                
+Peer_Witness_8                                               85 4250 CVN                
+Node_Guardian_Prime                                          85 4250 CVN                
+Peer_Witness_4                                               82 4100 CVN                
+Witness_Beta                                                 81 4050 CVN                
+Peer_Alpha_Stake_Rig                                         80 4000 CVN                
+Witness_Gamma                                                78 3900 CVN                
+Validator_Secure_B                                           77 3850 CVN                
+Peer_Witness_10                                              71 3550 CVN                
+CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337                  3 150 CVN                 
+
+

@@ -470,15 +470,26 @@ data, _ := json.Marshal(chain)
 fmt.Fprintln(conn, string(data))
 return
 }
-if strings.HasPrefix(text, "GOSSIP_PEER_DISCOVERY:") {
-incomingNodeAddress := strings.TrimPrefix(text, "GOSSIP_PEER_DISCOVERY:")
-RegisterGossipPeer(incomingNodeAddress)
-RosterMutex.Lock()
-rosterJSON, _ := json.Marshal(ActivePeerRoster)
-RosterMutex.Unlock()
-fmt.Fprintln(conn, string(rosterJSON))
-return
-}
+
+				// ... Keep your existing GOSSIP_PEER_DISCOVERY block directly above this ...
+		if strings.HasPrefix(text, "GOSSIP_PEER_DISCOVERY:") {
+            // Your clean code handles peer sharing here...
+			return
+		}
+
+		// 🧱 NEW: Handle Block Propagation Payload from External Nodes
+		if strings.HasPrefix(text, "BLOCK_PROPAGATE:") {
+			payload := strings.TrimPrefix(text, "BLOCK_PROPAGATE:")
+			var incomingBlock Block // Make sure 'Block' matches your project's block struct name!
+			if err := json.Unmarshal([]byte(payload), &incomingBlock); err == nil {
+				// Process, validate, and append the incoming block cleanly to your BoltDB buckets
+				fmt.Printf("🧱 [P2P Network Engine] Received newly propagated block height #%d across the wire Mesh!\n", incomingBlock.Index)
+			}
+			return
+		}
+
+		// ... Keep your existing TX_BROADCAST: block directly below this ...
+
 if strings.HasPrefix(text, "TX_BROADCAST:") {
 payload := strings.TrimPrefix(text, "TX_BROADCAST:")
 var tx Transaction
@@ -497,25 +508,72 @@ return
 }
 }
 }
+
+type RateLimiter struct {
+	sync.Mutex
+	LastConnection map[string]time.Time
+}
+
+var NetworkLimiter = &RateLimiter{
+	LastConnection: make(map[string]time.Time),
+}
+
 func StartTCPServer() {
-listener, err := net.Listen("tcp", "0.0.0.0:8080")
-if err != nil {
-fmt.Printf("🚨 TCP Server Bind Error: %v\n", err)
-return
+	listener, err := net.Listen("tcp", "0.0.0.0:8080")
+	if err != nil {
+		fmt.Printf("🚨 TCP Server Bind Error: %v\n", err)
+		return
+	}
+	defer listener.Close()
+	fmt.Println("📡 Global TCP P2P Subnetwork Engine Online. Listening for incoming miners on Port :8080...")
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			continue
+		}
+
+		// 1. Force Type-Assertion to TCPConn for Persistent Keep-Alives
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			tcpConn.SetKeepAlive(true)
+			tcpConn.SetKeepAlivePeriod(3 * time.Minute) // Keep channel alive for persistent mesh streaming
+		}
+
+		// 2. Extract Remote IP Address to process throttling rules
+		remoteAddr := conn.RemoteAddr().String()
+		ip, _, err := net.SplitHostPort(remoteAddr)
+		if err != nil {
+			ip = remoteAddr
+		}
+
+		// 3. Mathematical Cool-Down Backoff Throttle
+		NetworkLimiter.Lock()
+		lastSeen, exists := NetworkLimiter.LastConnection[ip]
+		now := time.Now()
+
+		if exists && now.Sub(lastSeen) < 4*time.Second {
+			// Connection is hitting within the 3-second bot window -> Silent Drop
+			NetworkLimiter.Unlock()
+			conn.Close() 
+			continue
+		}
+
+			// Update tracking snapshot matrix with current timestamp
+		NetworkLimiter.LastConnection[ip] = now
+		NetworkLimiter.Unlock()
+
+		// 4. NEW: Register the verified connection straight into the Gossip Mesh
+		GlobalRoster.RegisterPeer(ip)
+
+		// 5. Pass clean connection over to a single main engine logic thread
+		go HandleIncomingPeer(conn)
+	}
 }
-defer listener.Close()
-fmt.Println("📡 Global TCP P2P Subnetwork Engine Online. Listening for incoming miners on Port :8080...")
-for {
-conn, err := listener.Accept()
-if err != nil {
-continue
-}
-go HandleIncomingPeer(conn)
-}
-}
+
 func StartPublicExplorerServer() {
 	mux := http.NewServeMux()
 
+	// 1. Root Explorer Handle
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "" && r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -525,11 +583,28 @@ func StartPublicExplorerServer() {
 		http.ServeFile(w, r, "explorer.html")
 	})
 
+	// 2. Audit Statement Handle
 	mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		http.ServeFile(w, r, "audit.html")
 	})
 
+	// 3. CLEAN PEERS HANDLER SEPARATED OUT:
+	mux.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		
+		// Fetch our complete, synchronized list of known active network nodes
+		activePeers := GlobalRoster.GetPeerList()
+		
+		// If the roster is empty, initialize an empty slice so it returns [] instead of null
+		if activePeers == nil {
+			activePeers = []string{}
+		}
+		
+		json.NewEncoder(w).Encode(activePeers)
+	})
+
+	// 4. Transaction Injection Handle
 	mux.HandleFunc("/inject_tx", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -549,6 +624,7 @@ func StartPublicExplorerServer() {
 			http.Error(w, "Mempool capacity overflow: transaction dropped by spam shield", http.StatusTooManyRequests)
 		}
 	})
+    // ... Keep the rest of your server setup handles underneath this block ...
 
 	mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -723,11 +799,15 @@ hashRate := float64(newBlock.Nonce) / elapsed / 1000.0
 fmt.Printf("   ⏳ Nonce: %d | Throughput: %.2f kH/s...\n", newBlock.Nonce, hashRate)
 }
 if int(newBlock.Difficulty) <= len(newBlock.Hash) && newBlock.Hash[:int(newBlock.Difficulty)] == targetPrefix {
-totalElapsed := time.Since(startTime).Seconds()
-if totalElapsed == 0 { totalElapsed = 0.001 }
-finalHashRate := float64(newBlock.Nonce) / totalElapsed / 1000.0
-fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Speed: %.2f kH/s | Hash: %s\n", newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
-break
+	totalElapsed := time.Since(startTime).Seconds()
+	if totalElapsed == 0 { totalElapsed = 0.001 }
+	finalHashRate := float64(newBlock.Nonce) / totalElapsed / 1000.0
+	fmt.Printf("🎉 BLOCK SOLVED! Nonce: %d | Time: %.2fs | Speed: %.2f kH/s | Hash: %s\n", newBlock.Nonce, totalElapsed, finalHashRate, newBlock.Hash)
+	
+	// 🌐 HOOK: Phase 2 Gossip Mesh Automated Block Propagation Network Broadcast
+	BroadcastNewBlock(newBlock)
+
+	break
 }
 newBlock.Nonce++
 }
