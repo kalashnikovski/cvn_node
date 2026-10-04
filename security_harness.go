@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // RunSecurityChecks performs structural threat vector testing, tracking spent UTXO inputs
@@ -64,6 +66,45 @@ func RunSecurityChecks(chain []Block) bool {
 
 	fmt.Println("✅ [Security Harness] Ledger integrity verified. Zero double-spend anomalies detected.")
 	return true
+}
+
+// InterceptGossipBlock parses and runs rapid isolation validation checks on inbound network data strings
+func InterceptGossipBlock(gossipMessage string, latestLocalBlock Block) (*Block, bool) {
+	// 1. Strip the wire protocol routing header
+	if !strings.HasPrefix(gossipMessage, "BLOCK_PROPAGATE:") {
+		return nil, false
+	}
+	rawJSON := strings.TrimPrefix(gossipMessage, "BLOCK_PROPAGATE:")
+	rawJSON = strings.TrimSpace(rawJSON)
+
+	// 2. Deserialize payload parameters inside isolated memory context
+	var incomingBlock Block
+	if err := json.Unmarshal([]byte(rawJSON), &incomingBlock); err != nil {
+		fmt.Printf("🚨 [SECURITY WARNING] Malformed json packet dropped from mesh thread.\n")
+		return nil, false
+	}
+
+	// 3. Threat Vector 1: Check block lineage continuity upfront
+	if incomingBlock.PrevHash != latestLocalBlock.Hash || incomingBlock.Index != latestLocalBlock.Index+1 {
+		// Out of sync block structure or stale broadcast, drop silently without throwing a panic
+		return nil, false
+	}
+
+	// 4. Threat Vector 2: Re-verify proof-of-diligence cryptographic integrity
+	recalculatedHash := CalculateHash(incomingBlock)
+	if incomingBlock.Hash != recalculatedHash {
+		fmt.Printf("🚨 [SECURITY WARNING] Forged or mutated block hash dropped from mesh! Expected: %s\n", recalculatedHash)
+		return nil, false
+	}
+
+	// 5. Threat Vector 3: Enforce strict Q4 2026 Protocol Size Cap (1MB ceiling defense)
+	if len(rawJSON) > 1024*1024 {
+		fmt.Printf("🚨 [SECURITY WARNING] Over-sized block payload (%d bytes) dropped! Thread protected.\n", len(rawJSON))
+		return nil, false
+	}
+
+	// Block passed upfront checks, completely safe to handle via main state thread hooks
+	return &incomingBlock, true
 }
 
 // LogSlasherSeizure footprint logs the automated Sabbatical Slasher penalization state details
