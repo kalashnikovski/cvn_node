@@ -628,6 +628,26 @@ func StartPublicExplorerServer() {
 		}
 	})
     // ... Keep the rest of your server setup handles underneath this block ...
+	// 👥 Unique Network Addresses Roster Handle
+	mux.HandleFunc("/addresses", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		BalanceCacheMutex.RLock()
+		// Extract all unique account keys from your active thread-safe memory matrix cache state
+		addressList := make([]string, 0, len(StateBalanceCache))
+		for addr := range StateBalanceCache {
+			addressList = append(addressList, addr)
+		}
+		BalanceCacheMutex.RUnlock()
+
+		// Stream both the flat list and the total integer count out to the browser
+		responseData := map[string]interface{}{
+			"total_unique_addresses": len(addressList),
+			"addresses":              addressList,
+		}
+		json.NewEncoder(w).Encode(responseData)
+	})
 
 	mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
