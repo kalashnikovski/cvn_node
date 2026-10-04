@@ -50,15 +50,41 @@ echo.
 
 :: 3. Execute the node binary safely matching input choices with explicit cloud seed connections
 if not "!CHOSEN_ADDRESS!"=="" (
-    :: 🚀 FIXED: Route custom mining overrides straight into your live global subnetwork mesh
+    echo 📡 Attempting connection to Primary Singapore Cloud Hub...
     cvn_node.exe --miner-address !CHOSEN_ADDRESS! --connect 207.148.67.11:8080
+    
+    :: Catch Connection Error and Trigger Fallback to Melbourne Rig
+    if %ERRORLEVEL% NEQ 0 (
+        color 0E
+        echo.
+        echo ⚠️  WARNING: Primary Singapore Cloud Node unavailable or timed out.
+        echo 🔄 Triggering automated redundancy fallback path...
+        echo 🇦🇺 Connecting to Secondary Melbourne Anchor Rig Gateway...
+        echo.
+        timeout /t 3 >nul
+        color 0B
+        cvn_node.exe --miner-address !CHOSEN_ADDRESS! --connect 202.137.175.220:8080
+    )
 ) else (
-    :: 🚀 FIXED: Synchronize local default profile states from your cloud seed node instantly
+    echo 📡 Attempting connection to Primary Singapore Cloud Hub...
     cvn_node.exe --connect 207.148.67.11:8080
+    
+    :: Catch Connection Error and Trigger Fallback to Melbourne Rig
+    if %ERRORLEVEL% NEQ 0 (
+        color 0E
+        echo.
+        echo ⚠️  WARNING: Primary Singapore Cloud Node unavailable or timed out.
+        echo 🔄 Triggering automated redundancy fallback path...
+        echo 🇦🇺 Connecting to Secondary Melbourne Anchor Rig Gateway...
+        echo.
+        timeout /t 3 >nul
+        color 0B
+        cvn_node.exe --connect 202.137.175.220:8080
+    )
 )
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo ⚡ ERROR: The blockchain core engine encountered a launch obstacle.
+    echo 🚨 CRITICAL ERROR: Both Primary and Secondary bootstrap entry gateways are unreachable.
     pause
 )
