@@ -192,7 +192,7 @@ var (
 
 	ActivePeerRoster []string
 	RosterMutex      sync.Mutex
-	LocalListenerIP  string = "202.137.175.220"
+	LocalListenerIP  string = "207.148.67.11"
 
 	ValidatorStakingPool map[string]float64
 	StakingPoolMutex     sync.Mutex
