@@ -477,13 +477,18 @@ return
 			return
 		}
 
-		// 🧱 NEW: Handle Block Propagation Payload from External Nodes
+	// 🧱 SECURE INGRESS FIREWALL: Handle Block Propagation Payload from External Nodes
 		if strings.HasPrefix(text, "BLOCK_PROPAGATE:") {
-			payload := strings.TrimPrefix(text, "BLOCK_PROPAGATE:")
-			var incomingBlock Block // Make sure 'Block' matches your project's block struct name!
-			if err := json.Unmarshal([]byte(payload), &incomingBlock); err == nil {
-				// Process, validate, and append the incoming block cleanly to your BoltDB buckets
-				fmt.Printf("🧱 [P2P Network Engine] Received newly propagated block height #%d across the wire Mesh!\n", incomingBlock.Index)
+			latestBlock := GetLatestBlock()
+			
+			// Pass raw streaming network text straight through your security_harness.go isolation filter
+			validatedBlock, safe := InterceptGossipBlock(text, latestBlock)
+			if safe && validatedBlock != nil {
+				fmt.Printf("🧱 [P2P Network Engine] Inbound Block Height #%d passed cryptographic gauntlet! Saving...\n", validatedBlock.Index)
+				SaveBlockToStorage(*validatedBlock)
+				
+				// Re-index your fast-path state balance matrix cache map instantly
+				RebuildStateBalanceCache()
 			}
 			return
 		}
@@ -872,13 +877,17 @@ fmt.Println("====================================================")
 fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
 fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
 fmt.Println("====================================================")
-go StartTCPServer()
-go StartPublicExplorerServer()
-time.Sleep(200 * time.Millisecond)
-if ConnectTarget != "" {
-SyncChainFromSeedPeer(ConnectTarget)
-go DialAndGossipWithSeedPeer(ConnectTarget)
-}
+	go StartTCPServer()
+	go StartPublicExplorerServer()
+	time.Sleep(200 * time.Millisecond)
+	if ConnectTarget != "" {
+		SyncChainFromSeedPeer(ConnectTarget)
+		go DialAndGossipWithSeedPeer(ConnectTarget)
+		
+		// 🚀 ACTIVATE THE DAEMON AUTOMATICALLY ON BOOT
+		StartPeriodicPeerSync(ConnectTarget, 1*time.Minute)
+	}
+
 currentBlock := GetLatestBlock()
 fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
 for {
@@ -910,4 +919,42 @@ fmt.Printf("💰 LOCAL NODE REWARD AUDIT: Current Balance of %s: %.2f CVN\n", Cu
 fmt.Println("-----------------------------------------------------")
 time.Sleep(3 * time.Second)
 }
+} // <--- THIS IS THE EXISTING END OF YOUR FUNC MAIN()
+
+// Paste the background daemon right here outside the brackets:
+func StartPeriodicPeerSync(seedIP string, interval time.Duration) {
+	if seedIP == "" {
+		return
+	}
+	// Normalize seed endpoint to its public block explorer HTTP dashboard path
+	host, _, err := net.SplitHostPort(seedIP)
+	if err != nil {
+		host = seedIP
+	}
+	seedURL := fmt.Sprintf("http://%s:8081/peers", host)
+
+	go func() {
+		client := &http.Client{Timeout: 10 * time.Second}
+		fmt.Printf("🔄 [PEER SYNC DAEMON] Automated mesh discovery active. Target: %s\n", seedURL)
+
+		for {
+			resp, err := client.Get(seedURL)
+			if err != nil {
+				time.Sleep(interval)
+				continue
+			}
+
+			var discoveredIPs []string
+			err = json.NewDecoder(resp.Body).Decode(&discoveredIPs)
+			resp.Body.Close()
+
+			if err == nil && len(discoveredIPs) > 0 {
+				for _, ip := range discoveredIPs {
+					// Register harvested nodes directly into global memory tables
+					RegisterGossipPeer(net.JoinHostPort(ip, "8080"))
+				}
+			}
+			time.Sleep(interval)
+		}
+	}()
 }
