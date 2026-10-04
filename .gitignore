@@ -7,6 +7,9 @@ ledger_vault.json
 evolved_vault.txt
 network_health_summary.log
 cvn_mainnet.db
+backups/
+*.txt
+*.bak
 *.db
 
 # Node Hardware Profile Configs
