@@ -886,10 +886,14 @@ if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
 CustomMinerAddress = savedCfg.SavedMinerAddress
 }
 }
-fmt.Println("====================================================")
-fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
-fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
-fmt.Println("====================================================")
+	fmt.Println("====================================================")
+	fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
+	fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
+	fmt.Println("====================================================")
+
+	// 🚀 NEW PHASE 2 HOOK: Fire the automated router firewall mapping sequence
+	SetupAutomatedPortMapping()
+
 	go StartTCPServer()
 	go StartPublicExplorerServer()
 	time.Sleep(200 * time.Millisecond)

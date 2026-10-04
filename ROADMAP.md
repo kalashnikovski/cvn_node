@@ -14,7 +14,7 @@ Phase 2: Mesh Expansion (Q4 2026)
 
 \[x] Dynamic Peer Discovery Seeds
 
-\[ ] NAT Router Traversal (UPnP)
+\[x] NAT Router Traversal (UPnP)
 
 \[x] Continuous Roster P2P Gossip Loops
 
