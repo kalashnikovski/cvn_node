@@ -176,7 +176,7 @@ func (dm *DualChamberMempool) AssembleBlockPayload(maxTxCount int) []Transaction
 		zCount++
 	}
 
-	if zCount == len(dm.ZeroFeeChamber) {
+		if zCount == len(dm.ZeroFeeChamber) {
 		dm.ZeroFeeChamber = make([]Transaction, 0)
 	}
 
@@ -185,22 +185,19 @@ func (dm *DualChamberMempool) AssembleBlockPayload(maxTxCount int) []Transaction
 
 // Global Application Core Handles
 var (
-	MempoolMatrix      *DualChamberMempool
-	GlobalBoltEngine   *bbolt.DB
-	ConnectTarget      string
-	CustomMinerAddress string = "Nikola_Global_Network_Node"
-
-	ActivePeerRoster []string
-	RosterMutex      sync.Mutex
-	LocalListenerIP  string = "207.148.67.11"
-
+	MempoolMatrix        *DualChamberMempool
+	GlobalBoltEngine     *bbolt.DB
+	ConnectTarget        string
+	CustomMinerAddress   string = "Nikola_Global_Network_Node"
+	ActivePeerRoster     []string
+	RosterMutex          sync.Mutex
+	P2PListenPort        string = "8080"
+	ExplorerPort         string = "8081"
+	LocalListenerIP      string = "207.148.67.11"
 	ValidatorStakingPool map[string]float64
 	StakingPoolMutex     sync.Mutex
-)
-// 🔒 STATE BALANCE CACHE MATRIX: Eliminates the linear nested loop scan tax
-var (
-	StateBalanceCache      = make(map[string]float64)
-	BalanceCacheMutex      sync.RWMutex
+	StateBalanceCache    map[string]float64
+	BalanceCacheMutex    sync.RWMutex
 )
 
 // RebuildStateBalanceCache runs once on startup to fast-index all account yields from BoltDB
@@ -208,9 +205,10 @@ func RebuildStateBalanceCache() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
 
-	// Clear out any old records
+	// Clear out and allocate memory to your memory matrix indexes safely inside the function body
 	StateBalanceCache = make(map[string]float64)
 
+	// 🔥 THE FIX: Change *bbolt.DB to *bbolt.Tx right here
 	err := GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte("Blocks"))
 		if b == nil { return nil }
@@ -524,7 +522,7 @@ var NetworkLimiter = &RateLimiter{
 }
 
 func StartTCPServer() {
-	listener, err := net.Listen("tcp", "0.0.0.0:8080")
+	listener, err := net.Listen("tcp", "0.0.0.0:"+P2PListenPort)
 	if err != nil {
 		fmt.Printf("🚨 TCP Server Bind Error: %v\n", err)
 		return
@@ -669,8 +667,9 @@ func StartPublicExplorerServer() {
 		w.Write(data)
 	})
 
-	fmt.Println("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:8081...")
-	go func() { _ = http.ListenAndServe("0.0.0.0:8081", mux) }()
+	fmt.Printf("🌐 Public Block Explorer Server Online. Hosting dashboard live on http://localhost:%s...\n", ExplorerPort)
+go func() { _ = http.ListenAndServe("0.0.0.0:"+ExplorerPort, mux) }()
+
 }
 
 func DialAndGossipWithSeedPeer(seedAddr string) {
@@ -829,12 +828,26 @@ ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
 ConnectTarget = ""
 userPastedAddress := false
-for i := 1; i < len(os.Args); i++ {
-arg := os.Args[i]
-if arg == "--wallet" {
-RunWalletGUI()
-return
-}
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		
+		// 🛠️ NEW: Allow overriding the P2P communication port
+		if arg == "--port" && i+1 < len(os.Args) {
+			P2PListenPort = os.Args[i+1]
+			i++
+		}
+		// 🛠️ NEW: Allow overriding the HTTP block explorer dashboard port
+		if arg == "--explorer-port" && i+1 < len(os.Args) {
+			ExplorerPort = os.Args[i+1]
+			i++
+		}
+		
+		if arg == "--wallet" {
+			RunWalletGUI()
+			return
+		}
+        // ... leave your other existing flags (--miner-address, --connect) below this ...
+
 if arg == "--miner-address" && i+1 < len(os.Args) {
 inputAddress := strings.TrimSpace(os.Args[i+1])
 if inputAddress != "" && inputAddress != "=" {
@@ -888,10 +901,15 @@ fmt.Println("====================================================")
 		StartPeriodicPeerSync(ConnectTarget, 1*time.Minute)
 	}
 
-currentBlock := GetLatestBlock()
-fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
-for {
-// Mine up to 100 transactions per block boundary ceiling limit parameters
+	currentBlock := GetLatestBlock()
+	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
+	
+	// 🚀 THE FIX: Insert the cache building call right here!
+	RebuildStateBalanceCache()
+
+	for {
+		// Mine up to 100 transactions per block boundary...
+
 activeMempool := MempoolMatrix.AssembleBlockPayload(100)
 if len(activeMempool) > 0 {
 fmt.Printf("📦 [MINER CORE] Sweeping %d transactions from dual-chamber matrix straight into block payload...\n", len(activeMempool))

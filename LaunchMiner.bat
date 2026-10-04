@@ -48,11 +48,13 @@ echo [1/2] Activating hardware compilation acceleration paths...
 echo [2/2] Launching Proof-of-Diligence (PoD) Mining Engine...
 echo.
 
-:: 3. Execute the node binary safely matching input choices
+:: 3. Execute the node binary safely matching input choices with explicit cloud seed connections
 if not "!CHOSEN_ADDRESS!"=="" (
-    cvn_node.exe --miner-address !CHOSEN_ADDRESS!
+    :: 🚀 FIXED: Route custom mining overrides straight into your live global subnetwork mesh
+    cvn_node.exe --miner-address !CHOSEN_ADDRESS! --connect 207.148.67.11:8080
 ) else (
-    cvn_node.exe
+    :: 🚀 FIXED: Synchronize local default profile states from your cloud seed node instantly
+    cvn_node.exe --connect 207.148.67.11:8080
 )
 
 if %ERRORLEVEL% NEQ 0 (

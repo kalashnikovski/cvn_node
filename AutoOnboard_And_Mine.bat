@@ -21,10 +21,11 @@ if not exist "cvn_node.exe" (
 :: Read configuration profile from miner_config.json if it exists
 if exist "miner_config.json" (
     echo 📂 Found local profile layout on disk. Launching node engine automatically...
-    echo 📡 Connecting to primary consensus seed anchor network grid...
+    echo 📡 Connecting to neutral Singapore Cloud Seed Node matrix...
     echo.
     timeout /t 2 >nul
-    cvn_node.exe
+    :: 🚀 FIXED: Route existing profiles straight to your cloud anchor seed node
+    cvn_node.exe --connect 207.148.67.11:8080
     goto end
 )
 
@@ -43,7 +44,8 @@ if "%userchoice%"=="1" (
     echo.
     echo ✨ Profile config written successfully! Launching core node mining threads...
     timeout /t 3 >nul
-    cvn_node.exe
+    :: 🚀 FIXED: Route brand-new miners directly into your horizontal mesh
+    cvn_node.exe --connect 207.148.67.11:8080
     goto end
 )
 
@@ -53,8 +55,9 @@ if "%userchoice%"=="2" (
     if "%inputaddr%"=="" goto invalid
     
     echo.
-    echo 💾 Locking target address to default profile...
-    cvn_node.exe --miner-address %inputaddr%
+    echo 💾 Locking target address and booting mesh node...
+    :: 🚀 FIXED: Bind their pasted address and synchronize their ledger height from the seed node instantly
+    cvn_node.exe --miner-address %inputaddr% --connect 207.148.67.11:8080
     goto end
 )
 
