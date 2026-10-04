@@ -23,6 +23,12 @@ func (pr *PeerRoster) RegisterPeer(ip string) bool {
 	pr.Lock()
 	defer pr.Unlock()
 
+	// Normalize IP string to stripping out incoming socket ports if accidentally passed
+	host, _, err := net.SplitHostPort(ip)
+	if err == nil {
+		ip = host
+	}
+
 	_, exists := pr.ActiveAddresses[ip]
 	pr.ActiveAddresses[ip] = time.Now()
 
@@ -49,6 +55,7 @@ func (pr *PeerRoster) GetPeerList() []string {
 	}
 	return list
 }
+
 // BroadcastNewBlock payload streams newly solved blocks straight out to the peer network array
 func BroadcastNewBlock(blockData interface{}) {
 	// 1. Fetch your complete, synchronized list of known active network nodes
@@ -67,16 +74,22 @@ func BroadcastNewBlock(blockData interface{}) {
 
 	// 3. Systematically loop through your active subnets and stream the network broadcast
 	for _, ip := range peers {
-		go func(targetIP string) {
+		// Secure loop scoping to completely eliminate Go-routine variable race risks
+		targetIP := ip 
+
+		go func(target string) {
 			// Dial their consensus wire gateway channel handle with a strict 5-second timeout boundary
-			conn, err := net.DialTimeout("tcp", net.JoinHostPort(targetIP, "8080"), 5*time.Second)
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort(target, "8080"), 5*time.Second)
 			if err != nil {
 				return // Peer node unavailable, skip silently to protect threads
 			}
 			defer conn.Close()
 
+			// Set a write deadline to protect against slow-loris hanging network pipes
+			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+
 			// Transmit the solved block nonce parameters out to their consensus handle
 			fmt.Fprint(conn, msg)
-		}(ip)
+		}(targetIP)
 	}
 }
