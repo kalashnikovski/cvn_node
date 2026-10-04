@@ -6,6 +6,8 @@
 ledger_vault.json
 evolved_vault.txt
 network_health_summary.log
+cvn_mainnet.db
+*.db
 
 # Node Hardware Profile Configs
 miner_config.json
