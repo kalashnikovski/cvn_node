@@ -30,7 +30,18 @@ You no longer need to have Go, Git, or a compiler toolchain installed. To connec
 
 ---
 
-## 📡 Live Mainnet Telemetry
+## 📡 Live Mainnet Telemetry & Seed Node Gateway
 
+To ensure absolute network redundancy and high-throughput data replication, the Covenant Standard mainnet relies on a distributed multi-anchor blueprint. Miners and full nodes can synchronize their ledger states through either of the live bootstrap entry gates below:
+
+### 🇸🇬 1. Cloud Master Seed Node (Singapore Hub)
+* **Visual Blockchain Explorer Dashboard:** http://207.148.67.11:8081
+* **Public Discovery Peer Roster Index:** http://207.148.67.11:8081/peers
+* **P2P Mesh Consensus Connection Gateway:** `207.148.67.11:8080`
+
+### 🇦🇺 2. Anchor Seed Node Rig (Melbourne Hub)
 * **Visual Blockchain Explorer Dashboard:** http://202.137.175.220:8081/
-* **Developer Workspace / Core Repositories:** https://github.com/kalashnikovski/cvn_node
+* **Public Discovery Peer Roster Index:** http://202.137.175.220:8081/peers
+* **P2P Mesh Consensus Connection Gateway:** `202.137.175.220:8080`
+
+* **Developer Workspace / Core Source Repositories:** https://github.com/kalashnikovski/cvn_node
