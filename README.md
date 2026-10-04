@@ -37,11 +37,11 @@ To ensure absolute network redundancy and high-throughput data replication, the 
 ### 🇸🇬 1. Cloud Master Seed Node (Singapore Hub)
 * **Visual Blockchain Explorer Dashboard:** http://207.148.67.11:8081
 * **Public Discovery Peer Roster Index:** http://207.148.67.11:8081/peers
-* **P2P Mesh Consensus Connection Gateway:** `http://207.148.67.11:8080`
+* **P2P Mesh Consensus Connection Gateway:** `[207.148.67.11:8080](tcp://207.148.67.11:8080)`
 
 ### 🇦🇺 2. Anchor Seed Node Rig (Melbourne Hub)
 * **Visual Blockchain Explorer Dashboard:** http://202.137.175.220:8081/
 * **Public Discovery Peer Roster Index:** http://202.137.175.220:8081/peers
-* **P2P Mesh Consensus Connection Gateway:** `http://202.137.175.220:8080`
+* **P2P Mesh Consensus Connection Gateway:** `[202.137.175.220:8080](tcp://202.137.175.220:8080)`
 
 * **Developer Workspace / Core Source Repositories:** https://github.com/kalashnikovski/cvn_node
