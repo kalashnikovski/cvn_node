@@ -729,8 +729,12 @@ func DialAndGossipWithSeedPeer(seedAddr string) {
 }
 
 func SyncChainFromSeedPeer(seedAddr string) {
-	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-	if err != nil { return }
+	// 🌟 EXPAND THE WINDOW: Increase timeout to 30 seconds to survive global routing lag!
+	conn, err := net.DialTimeout("tcp", seedAddr, 30*time.Second)
+	if err != nil { 
+		fmt.Printf("⚠️  [NETWORK TIMEOUT] Connection to seed node %s timed out. Retrying pipeline...\n", seedAddr)
+		return 
+	}
 	defer conn.Close()
 	
 	fmt.Fprintln(conn, "REQ_CHAIN_SYNC")
