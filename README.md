@@ -1,6 +1,10 @@
 # 💎 Covenant Standard (CVN) Protocol 📡
 [![Discord Invite](https://shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white)](https://discord.gg/xE2egYbumx)
 
+🚨 TECHNICAL ANNOUNCEMENT / REPOSITORY HOTFIX (v1.0.1)
+Today we identified and patched a configuration leak in main.go. The template variable CustomMinerAddress was accidentally hardcoded to my personal development address by default. As a result, anyone launching the node without explicitly setting their own wallet parameter was accidentally routing their mining solutions to my wallet.
+This has been fixed in the latest GitHub commit (fa2ebff). Please run git pull or re-clone the repository to update your files. If your machine accidentally mined blocks to my address during your tests, please join [![Discord Invite](https://shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white)](https://discord.gg/xE2egYbumx) and provide your Unique Wallet Address.
+
 Covenant Standard (CVN) is an independent, decentralized Layer-1 blockchain network built completely from scratch in the Go programming language, running natively on a hyper-efficient transactional binary **BoltDB key-value store** backend (`cvn_mainnet.db`). By decoupling state consensus from corporate infrastructure, CVN establishes a highly secure, immutable ledger optimized specifically for consumer computer hardware without relying on bloated external frameworks.
 
 ---
