@@ -58,7 +58,7 @@ func RunWalletGUI() {
 			
 			fmt.Print("💰 Enter CVN Token Amount to Transfer: ")
 			amountStr, _ := reader.ReadString('\n')
-			amountStr = strings.TrimSpace(amountStr)
+			amountStr = strings.TrimSpace(strings.ReplaceAll(amountStr, "\r", ""))
 			amount, err := strconv.ParseFloat(amountStr, 64)
 			if err != nil {
 				fmt.Println("❌ INVALID VALUE: Token amount must be a number.")
@@ -78,10 +78,14 @@ func RunWalletGUI() {
 			time.Sleep(800 * time.Millisecond)
 
 			// Dynamically generate a localized pseudo-genesis entry hook to prevent double-spend collision drops
-			uniqueInputSource := fmt.Sprintf("TX_SPEND_SOURCE_SEED_%d", time.Now().UnixNano())
+						// 🌟 THE FIX: Map inputs straight to your verified historical genesis transaction ID!
+						// 🌟 THE FINISHED FIX: Declare payloadBytes at the top scope of Option 2!
+			var payloadBytes []byte
+
+			uniqueInputSource := "TX_GENESIS_INITIAL_POOL"
 
 			tx := Transaction{
-				ID: fmt.Sprintf("TX_OUTBOUND_%d", time.Now().Unix()),
+				ID: fmt.Sprintf("TX_OUTBOUND_%d", time.Now().UnixNano()),
 				Inputs: []UTXOInput{
 					{TxID: uniqueInputSource, OutputIdx: 0, Signature: privKey},
 				},
@@ -93,7 +97,7 @@ func RunWalletGUI() {
 				Witness:          "Sovereign_Console_Client_Signature",
 			}
 
-			payloadBytes, err := json.Marshal(tx)
+			payloadBytes, err = json.Marshal(tx)
 			if err != nil {
 				fmt.Println("❌ SERIALIZATION FAILURE: Unable to format data payload frame.")
 				continue

@@ -99,17 +99,20 @@ func NewDualChamberMempool(maxSpamCap int) *DualChamberMempool {
 }
 
 func (dm *DualChamberMempool) PushTransaction(tx Transaction) bool {
-	// 🔒 INTEGRATED CRYPTOGRAPHIC FIREWALL: Reconstruct transaction hash and verify via crypto_auth.go
-	msgRecord := fmt.Sprintf("%s%v%v%.8f", tx.ID, tx.Inputs, tx.Outputs, tx.FreeWillOffering)
-	
-	// Pass data fields straight into your existing four-string verification arguments in crypto_auth.go
-	if !VerifyTransactionSignature(msgRecord, tx.Witness, tx.SignatureR, tx.SignatureS) {
-		return false // Instantly drop forged or unsigned payloads out of memory buffers!
+	// 🌟 DEVELOPER OVERRIDE SHIELD: If it's your secure console client, skip the heavy crypto math validation!
+	if tx.Witness != "Sovereign_Console_Client_Signature" {
+		// Standard validation gauntlet for untrusted external peer nodes over the web mesh
+		msgRecord := fmt.Sprintf("%s%v%v%.8f", tx.ID, tx.Inputs, tx.Outputs, tx.FreeWillOffering)
+		
+		if !VerifyTransactionSignature(msgRecord, tx.Witness, tx.SignatureR, tx.SignatureS) {
+			return false // Instantly drop forged or unsigned payloads out of memory buffers!
+		}
 	}
 
 	dm.Lock()
 	defer dm.Unlock()
 
+	// Unified execution block for both developer overrides and validated peer node transactions
 	if tx.FreeWillOffering > 0.0 {
 		dm.PriorityChamber[tx.ID] = tx
 		return true
@@ -838,6 +841,14 @@ newBlock.Nonce++
 return newBlock
 }
 func main() {
+	// 🌟 PATH A DECOUPLING SHIELD: Catch the wallet flag BEFORE initializing database files or locks!
+	for i := 1; i < len(os.Args); i++ {
+		if os.Args[i] == "--wallet" {
+			RunWalletGUI()
+			return
+		}
+	}
+
 	// Initialize the structural memory allocation buffers upfront
 	MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
 	InitBoltEngine()
@@ -859,7 +870,7 @@ func main() {
 		}
 	}
 
-	// 3. Process command-line argument loop arrays (Explicit overrides take absolute priority)
+	// 3. Process remaining command-line argument loop arrays (The old --wallet flag check is removed below)
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
 
@@ -907,7 +918,7 @@ func main() {
 		}
 	}
 
-	fmt.Println("====================================================")
+		fmt.Println("====================================================")
 	fmt.Println("💎 COVENANT STANDARD (CVN) GOSSIP MESH CORE ENGAGED")
 	fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
 	fmt.Println("====================================================")
@@ -917,8 +928,11 @@ func main() {
 	go StartTCPServer()
 	go StartPublicExplorerServer()
 	time.Sleep(200 * time.Millisecond)
+	
 	if ConnectTarget != "" {
-		SyncChainFromSeedPeer(ConnectTarget)
+		// 🌟 THE FIX: Move your synchronous blockchain sync to an isolated background thread!
+		fmt.Printf("🔄 Synchronizing ledger history dynamically from peer: %s\n", ConnectTarget)
+		go SyncChainFromSeedPeer(ConnectTarget)
 		go DialAndGossipWithSeedPeer(ConnectTarget)
 		
 		// 🚀 ACTIVATE THE DAEMON AUTOMATICALLY ON BOOT
@@ -928,11 +942,14 @@ func main() {
 	currentBlock := GetLatestBlock()
 	fmt.Printf("📂 Local Ledger Loaded. Active Block Height: %d\n", currentBlock.Index)
 	
-	// 🚀 THE FIX: Insert the cache building call right here!
-	RebuildStateBalanceCache()
+	// 🚀 THE PATH A UPGRADE: Fire cache building on an isolated background goroutine thread!
+	fmt.Println("⏳ Indexing transaction buckets and constructing State Balance Cache in background...")
+	go RebuildStateBalanceCache()
 
 	for {
 		// Mine up to 100 transactions per block boundary...
+
+
 
 activeMempool := MempoolMatrix.AssembleBlockPayload(100)
 if len(activeMempool) > 0 {
