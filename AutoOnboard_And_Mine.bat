@@ -20,27 +20,7 @@ if not exist "cvn_node.exe" (
 
 :: Read configuration profile from miner_config.json if it exists
 if exist "miner_config.json" (
-    echo 📂 Found local profile layout on disk. Launching node engine automatically...
-    echo 📡 Attempting connection to Primary Singapore Cloud Hub...
-    echo.
-    timeout /t 2 >nul
-    
-    :: Try Primary Singapore Hub
-    cvn_node.exe --connect 207.148.67.11:8080
-    
-    :: Catch Connection Error and Trigger Fallback to Melbourne Rig
-    if errorlevel 1 (
-        color 0E
-        echo.
-        echo ⚠️  WARNING: Primary Singapore Cloud Node unavailable or timed out.
-        echo 🔄 Triggering automated redundancy fallback path...
-        echo 🇦🇺 Connecting to Secondary Melbourne Anchor Rig Gateway...
-        echo.
-        timeout /t 3 >nul
-        color 0B
-        cvn_node.exe --connect 202.137.175.220:8080
-    )
-    goto end
+    goto launch_sequence
 )
 
 :: If no config profile exists, prompt for initialization
@@ -51,55 +31,65 @@ echo [2] Start Core Node using an existing public CVN address.
 echo.
 set /p userchoice="Select initialization vector [1-2]: "
 
-if "%userchoice%"=="1" (
-    echo.
-    echo 🔑 Initializing cryptographic key-generation sequence...
-    cvn_node.exe --generate-profile
-    echo.
-    echo ✨ Profile config written successfully! Launching core node mining threads...
-    timeout /t 3 >nul
-    
-    echo 📡 Attempting connection to Primary Singapore Cloud Hub...
-    cvn_node.exe --connect 207.148.67.11:8080
-    
-    if errorlevel 1 (
-        color 0E
-        echo.
-        echo ⚠️  WARNING: Primary Singapore Cloud Node unavailable or timed out.
-        echo 🔄 Triggering automated redundancy fallback path...
-        echo 🇦🇺 Connecting to Secondary Melbourne Anchor Rig Gateway...
-        echo.
-        timeout /t 3 >nul
-        color 0B
-        cvn_node.exe --connect 202.137.175.220:8080
-    )
-    goto end
-)
+if "%userchoice%"=="1" goto init_option1
+if "%userchoice%"=="2" goto init_option2
+goto invalid
 
-if "%userchoice%"=="2" (
+:init_option1
+echo.
+echo 🔑 Initializing cryptographic key-generation sequence...
+cvn_node.exe --generate-profile
+echo.
+echo ✨ Profile config written successfully! Re-routing to clean boot sequence...
+timeout /t 3 >nul
+goto launch_sequence
+
+:init_option2
+echo.
+set /p inputaddr="Paste your public wallet address (Format: CVN_...): "
+if "%inputaddr%"=="" goto invalid
+
+echo.
+echo 💾 Locking target address and booting mesh node...
+echo 📡 Attempting connection to Primary Singapore Cloud Hub...
+
+cvn_node.exe --miner-address %inputaddr% --connect 207.148.67.11:8080
+
+if errorlevel 1 (
+    color 0E
     echo.
-    set /p inputaddr="Paste your public wallet address (Format: CVN_...): "
-    if "%inputaddr%"=="" goto invalid
-    
+    echo ⚠️  WARNING: Primary Singapore Cloud Node unavailable or timed out.
+    echo 🔄 Triggering automated redundancy fallback path...
+    echo 🇦🇺 Connecting to Secondary Melbourne Anchor Rig Gateway...
     echo.
-    echo 💾 Locking target address and booting mesh node...
-    echo 📡 Attempting connection to Primary Singapore Cloud Hub...
-    
-    cvn_node.exe --miner-address %inputaddr% --connect 207.148.67.11:8080
-    
-    if errorlevel 1 (
-        color 0E
-        echo.
-        echo ⚠️  WARNING: Primary Singapore Cloud Node unavailable or timed out.
-        echo 🔄 Triggering automated redundancy fallback path...
-        echo 🇦🇺 Connecting to Secondary Melbourne Anchor Rig Gateway...
-        echo.
-        timeout /t 3 >nul
-        color 0B
-        cvn_node.exe --miner-address %inputaddr% --connect 202.137.175.220:8080
-    )
-    goto end
+    timeout /t 3 >nul
+    color 0B
+    cvn_node.exe --miner-address %inputaddr% --connect 202.137.175.220:8080
 )
+goto end
+
+:launch_sequence
+echo 📂 Found local profile layout on disk. Launching node engine automatically...
+echo 📡 Attempting connection to Primary Singapore Cloud Hub...
+echo.
+timeout /t 2 >nul
+
+:: Try Primary Singapore Hub
+cvn_node.exe --connect 207.148.67.11:8080
+
+:: Catch Connection Error and Trigger Fallback to Melbourne Rig
+if errorlevel 1 (
+    color 0E
+    echo.
+    echo ⚠️  WARNING: Primary Singapore Cloud Node unavailable or timed out.
+    echo 🔄 Triggering automated redundancy fallback path...
+    echo 🇦🇺 Connecting to Secondary Melbourne Anchor Rig Gateway...
+    echo.
+    timeout /t 3 >nul
+    color 0B
+    cvn_node.exe --connect 202.137.175.220:8080
+)
+goto end
 
 :invalid
 color 0C
