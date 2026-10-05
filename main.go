@@ -863,7 +863,7 @@ func main() {
 	ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 
 	// 1. Establish the bedrock baseline master wallet default
-	CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
+	CustomMinerAddress = "CVN_PLACEHOLDER_INSERT_YOUR_OWN_WALLET_ADDRESS"
 	ConnectTarget = ""
 
 	// 2. Load the disk profile layout first if it exists
