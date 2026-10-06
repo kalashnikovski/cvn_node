@@ -44,6 +44,18 @@ Follow this simple sequence to spin up your local hardware threads, connect to t
 
 ---
 
+⚡ SPEED UP INITIAL SYNC (RECOMMENDED FAST-BOOT ROUTINE):
+If your domestic internet connection experiences timeout resets during the initial history catch-up pass, you can instantly bypass the network download process:
+
+1. Download our official pre-verified mainnet ledger snapshot clone:
+👉 https://drive.google.com/file/d/14DZbL6oa2v-zbvRzj3yIUxs-FCfbgztO/view?usp=sharing
+
+2. Extract and drop the 'cvn_mainnet.db' file straight into your root project directory folder before launching your executable terminal window.
+
+3. Fire up your mining loop natively:
+.\cvn_node.exe --connect 207.148.67.11:8080
+
+
 ## 📡 3. Live Mainnet Telemetry & Seed Node Gateway
 
 To ensure absolute network redundancy, automated failover protection, and high-throughput data replication, the Covenant Standard mainnet relies on a distributed multi-anchor blueprint. Miners and full nodes can synchronize their ledger states through either of the live bootstrap entry gates below:
