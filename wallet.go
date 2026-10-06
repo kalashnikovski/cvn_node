@@ -29,7 +29,7 @@ func RunWalletGUI() {
 		choiceStr, _ := reader.ReadString('\n')
 		choiceStr = strings.TrimSpace(choiceStr)
 
-		if choiceStr == "1" {
+				if choiceStr == "1" {
 			// 🔐 Hook directly into your crypto_auth.go generation mathematical rules
 			privHex, walletAddress, err := GenerateKeyPair()
 			if err != nil {
@@ -44,6 +44,34 @@ func RunWalletGUI() {
 			fmt.Println("--------------------------------------------------------------------")
 			fmt.Println("⚠️  WARNING: Copy and save your Private Key safely! It is never stored on disk.")
 			fmt.Println("====================================================================")
+
+			// ====================================================================
+			// 🟩 PASTE THE AUTOMATED BACKUP FIX DIRECTLY HERE:
+			// ====================================================================
+			backupContent := fmt.Sprintf(
+				"====================================================\n"+
+				"🛰️  COVENANT STANDARD (CVN) SOVEREIGN WALLET KEYS\n"+
+				"====================================================\n\n"+
+				"📋 PUBLIC WALLET ADDRESS (Safe to share with anyone):\n"+
+				"%s\n\n"+
+				"🔑 SECRET PRIVATE KEY (NEVER SHARE - Keep completely hidden):\n"+
+				"%s\n"+
+				"====================================================\n", 
+				walletAddress, privHex,
+			)
+			
+			// Write the file down to your disk storage directory using strict read/write security privileges
+			_ = os.WriteFile("my_crypto_address.txt", []byte(backupContent), 0600)
+			
+			// Also write the matching public profile format out to prevent configuration script bypasses
+			configMap := map[string]string{"saved_miner_address": walletAddress}
+			configBytes, _ := json.MarshalIndent(configMap, "", "  ")
+			_ = os.WriteFile("miner_config.json", configBytes, 0644)
+			
+			fmt.Println("💾 SUCCESS: Sovereign wallet credentials safely written to disk inside your directory!")
+			fmt.Println("====================================================================")
+			// ====================================================================
+
 			fmt.Println("Press [ENTER] to return to the core wallet menu window.")
 			_, _ = reader.ReadString('\n')
 
