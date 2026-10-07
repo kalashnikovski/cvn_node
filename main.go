@@ -501,11 +501,19 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			fmt.Printf("\n⛓️  [SYNC GATE ENGAGED] Network Tip Height: #%d | Local Height: #%d\n", remoteHeight, localHeight)
 			fmt.Printf("⏳ Catching up on %d missing block segments...\n", totalBlocksToSync)
 			
+			// ✅ FIXED: Track the true cryptographic hash properties of the Genesis Block (Index 0)
 			var lastValidHash string = remoteChain[0].Hash
+			
 			for i := 1; i < len(remoteChain); i++ {
 				block := remoteChain[i]
-				if block.PrevHash != lastValidHash { return }
-				if block.Hash != CalculateHash(block) { return }
+				if block.PrevHash != lastValidHash { 
+					fmt.Printf("\n🚨 [SYNC ERROR] Lineage link broken at Block #%d! Expected match for: %s\n", block.Index, lastValidHash)
+					return 
+				}
+				if block.Hash != CalculateHash(block) { 
+					fmt.Printf("\n🚨 [SYNC ERROR] Payload mutation caught at Block #%d!\n", block.Index)
+					return 
+				}
 				if !ValidateBlockSize(block) { return }
 				targetPrefix := strings.Repeat("0", int(block.Difficulty))
 				if len(block.Hash) < int(block.Difficulty) || block.Hash[:int(block.Difficulty)] != targetPrefix { return }
@@ -518,12 +526,10 @@ func SyncChainFromSeedPeer(seedAddr string) {
 					completedBars := int((percentComplete / 100.0) * float64(barLength))
 					barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 					
-					// Print the animated percentage tracking bar string natively across the console line
+					// Formulate the interactive visual percentage text string
 					fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, block.Index, remoteHeight)
 					
-					// ⏱️ INJECTED MICRO-COOLDOWN PACING PACER
-					// Gives the Windows console window thread 1 millisecond of breathing space 
-					// to physically draw the percentage string frames on screen before jumping to the next block
+					// ⏱️ Pacing pacer allows the terminal window thread time to physically refresh the lines
 					time.Sleep(1 * time.Millisecond)
 				}
 			}
