@@ -569,12 +569,12 @@ func executeBootstrapSequence() {
 	}
 
 	for _, seedIP := range MasterSeedNodes {
-		// ✅ FIXED: Safely isolate the pure IP address segment cleanly away from the colon port suffix
+		// ✅ FIXED: Safely isolate the pure IP address string using array index [0] cleanly away from the port numbers
 		hostSegment := seedIP
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0] // Isolate index 0 to fetch the pure IP string coordinate
+				hostSegment = parts[0] // Isolate index 0 to capture the raw IP text coordinate cleanly
 			}
 		}
 
