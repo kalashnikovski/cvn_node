@@ -553,14 +553,30 @@ func RunAutonomousBootstrapEngine() {
 }
 
 func executeBootstrapSequence() {
+	// Dynamically pull all active IP configurations assigned to this machine's network cards
+	localIPs := make(map[string]bool)
+	localIPs["127.0.0.1"] = true
+	localIPs["0.0.0.0"] = true
+	localIPs["localhost"] = true
+
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok {
+				localIPs[ipnet.IP.String()] = true
+			}
+		}
+	}
+
 	for _, seedIP := range MasterSeedNodes {
-		// 🛡️ DYNAMIC LOOPBACK AND SELF-DIAL PROTECTION
-		// Explicitly check if the target seed matches either our hardcoded LocalListenerIP 
-		// OR contains an internal loopback signature to prevent a node from syncing with itself.
-		if strings.HasPrefix(seedIP, LocalListenerIP) || 
-		   strings.HasPrefix(seedIP, "127.0.0.1") || 
-		   strings.HasPrefix(seedIP, "0.0.0.0") || 
-		   strings.HasPrefix(seedIP, "localhost") {
+		// Strip away the colon port suffix to isolate the pure IP address string segment
+		hostSegment := seedIP
+		if parts := strings.Split(seedIP, ":"); len(parts) > 0 {
+			hostSegment = parts[0]
+		}
+
+		// 🛡️ DYNAMIC HARDWARE LEVEL SELF-DIAL SHIELD
+		// If the target seed host matches any IP assigned to this machine, skip it safely!
+		if localIPs[hostSegment] || hostSegment == LocalListenerIP {
 			continue
 		}
 
