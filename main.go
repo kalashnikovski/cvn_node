@@ -501,7 +501,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			fmt.Printf("\n⛓️  [SYNC GATE ENGAGED] Network Tip Height: #%d | Local Height: #%d\n", remoteHeight, localHeight)
 			fmt.Printf("⏳ Catching up on %d missing block segments...\n", totalBlocksToSync)
 			
-			// ✅ FIXED: Track the true cryptographic hash properties of the Genesis Block (Index 0)
+			// ✅ FIXED: Explicitly target array index 0 to capture the valid Genesis block hash string cleanly
 			var lastValidHash string = remoteChain[0].Hash
 			
 			for i := 1; i < len(remoteChain); i++ {
