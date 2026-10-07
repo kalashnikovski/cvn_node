@@ -501,7 +501,6 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			fmt.Printf("\n⛓️  [SYNC GATE ENGAGED] Network Tip Height: #%d | Local Height: #%d\n", remoteHeight, localHeight)
 			fmt.Printf("⏳ Catching up on %d missing block segments...\n", totalBlocksToSync)
 			
-			// ✅ FIXED: Rely on the true root parent link hash of the incoming slice chain segment
 			var lastValidHash string = remoteChain[0].Hash
 			for i := 1; i < len(remoteChain); i++ {
 				block := remoteChain[i]
@@ -518,7 +517,14 @@ func SyncChainFromSeedPeer(seedAddr string) {
 					barLength := 20
 					completedBars := int((percentComplete / 100.0) * float64(barLength))
 					barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
+					
+					// Print the animated percentage tracking bar string natively across the console line
 					fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, block.Index, remoteHeight)
+					
+					// ⏱️ INJECTED MICRO-COOLDOWN PACING PACER
+					// Gives the Windows console window thread 1 millisecond of breathing space 
+					// to physically draw the percentage string frames on screen before jumping to the next block
+					time.Sleep(1 * time.Millisecond)
 				}
 			}
 			fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
@@ -536,6 +542,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 		}
 	}
 }
+
 
 func RunAutonomousBootstrapEngine() {
 	fmt.Println("🛰️  [BOOTSTRAP ENGINE] Manual link flag absent. Booting autonomous peer discovery engine...")
