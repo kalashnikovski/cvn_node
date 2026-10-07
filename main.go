@@ -552,53 +552,58 @@ func RunAutonomousBootstrapEngine() {
 	}()
 }
 
-
 func executeBootstrapSequence() {
-	// Dynamically pull all active IP configurations assigned to this machine's network cards
-	localIPs := make(map[string]bool)
-	localIPs["127.0.0.1"] = true
-	localIPs["0.0.0.0"] = true
-	localIPs["localhost"] = true
+	// 📡 1. Dynamically gather all IP addresses assigned to this local machine's network cards
+	localInterfaces := make(map[string]bool)
+	localInterfaces["127.0.0.1"] = true
+	localInterfaces["0.0.0.0"] = true
+	localInterfaces["localhost"] = true
 
 	if addrs, err := net.InterfaceAddrs(); err == nil {
 		for _, addr := range addrs {
 			if ipnet, ok := addr.(*net.IPNet); ok {
-				localIPs[ipnet.IP.String()] = true
+				localInterfaces[ipnet.IP.String()] = true
 			}
 		}
 	}
 
+	// 📡 2. Loop through our global master seed targets
 	for _, seedIP := range MasterSeedNodes {
-		// ✅ FIXED: Safely isolate the pure IP address string using array index [0] cleanly away from the port numbers
+		// Isolate the pure IP host segment by stripping away the port suffix
 		hostSegment := seedIP
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0] // Isolate index 0 to capture the raw IP text coordinate cleanly
+				hostSegment = parts[0] // Safely grab the raw IP string component
 			}
 		}
 
-		// 🛡️ DYNAMIC HARDWARE LEVEL SELF-DIAL SHIELD
-		// If the target seed host matches any IP assigned to this machine, skip it safely!
-		if localIPs[hostSegment] || hostSegment == LocalListenerIP {
+		// 🛡️ HARDWARE-LEVEL SELF-DIAL FILTER SHIELD
+		// If the seed target host matches any IP belonging to THIS local machine, skip it!
+		if localInterfaces[hostSegment] {
 			continue
 		}
 
 		fmt.Printf("📡 [BOOTSTRAP] Attempting handshake alignment with Master Seed Anchor: %s\n", seedIP)
-		conn, err := net.DialTimeout("tcp", seedIP, 4*time.Second)
+		
+		// Establish a brief connection check to ensure the target port is accessible
+		conn, err := net.DialTimeout("tcp", seedIP, 5*time.Second)
 		if err != nil { 
-			fmt.Printf("   ❌ Seed %s unresponsive or connection timed out. Advancing vector...\n", seedIP)
+			fmt.Printf("   ❌ Seed %s unresponsive or connection timed out. Advancing...\n", seedIP)
 			continue 
 		}
 		conn.Close()
 
 		fmt.Printf("🟩 [BOOTSTRAP SUCCESS] Secure channel verified with seed: %s. Commencing automated sync pipeline...\n", seedIP)
+		
+		// Fire the core validation sync engine to trigger the visual percentage loader bar
 		SyncChainFromSeedPeer(seedIP)
 		DialAndGossipWithSeedPeer(seedIP)
 		RegisterGossipPeer(seedIP)
-		break
+		break // Connection successfully established, exit bootstrap sequence safely
 	}
 }
+
 
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
 	var newBlock Block
