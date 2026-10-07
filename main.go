@@ -554,9 +554,22 @@ func RunAutonomousBootstrapEngine() {
 
 func executeBootstrapSequence() {
 	for _, seedIP := range MasterSeedNodes {
-		if strings.HasPrefix(seedIP, LocalListenerIP) { continue }
+		// 🛡️ DYNAMIC LOOPBACK AND SELF-DIAL PROTECTION
+		// Explicitly check if the target seed matches either our hardcoded LocalListenerIP 
+		// OR contains an internal loopback signature to prevent a node from syncing with itself.
+		if strings.HasPrefix(seedIP, LocalListenerIP) || 
+		   strings.HasPrefix(seedIP, "127.0.0.1") || 
+		   strings.HasPrefix(seedIP, "0.0.0.0") || 
+		   strings.HasPrefix(seedIP, "localhost") {
+			continue
+		}
+
+		fmt.Printf("📡 [BOOTSTRAP] Attempting handshake alignment with Master Seed Anchor: %s\n", seedIP)
 		conn, err := net.DialTimeout("tcp", seedIP, 4*time.Second)
-		if err != nil { continue }
+		if err != nil { 
+			fmt.Printf("   ❌ Seed %s unresponsive or connection timed out. Advancing vector...\n", seedIP)
+			continue 
+		}
 		conn.Close()
 
 		fmt.Printf("🟩 [BOOTSTRAP SUCCESS] Secure channel verified with seed: %s. Commencing automated sync pipeline...\n", seedIP)
@@ -566,6 +579,7 @@ func executeBootstrapSequence() {
 		break
 	}
 }
+
 
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
 	var newBlock Block
