@@ -552,6 +552,7 @@ func RunAutonomousBootstrapEngine() {
 	}()
 }
 
+
 func executeBootstrapSequence() {
 	// Dynamically pull all active IP configurations assigned to this machine's network cards
 	localIPs := make(map[string]bool)
@@ -568,10 +569,13 @@ func executeBootstrapSequence() {
 	}
 
 	for _, seedIP := range MasterSeedNodes {
-		// Strip away the colon port suffix to isolate the pure IP address string segment
+		// ✅ FIXED: Safely isolate the pure IP address segment cleanly away from the colon port suffix
 		hostSegment := seedIP
-		if parts := strings.Split(seedIP, ":"); len(parts) > 0 {
-			hostSegment = parts[0]
+		if strings.Contains(seedIP, ":") {
+			parts := strings.Split(seedIP, ":")
+			if len(parts) > 0 {
+				hostSegment = parts[0] // Isolate index 0 to fetch the pure IP string coordinate
+			}
 		}
 
 		// 🛡️ DYNAMIC HARDWARE LEVEL SELF-DIAL SHIELD
@@ -595,7 +599,6 @@ func executeBootstrapSequence() {
 		break
 	}
 }
-
 
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
 	var newBlock Block
