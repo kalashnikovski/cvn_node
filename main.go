@@ -331,40 +331,32 @@ go HandleIncomingPeer(conn)
 }
 func StartPublicExplorerServer() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "" && r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		http.ServeFile(w, r, "explorer.html")
-	})
-	// 📡 INJECTED PEER ROSTER TELEMETRY ROUTE
+	
+	// 📡 1. Dedicated Peer Roster Telemetry Route (Registered upfront to prevent fallback catch-alls)
 	mux.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		
 		RosterMutex.Lock()
-		// Capture a snapshot slice of our active mesh network routing tables
 		sharedRoster := make([]string, len(ActivePeerRoster))
 		copy(sharedRoster, ActivePeerRoster)
 		RosterMutex.Unlock()
 		
-		// If the roster is empty, fall back to showing our primary seed backplane context
+		// If the local roster tracker is empty, append our cloud partner explicitly
 		if len(sharedRoster) == 0 {
-			sharedRoster = append(sharedRoster, "207.148.67.11:8080 (Cloud Master Seed Node)")
+			sharedRoster = append(sharedRoster, "207.148.67.11:8080 (Cloud Master Seed Node Anchor)")
 		}
 		
 		data, _ := json.Marshal(sharedRoster)
 		w.Write(data)
 	})
-		// 💰 INJECTED UNIQUE WALLET ADDRESSES TELEMETRY ROUTE
+
+	// 💰 2. Unique Wallet Addresses Telemetry Route
 	mux.HandleFunc("/addresses", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		
 		BalanceCacheMutex.RLock()
-		// Dynamically isolate all account coordinates out of the State Balance Cache Matrix
 		uniqueAddresses := make([]string, 0, len(StateBalanceCache))
 		for addr := range StateBalanceCache {
 			uniqueAddresses = append(uniqueAddresses, addr)
@@ -376,38 +368,11 @@ func StartPublicExplorerServer() {
 			"addresses":              uniqueAddresses,
 			"total_unique_addresses": totalUnique,
 		}
-		
 		data, _ := json.Marshal(responseData)
 		w.Write(data)
 	})
 
-	mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		http.ServeFile(w, r, "audit.html")
-	})
-	mux.HandleFunc("/inject_tx", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var tx Transaction
-		if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
-			http.Error(w, "Malformed transaction payload data", http.StatusBadRequest)
-			return
-		}
-		if tx.Witness == "" || len(tx.Witness) < 10 {
-			http.Error(w, "🚨 PROTOCOL CEILING ALERT: Transaction dropped. Destination target validation firewall exception.", http.StatusUnprocessableEntity)
-			return
-		}
-		accepted := MempoolMatrix.PushTransaction(tx)
-		if accepted {
-			fmt.Printf("📦 [MEMPOOL INGEST] Received 1 new transaction cleanly!\n")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("✅ Ingestion successful"))
-		} else {
-			http.Error(w, "Mempool capacity overflow: transaction dropped by spam shield", http.StatusTooManyRequests)
-		}
-	})
+	// ⚖️ 3. Core Chain History Endpoint Layout
 	mux.HandleFunc("/req_chain", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
@@ -436,6 +401,48 @@ func StartPublicExplorerServer() {
 		data, _ := json.Marshal(responseData)
 		w.Write(data)
 	})
+
+	// 📥 4. Public Transaction Injection Gate
+	mux.HandleFunc("/inject_tx", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var tx Transaction
+		if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+			http.Error(w, "Malformed transaction payload data", http.StatusBadRequest)
+			return
+		}
+		if tx.Witness == "" || len(tx.Witness) < 10 {
+			http.Error(w, "🚨 PROTOCOL CEILING ALERT: Transaction dropped.", http.StatusUnprocessableEntity)
+			return
+		}
+		accepted := MempoolMatrix.PushTransaction(tx)
+		if accepted {
+			fmt.Printf("📦 [MEMPOOL INGEST] Received 1 new transaction cleanly!\n")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("✅ Ingestion successful"))
+		} else {
+			http.Error(w, "Mempool capacity overflow", http.StatusTooManyRequests)
+		}
+	})
+
+	// 📜 5. Static Audit Dashboard Handler
+	mux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		http.ServeFile(w, r, "audit.html")
+	})
+
+	// 📊 6. Core Base Catch-All Root Path Endpoint Handler (Kept explicitly at the bottom)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "" && r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		http.ServeFile(w, r, "explorer.html")
+	})
+
 	fmt.Printf("🌐 Public Block Explorer Server Online. Hosting live on http://localhost:%d...\n", ExplorerPort)
 	go func() { _ = http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", ExplorerPort), mux) }()
 }
