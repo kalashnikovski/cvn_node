@@ -261,14 +261,25 @@ func CalculateAdaptiveDifficulty() int64 {
 }
 
 func RegisterGossipPeer(peerAddr string) {
-	if peerAddr == "" || strings.HasPrefix(peerAddr, "127.0.0.1") || strings.HasPrefix(peerAddr, "0.0.0.0") { return }
+	// 🛡️ MESH ENTRANCE FILTER SHIELD
+	// Instantly drop any empty parameters, local loopbacks, or malformed visual HTML string leaks
+	cleanedAddr := strings.TrimSpace(peerAddr)
+	if cleanedAddr == "" || 
+	   strings.HasPrefix(cleanedAddr, "127.0.0.1") || 
+	   strings.HasPrefix(cleanedAddr, "0.0.0.0") || 
+	   strings.Contains(cleanedAddr, "<!") || 
+	   strings.Contains(cleanedAddr, "html") || 
+	   strings.Contains(cleanedAddr, "DOCTYPE") { 
+		return 
+	}
+	
 	RosterMutex.Lock()
 	defer RosterMutex.Unlock()
 	for _, existing := range ActivePeerRoster {
-		if existing == peerAddr { return }
+		if existing == cleanedAddr { return }
 	}
-	ActivePeerRoster = append(ActivePeerRoster, peerAddr)
-	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", peerAddr)
+	ActivePeerRoster = append(ActivePeerRoster, cleanedAddr)
+	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", cleanedAddr)
 }
 
 func HandleIncomingPeer(conn net.Conn) {
