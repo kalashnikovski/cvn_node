@@ -40,7 +40,7 @@ Follow this simple sequence to spin up your local hardware threads, connect to t
    ```
 3. **Select Option 1** from the interface menu prompt if you are a new user. 
 
-*BOOM! The standalone binary will automatically initialize your unique cryptographic public/private key-generation pair, write your profile config to disk, safely clear environment variables using sequential execution jumps, and instantly lock hands with our bootstrap entry gates to stream the full historical ledger block height dynamically to your private keys!*
+*BOOM! The standalone binary will automatically initialize your unique cryptographic public/private key-generation pair, write your profile config to disk, safely clear environment variables using sequential execution jumps, and instantly engage our Autonomous Bootstrap Engine. If launched without parameters, the node client automatically runs an input validation pass, checks our hardcoded seed anchors, displays an interactive sync progress bar, and securely chains your machine to the global mainnet wire entirely on autopilot!*
 
 ---
 
@@ -53,7 +53,7 @@ If your domestic internet connection experiences timeout resets during the initi
 2. Extract and drop the 'cvn_mainnet.db' file straight into your root project directory folder before launching your executable terminal window.
 
 3. Fire up your mining loop natively:
-.\cvn_node.exe --connect 207.148.67.11:8080
+.\cvn_node.exe
 
 
 ## 📡 3. Live Mainnet Telemetry & Seed Node Gateway
