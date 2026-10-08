@@ -521,6 +521,8 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 				break 
 			}
 
+			// ✅ CRITICAL 1-by-1 MATCHING ALIGNMENT: 
+			// We calculate progress and print live console updates INSIDE the active transactional batch loops!
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
@@ -529,6 +531,19 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 					blockData, _ := json.Marshal(block)
 					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
 					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
+					
+					// Force an instant visual percentage calculation every time a key block sector finishes saving
+					if block.Index == targetEnd || block.Index%128 == 0 {
+						currentSyncedCount := block.Index - localHeight
+						percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
+						barLength := 20
+						completedBars := int((percentComplete / 100.0) * float64(barLength))
+						barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
+						
+						// Use explicit \n line feeds to bypass Linux stdout buffering blocks completely
+						fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, block.Index, remoteHeight)
+						_ = os.Stdout.Sync()
+					}
 				}
 				return nil
 			})
@@ -536,20 +551,8 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			lastBlockInBatch := blockBatch[len(blockBatch)-1]
 			syncedTip = lastBlockInBatch
 			currentIdx = lastBlockInBatch.Index + 1
-
-			// Update the interactive visual progress percentage log bar frame
-			currentSyncedCount := currentIdx - 1 - localHeight
-			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
-			barLength := 20
-			completedBars := int((percentComplete / 100.0) * float64(barLength))
-			barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 			
-			// ✅ FIXED: Force unique line feeds (\n) per batch tracking segment 
-			// This forcefully breaks any Linux VPS terminal stdout caching blocks and displays the update instantly!
-			fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, currentIdx-1, remoteHeight)
-			_ = os.Stdout.Sync()
-			
-			time.Sleep(30 * time.Millisecond) // Injected pacing delay so you can visually watch the bar climb!
+			time.Sleep(20 * time.Millisecond) // Smooth pacing delay to ensure visual stability
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -744,11 +747,10 @@ func InitBoltEngine() {
 }
 
 func main() {
-	MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
-	InitBoltEngine()
-	defer GlobalBoltEngine.Close()
-
-	ValidatorStakingPool = make(map[string]float64)
+MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
+InitBoltEngine()
+defer GlobalBoltEngine.Close()
+ValidatorStakingPool = make(map[string]float64)
 ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
