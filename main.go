@@ -471,15 +471,12 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if err != nil { return GetLatestBlock() }
 	defer conn.Close()
 	
-	// Initialize a single, high-capacity buffered scanner tracking stream outside the loop
-	scanner := bufio.NewScanner(conn)
-	// Enforce a massive 4MB token allocation buffer ceiling to safely consume heavy block array streams
-	buf := make([]byte, 4*1024*1024)
-	scanner.Buffer(buf, 4*1024*1024)
+	// ✅ FIXED: Use a single, persistent, unbounded reader instead of a capped scanner
+	networkReader := bufio.NewReader(conn)
 
 	fmt.Fprintln(conn, "REQ_CHAIN_HEIGHT")
-	if !scanner.Scan() { return GetLatestBlock() }
-	respLine := scanner.Text()
+	respLine, err := networkReader.ReadString('\n')
+	if err != nil { return GetLatestBlock() }
 	
 	remoteHeight, err := strconv.ParseInt(strings.TrimSpace(respLine), 10, 64)
 	if err != nil { return GetLatestBlock() }
@@ -500,13 +497,14 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			// Request an optimized 32-block batch packet from the seed node
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			
-			// Scan the raw socket line continuously until the complete line terminates cleanly
-			if !scanner.Scan() {
-				fmt.Println("\n🚨 [BATCH EXCEPTION] Socket read channel disconnected or stream timed out.")
-				return GetLatestBlock()
+			// ✅ FIXED: ReadString operates without any arbitrary buffer limits, capturing large payloads safely
+			batchDataStr, err := networkReader.ReadString('\n')
+			if err != nil { 
+				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
+				return GetLatestBlock()	
 			}
 			
-			cleanedBatchStr := strings.TrimSpace(scanner.Text())
+			cleanedBatchStr := strings.TrimSpace(batchDataStr)
 			var blockBatch []Block
 			
 			if err := json.Unmarshal([]byte(cleanedBatchStr), &blockBatch); err != nil {
@@ -751,9 +749,10 @@ func InitBoltEngine() {
 }
 
 func main() {
-MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
-InitBoltEngine()
-defer GlobalBoltEngine.Close()
+	MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
+	InitBoltEngine()
+	defer GlobalBoltEngine.Close()
+
 ValidatorStakingPool = make(map[string]float64)
 ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
