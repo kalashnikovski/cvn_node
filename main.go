@@ -473,6 +473,7 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	var syncedTip Block
 	syncedTip.Index = 0
 	syncedTip.Hash = "0000000000000000000000000000000000000000000000000000000000000000"
+	syncedTip.Difficulty = 4
 
 	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
 	if err != nil { return GetLatestBlock() }
@@ -496,6 +497,7 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			targetEnd := currentIdx + 511
 			if targetEnd > remoteHeight { targetEnd = remoteHeight }
 			
+			// Request an optimized 512-block batch packet from the seed node
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			batchBytes, err := bufio.NewReader(conn).ReadBytes('\n')
 			if err != nil { 
@@ -512,6 +514,7 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 
 			if len(blockBatch) == 0 { break }
 
+			// Commit all 512 blocks to the hard drive in one single disk cycle
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
@@ -520,14 +523,16 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 					blockData, _ := json.Marshal(block)
 					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
 					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
-					syncedTip = block
 				}
 				return nil
 			})
 
+			// ✅ FIX: Extract the highest block out of the batch and advance trackers globally
 			lastBlockInBatch := blockBatch[len(blockBatch)-1]
+			syncedTip = lastBlockInBatch
 			currentIdx = lastBlockInBatch.Index + 1
 
+			// Update the interactive visual progress percentage log bar frame
 			currentSyncedCount := currentIdx - 1 - localHeight
 			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			barLength := 20
@@ -537,7 +542,8 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, currentIdx-1, remoteHeight)
 			_ = os.Stdout.Sync()
 			
-			time.Sleep(15 * time.Millisecond) // Smooth visual presentation pacing delay
+			// ⏱️ Visual pacer delay ensures the console window has time to draw the rendering updates
+			time.Sleep(15 * time.Millisecond)
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -570,7 +576,7 @@ func executeBootstrapSequence() Block {
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0]
+				hostSegment = parts[0] // ✅ FIX: Extract pure host IP address string component cleanly
 			}
 		}
 
@@ -705,7 +711,6 @@ func (dm *DualChamberMempool) AssembleBlockPayload(maxTxCount int) []Transaction
 	return finalPayload
 }
 
-// ✅ UPGRADED: InitBoltEngine protects the historical block height state from boot overwrites
 func InitBoltEngine() {
 	db, err := bbolt.Open("cvn_mainnet.db", 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	if err != nil { log.Fatalf("Database lock failure: %v", err) }
@@ -715,7 +720,7 @@ func InitBoltEngine() {
 		b, _ := tx.CreateBucketIfNotExists([]byte("Blocks"))
 		meta, _ := tx.CreateBucketIfNotExists([]byte("Metadata"))
 		
-		// Only set baseline height to 0 if the tracking key is completely blank!
+		// Only set baseline height to 0 if the bucket key is completely empty!
 		if meta.Get([]byte("height")) == nil {
 			_ = meta.Put([]byte("height"), []byte("0"))
 		}
@@ -743,19 +748,18 @@ func main() {
 	ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 
 	CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
-	userPastedAddress := false
-
-	for i := 1; i < len(os.Args); i++ {
-		arg := os.Args[i]
-		if arg == "--miner-address" && i+1 < len(os.Args) {
-			inputAddress := strings.TrimSpace(os.Args[i+1])
-			if inputAddress != "" && inputAddress != "=" {
-				CustomMinerAddress = inputAddress
-				userPastedAddress = true
-			}
-			i++
-		}
-		if arg == "--generate-profile" {
+userPastedAddress := false
+for i := 1; i < len(os.Args); i++ {
+arg := os.Args[i]
+if arg == "--miner-address" && i+1 < len(os.Args) {
+inputAddress := strings.TrimSpace(os.Args[i+1])
+if inputAddress != "" && inputAddress != "=" {
+CustomMinerAddress = inputAddress
+userPastedAddress = true
+}
+i++
+}
+if arg == "--generate-profile" {
 fmt.Printf("📋 PROFILE EXPORT INITIALIZED\n")
 return
 }
@@ -789,6 +793,7 @@ go DialAndGossipWithSeedPeer(ConnectTarget)
 } else {
 currentBlock = RunAutonomousBootstrapEngine()
 }
+// ✅ FORCE SYNCHRONIZED RUNTIME STATE INJECTIONS
 if currentBlock.Index == 0 {
 currentBlock = GetLatestBlock()
 }
