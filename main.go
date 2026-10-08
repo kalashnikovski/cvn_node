@@ -471,7 +471,6 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if err != nil { return GetLatestBlock() }
 	defer conn.Close()
 	
-	// ✅ FIXED: Use a single, persistent, unbounded reader instead of a capped scanner
 	networkReader := bufio.NewReader(conn)
 
 	fmt.Fprintln(conn, "REQ_CHAIN_HEIGHT")
@@ -485,76 +484,61 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if remoteHeight > localHeight {
 		totalBlocksToSync := remoteHeight - localHeight
 		fmt.Printf("\n⛓️  [SYNC GATE ENGAGED] Network Tip Height: #%d | Local Height: #%d\n", remoteHeight, localHeight)
-		fmt.Printf("⏳ Catching up on %d missing block segments in 32 bulk compressed batches...\n", totalBlocksToSync)
+		fmt.Printf("⏳ Catching up on %d missing block segments 1-by-1 natively...\n", totalBlocksToSync)
 
-		var totalBlocksWritten int64 = 0
 		currentIdx := localHeight + 1
-
 		for currentIdx <= remoteHeight {
-			targetEnd := currentIdx + 31
-			if targetEnd > remoteHeight { targetEnd = remoteHeight }
+			// 📡 REVERTED WIRE CORE: Request exactly 1 block at a time to prevent packet truncation
+			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK:%d", currentIdx))
 			
-			// Request an optimized 32-block batch packet from the seed node
-			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
-			
-			// ✅ FIXED: ReadString operates without any arbitrary buffer limits, capturing large payloads safely
-			batchDataStr, err := networkReader.ReadString('\n')
+			blockBytes, err := networkReader.ReadString('\n')
 			if err != nil { 
-				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
+				fmt.Printf("\n🚨 [SYNC EXCEPTION] Socket read timeout on block #%d: %v\n", currentIdx, err)
 				return GetLatestBlock()	
 			}
 			
-			cleanedBatchStr := strings.TrimSpace(batchDataStr)
-			var blockBatch []Block
-			
-			if err := json.Unmarshal([]byte(cleanedBatchStr), &blockBatch); err != nil {
-				var dynamicBatch []map[string]interface{}
-				if json.Unmarshal([]byte(cleanedBatchStr), &dynamicBatch) == nil && len(dynamicBatch) > 0 {
-					for _, rawBlk := range dynamicBatch {
-						var bBlock Block
-						bBytes, _ := json.Marshal(rawBlk)
-						if json.Unmarshal(bBytes, &bBlock) == nil {
-							blockBatch = append(blockBatch, bBlock)
-						}
-					}
+			cleanedBlockStr := strings.TrimSpace(blockBytes)
+			var block Block
+			if err := json.Unmarshal([]byte(cleanedBlockStr), &block); err != nil {
+				// Handle dynamic dynamic layout mappings on the fly if string buffers vary
+				var dynamicBlock map[string]interface{}
+				if json.Unmarshal([]byte(cleanedBlockStr), &dynamicBlock) == nil {
+					bBytes, _ := json.Marshal(dynamicBlock)
+					_ = json.Unmarshal(bBytes, &block)
 				}
 			}
 
-			if len(blockBatch) == 0 { 
-				fmt.Printf("\n🚨 [SYNC STALL] Received empty block batch for indexes %d to %d\n", currentIdx, targetEnd)
-				break 
+			if block.Index == 0 {
+				fmt.Printf("\n🚨 [SYNC STALL] Received unreadable or empty block data frame at index %d\n", currentIdx)
+				break
 			}
 
+			// Save the single block to disk within an ACID-compliant BoltDB update transaction
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
 				
-				for _, block := range blockBatch {
-					if block.Index == 0 { continue }
-					blockData, _ := json.Marshal(block)
-					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
-					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
-					syncedTip = block
-				}
+				blockData, _ := json.Marshal(block)
+				_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
+				_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
+				syncedTip = block
 				return nil
 			})
 
-			actualBatchSize := int64(len(blockBatch))
-			totalBlocksWritten += actualBatchSize
-			currentIdx += actualBatchSize
-
 			// Update the interactive visual progress percentage log bar frame
-			percentComplete := (float64(totalBlocksWritten) / float64(totalBlocksToSync)) * 100.0
-			if percentComplete > 100.0 { percentComplete = 100.0 }
+			currentSyncedCount := currentIdx - localHeight
+			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			
 			barLength := 20
 			completedBars := int((percentComplete / 100.0) * float64(barLength))
 			barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 			
-			fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, totalBlocksWritten, totalBlocksToSync)
+			// Use clean trailing line feeds (\n) to force Linux remote SSH shells to flush text live
+			fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, currentIdx, remoteHeight)
 			_ = os.Stdout.Sync()
 			
-			time.Sleep(10 * time.Millisecond) 
+			currentIdx++
+			time.Sleep(1 * time.Millisecond) // Ultra-short pacing to ensure stable visual rendering
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -753,14 +737,16 @@ func main() {
 	InitBoltEngine()
 	defer GlobalBoltEngine.Close()
 
-ValidatorStakingPool = make(map[string]float64)
-ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
-ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
-CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
-userPastedAddress := false
-for i := 1; i < len(os.Args); i++ {
-arg := os.Args[i]
-if arg == "--miner-address" && i+1 < len(os.Args) {
+	ValidatorStakingPool = make(map[string]float64)
+	ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
+	ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
+
+	CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
+	userPastedAddress := false
+
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		if arg == "--miner-address" && i+1 < len(os.Args) {
 inputAddress := strings.TrimSpace(os.Args[i+1])
 if inputAddress != "" && inputAddress != "=" {
 CustomMinerAddress = inputAddress
