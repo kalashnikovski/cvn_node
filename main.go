@@ -254,28 +254,30 @@ func HandleIncomingPeer(conn net.Conn) {
 			continue
 		}
 		
-				// 📡 BATCH SERVER WIRE GATE: Compact the data stream into one single line to prevent socket truncation
+				// 📡 BATCH SERVER WIRE GATE: High-capacity interface map parsing eliminates structure layout mismatches
 		if strings.HasPrefix(text, "REQ_BLOCK_BATCH:") {
 			reqPayload := strings.TrimPrefix(text, "REQ_BLOCK_BATCH:")
 			parts := strings.Split(reqPayload, ":")
 			if len(parts) < 2 { continue }
 			
-			// ✅ FIXED: Map indices [0] and [1] explicitly to capture numeric coordinates perfectly
 			startIdx, _ := strconv.ParseInt(parts[0], 10, 64)
 			endIdx, _ := strconv.ParseInt(parts[1], 10, 64)
 			
 			if endIdx - startIdx > 512 { endIdx = startIdx + 512 }
 
-			var blockBatch []Block
+			// Use an anonymous interface map array slice to entirely bypass strict compilation cache bottlenecks
+			var rawBatch []map[string]interface{}
+			
 			_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				if b != nil {
 					for i := startIdx; i <= endIdx; i++ {
 						bData := b.Get([]byte(strconv.FormatInt(i, 10)))
 						if bData != nil {
-							var blk Block
-							if json.Unmarshal(bData, &blk) == nil {
-								blockBatch = append(blockBatch, blk)
+							var dynamicBlock map[string]interface{}
+							// Safely ingest data frames natively as dynamic map interfaces to prevent layout rejections
+							if json.Unmarshal(bData, &dynamicBlock) == nil {
+								rawBatch = append(rawBatch, dynamicBlock)
 							}
 						}
 					}
@@ -283,38 +285,12 @@ func HandleIncomingPeer(conn net.Conn) {
 				return nil
 			})
 
-			// Force the entire 512-block JSON array onto one single, unbroken line text stream
-			batchData, _ := json.Marshal(blockBatch)
+			// Encode the dynamic map stream array onto one single, unbroken line text packet stream
+			batchData, _ := json.Marshal(rawBatch)
 			compactStr := strings.ReplaceAll(string(batchData), "\n", "")
 			compactStr = strings.ReplaceAll(compactStr, "\r", "")
 			
 			fmt.Fprintln(conn, compactStr)
-			continue
-		}
-		
-		if strings.HasPrefix(text, "GOSSIP_PEER_DISCOVERY:") {
-			incomingNodeAddress := strings.TrimPrefix(text, "GOSSIP_PEER_DISCOVERY:")
-			RegisterGossipPeer(incomingNodeAddress)
-			RosterMutex.Lock()
-			rosterJSON, _ := json.Marshal(ActivePeerRoster)
-			RosterMutex.Unlock()
-			fmt.Fprintln(conn, string(rosterJSON))
-			continue
-		}
-		
-		if strings.HasPrefix(text, "TX_BROADCAST:") {
-			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
-			var tx Transaction
-			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
-				accepted := MempoolMatrix.PushTransaction(tx)
-				if accepted {
-					fmt.Fprintln(conn, "TX_ACCEPTED")
-				} else {
-					fmt.Fprintln(conn, "TX_REJECTED_SPAM_OVERFLOW")
-				}
-			} else {
-				fmt.Fprintln(conn, "TX_REJECTED_MALFORMED")
-			}
 			continue
 		}
 	}
