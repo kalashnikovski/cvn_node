@@ -534,16 +534,20 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			syncedTip = lastBlockInBatch
 			currentIdx = lastBlockInBatch.Index + 1
 
+						// Update the interactive visual progress percentage log bar frame
 			currentSyncedCount := currentIdx - 1 - localHeight
 			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			barLength := 20
 			completedBars := int((percentComplete / 100.0) * float64(barLength))
 			barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 			
-			fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, currentIdx-1, remoteHeight)
+			// ✅ FIXED: Shift from \r carriage returns to clean trailing print lines (\n) 
+			// to force Linux server shell buffers to output the streaming tracking frames live!
+			fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, currentIdx-1, remoteHeight)
 			_ = os.Stdout.Sync()
 			
 			time.Sleep(15 * time.Millisecond) // Precise visual pacing delay
+
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
