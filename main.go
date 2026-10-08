@@ -531,20 +531,24 @@ func SyncChainFromSeedPeer(seedAddr string) {
 		for i := localHeight + 1; i <= remoteHeight; i++ {
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_CHUNK:%d", i))
 			blockBytes, err := bufio.NewReader(conn).ReadBytes('\n')
-			if err != nil { return }
+			if err != nil { 
+				fmt.Printf("\n🚨 [SYNC EXCEPTION] Socket read failure at Block #%d: %v\n", i, err)
+				return 
+			}
 			
-			// ✅ FIXED: Trim all system whitespaces and trailing system newlines (\n) 
-			// away from the raw data payload before parsing to prevent json syntax unmarshal failures!
+			// Clean all system whitespaces and trailing structural newline formatting
 			cleanedBlockStr := strings.TrimSpace(string(blockBytes))
 			
 			var block Block
 			if err := json.Unmarshal([]byte(cleanedBlockStr), &block); err != nil { 
-				fmt.Printf("\n🚨 [SYNC EXCEPTION] JSON syntax unmarshal crash at Block Height #%d: %v\n", i, err)
+				// 📊 UPGRADED TELEMETRY: Print out the raw data and explicit error reason instead of bailing silently
+				fmt.Printf("\n🚨 [SYNC EXCEPTION] JSON unmarshal crash at Block Height #%d: %v\n", i, err)
+				fmt.Printf("🔍 RAW DATA STREAM ATTEMPTED: %s\n", cleanedBlockStr)
 				return 
 			}
 			
 			if i > 1 && block.PrevHash != lastValidHash { 
-				fmt.Printf("\n🚨 [SYNC REJECTION] Lineage break pointer caught at Block Height #%d\n", i)
+				fmt.Printf("\n🚨 [SYNC REJECTION] Lineage link broken at block #%d\n", i)
 				return 
 			}
 			lastValidHash = block.Hash
@@ -558,7 +562,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 				return nil
 			})
 
-			// 📊 VISUAL SYNC PROGRESS LOG GENERATOR
+			// Visual Percentage Log Generator
 			currentSyncedCount := i - localHeight
 			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			barLength := 20
@@ -571,6 +575,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			// ⏱️ 1ms pacing delay keeps text frames perfectly stable on screen
 			time.Sleep(1 * time.Millisecond)
 		}
+
 		
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
