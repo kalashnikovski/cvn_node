@@ -102,7 +102,6 @@ func StartDynamicPeerPruningHeartbeat() {
 	go func() {
 		for range ticker.C {
 			GlobalRoster.Lock()
-			// Snapshot the current keys inside the roster map to safely iterate without memory race deadlocks
 			activeSnapshot := make([]string, 0)
 			for peerIP := range GlobalRoster.ActiveAddresses {
 				activeSnapshot = append(activeSnapshot, peerIP)
@@ -116,20 +115,21 @@ func StartDynamicPeerPruningHeartbeat() {
 			fmt.Printf("🔍 [PEER HEALTH AUDIT] Auditing %d active network nodes for heartbeat responses...\n", len(activeSnapshot))
 
 			for _, peerIP := range activeSnapshot {
-				// Establish a hyper-fast 3-second diagnostic TCP probe dial to their consensus port 8080
+				// Establish a fast 3-second diagnostic TCP probe dial to their consensus port 8080
 				conn, err := net.DialTimeout("tcp", net.JoinHostPort(peerIP, "8080"), 3*time.Second)
 				
 				if err != nil {
-					// 🚨 THE CONE OF PURGE 🚨
-					// If the node turned off their rig or disconnected, drop them immediately from memory maps
 					GlobalRoster.Lock()
 					delete(GlobalRoster.ActiveAddresses, peerIP)
 					GlobalRoster.Unlock()
-					fmt.Printf("   ❌ Node %s failed health check (Offline/Timeout). Successfully pruned from dynamic peer rosters.\n", peerIP)
+					fmt.Printf("   ❌ Node %s failed health check (Offline/Timeout). Pruned from roster.\n", peerIP)
 				} else {
-					// Connection passed, peer is wide awake! Close the socket and keep them active
 					conn.Close()
 				}
+				
+				// ✅ FIXED: Inject a 250ms pacing delay between individual node checks 
+				// to completely eliminate port exhaustion and thread choking across your VPS hubs!
+				time.Sleep(250 * time.Millisecond)
 			}
 		}
 	}()
