@@ -518,8 +518,6 @@ func DialAndGossipWithSeedPeer(seedAddr string) {
 		}
 	}
 }
-
-// ✅ UPGRADED: Lightweight Stream Sync Gate Protocol Layer
 func SyncChainFromSeedPeer(seedAddr string) {
 	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
 	if err != nil { return }
@@ -537,27 +535,13 @@ func SyncChainFromSeedPeer(seedAddr string) {
 		totalBlocksToSync := remoteHeight - localHeight
 		fmt.Printf("\n⛓️  [SYNC GATE ENGAGED] Network Tip Height: #%d | Local Height: #%d\n", remoteHeight, localHeight)
 		fmt.Printf("⏳ Catching up on %d missing block segments in 512 bulk compressed batches...\n", totalBlocksToSync)
-		
-		var lastValidHash string
-		_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-			b := tx.Bucket([]byte("Blocks"))
-			if b != nil {
-				var lastBlock Block
-				bData := b.Get([]byte(strconv.FormatInt(localHeight, 10)))
-				if bData != nil {
-					_ = json.Unmarshal(bData, &lastBlock)
-					lastValidHash = lastBlock.Hash
-				}
-			}
-			return nil
-		})
 
 		currentIdx := localHeight + 1
 		for currentIdx <= remoteHeight {
 			targetEnd := currentIdx + 511
 			if targetEnd > remoteHeight { targetEnd = remoteHeight }
 			
-			// Request a complete, optimized 512-block batch packet from the seed node
+			// Request an optimized 512-block batch packet from the target seed node anchor
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			batchBytes, err := bufio.NewReader(conn).ReadBytes('\n')
 			if err != nil { 
@@ -572,18 +556,12 @@ func SyncChainFromSeedPeer(seedAddr string) {
 				return 
 			}
 
-			// Open a single ACID transaction to commit all 512 blocks to the hard drive in one single disk cycle!
+			// Open a single ACID transaction to commit all 512 blocks to the hard drive in one single disk cycle
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
 				
 				for _, block := range blockBatch {
-					// Apply our self-healing lineage warp shield on the fly inside memory
-					if block.Index > 1 && block.PrevHash != lastValidHash {
-						// Suppress excessive print spam during bulk operations, line transitions safely
-					}
-					lastValidHash = block.Hash
-
 					blockData, _ := json.Marshal(block)
 					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
 					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
@@ -608,7 +586,6 @@ func SyncChainFromSeedPeer(seedAddr string) {
 		RebuildStateBalanceCache()
 	}
 }
-
 
 func RunAutonomousBootstrapEngine() {
 	fmt.Println("🛰️  [BOOTSTRAP ENGINE] Manual link flag absent. Booting autonomous peer discovery engine...")
@@ -640,16 +617,14 @@ func executeBootstrapSequence() {
 	}
 
 	for _, seedIP := range MasterSeedNodes {
-		// ✅ FIXED: Safely isolate the pure IP address string segment using index 0
 		hostSegment := seedIP
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0] // Explicitly extract the pure host IP address string
+				hostSegment = parts[0]
 			}
 		}
 
-		// 🛡️ DYNAMIC HARDWARE LEVEL SELF-DIAL SHIELD
 		if localInterfaces[hostSegment] {
 			continue
 		}
@@ -803,7 +778,6 @@ func main() {
 			i++
 		}
 		if arg == "--generate-profile" {
-			// Basic template pass for batch isolation setups
 			fmt.Printf("📋 PROFILE EXPORT INITIALIZED\n")
 			return
 		}
@@ -829,12 +803,11 @@ func main() {
 	go StartPublicExplorerServer()
 	time.Sleep(200 * time.Millisecond)
 
-	fmt.Println("⏳ [STATE ENGINE] Scanning binary BoltDB buckets to generate State Balance Cache...")
-	fmt.Println("   ↳ (This may take a moment to safely parse block histories under your 25% vCPU limit...)")
-	RebuildStateBalanceCache()
-	fmt.Println("🟩 [STATE ENGINE] Memory Matrix successfully synced. Proceeding to network gates.")
-
-	if ConnectTarget != "" {
+fmt.Println("⏳ [STATE ENGINE] Scanning binary BoltDB buckets to generate State Balance Cache...")
+fmt.Println("   ↳ (This may take a moment to safely parse block histories under your 25% vCPU limit...)")
+RebuildStateBalanceCache()
+fmt.Println("🟩 [STATE ENGINE] Memory Matrix successfully synced. Proceeding to network gates.")
+if ConnectTarget != "" {
 fmt.Printf("📡 Target connect instruction found: %s\n", ConnectTarget)
 SyncChainFromSeedPeer(ConnectTarget)
 go DialAndGossipWithSeedPeer(ConnectTarget)
