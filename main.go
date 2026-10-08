@@ -254,7 +254,7 @@ func HandleIncomingPeer(conn net.Conn) {
 			continue
 		}
 		
-				// 📡 UPGRADED BATCH STREAMING PROTOCOL: Extract and transmit up to 512 blocks in a single transaction payload
+				// 📡 BATCH SERVER WIRE GATE: Compact the data stream into one single line to prevent socket truncation
 		if strings.HasPrefix(text, "REQ_BLOCK_BATCH:") {
 			reqPayload := strings.TrimPrefix(text, "REQ_BLOCK_BATCH:")
 			parts := strings.Split(reqPayload, ":")
@@ -263,10 +263,7 @@ func HandleIncomingPeer(conn net.Conn) {
 			startIdx, _ := strconv.ParseInt(parts[0], 10, 64)
 			endIdx, _ := strconv.ParseInt(parts[1], 10, 64)
 			
-			// Enforce a hard protocol ceiling cap of 512 blocks per packet slice to protect node RAM
-			if endIdx - startIdx > 512 {
-				endIdx = startIdx + 512
-			}
+			if endIdx - startIdx > 512 { endIdx = startIdx + 512 }
 
 			var blockBatch []Block
 			_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
@@ -285,9 +282,12 @@ func HandleIncomingPeer(conn net.Conn) {
 				return nil
 			})
 
-			// Serialize the entire 512-block batch array cleanly and blast it over the open socket channel
+			// ✅ FIXED: Force the entire 512-block JSON array onto one single, unbroken line text stream
 			batchData, _ := json.Marshal(blockBatch)
-			fmt.Fprintln(conn, string(batchData))
+			compactStr := strings.ReplaceAll(string(batchData), "\n", "")
+			compactStr = strings.ReplaceAll(compactStr, "\r", "")
+			
+			fmt.Fprintln(conn, compactStr)
 			continue
 		}
 
