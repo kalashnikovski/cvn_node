@@ -500,22 +500,14 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			totalBlocksToSync := remoteHeight - localHeight
 			fmt.Printf("\n⛓️  [SYNC GATE ENGAGED] Network Tip Height: #%d | Local Height: #%d\n", remoteHeight, localHeight)
 			fmt.Printf("⏳ Catching up on %d missing block segments...\n", totalBlocksToSync)
-						// ✅ CRITICAL SECURITY GAUNTLET SEGMENT PASSED LIVE
+			
 			var lastValidHash string = remoteChain[0].Hash
 			
 			for i := 1; i < len(remoteChain); i++ {
 				block := remoteChain[i]
-				
-				if block.PrevHash != lastValidHash { 
-					fmt.Printf("\n🚨 [SYNC REJECTION] Broken link pointer caught at Block Height #%d!\n", block.Index)
-					return 
-				}
-				if block.Hash != CalculateHash(block) { 
-					fmt.Printf("\n🚨 [SYNC REJECTION] Payload mutation caught at Block Height #%d!\n", block.Index)
-					return 
-				}
+				if block.PrevHash != lastValidHash { return }
+				if block.Hash != CalculateHash(block) { return }
 				if !ValidateBlockSize(block) { return }
-				
 				targetPrefix := strings.Repeat("0", int(block.Difficulty))
 				if len(block.Hash) < int(block.Difficulty) || block.Hash[:int(block.Difficulty)] != targetPrefix { return }
 				lastValidHash = block.Hash
@@ -523,24 +515,23 @@ func SyncChainFromSeedPeer(seedAddr string) {
 				if block.Index > localHeight {
 					currentSyncedCount := block.Index - localHeight
 					percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
-					
-					// Formulate a beautiful interactive text progress bar frame string
 					barLength := 20
 					completedBars := int((percentComplete / 100.0) * float64(barLength))
 					barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 					
-					// Use carriage return (\r) to animate the exact same log line continuously
+					// Print the animated percentage tracking bar string natively across the console line
 					fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, block.Index, remoteHeight)
 					
-					// ⏱️ INJECTED MICRO-COOLDOWN PACING PACER
-					// Gives the terminal window thread 1 millisecond of breathing space 
-					// to physically draw the percentage string frames before processing the next block
-					time.Sleep(1 * time.Millisecond)
+					// 🛡️ FIXED: Force the operating system terminal thread to immediately flush its print buffer
+					// This guarantees the progress bar draws frame-by-frame on screen without silent background caching
+					_ = os.Stdout.Sync()
+					
+					// ⏱️ Pacing pacer gives the console window thread 2 milliseconds of breathing space 
+					time.Sleep(2 * time.Millisecond)
 				}
 			}
 			fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
-
-						
+			
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
