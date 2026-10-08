@@ -798,6 +798,8 @@ fmt.Println("====================================================")
 go StartTCPServer()
 go StartPublicExplorerServer()
 time.Sleep(200 * time.Millisecond)
+// ✅ INITIALIZE PEER HEALTH CHECKER DAEMON
+	go StartDynamicPeerPruningHeartbeat()
 fmt.Println("⏳ [STATE ENGINE] Scanning binary BoltDB buckets to generate State Balance Cache...")
 fmt.Println("   ↳ (This may take a moment to safely parse block histories under your 25% vCPU limit...)")
 RebuildStateBalanceCache()
