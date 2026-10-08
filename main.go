@@ -471,8 +471,11 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if err != nil { return GetLatestBlock() }
 	defer conn.Close()
 	
+	// Initialize ONE persistent network stream reader OUTSIDE the loop scope bounds
+	networkReader := bufio.NewReader(conn)
+
 	fmt.Fprintln(conn, "REQ_CHAIN_HEIGHT")
-	respLine, err := bufio.NewReader(conn).ReadString('\n')
+	respLine, err := networkReader.ReadString('\n')
 	if err != nil { return GetLatestBlock() }
 	
 	remoteHeight, err := strconv.ParseInt(strings.TrimSpace(respLine), 10, 64)
@@ -489,17 +492,19 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			targetEnd := currentIdx + 511
 			if targetEnd > remoteHeight { targetEnd = remoteHeight }
 			
+			// Request an optimized 512-block batch packet from the seed node
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
-			batchBytes, err := bufio.NewReader(conn).ReadBytes('\n')
+			
+			// Stream data chunks continuously through the persistent reader wrapper
+			batchBytes, err := networkReader.ReadBytes('\n')
 			if err != nil { 
-				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout: %v\n", err)
+				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
 				return GetLatestBlock()	
 			}
 			
 			cleanedBatchStr := strings.TrimSpace(string(batchBytes))
 			var blockBatch []Block
 			
-			// 🛡️ UNMARSHAL FIREWALL: Fallback gracefully to handle varied array padding formats
 			if err := json.Unmarshal([]byte(cleanedBatchStr), &blockBatch); err != nil {
 				var dynamicBatch []map[string]interface{}
 				if json.Unmarshal([]byte(cleanedBatchStr), &dynamicBatch) == nil && len(dynamicBatch) > 0 {
@@ -534,20 +539,17 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			syncedTip = lastBlockInBatch
 			currentIdx = lastBlockInBatch.Index + 1
 
-						// Update the interactive visual progress percentage log bar frame
+			// Update the interactive visual progress percentage log bar frame
 			currentSyncedCount := currentIdx - 1 - localHeight
 			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			barLength := 20
 			completedBars := int((percentComplete / 100.0) * float64(barLength))
 			barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 			
-			// ✅ FIXED: Shift from \r carriage returns to clean trailing print lines (\n) 
-			// to force Linux server shell buffers to output the streaming tracking frames live!
 			fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, currentIdx-1, remoteHeight)
 			_ = os.Stdout.Sync()
 			
 			time.Sleep(15 * time.Millisecond) // Precise visual pacing delay
-
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -580,7 +582,7 @@ func executeBootstrapSequence() Block {
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0]
+				hostSegment = parts[0] // ✅ FIXED: Explicitly capture string index 0 to parse host segments perfectly
 			}
 		}
 
@@ -746,15 +748,13 @@ func main() {
 	InitBoltEngine()
 	defer GlobalBoltEngine.Close()
 
-	ValidatorStakingPool = make(map[string]float64)
-	ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
-	ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
-
-	CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
-	userPastedAddress := false
-
-	for i := 1; i < len(os.Args); i++ {
-		arg := os.Args[i]
+ValidatorStakingPool = make(map[string]float64)
+ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
+ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
+CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
+userPastedAddress := false
+for i := 1; i < len(os.Args); i++ {
+arg := os.Args[i]
 if arg == "--miner-address" && i+1 < len(os.Args) {
 inputAddress := strings.TrimSpace(os.Args[i+1])
 if inputAddress != "" && inputAddress != "=" {
