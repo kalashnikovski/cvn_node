@@ -1,3 +1,6 @@
+//go:build !server
+// +build !server
+
 package main
 
 import (
@@ -52,37 +55,6 @@ var (
 	MinerLockMutex        sync.RWMutex
 	GlobalMainnetTip      int64
 )
-
-// Data Structures Matching Your Standardized Type Definitions
-type Block struct {
-	Index        int64         `json:"index"`
-	Timestamp    int64         `json:"timestamp"`
-	Transactions []Transaction `json:"transactions"`
-	PrevHash     string        `json:"prev_hash"`
-	Hash         string        `json:"hash"`
-	Difficulty   int64         `json:"difficulty"`
-	Nonce        int64         `json:"nonce"`
-	GuardMatrix  []string      `json:"guard_matrix"`
-}
-
-type Transaction struct {
-	ID               string       `json:"id"`
-	Inputs           []UTXOInput  `json:"inputs"`
-	Outputs          []UTXOOutput `json:"outputs"`
-	FreeWillOffering float64      `json:"free_will_offering"`
-	DataSizeKB       float64      `json:"data_size_kb"`
-	Witness          string       `json:"witness"`
-}
-
-type UTXOInput struct {
-	SourceTxID string `json:"source_tx_id"`
-	Index      int    `json:"index"`
-}
-
-type UTXOOutput struct {
-	Recipient string  `json:"recipient"`
-	Amount    float64 `json:"amount"`
-}
 
 type MinerConfig struct {
 	SavedMinerAddress string `json:"saved_miner_address"`
@@ -251,6 +223,12 @@ func main() {
 	}
 
 	if runDesktopUI {
+		// ✅ DESKTOP OVERRIDE GATE: Bypasses the graphics manager context on headless environments
+		if os.Getenv("GOOS") == "linux" {
+			fmt.Println("🛰️ SERVER DEMON MODE: Graphics subsystem initialization bypassed.")
+			return
+		}
+
 		fmt.Println("🎨 [WAILS ENGINE] Initiating thread-safe graphical matrix windows...")
 		wailsApp := NewApp()
 		err := wails.Run(&options.App{
