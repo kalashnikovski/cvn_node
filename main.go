@@ -583,7 +583,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 				return nil
 			})
 
-			// ✅ FIXED: Safely advance the index tracker globally OUTSIDE the closure scope
+			// Safely advance the index tracker globally outside the closure scope
 			lastBlockInBatch := blockBatch[len(blockBatch)-1]
 			currentIdx = lastBlockInBatch.Index + 1
 
@@ -597,7 +597,10 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, currentIdx-1, remoteHeight)
 			_ = os.Stdout.Sync()
 			
-			time.Sleep(1 * time.Millisecond) // Minimal delay to keep text graphics perfectly stable
+			// ⏱️ VISUAL PACER PACKET DELAY
+			// Intentionally slows the background evaluation thread down by 15 milliseconds 
+			// per 512 blocks to allow your desktop terminal to draw the filling animation bar frames!
+			time.Sleep(15 * time.Millisecond)
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -812,9 +815,9 @@ func main() {
 	}
 
 	fmt.Println("====================================================")
-	fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 CONSENSUS CORE ENGINE LAUNCHER")
-	fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
-        fmt.Println("====================================================")
+fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 CONSENSUS CORE ENGINE LAUNCHER")
+fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
+fmt.Println("====================================================")
 go StartTCPServer()
 go StartPublicExplorerServer()
 time.Sleep(200 * time.Millisecond)
