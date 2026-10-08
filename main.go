@@ -471,7 +471,6 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if err != nil { return GetLatestBlock() }
 	defer conn.Close()
 	
-	// Initialize ONE persistent network stream reader OUTSIDE the loop scope bounds
 	networkReader := bufio.NewReader(conn)
 
 	fmt.Fprintln(conn, "REQ_CHAIN_HEIGHT")
@@ -495,7 +494,6 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			// Request an optimized 512-block batch packet from the seed node
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			
-			// Stream data chunks continuously through the persistent reader wrapper
 			batchBytes, err := networkReader.ReadBytes('\n')
 			if err != nil { 
 				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
@@ -546,10 +544,12 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			completedBars := int((percentComplete / 100.0) * float64(barLength))
 			barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 			
+			// ✅ FIXED: Force unique line feeds (\n) per batch tracking segment 
+			// This forcefully breaks any Linux VPS terminal stdout caching blocks and displays the update instantly!
 			fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, currentIdx-1, remoteHeight)
 			_ = os.Stdout.Sync()
 			
-			time.Sleep(15 * time.Millisecond) // Precise visual pacing delay
+			time.Sleep(30 * time.Millisecond) // Injected pacing delay so you can visually watch the bar climb!
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -582,7 +582,7 @@ func executeBootstrapSequence() Block {
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0] // ✅ FIXED: Explicitly capture string index 0 to parse host segments perfectly
+				hostSegment = parts[0]
 			}
 		}
 
@@ -748,7 +748,7 @@ func main() {
 	InitBoltEngine()
 	defer GlobalBoltEngine.Close()
 
-ValidatorStakingPool = make(map[string]float64)
+	ValidatorStakingPool = make(map[string]float64)
 ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
