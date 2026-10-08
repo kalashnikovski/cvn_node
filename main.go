@@ -471,11 +471,15 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if err != nil { return GetLatestBlock() }
 	defer conn.Close()
 	
-	networkReader := bufio.NewReader(conn)
+	// Initialize a single, high-capacity buffered scanner tracking stream outside the loop
+	scanner := bufio.NewScanner(conn)
+	// Enforce a massive 4MB token allocation buffer ceiling to safely consume heavy block array streams
+	buf := make([]byte, 4*1024*1024)
+	scanner.Buffer(buf, 4*1024*1024)
 
 	fmt.Fprintln(conn, "REQ_CHAIN_HEIGHT")
-	respLine, err := networkReader.ReadString('\n')
-	if err != nil { return GetLatestBlock() }
+	if !scanner.Scan() { return GetLatestBlock() }
+	respLine := scanner.Text()
 	
 	remoteHeight, err := strconv.ParseInt(strings.TrimSpace(respLine), 10, 64)
 	if err != nil { return GetLatestBlock() }
@@ -493,15 +497,16 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			targetEnd := currentIdx + 31
 			if targetEnd > remoteHeight { targetEnd = remoteHeight }
 			
+			// Request an optimized 32-block batch packet from the seed node
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			
-			batchBytes, err := networkReader.ReadBytes('\n')
-			if err != nil { 
-				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
-				return GetLatestBlock()	
+			// Scan the raw socket line continuously until the complete line terminates cleanly
+			if !scanner.Scan() {
+				fmt.Println("\n🚨 [BATCH EXCEPTION] Socket read channel disconnected or stream timed out.")
+				return GetLatestBlock()
 			}
 			
-			cleanedBatchStr := strings.TrimSpace(string(batchBytes))
+			cleanedBatchStr := strings.TrimSpace(scanner.Text())
 			var blockBatch []Block
 			
 			if err := json.Unmarshal([]byte(cleanedBatchStr), &blockBatch); err != nil {
@@ -584,7 +589,7 @@ func executeBootstrapSequence() Block {
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0] // ✅ FIXED: Capture array offset index 0 to cleanly isolate host IP segments
+				hostSegment = parts[0]
 			}
 		}
 
@@ -677,7 +682,6 @@ func RebuildStateBalanceCache() {
 
 func ValidateBlockSize(b Block) bool {
 	blockBytes, _ := json.Marshal(b)
-	// ✅ FIXED: Pass the evaluated length of serialized byte array string instead of raw custom struct b
 	return len(blockBytes) <= MaxBlockPayloadSizeBytes
 }
 
@@ -747,11 +751,10 @@ func InitBoltEngine() {
 }
 
 func main() {
-	MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
-	InitBoltEngine()
-	defer GlobalBoltEngine.Close()
-
-	ValidatorStakingPool = make(map[string]float64)
+MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
+InitBoltEngine()
+defer GlobalBoltEngine.Close()
+ValidatorStakingPool = make(map[string]float64)
 ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
