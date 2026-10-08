@@ -471,7 +471,6 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if err != nil { return GetLatestBlock() }
 	defer conn.Close()
 	
-	// Initialize ONE persistent network stream reader OUTSIDE the loop scope bounds
 	networkReader := bufio.NewReader(conn)
 
 	fmt.Fprintln(conn, "REQ_CHAIN_HEIGHT")
@@ -485,20 +484,17 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 	if remoteHeight > localHeight {
 		totalBlocksToSync := remoteHeight - localHeight
 		fmt.Printf("\n⛓️  [SYNC GATE ENGAGED] Network Tip Height: #%d | Local Height: #%d\n", remoteHeight, localHeight)
-		fmt.Printf("⏳ Catching up on %d missing block segments in 512 bulk compressed batches...\n", totalBlocksToSync)
+		fmt.Printf("⏳ Catching up on %d missing block segments in 32 bulk compressed batches...\n", totalBlocksToSync)
 
-		// Maintain an explicit progress tracking counter independent of network field types
 		var totalBlocksWritten int64 = 0
 		currentIdx := localHeight + 1
 
 		for currentIdx <= remoteHeight {
-			targetEnd := currentIdx + 511
+			targetEnd := currentIdx + 31
 			if targetEnd > remoteHeight { targetEnd = remoteHeight }
 			
-			// Request an optimized 512-block batch packet from the seed node
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			
-			// Stream data chunks continuously through the persistent reader wrapper
 			batchBytes, err := networkReader.ReadBytes('\n')
 			if err != nil { 
 				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
@@ -526,15 +522,12 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 				break 
 			}
 
-			// Execute clean, high-speed transactional disk storage operations
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
 				
 				for _, block := range blockBatch {
-					if block.Index == 0 {
-						continue 
-					}
+					if block.Index == 0 { continue }
 					blockData, _ := json.Marshal(block)
 					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
 					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
@@ -543,7 +536,6 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 				return nil
 			})
 
-			// Dynamically increment progress based on the physical size of the processed batch slice array
 			actualBatchSize := int64(len(blockBatch))
 			totalBlocksWritten += actualBatchSize
 			currentIdx += actualBatchSize
@@ -556,11 +548,10 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			completedBars := int((percentComplete / 100.0) * float64(barLength))
 			barStr := strings.Repeat("■", completedBars) + strings.Repeat("░", barLength-completedBars)
 			
-			// Force unique line feeds (\n) per batch tracking segment outside database closures
 			fmt.Printf("📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)\n", barStr, percentComplete, totalBlocksWritten, totalBlocksToSync)
 			_ = os.Stdout.Sync()
 			
-			time.Sleep(30 * time.Millisecond) // Injected pacing delay so you can visually watch the bar climb!
+			time.Sleep(10 * time.Millisecond) 
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -593,7 +584,7 @@ func executeBootstrapSequence() Block {
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0]
+				hostSegment = parts[0] // ✅ FIXED: Capture array offset index 0 to cleanly isolate host IP segments
 			}
 		}
 
@@ -686,6 +677,7 @@ func RebuildStateBalanceCache() {
 
 func ValidateBlockSize(b Block) bool {
 	blockBytes, _ := json.Marshal(b)
+	// ✅ FIXED: Pass the evaluated length of serialized byte array string instead of raw custom struct b
 	return len(blockBytes) <= MaxBlockPayloadSizeBytes
 }
 
@@ -741,23 +733,25 @@ func InitBoltEngine() {
 			_ = meta.Put([]byte("height"), []byte("0"))
 		}
 		
-if b.Get([]byte("0")) == nil {
-genesisBlock := Block{
-Index:     0,
-Hash:      "0000000000000000000000000000000000000000000000000000000000000000",
-Timestamp: 1710000000,
+		if b.Get([]byte("0")) == nil {
+			genesisBlock := Block{
+				Index:     0,
+				Hash:      "0000000000000000000000000000000000000000000000000000000000000000",
+				Timestamp: 1710000000,
+			}
+			gData, _ := json.Marshal(genesisBlock)
+			_ = b.Put([]byte("0"), gData)
+		}
+		return nil
+	})
 }
-gData, _ := json.Marshal(genesisBlock)
-_ = b.Put([]byte("0"), gData)
-}
-return nil
-})
-}
+
 func main() {
-MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
-InitBoltEngine()
-defer GlobalBoltEngine.Close()
-ValidatorStakingPool = make(map[string]float64)
+	MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
+	InitBoltEngine()
+	defer GlobalBoltEngine.Close()
+
+	ValidatorStakingPool = make(map[string]float64)
 ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
