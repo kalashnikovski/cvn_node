@@ -232,42 +232,36 @@ func RegisterGossipPeer(peerAddr string) {
 	ActivePeerRoster = append(ActivePeerRoster, cleanedAddr)
 	fmt.Printf("🛰️  [Gossip Mesh Network] Connected new mesh node to routing tables: %s\n", cleanedAddr)
 }
-
 func HandleIncomingPeer(conn net.Conn) {
 	defer conn.Close()
 	
-	// ✅ FIXED: Shift away from restrictive Scanners to an infinite-capacity Reader pipe
 	reader := bufio.NewReader(conn)
 
 	for {
-		// Read incoming request lines cleanly until hitting the newline marker (\n)
 		lineBytes, err := reader.ReadBytes('\n')
-		if err != nil { return } // Safe exit if a peer disconnects
+		if err != nil { return } 
 		
 		text := strings.TrimSpace(string(lineBytes))
 		if text == "" { continue }
 
-		// 📡 1. Stream Request: Send out current numeric local block height tip
 		if text == "REQ_CHAIN_HEIGHT" {
 			latestBlock := GetLatestBlock()
 			fmt.Fprintln(conn, strconv.FormatInt(latestBlock.Index, 10))
 			continue
 		}
 		
-				// 📡 BATCH SERVER WIRE GATE: High-capacity interface map parsing eliminates structure layout mismatches
+		// 📡 UPGRADED BATCH STREAMING WIRE GATE: Correctly maps indexes 1 and 2 with unified array slices
 		if strings.HasPrefix(text, "REQ_BLOCK_BATCH:") {
 			reqPayload := strings.TrimPrefix(text, "REQ_BLOCK_BATCH:")
 			parts := strings.Split(reqPayload, ":")
-			if len(parts) < 2 { continue }
+			if len(parts) < 3 { continue }
 			
-			startIdx, _ := strconv.ParseInt(parts[0], 10, 64)
-			endIdx, _ := strconv.ParseInt(parts[1], 10, 64)
+			startIdx, _ := strconv.ParseInt(parts[1], 10, 64)
+			endIdx, _ := strconv.ParseInt(parts[2], 10, 64)
 			
 			if endIdx - startIdx > 512 { endIdx = startIdx + 512 }
 
-			// Use an anonymous interface map array slice to entirely bypass strict compilation cache bottlenecks
 			var rawBatch []map[string]interface{}
-			
 			_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				if b != nil {
@@ -275,7 +269,6 @@ func HandleIncomingPeer(conn net.Conn) {
 						bData := b.Get([]byte(strconv.FormatInt(i, 10)))
 						if bData != nil {
 							var dynamicBlock map[string]interface{}
-							// Safely ingest data frames natively as dynamic map interfaces to prevent layout rejections
 							if json.Unmarshal(bData, &dynamicBlock) == nil {
 								rawBatch = append(rawBatch, dynamicBlock)
 							}
@@ -285,12 +278,42 @@ func HandleIncomingPeer(conn net.Conn) {
 				return nil
 			})
 
-			// Encode the dynamic map stream array onto one single, unbroken line text packet stream
 			batchData, _ := json.Marshal(rawBatch)
 			compactStr := strings.ReplaceAll(string(batchData), "\n", "")
 			compactStr = strings.ReplaceAll(compactStr, "\r", "")
 			
 			fmt.Fprintln(conn, compactStr)
+			continue
+		}
+
+		if text == "REQ_CHAIN_SYNC" {
+			// Legacy full chain fallback slice logic
+			continue
+		}
+		
+		if strings.HasPrefix(text, "GOSSIP_PEER_DISCOVERY:") {
+			incomingNodeAddress := strings.TrimPrefix(text, "GOSSIP_PEER_DISCOVERY:")
+			RegisterGossipPeer(incomingNodeAddress)
+			RosterMutex.Lock()
+			rosterJSON, _ := json.Marshal(ActivePeerRoster)
+			RosterMutex.Unlock()
+			fmt.Fprintln(conn, string(rosterJSON))
+			continue
+		}
+		
+		if strings.HasPrefix(text, "TX_BROADCAST:") {
+			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
+			var tx Transaction
+			if err := json.Unmarshal([]byte(payload), &tx); err == nil {
+				accepted := MempoolMatrix.PushTransaction(tx)
+				if accepted {
+					fmt.Fprintln(conn, "TX_ACCEPTED")
+				} else {
+					fmt.Fprintln(conn, "TX_REJECTED_SPAM_OVERFLOW")
+				}
+			} else {
+				fmt.Fprintln(conn, "TX_REJECTED_MALFORMED")
+			}
 			continue
 		}
 	}
