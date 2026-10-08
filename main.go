@@ -546,7 +546,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			batchBytes, err := bufio.NewReader(conn).ReadBytes('\n')
 			if err != nil { 
 				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
-				return 
+				return 	
 			}
 			
 			cleanedBatchStr := strings.TrimSpace(string(batchBytes))
@@ -555,6 +555,8 @@ func SyncChainFromSeedPeer(seedAddr string) {
 				fmt.Printf("\n🚨 [BATCH EXCEPTION] JSON syntax unmarshal crash during bulk transfer: %v\n", err)
 				return 
 			}
+
+			if len(blockBatch) == 0 { break }
 
 			// Open a single ACID transaction to commit all 512 blocks to the hard drive in one single disk cycle
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
@@ -565,10 +567,13 @@ func SyncChainFromSeedPeer(seedAddr string) {
 					blockData, _ := json.Marshal(block)
 					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
 					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
-					currentIdx = block.Index + 1
 				}
 				return nil
 			})
+
+			// ✅ FIXED: Safely advance the index tracker globally OUTSIDE the closure scope
+			lastBlockInBatch := blockBatch[len(blockBatch)-1]
+			currentIdx = lastBlockInBatch.Index + 1
 
 			// Update the interactive visual progress percentage log bar frame
 			currentSyncedCount := currentIdx - 1 - localHeight
@@ -797,12 +802,10 @@ func main() {
 	fmt.Println("====================================================")
 	fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 CONSENSUS CORE ENGINE LAUNCHER")
 	fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
-	fmt.Println("====================================================")
-
-	go StartTCPServer()
-	go StartPublicExplorerServer()
-	time.Sleep(200 * time.Millisecond)
-
+        fmt.Println("====================================================")
+go StartTCPServer()
+go StartPublicExplorerServer()
+time.Sleep(200 * time.Millisecond)
 fmt.Println("⏳ [STATE ENGINE] Scanning binary BoltDB buckets to generate State Balance Cache...")
 fmt.Println("   ↳ (This may take a moment to safely parse block histories under your 25% vCPU limit...)")
 RebuildStateBalanceCache()
