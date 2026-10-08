@@ -260,6 +260,7 @@ func HandleIncomingPeer(conn net.Conn) {
 			parts := strings.Split(reqPayload, ":")
 			if len(parts) < 2 { continue }
 			
+			// ✅ FIXED: Map indices [0] and [1] explicitly to capture numeric coordinates perfectly
 			startIdx, _ := strconv.ParseInt(parts[0], 10, 64)
 			endIdx, _ := strconv.ParseInt(parts[1], 10, 64)
 			
@@ -282,20 +283,12 @@ func HandleIncomingPeer(conn net.Conn) {
 				return nil
 			})
 
-			// ✅ FIXED: Force the entire 512-block JSON array onto one single, unbroken line text stream
+			// Force the entire 512-block JSON array onto one single, unbroken line text stream
 			batchData, _ := json.Marshal(blockBatch)
 			compactStr := strings.ReplaceAll(string(batchData), "\n", "")
 			compactStr = strings.ReplaceAll(compactStr, "\r", "")
 			
 			fmt.Fprintln(conn, compactStr)
-			continue
-		}
-
-
-		if text == "REQ_CHAIN_SYNC" {
-			chain := LoadFullChainSlice()
-			data, _ := json.Marshal(chain)
-			fmt.Fprintln(conn, string(data))
 			continue
 		}
 		
