@@ -250,14 +250,39 @@ func HandleIncomingPeer(conn net.Conn) {
 			continue
 		}
 		
-		// 📡 UPGRADED BATCH STREAMING WIRE GATE: Correctly maps indexes 1 and 2 with unified array slices
+		// 📡 ROUTE TARGET A: Individual Block Retrieval (Ensures pristine 1-by-1 sync progress bar animations)
+		if strings.HasPrefix(text, "REQ_BLOCK:") {
+			reqPayload := strings.TrimPrefix(text, "REQ_BLOCK:")
+			blockIdx, err := strconv.ParseInt(strings.TrimSpace(reqPayload), 10, 64)
+			if err != nil { continue }
+
+			var blkData []byte
+			_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+				b := tx.Bucket([]byte("Blocks"))
+				if b != nil {
+					blkData = b.Get([]byte(strconv.FormatInt(blockIdx, 10)))
+				}
+				return nil
+			})
+
+			if blkData != nil {
+				compactStr := strings.ReplaceAll(string(blkData), "\n", "")
+				compactStr = strings.ReplaceAll(compactStr, "\r", "")
+				fmt.Fprintln(conn, compactStr)
+			} else {
+				fmt.Fprintln(conn, "{}") // Send empty json block frame fallback to prevent client hangs
+			}
+			continue
+		}
+		
+		// 📡 ROUTE TARGET B: 512 Bulk Batch Retrieval (Maintains backend high-capacity failovers)
 		if strings.HasPrefix(text, "REQ_BLOCK_BATCH:") {
 			reqPayload := strings.TrimPrefix(text, "REQ_BLOCK_BATCH:")
 			parts := strings.Split(reqPayload, ":")
-			if len(parts) < 3 { continue }
+			if len(parts) < 2 { continue }
 			
-			startIdx, _ := strconv.ParseInt(parts[1], 10, 64)
-			endIdx, _ := strconv.ParseInt(parts[2], 10, 64)
+			startIdx, _ := strconv.ParseInt(parts[0], 10, 64)
+			endIdx, _ := strconv.ParseInt(parts[1], 10, 64)
 			
 			if endIdx - startIdx > 512 { endIdx = startIdx + 512 }
 
@@ -287,7 +312,6 @@ func HandleIncomingPeer(conn net.Conn) {
 		}
 
 		if text == "REQ_CHAIN_SYNC" {
-			// Legacy full chain fallback slice logic
 			continue
 		}
 		
