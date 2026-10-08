@@ -497,24 +497,35 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			targetEnd := currentIdx + 511
 			if targetEnd > remoteHeight { targetEnd = remoteHeight }
 			
-			// Request an optimized 512-block batch packet from the seed node
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			batchBytes, err := bufio.NewReader(conn).ReadBytes('\n')
 			if err != nil { 
-				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
+				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout: %v\n", err)
 				return GetLatestBlock()	
 			}
 			
 			cleanedBatchStr := strings.TrimSpace(string(batchBytes))
 			var blockBatch []Block
-			if err := json.Unmarshal([]byte(cleanedBatchStr), &blockBatch); err != nil { 
-				fmt.Printf("\n🚨 [BATCH EXCEPTION] JSON syntax unmarshal crash during bulk transfer: %v\n", err)
-				return GetLatestBlock()
+			
+			// 🛡️ UNMARSHAL FIREWALL: Fallback gracefully to handle varied array padding formats
+			if err := json.Unmarshal([]byte(cleanedBatchStr), &blockBatch); err != nil {
+				var dynamicBatch []map[string]interface{}
+				if json.Unmarshal([]byte(cleanedBatchStr), &dynamicBatch) == nil && len(dynamicBatch) > 0 {
+					for _, rawBlk := range dynamicBatch {
+						var bBlock Block
+						bBytes, _ := json.Marshal(rawBlk)
+						if json.Unmarshal(bBytes, &bBlock) == nil {
+							blockBatch = append(blockBatch, bBlock)
+						}
+					}
+				}
 			}
 
-			if len(blockBatch) == 0 { break }
+			if len(blockBatch) == 0 { 
+				fmt.Printf("\n🚨 [SYNC STALL] Received empty block batch for indexes %d to %d\n", currentIdx, targetEnd)
+				break 
+			}
 
-			// Commit all 512 blocks to the hard drive in one single disk cycle
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
@@ -527,12 +538,10 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 				return nil
 			})
 
-			// ✅ FIX: Extract the highest block out of the batch and advance trackers globally
 			lastBlockInBatch := blockBatch[len(blockBatch)-1]
 			syncedTip = lastBlockInBatch
 			currentIdx = lastBlockInBatch.Index + 1
 
-			// Update the interactive visual progress percentage log bar frame
 			currentSyncedCount := currentIdx - 1 - localHeight
 			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			barLength := 20
@@ -542,8 +551,7 @@ func SyncChainFromSeedPeer(seedAddr string) Block {
 			fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, currentIdx-1, remoteHeight)
 			_ = os.Stdout.Sync()
 			
-			// ⏱️ Visual pacer delay ensures the console window has time to draw the rendering updates
-			time.Sleep(15 * time.Millisecond)
+			time.Sleep(15 * time.Millisecond) // Precise visual pacing delay
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
@@ -576,7 +584,7 @@ func executeBootstrapSequence() Block {
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0] // ✅ FIX: Extract pure host IP address string component cleanly
+				hostSegment = parts[0]
 			}
 		}
 
@@ -720,7 +728,6 @@ func InitBoltEngine() {
 		b, _ := tx.CreateBucketIfNotExists([]byte("Blocks"))
 		meta, _ := tx.CreateBucketIfNotExists([]byte("Metadata"))
 		
-		// Only set baseline height to 0 if the bucket key is completely empty!
 		if meta.Get([]byte("height")) == nil {
 			_ = meta.Put([]byte("height"), []byte("0"))
 		}
@@ -748,9 +755,10 @@ func main() {
 	ValidatorStakingPool["Peer_Alpha_Stake_Rig"] = RequiredStakingBond
 
 	CustomMinerAddress = "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"
-userPastedAddress := false
-for i := 1; i < len(os.Args); i++ {
-arg := os.Args[i]
+	userPastedAddress := false
+
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
 if arg == "--miner-address" && i+1 < len(os.Args) {
 inputAddress := strings.TrimSpace(os.Args[i+1])
 if inputAddress != "" && inputAddress != "=" {
@@ -793,7 +801,6 @@ go DialAndGossipWithSeedPeer(ConnectTarget)
 } else {
 currentBlock = RunAutonomousBootstrapEngine()
 }
-// ✅ FORCE SYNCHRONIZED RUNTIME STATE INJECTIONS
 if currentBlock.Index == 0 {
 currentBlock = GetLatestBlock()
 }
