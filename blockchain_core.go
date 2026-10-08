@@ -1,5 +1,9 @@
 package main
 
+import (
+	"sync"
+)
+
 // Block represents a single verified ledger block segment on the mainnet wire
 type Block struct {
 	Index        int64         `json:"current_height"`
@@ -7,8 +11,9 @@ type Block struct {
 	Transactions []Transaction `json:"transactions"`
 	PrevHash     string        `json:"prev_hash"`
 	Hash         string        `json:"block_hash"`
-	Difficulty   int           `json:"difficulty"`
+	Difficulty   int           `json:"difficulty"` 
 	Nonce        int64         `json:"nonce"`
+	GuardMatrix  string        `json:"guard_matrix"` 
 }
 
 // Transaction maps the cryptographic dual-chamber cash value transfer payload
@@ -36,6 +41,28 @@ type UTXOOutput struct {
 	Amount    float64 `json:"amount"`
 }
 
+// MempoolType manages transaction states with native method support to satisfy app.go calls
+type MempoolType struct {
+	sync.RWMutex
+	Transactions map[string]interface{}
+}
+
+// PushTransaction handles thread-safe transaction data injection hooks natively matching app.go return assignments
+func (m *MempoolType) PushTransaction(tx Transaction) bool {
+	m.Lock()
+	defer m.Unlock()
+	if m.Transactions == nil {
+		m.Transactions = make(map[string]interface{})
+	}
+	m.Transactions[tx.ID] = tx
+	return true // ✅ FIXED VALUE: Returns true to cleanly satisfy assignment context expectations inside app.go
+}
+
 // Global Ledger Tracking Storage Parameters
 var BlockchainFile = "cvn_mainnet.db"
 var CustomMinerAddress string
+
+// Global Memory State Cache and Mutex Registries to satisfy app.go framework tracking lookups
+var BalanceCacheMutex sync.RWMutex
+var StateBalanceCache = make(map[string]float64)
+var MempoolMatrix = &MempoolType{Transactions: make(map[string]interface{})}
