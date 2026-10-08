@@ -533,12 +533,18 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			blockBytes, err := bufio.NewReader(conn).ReadBytes('\n')
 			if err != nil { return }
 			
-			var block Block
-			if err := json.Unmarshal(blockBytes, &block); err != nil { return }
+			// ✅ FIXED: Trim all system whitespaces and trailing system newlines (\n) 
+			// away from the raw data payload before parsing to prevent json syntax unmarshal failures!
+			cleanedBlockStr := strings.TrimSpace(string(blockBytes))
 			
-			// ✅ FIXED: Log any alignment anomalies instead of silently crashing out the sync loop
+			var block Block
+			if err := json.Unmarshal([]byte(cleanedBlockStr), &block); err != nil { 
+				fmt.Printf("\n🚨 [SYNC EXCEPTION] JSON syntax unmarshal crash at Block Height #%d: %v\n", i, err)
+				return 
+			}
+			
 			if i > 1 && block.PrevHash != lastValidHash { 
-				fmt.Printf("\n🚨 [SYNC REJECTION] Lineage break at block #%d\n", i)
+				fmt.Printf("\n🚨 [SYNC REJECTION] Lineage break pointer caught at Block Height #%d\n", i)
 				return 
 			}
 			lastValidHash = block.Hash
@@ -552,7 +558,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 				return nil
 			})
 
-			// Visual Percentage Log Generator
+			// 📊 VISUAL SYNC PROGRESS LOG GENERATOR
 			currentSyncedCount := i - localHeight
 			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			barLength := 20
@@ -565,7 +571,7 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			// ⏱️ 1ms pacing delay keeps text frames perfectly stable on screen
 			time.Sleep(1 * time.Millisecond)
 		}
-
+		
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
 	}
