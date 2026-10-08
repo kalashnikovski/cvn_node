@@ -242,10 +242,12 @@ func main() {
 
 	ValidatorStakingPool["CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"] = RequiredStakingBond
 
-	// FORCE TRUE: Instruct the engine to instantiate your visual panel out of the box
+		// ✅ FIXED: Evaluates input arguments correctly to cleanly separate server mining and graphic UI frames
 	runDesktopUI := true
 	for _, arg := range os.Args {
-		if arg == "--desktop-ui" { runDesktopUI = true }
+		if arg == "--connect" || arg == "--miner-address" {
+			runDesktopUI = false
+		}
 	}
 
 	if runDesktopUI {
@@ -255,8 +257,8 @@ func main() {
 			Title:            "💎 COVENANT STANDARD (CVN) MATRIX CORE",
 			Width:            1100,
 			Height:           760,
-			AssetServer:	  &assetserver.Options{
-			Assets: assets,
+			AssetServer: &assetserver.Options{
+				Assets: assets,
 			},
 			BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 1},
 			OnStartup:        wailsApp.startup,
@@ -265,6 +267,9 @@ func main() {
 		if err != nil { log.Fatalf("Wails failure: %v", err) }
 		return
 	}
+
+	// ✅ HEADLESS SERVER TRACKS: Fires when launched from LaunchMiner.bat to enable mining and open your ports!
+	fmt.Println("🚀 IGNITING NETWORK SERVICE CORES...")
 
 	var currentBlock Block
 	currentBlock = GetLatestBlock()

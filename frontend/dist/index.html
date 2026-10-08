@@ -19,6 +19,12 @@
         .neon-button-submit:hover { background-color: #00ff66; color: #0a0a0f; box-shadow: 0 0 15px #00ff66; }
         .status-ribbon { margin-top: 1rem; color: #00ffff; font-size: 0.8rem; background-color: #050c14; padding: 0.5rem; border-left: 3px solid #00ffff; }
         .wallet-hash { display: block; background-color: #05050a; padding: 0.75rem; border-radius: 4px; border: 1px solid #151525; color: #00ffff; font-size: 0.9rem; word-break: break-all; margin-bottom: 0.5rem; }
+        
+        /* Cyberpunk Progress Bar Component Tracking Mappings */
+        .sync-container { background-color: #05050a; border: 1px solid #1f1f3a; border-radius: 4px; padding: 1rem; margin-bottom: 1.5rem; }
+        .sync-meta { display: flex; justify-content: space-between; font-size: 0.85rem; color: #8a8a9e; margin-bottom: 0.5rem; }
+        .sync-track { background-color: #141424; height: 12px; border-radius: 6px; overflow: hidden; border: 1px solid #252545; }
+        .sync-bar { background: linear-gradient(90deg, #00ff66, #00ffff); width: 0%; height: 100%; transition: width 0.4s ease; shadow: 0 0 8px #00ff66; }
     </style>
 </head>
 <body>
@@ -26,6 +32,17 @@
         <header class="neon-header">
             <h1>💎 COVENANT STANDARD MATRIX CORE</h1>
         </header>
+
+        <!-- Dynamic Sync Progress Dashboard Track Panel -->
+        <div class="sync-container">
+            <div class="sync-meta">
+                <span>🛰️ MAINNET BLOCKCHAIN SYNCHRONIZATION STATUS</span>
+                <span id="ui-percent">0% SYNCED</span>
+            </div>
+            <div class="sync-track">
+                <div id="ui-progressbar" class="sync-bar"></div>
+            </div>
+        </div>
 
         <div class="telemetry-grid">
             <div class="neon-card">
@@ -92,11 +109,33 @@
                 let fetchedBalance = await window.go.main.App.FetchWalletBalanceQuery(telemetry.miner_address);
                 let balanceNum = typeof fetchedBalance === 'number' ? fetchedBalance : 0.0;
 
+                // Dynamically fetch public network telemetry from your Singapore anchor VPS to map progress targets
+                let globalTipHeight = telemetry.current_height; 
+                try {
+                    let response = await fetch("http://207.148.67");
+                    let data = await response.json();
+                    if (data && data.global_tip) {
+                        globalTipHeight = data.global_tip;
+                    }
+                } catch (netErr) {
+                    console.log("Remote seed anchor pinging holding...", netErr);
+                }
+
+                // Calculate the real-time sync ratio
+                let percentage = 100;
+                if (globalTipHeight > 0 && telemetry.current_height < globalTipHeight) {
+                    percentage = Math.floor((telemetry.current_height / globalTipHeight) * 100);
+                }
+
+                // Render metrics to the DOM smoothly
                 document.getElementById("ui-height").innerText = "#" + telemetry.current_height;
                 document.getElementById("ui-balance").innerText = balanceNum.toFixed(2) + " CVN";
                 document.getElementById("ui-difficulty").innerText = "Prefix " + telemetry.difficulty + " Zeros";
                 document.getElementById("ui-address").innerText = telemetry.miner_address;
                 document.getElementById("ui-hash").innerText = telemetry.block_hash;
+                
+                document.getElementById("ui-percent").innerText = percentage + "% SYNCHRONIZED";
+                document.getElementById("ui-progressbar").style.width = percentage + "%";
             } catch (err) {
                 console.log("Telemetry sync waiting...", err);
             }
@@ -131,7 +170,6 @@
             }
         }
 
-        // Native lifecycle boot bindings
         setTimeout(() => {
             refreshNodeTelemetry();
             setInterval(refreshNodeTelemetry, 2000);

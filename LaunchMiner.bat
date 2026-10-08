@@ -10,10 +10,10 @@ echo.
 set "CONFIG_FILE=miner_config.json"
 set "CHOSEN_ADDRESS="
 
-:: 1. If an identity file is missing, invoke the profile creator
+:: 1. ✅ FIXED: Targets your real compiled binary location to initialize profiles cleanly
 if not exist "%CONFIG_FILE%" (
     echo 📡 NO PROFILE DETECTED: Running automated wizard...
-    cvn_node.exe --generate-profile
+    .\build\bin\cvn_node.exe --generate-profile
     echo.
     echo ✅ miner_config.json profile built successfully!
     echo --------------------------------------------------------------------
@@ -48,10 +48,10 @@ echo [1/2] Activating hardware compilation acceleration paths...
 echo [2/2] Launching Proof-of-Diligence (PoD) Mining Engine...
 echo.
 
-:: 3. Execute the node binary safely matching input choices with explicit cloud seed connections
+:: 3. ✅ FIXED: Re-routed all backend binary calls straight down into your build directory tracks
 if not "!CHOSEN_ADDRESS!"=="" (
     echo 📡 Attempting connection to Primary Singapore Cloud Hub...
-    cvn_node.exe --miner-address !CHOSEN_ADDRESS! --connect 207.148.67.11:8080
+    .\build\bin\cvn_node.exe --miner-address !CHOSEN_ADDRESS! --connect 207.148.67.11:8080
     
     :: Catch Connection Error and Trigger Fallback to Melbourne Rig
     if %ERRORLEVEL% NEQ 0 (
@@ -63,11 +63,11 @@ if not "!CHOSEN_ADDRESS!"=="" (
         echo.
         timeout /t 3 >nul
         color 0B
-        cvn_node.exe --miner-address !CHOSEN_ADDRESS! --connect 202.137.175.220:8080
+        .\build\bin\cvn_node.exe --miner-address !CHOSEN_ADDRESS! --connect 202.137.175.220:8080
     )
 ) else (
     echo 📡 Attempting connection to Primary Singapore Cloud Hub...
-    cvn_node.exe --connect 207.148.67.11:8080
+    .\build\bin\cvn_node.exe --connect 207.148.67.11:8080
     
     :: Catch Connection Error and Trigger Fallback to Melbourne Rig
     if %ERRORLEVEL% NEQ 0 (
@@ -79,7 +79,7 @@ if not "!CHOSEN_ADDRESS!"=="" (
         echo.
         timeout /t 3 >nul
         color 0B
-        cvn_node.exe --connect 202.137.175.220:8080
+        .\build\bin\cvn_node.exe --connect 202.137.175.220:8080
     )
 )
 
