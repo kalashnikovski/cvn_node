@@ -284,19 +284,23 @@ func RegisterGossipPeer(peerAddr string) {
 
 func HandleIncomingPeer(conn net.Conn) {
 	defer conn.Close()
-	scanner := bufio.NewScanner(conn)
-	// Allocate a larger buffer window allocation to safely pass transactional data structures
-	buf := make([]byte, 1024*1024)
-	scanner.Buffer(buf, 1024*1024)
+	
+	// ✅ FIXED: Shift away from restrictive Scanners to an infinite-capacity Reader pipe
+	reader := bufio.NewReader(conn)
 
-	for scanner.Scan() {
-		text := scanner.Text()
+	for {
+		// Read incoming request lines cleanly until hitting the newline marker (\n)
+		lineBytes, err := reader.ReadBytes('\n')
+		if err != nil { return } // Safe exit if a peer disconnects
 		
+		text := strings.TrimSpace(string(lineBytes))
+		if text == "" { continue }
+
 		// 📡 1. Stream Request: Send out current numeric local block height tip
 		if text == "REQ_CHAIN_HEIGHT" {
 			latestBlock := GetLatestBlock()
 			fmt.Fprintln(conn, strconv.FormatInt(latestBlock.Index, 10))
-			return
+			continue
 		}
 		
 		// 📡 2. Stream Request: Extract and return a specific single block slice
@@ -315,15 +319,16 @@ func HandleIncomingPeer(conn net.Conn) {
 			} else {
 				fmt.Fprintln(conn, "{}")
 			}
-			return
+			continue
 		}
 
 		if text == "REQ_CHAIN_SYNC" {
 			chain := LoadFullChainSlice()
 			data, _ := json.Marshal(chain)
 			fmt.Fprintln(conn, string(data))
-			return
+			continue
 		}
+		
 		if strings.HasPrefix(text, "GOSSIP_PEER_DISCOVERY:") {
 			incomingNodeAddress := strings.TrimPrefix(text, "GOSSIP_PEER_DISCOVERY:")
 			RegisterGossipPeer(incomingNodeAddress)
@@ -331,8 +336,9 @@ func HandleIncomingPeer(conn net.Conn) {
 			rosterJSON, _ := json.Marshal(ActivePeerRoster)
 			RosterMutex.Unlock()
 			fmt.Fprintln(conn, string(rosterJSON))
-			return
+			continue
 		}
+		
 		if strings.HasPrefix(text, "TX_BROADCAST:") {
 			payload := strings.TrimPrefix(text, "TX_BROADCAST:")
 			var tx Transaction
@@ -346,7 +352,7 @@ func HandleIncomingPeer(conn net.Conn) {
 			} else {
 				fmt.Fprintln(conn, "TX_REJECTED_MALFORMED")
 			}
-			return
+			continue
 		}
 	}
 }
