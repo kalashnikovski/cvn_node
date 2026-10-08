@@ -159,19 +159,31 @@ func InitBoltEngine() {
 }
 
 func GetLatestBlock() Block {
-	var currentBlock Block
+	var latest Block
+	latest.Index = 0
+	latest.Hash = "0000000000000000000000000000000000000000000000000000000000000000" // Hard Genesis Hash
+	latest.Difficulty = 4
+
+	if GlobalBoltEngine == nil { return latest }
+
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("Blocks"))
 		meta := tx.Bucket([]byte("Metadata"))
+		b := tx.Bucket([]byte("Blocks"))
+		if meta == nil || b == nil { return nil }
+
 		heightBytes := meta.Get([]byte("height"))
 		if heightBytes != nil {
-			blockData := b.Get(heightBytes)
-			_ = json.Unmarshal(blockData, &currentBlock)
+			heightStr := string(heightBytes)
+			blockData := b.Get([]byte(heightStr))
+			if blockData != nil {
+				_ = json.Unmarshal(blockData, &latest)
+			}
 		}
 		return nil
 	})
-	return currentBlock
+	return latest
 }
+
 
 func SaveBlockToStorage(block Block) {
 	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
