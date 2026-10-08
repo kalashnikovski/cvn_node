@@ -593,34 +593,38 @@ func RunAutonomousBootstrapEngine() {
 }
 
 func executeBootstrapSequence() {
-	localInterfaces := make(map[string]bool)
-	localInterfaces["127.0.0.1"] = true
-	localInterfaces["0.0.0.0"] = true
-	localInterfaces["localhost"] = true
+	// Dynamically pull all active IP configurations assigned to this machine's network cards
+	localIPs := make(map[string]bool)
+	localIPs["127.0.0.1"] = true
+	localIPs["0.0.0.0"] = true
+	localIPs["localhost"] = true
 
 	if addrs, err := net.InterfaceAddrs(); err == nil {
 		for _, addr := range addrs {
 			if ipnet, ok := addr.(*net.IPNet); ok {
-				localInterfaces[ipnet.IP.String()] = true
+				localIPs[ipnet.IP.String()] = true
 			}
 		}
 	}
 
 	for _, seedIP := range MasterSeedNodes {
+		// ✅ FIXED: Safely isolate the pure IP address string using array index cleanly away from the port numbers
 		hostSegment := seedIP
 		if strings.Contains(seedIP, ":") {
 			parts := strings.Split(seedIP, ":")
 			if len(parts) > 0 {
-				hostSegment = parts[0]
+				hostSegment = parts[0] // Isolate index 0 to capture the raw IP text coordinate cleanly
 			}
 		}
 
-		if localInterfaces[hostSegment] {
+		// 🛡️ DYNAMIC HARDWARE LEVEL SELF-DIAL SHIELD
+		// If the target seed host matches any IP assigned to this machine, skip it safely!
+		if localIPs[hostSegment] || hostSegment == LocalListenerIP {
 			continue
 		}
 
 		fmt.Printf("📡 [BOOTSTRAP] Attempting handshake alignment with Master Seed Anchor: %s\n", seedIP)
-		conn, err := net.DialTimeout("tcp", seedIP, 5*time.Second)
+		conn, err := net.DialTimeout("tcp", seedIP, 4*time.Second)
 		if err != nil { 
 			fmt.Printf("   ❌ Seed %s unresponsive or connection timed out. Advancing...\n", seedIP)
 			continue 
