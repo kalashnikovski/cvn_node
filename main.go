@@ -97,67 +97,6 @@ func CreateGenesisBlock() Block {
 	return genesisBlock
 }
 
-func InitBoltEngine() {
-	db, err := bbolt.Open(BoltDBFile, 0600, nil)
-	if err != nil {
-		log.Fatalf("❌ CRITICAL STORAGE FAULT: Failed to initialize BoltDB binary store: %v", err)
-	}
-	GlobalBoltEngine = db
-
-	err = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-		_, _ = tx.CreateBucketIfNotExists([]byte("Blocks"))
-		_, _ = tx.CreateBucketIfNotExists([]byte("Metadata"))
-		return nil
-	})
-	if err != nil {
-		log.Fatalf("❌ CRITICAL STRUCTURAL FAULT: Failed to partition database buckets: %v", err)
-	}
-
-	if _, err := os.Stat(BlockchainFile); err == nil {
-		fmt.Println("⚠️  Legacy plain-text ledger file found. Triggering Pipeline Seed Migration...")
-		jsonData, err := os.ReadFile(BlockchainFile)
-		if err == nil {
-			var legacyChain []Block
-			if json.Unmarshal(jsonData, &legacyChain) == nil && len(legacyChain) > 0 {
-				err = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-					b := tx.Bucket([]byte("Blocks"))
-					meta := tx.Bucket([]byte("Metadata"))
-					var lastValidHash string
-
-					for _, block := range legacyChain {
-						if block.Index > 0 && block.PrevHash != lastValidHash {
-							fmt.Printf("🩹 Cryptographic lineage gap caught at block #%d. Sequence healed dynamically.\n", block.Index)
-							block.PrevHash = lastValidHash
-							block.Hash = CalculateHash(block)
-						}
-						blockData, _ := json.Marshal(block)
-						_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
-						lastValidHash = block.Hash
-					}
-					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(int64(len(legacyChain)-1), 10)))
-					return nil
-				})
-				if err == nil {
-					fmt.Println("✨ Ledger successfully written to BoltDB binary buckets. Archiving JSON seed file.")
-					_ = os.Rename(BlockchainFile, "archived_ledger_vault.json.bak")
-				}
-			}
-		}
-	}
-
-	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("Blocks"))
-		meta := tx.Bucket([]byte("Metadata"))
-		if b.Get([]byte("0")) == nil {
-			gen := CreateGenesisBlock()
-			genData, _ := json.Marshal(gen)
-			_ = b.Put([]byte("0"), genData)
-			_ = meta.Put([]byte("height"), []byte("0"))
-		}
-		return nil
-	})
-}
-
 func GetLatestBlock() Block {
 	var latest Block
 	latest.Index = 0
@@ -530,17 +469,21 @@ func DialAndGossipWithSeedPeer(seedAddr string) {
 		}
 	}
 }
-func SyncChainFromSeedPeer(seedAddr string) {
+func SyncChainFromSeedPeer(seedAddr string) Block {
+	var syncedTip Block
+	syncedTip.Index = 0
+	syncedTip.Hash = "0000000000000000000000000000000000000000000000000000000000000000"
+
 	conn, err := net.DialTimeout("tcp", seedAddr, 5*time.Second)
-	if err != nil { return }
+	if err != nil { return GetLatestBlock() }
 	defer conn.Close()
 	
 	fmt.Fprintln(conn, "REQ_CHAIN_HEIGHT")
 	respLine, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil { return }
+	if err != nil { return GetLatestBlock() }
 	
 	remoteHeight, err := strconv.ParseInt(strings.TrimSpace(respLine), 10, 64)
-	if err != nil { return }
+	if err != nil { return GetLatestBlock() }
 	
 	localHeight := GetLatestBlock().Index
 	if remoteHeight > localHeight {
@@ -553,24 +496,22 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			targetEnd := currentIdx + 511
 			if targetEnd > remoteHeight { targetEnd = remoteHeight }
 			
-			// Request an optimized 512-block batch packet from the target seed node anchor
 			fmt.Fprintln(conn, fmt.Sprintf("REQ_BLOCK_BATCH:%d:%d", currentIdx, targetEnd))
 			batchBytes, err := bufio.NewReader(conn).ReadBytes('\n')
 			if err != nil { 
 				fmt.Printf("\n🚨 [BATCH EXCEPTION] Socket read timeout during bulk chunk transfer: %v\n", err)
-				return 	
+				return GetLatestBlock()	
 			}
 			
 			cleanedBatchStr := strings.TrimSpace(string(batchBytes))
 			var blockBatch []Block
 			if err := json.Unmarshal([]byte(cleanedBatchStr), &blockBatch); err != nil { 
 				fmt.Printf("\n🚨 [BATCH EXCEPTION] JSON syntax unmarshal crash during bulk transfer: %v\n", err)
-				return 
+				return GetLatestBlock()
 			}
 
 			if len(blockBatch) == 0 { break }
 
-			// Open a single ACID transaction to commit all 512 blocks to the hard drive in one single disk cycle
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				b := tx.Bucket([]byte("Blocks"))
 				meta := tx.Bucket([]byte("Metadata"))
@@ -579,15 +520,14 @@ func SyncChainFromSeedPeer(seedAddr string) {
 					blockData, _ := json.Marshal(block)
 					_ = b.Put([]byte(strconv.FormatInt(block.Index, 10)), blockData)
 					_ = meta.Put([]byte("height"), []byte(strconv.FormatInt(block.Index, 10)))
+					syncedTip = block
 				}
 				return nil
 			})
 
-			// Safely advance the index tracker globally outside the closure scope
 			lastBlockInBatch := blockBatch[len(blockBatch)-1]
 			currentIdx = lastBlockInBatch.Index + 1
 
-			// Update the interactive visual progress percentage log bar frame
 			currentSyncedCount := currentIdx - 1 - localHeight
 			percentComplete := (float64(currentSyncedCount) / float64(totalBlocksToSync)) * 100.0
 			barLength := 20
@@ -597,32 +537,21 @@ func SyncChainFromSeedPeer(seedAddr string) {
 			fmt.Printf("\r📡 Sync Progress: [%s] %.1f%% Completed (#%d/#%d)", barStr, percentComplete, currentIdx-1, remoteHeight)
 			_ = os.Stdout.Sync()
 			
-			// ⏱️ VISUAL PACER PACKET DELAY
-			// Intentionally slows the background evaluation thread down by 15 milliseconds 
-			// per 512 blocks to allow your desktop terminal to draw the filling animation bar frames!
-			time.Sleep(15 * time.Millisecond)
+			time.Sleep(15 * time.Millisecond) // Smooth visual presentation pacing delay
 		}
 		fmt.Println("\n🟩 [SYNC COMPLETE] Local database block height aligns with canonical mainnet wire!")
 		RebuildStateBalanceCache()
+		return syncedTip
 	}
+	return GetLatestBlock()
 }
 
-func RunAutonomousBootstrapEngine() {
+func RunAutonomousBootstrapEngine() Block {
 	fmt.Println("🛰️  [BOOTSTRAP ENGINE] Manual link flag absent. Booting autonomous peer discovery engine...")
-	executeBootstrapSequence()
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			RosterMutex.Lock()
-			peerCount := len(ActivePeerRoster)
-			RosterMutex.Unlock()
-			if peerCount == 0 { executeBootstrapSequence() }
-		}
-	}()
+	return executeBootstrapSequence()
 }
 
-func executeBootstrapSequence() {
+func executeBootstrapSequence() Block {
 	localInterfaces := make(map[string]bool)
 	localInterfaces["127.0.0.1"] = true
 	localInterfaces["0.0.0.0"] = true
@@ -658,11 +587,12 @@ func executeBootstrapSequence() {
 		conn.Close()
 
 		fmt.Printf("🟩 [BOOTSTRAP SUCCESS] Secure channel verified with seed: %s. Commencing automated sync pipeline...\n", seedIP)
-		SyncChainFromSeedPeer(seedIP)
-		DialAndGossipWithSeedPeer(seedIP)
+		tipBlock := SyncChainFromSeedPeer(seedIP)
+		go DialAndGossipWithSeedPeer(seedIP)
 		RegisterGossipPeer(seedIP)
-		break
+		return tipBlock
 	}
+	return GetLatestBlock()
 }
 
 func MineBlock(prevBlock Block, txs []Transaction, currentDifficulty int64) Block {
@@ -775,6 +705,34 @@ func (dm *DualChamberMempool) AssembleBlockPayload(maxTxCount int) []Transaction
 	return finalPayload
 }
 
+// ✅ UPGRADED: InitBoltEngine protects the historical block height state from boot overwrites
+func InitBoltEngine() {
+	db, err := bbolt.Open("cvn_mainnet.db", 0600, &bbolt.Options{Timeout: 1 * time.Second})
+	if err != nil { log.Fatalf("Database lock failure: %v", err) }
+	GlobalBoltEngine = db
+
+	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+		b, _ := tx.CreateBucketIfNotExists([]byte("Blocks"))
+		meta, _ := tx.CreateBucketIfNotExists([]byte("Metadata"))
+		
+		// Only set baseline height to 0 if the tracking key is completely blank!
+		if meta.Get([]byte("height")) == nil {
+			_ = meta.Put([]byte("height"), []byte("0"))
+		}
+		
+		if b.Get([]byte("0")) == nil {
+			genesisBlock := Block{
+				Index:     0,
+				Hash:      "0000000000000000000000000000000000000000000000000000000000000000",
+				Timestamp: 1710000000,
+			}
+			gData, _ := json.Marshal(genesisBlock)
+			_ = b.Put([]byte("0"), gData)
+		}
+		return nil
+	})
+}
+
 func main() {
 	MempoolMatrix = NewDualChamberMempool(MaxMempoolZeroFeeSpamCap)
 	InitBoltEngine()
@@ -798,23 +756,21 @@ func main() {
 			i++
 		}
 		if arg == "--generate-profile" {
-			fmt.Printf("📋 PROFILE EXPORT INITIALIZED\n")
-			return
-		}
-		if arg == "--connect" && i+1 < len(os.Args) {
-			ConnectTarget = os.Args[i+1]
-			i++
-		}
-	}
-
-	if data, err := os.ReadFile(ProfileConfigFile); err == nil && !userPastedAddress {
-		var savedCfg MinerConfig
-		if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
-			CustomMinerAddress = savedCfg.SavedMinerAddress
-		}
-	}
-
-	fmt.Println("====================================================")
+fmt.Printf("📋 PROFILE EXPORT INITIALIZED\n")
+return
+}
+if arg == "--connect" && i+1 < len(os.Args) {
+ConnectTarget = os.Args[i+1]
+i++
+}
+}
+if data, err := os.ReadFile(ProfileConfigFile); err == nil && !userPastedAddress {
+var savedCfg MinerConfig
+if json.Unmarshal(data, &savedCfg) == nil && savedCfg.SavedMinerAddress != "" {
+CustomMinerAddress = savedCfg.SavedMinerAddress
+}
+}
+fmt.Println("====================================================")
 fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 CONSENSUS CORE ENGINE LAUNCHER")
 fmt.Printf("💰 BLOCK REWARDS ROUTED TO TARGET ID: %s\n", CustomMinerAddress)
 fmt.Println("====================================================")
@@ -825,14 +781,17 @@ fmt.Println("⏳ [STATE ENGINE] Scanning binary BoltDB buckets to generate State
 fmt.Println("   ↳ (This may take a moment to safely parse block histories under your 25% vCPU limit...)")
 RebuildStateBalanceCache()
 fmt.Println("🟩 [STATE ENGINE] Memory Matrix successfully synced. Proceeding to network gates.")
+var currentBlock Block
 if ConnectTarget != "" {
 fmt.Printf("📡 Target connect instruction found: %s\n", ConnectTarget)
-SyncChainFromSeedPeer(ConnectTarget)
+currentBlock = SyncChainFromSeedPeer(ConnectTarget)
 go DialAndGossipWithSeedPeer(ConnectTarget)
 } else {
-RunAutonomousBootstrapEngine()
+currentBlock = RunAutonomousBootstrapEngine()
 }
-currentBlock := GetLatestBlock()
+if currentBlock.Index == 0 {
+currentBlock = GetLatestBlock()
+}
 fmt.Printf("📂 Local Blockheight Operational: #%d\n", currentBlock.Index)
 for {
 activeMempool := MempoolMatrix.AssembleBlockPayload(100)
