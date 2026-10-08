@@ -115,14 +115,14 @@ func RunWalletGUI() {
 			tx := Transaction{
 				ID: fmt.Sprintf("TX_OUTBOUND_%d", time.Now().UnixNano()),
 				Inputs: []UTXOInput{
-					{TxID: uniqueInputSource, OutputIdx: 0, Signature: privKey},
+					{SourceTxID: uniqueInputSource, Index: 0},
 				},
 				Outputs: []UTXOOutput{
 					{Recipient: recipient, Amount: amount},
 				},
 				FreeWillOffering: offering,
 				DataSizeKB:       1.0,
-				Witness:          "Sovereign_Console_Client_Signature",
+				Witness:          privKey,
 			}
 
 			payloadBytes, err = json.Marshal(tx)

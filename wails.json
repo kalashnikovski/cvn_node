@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io",
+  "name": "cvn_node",
+  "outputfilename": "cvn_node.exe",
+  "frontend:dir": "frontend",
+  "frontend:install": "npm install --legacy-peer-deps",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "skipfrontend": false,
+  "wailsjsdir": "./frontend/wailsjs",
+  "author": {
+    "name": "kalashnikovski",
+    "email": "ntrajanovski@yahoo.com"
+  }
+}

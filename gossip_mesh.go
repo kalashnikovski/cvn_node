@@ -4,9 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 )
+
+// ============================================================================
+// PART 1: CORE HORIZONTAL P2P GOSSIP MESH ENGINE (Your Existing Logic)
+// ============================================================================
 
 // PeerRoster manages the synchronized list of active distributed nodes
 type PeerRoster struct {
@@ -93,44 +98,87 @@ func BroadcastNewBlock(blockData interface{}) {
 		}(targetIP)
 	}
 }
-// StartDynamicPeerPruningHeartbeat continuously audits the active GlobalRoster entries.
-// It forcefully purges offline or unresponsive network coordinates every 60 seconds.
-func StartDynamicPeerPruningHeartbeat() {
-	fmt.Println("🛰️  [PEER HEALTH ENGINE] Dynamic network pruning heartbeat daemon successfully activated.")
-	
-	ticker := time.NewTicker(60 * time.Second) // Audits the global mesh network topology once every minute
-	go func() {
-		for range ticker.C {
-			GlobalRoster.Lock()
-			activeSnapshot := make([]string, 0)
-			for peerIP := range GlobalRoster.ActiveAddresses {
-				activeSnapshot = append(activeSnapshot, peerIP)
-			}
-			GlobalRoster.Unlock()
 
-			if len(activeSnapshot) == 0 {
-				continue
-			}
+// ============================================================================
+// PART 2: PHASE 3 SYNC-GATE LOCK VALIDATION FIREWALL (The New Guard)
+// ============================================================================
 
-			fmt.Printf("🔍 [PEER HEALTH AUDIT] Auditing %d active network nodes for heartbeat responses...\n", len(activeSnapshot))
+// SyncGateMonitor holds the thread-safe state validation markers for the local mesh node
+type SyncGateMonitor struct {
+	mu                  sync.RWMutex
+	IsFullySynchronized bool
+	TargetGlobalHeight   int64
+}
 
-			for _, peerIP := range activeSnapshot {
-				// Establish a fast 3-second diagnostic TCP probe dial to their consensus port 8080
-				conn, err := net.DialTimeout("tcp", net.JoinHostPort(peerIP, "8080"), 3*time.Second)
-				
-				if err != nil {
-					GlobalRoster.Lock()
-					delete(GlobalRoster.ActiveAddresses, peerIP)
-					GlobalRoster.Unlock()
-					fmt.Printf("   ❌ Node %s failed health check (Offline/Timeout). Pruned from roster.\n", peerIP)
-				} else {
-					conn.Close()
-				}
-				
-				// ✅ FIXED: Inject a 250ms pacing delay between individual node checks 
-				// to completely eliminate port exhaustion and thread choking across your VPS hubs!
-				time.Sleep(250 * time.Millisecond)
-			}
+// GlobalSyncShield is the active sentinel monitoring your network alignment boundaries
+var GlobalSyncShield = &SyncGateMonitor{
+	IsFullySynchronized: false,
+	TargetGlobalHeight:   0,
+}
+
+// GetGlobalMeshMaxHeight queries active peer tracking endpoints to find the true network tip height
+func GetGlobalMeshMaxHeight(seedPeerURL string) int64 {
+	client := http.Client{
+		Timeout: 5 * time.Second, // Hard deadline to prevent Slow-Loris socket stalling
+	}
+
+	resp, err := client.Get(seedPeerURL)
+	if err != nil {
+		// Fallback to 0 if peer is cycling offline; protects against network isolation panic
+		return 0 
+	}
+	defer resp.Body.Close()
+
+	// Struct matching your live public /peers index endpoint arrays
+	var peerHeights []int64
+	if err := json.NewDecoder(resp.Body).Decode(&peerHeights); err != nil {
+		return 0
+	}
+
+	var maxTarget int64 = 0
+	for _, height := range peerHeights {
+		if height > maxTarget {
+			maxTarget = height
 		}
-	}()
+	}
+	return maxTarget
+}
+
+// EnforceSyncGateLock acts as the Phase 3 validation firewall, freezing worker threads until aligned
+func EnforceSyncGateLock(seedPeerExplorerURL string, localHeightProvider func() int64) {
+	fmt.Println("\n🔒 [PHASE 3 SECURITY MATRIX] Sync-Gate Lock activated.")
+	fmt.Println("🛰️  Validating ledger alignment against global network tip benchmarks...")
+
+	for {
+		localHeight := localHeightProvider()
+		globalMaxHeight := GetGlobalMeshMaxHeight(seedPeerExplorerURL)
+
+		GlobalSyncShield.mu.Lock()
+		GlobalSyncShield.TargetGlobalHeight = globalMaxHeight
+
+		// If local height matches or beats the global tracking mesh height, lift the lock gate!
+		if localHeight >= globalMaxHeight || globalMaxHeight == 0 {
+			GlobalSyncShield.IsFullySynchronized = true
+			GlobalSyncShield.mu.Unlock()
+			
+			fmt.Println("\n✨ [🔓 SYNC COMPLETE] Core fully aligned with global mainnet tip. Hashing worker threads ignited!")
+			break
+		}
+
+		GlobalSyncShield.IsFullySynchronized = false
+		GlobalSyncShield.mu.Unlock()
+
+		// Print a clean, dynamic, non-bloating real-time tracking line to the console
+		fmt.Printf("\r⏳ [MAINNET SYNC LOCK] Local Ledger Height: %d / True Network Tip: %d. Waiting for synchronization equilibrium...", localHeight, globalMaxHeight)
+		
+		// Throttle the loop pass execution to prevent local CPU thread resource exhaustion
+		time.Sleep(5 * time.Second) 
+	}
+}
+
+// IsCoreMinerLocked allows your mining loop workers to audit their execution permission states in memory
+func IsCoreMinerLocked() bool {
+	GlobalSyncShield.mu.RLock()
+	GlobalSyncShield.mu.RUnlock()
+	return !GlobalSyncShield.IsFullySynchronized
 }

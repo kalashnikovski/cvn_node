@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💎 COVENANT STANDARD MATRIX CORE</title>
+    <style>
+        body { background-color: #0a0a0f; color: #e2e2e9; font-family: monospace; padding: 2rem; margin: 0; }
+        .app-container { max-width: 1000px; margin: 0 auto; }
+        .neon-header { text-align: center; margin-bottom: 2rem; color: #00ff66; }
+        .neon-header h1 { text-shadow: 0 0 10px #00ff66; margin: 0; }
+        .telemetry-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
+        .neon-card { background-color: #0f0f1a; border: 1px solid #1f1f3a; padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 4px; box-shadow: inset 0 0 15px rgba(0,0,0,0.6); }
+        .form-group { display: flex; flex-direction: column; margin-bottom: 1rem; }
+        .form-group label { font-size: 0.8rem; color: #8a8a9e; margin-bottom: 0.4rem; }
+        .form-group input { background-color: #05050a; border: 1px solid #252545; border-radius: 4px; padding: 0.65rem; color: #fff; font-family: inherit; font-size: 0.9rem; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .neon-button-submit { width: 100%; background-color: #051a10; border: 1px solid #00ff66; color: #00ff66; padding: 0.85rem; cursor: pointer; font-weight: bold; font-family: inherit; border-radius: 4px; font-size: 0.95rem; text-shadow: 0 0 5px #00ff66; box-shadow: 0 0 10px rgba(0,255,102,0.1); margin-top: 0.5rem; transition: all 0.2s ease; }
+        .neon-button-submit:hover { background-color: #00ff66; color: #0a0a0f; box-shadow: 0 0 15px #00ff66; }
+        .status-ribbon { margin-top: 1rem; color: #00ffff; font-size: 0.8rem; background-color: #050c14; padding: 0.5rem; border-left: 3px solid #00ffff; }
+        .wallet-hash { display: block; background-color: #05050a; padding: 0.75rem; border-radius: 4px; border: 1px solid #151525; color: #00ffff; font-size: 0.9rem; word-break: break-all; margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="neon-header">
+            <h1>💎 COVENANT STANDARD MATRIX CORE</h1>
+        </header>
+
+        <div class="telemetry-grid">
+            <div class="neon-card">
+                <div style="font-size: 0.85rem; color: #8a8a9e;">CURRENT BLOCK HEIGHT</div>
+                <div id="ui-height" style="color: #00ff66; font-size: 1.8rem; font-weight: bold; margin-top: 0.5rem;">#---</div>
+            </div>
+            <div class="neon-card">
+                <div style="font-size: 0.85rem; color: #8a8a9e;">VERIFIED WALLET BALANCE</div>
+                <div id="ui-balance" style="color: #00ffff; font-size: 1.8rem; font-weight: bold; margin-top: 0.5rem;">0.00 CVN</div>
+            </div>
+            <div class="neon-card">
+                <div style="font-size: 0.85rem; color: #8a8a9e;">POD CELL DIFFICULTY</div>
+                <div id="ui-difficulty" style="color: #cc66ff; font-size: 1.8rem; font-weight: bold; margin-top: 0.5rem;">Prefix - Zeros</div>
+            </div>
+        </div>
+
+        <div class="neon-card">
+            <div style="font-size: 0.85rem; color: #cc66ff;">💰 ACTIVE BLOCK REWARD TARGET IDENTIFIER</div>
+            <h2 style="margin: 0.5rem 0; font-size: 1.1rem; color: #fff;">Sovereign Wallet Profile Identity</h2>
+            <code id="ui-address" class="wallet-hash">------------------------------------------</code>
+            <div style="font-size: 0.75rem; color: #6a6a7e;">Latest Chain Tip Block Hash: <span id="ui-hash" style="color: #a2a2b0;">----------------------------------------------------------------</span></div>
+        </div>
+
+        <div class="workspace-layout">
+            <div class="neon-card">
+                <h2 style="color: #00ff66; margin: 0 0 1.25rem 0; font-size: 1.1rem; border-bottom: 1px solid #1f1f3a; padding-bottom: 0.5rem;">📜 BROADCAST NEW TRANSACTION SOLUTION</h2>
+                
+                <div class="form-group">
+                    <label for="recipient">Recipient Target Address Hash</label>
+                    <input id="recipient" type="text" placeholder="CVN_..." />
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="amount">Token Volume (CVN Amount)</label>
+                        <input id="amount" type="number" step="0.0001" placeholder="0.00" />
+                    </div>
+                    <div class="form-group">
+                        <label for="fee">Priority Offering Fee</label>
+                        <input id="fee" type="number" step="0.001" value="0.01" />
+                    </div>
+                </div>
+
+                <button class="neon-button-submit" onclick="handleTransferSubmit()">
+                    COMMIT PAYLOAD TO MAINNET WIRE
+                </button>
+
+                <footer id="ui-status" class="status-ribbon">
+                    System Status: Standby Core Locked.
+                </footer>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function refreshNodeTelemetry() {
+            try {
+                if (!window.go || !window.go.main || !window.go.main.App) return;
+                
+                let telemetryStr = await window.go.main.App.GetLocalNodeTelemetry();
+                if (!telemetryStr) return;
+                let telemetry = JSON.parse(telemetryStr);
+                
+                let fetchedBalance = await window.go.main.App.FetchWalletBalanceQuery(telemetry.miner_address);
+                let balanceNum = typeof fetchedBalance === 'number' ? fetchedBalance : 0.0;
+
+                document.getElementById("ui-height").innerText = "#" + telemetry.current_height;
+                document.getElementById("ui-balance").innerText = balanceNum.toFixed(2) + " CVN";
+                document.getElementById("ui-difficulty").innerText = "Prefix " + telemetry.difficulty + " Zeros";
+                document.getElementById("ui-address").innerText = telemetry.miner_address;
+                document.getElementById("ui-hash").innerText = telemetry.block_hash;
+            } catch (err) {
+                console.log("Telemetry sync waiting...", err);
+            }
+        }
+
+        async function handleTransferSubmit() {
+            let recInput = document.getElementById("recipient");
+            let amInput = document.getElementById("amount");
+            let feeInput = document.getElementById("fee");
+
+            let rec = recInput ? recInput.value : "";
+            let am = amInput ? amInput.value : "";
+            let fee = feeInput ? feeInput.value : "0.01";
+
+            if (!rec || !am) {
+                alert("ALERT: Recipient address and token volume fields are mandatory.");
+                return;
+            }
+            
+            let statusEl = document.getElementById("ui-status");
+            if (statusEl) statusEl.innerText = "BROADCASTING: Compiling cryptographic cash graph payload...";
+            
+            try {
+                let result = await window.go.main.App.BroadcastLocalTransactionSubmit(rec, am, fee);
+                if (statusEl) statusEl.innerText = result;
+                if (recInput) recInput.value = "";
+                if (amInput) amInput.value = "";
+            } catch (err) {
+                if (statusEl) statusEl.innerText = "CRITICAL: Network socket drop: " + err;
+            } finally {
+                refreshNodeTelemetry();
+            }
+        }
+
+        // Native lifecycle boot bindings
+        setTimeout(() => {
+            refreshNodeTelemetry();
+            setInterval(refreshNodeTelemetry, 2000);
+        }, 500);
+    </script>
+</body>
+</html>
