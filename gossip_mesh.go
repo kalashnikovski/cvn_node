@@ -243,18 +243,18 @@ func StartMeshNetwork() {
 			json.NewEncoder(w).Encode(GetLatestBlock())
 		})
 
-		                // 🪪 FIXED: Injecting the /addresses mapping gateway directly into port 8081!
+		// 🔑 WALLET ADDRESSES GATEWAY ENDPOINT: Dynamic mapping hook to automatically satisfy Wails layout initializations
                 http.HandleFunc("/addresses", func(w http.ResponseWriter, r *http.Request) {
                         w.Header().Set("Content-Type", "application/json")
                         w.Header().Set("Access-Control-Allow-Origin", "*")
                         
-                        // Dynamically returns your active mining node identity token variable
+                        // ✅ DYNAMIC REPAIR: Automatically uses the active local node identity string variable!
                         json.NewEncoder(w).Encode(map[string]interface{}{
-                                "active_addresses": []string{"CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337"},
+                                "active_addresses": []string{CustomMinerAddress},
                         })
                 })
 
-		                // 📊 DYNAMIC WALLET AUDIT ENDPOINT LOOP PATH (Port 8081 HTML Table Dash)
+                // 📊 DYNAMIC WALLET AUDIT ENDPOINT LOOP PATH (Port 8081 HTML Table Dash)
                 http.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
                         w.Header().Set("Content-Type", "text/html; charset=utf-8")
                         w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -273,17 +273,16 @@ func StartMeshNetwork() {
                         var balance int64 = 0
                         var blocksMined int64 = 0
 
-                        // Self-contained multi-wallet ledger mapping parameters
-                        if targetAddress == "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337" {
+                        // ✅ DYNAMIC LEDGER MAPPING: Validates stats against the local running rig's variables natively!
+                        if targetAddress == CustomMinerAddress {
                                 balance = latestBlock.Index * 50 
                                 blocksMined = latestBlock.Index
                         } else if targetAddress == "CVN_766d4b3be2e1c894f0b2a688527e4d2592151cd1" {
-                                // Dynamic ledger tracking checks historical data slices for Sparks60
+                                // Keeps historical reference parameters grounded for Sparks60's view
                                 balance = 1000
                                 blocksMined = 0
                         }
 
-                        // ✅ FIXED: Single percent strings unlock seamless, clean data rendering with NO footer text strings!
                         fmt.Fprintf(w, `<!DOCTYPE html>
                         <html>
                         <head>
@@ -333,12 +332,13 @@ func StartMeshNetwork() {
                         </body>
                         </html>`, latestBlock.Index, targetAddress, balance, blocksMined)
                 })
-                // ✅ FIXED: Perfectly closes the http listener routine container on port 8081 cleanly!
+
+                // Perfectly closes the http listener routine container on port 8081 cleanly!
                 fmt.Println("📡 Explorer API Gateway Matrix listening natively on isolated port :8081...")
                 if err := http.ListenAndServe(":8081", nil); err != nil {
                         log.Printf("Network socket notice: %v\n", err)
-                    }
-        }() // Encloses and fires the go func server thread natively!
+                }
+        }() 
 }
 
 
