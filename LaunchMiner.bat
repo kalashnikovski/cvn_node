@@ -9,20 +9,27 @@ echo ====================================================================
 echo.
 
 echo 📡 [1/2] Preparing network socket channels safely...
-rem ✅ DETOXIFIED: Removed taskkill commands to prevent breaking active onboarding states mid-launch!
+
+// ✅ FIXED: Adapt execution scope to whatever directory holds this file natively
+cd /d "%~dp0"
 
 echo ⚙️ [2/3] Extracting local identity token variables dynamically...
 if not exist miner_config.json (
     echo {"miner_address":"CVN_UNCONFIGURED_LOCAL_NODE_ID"} > miner_config.json
 )
 
-set LOCAL_RIG_ID=
-for /f "tokens=2 delims=:, " %%a in ('findstr "miner_address" miner_config.json') do (
-    set tmp_id=%%a
+set LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID
+for /f "tokens=2 delims=:," %%A in (miner_config.json) do (
+    set "val=%%A"
+    set "val=!val: =!"
+    set "val=!val:"=!"
+    set "val=!val:{=!"
+    set "val=!val:}=!"
+    set "val=!val:[=!"
+    set "val=!val:]=!"
 )
-set LOCAL_RIG_ID=%tmp_id:"=%
-set LOCAL_RIG_ID=%LOCAL_RIG_ID:}=%
-set LOCAL_RIG_ID=%LOCAL_RIG_ID:]=%
+set "LOCAL_RIG_ID=%val:"=%"
+set "LOCAL_RIG_ID=%LOCAL_RIG_ID: =%"
 
 if "%LOCAL_RIG_ID%"=="" (
     set LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID
@@ -33,7 +40,6 @@ echo --------------------------------------------------------------------
 echo ACTIVE RIG IDENTITY: %LOCAL_RIG_ID%
 echo.
 
-rem ✅ FIXED: Executes the compiled binary directly from your root project space to unchain the screen logger instantly!
 if exist ".\cvn_node.exe" (
     .\cvn_node.exe --miner-address %LOCAL_RIG_ID%
 ) else if exist ".\build\bin\cvn_node.exe" (

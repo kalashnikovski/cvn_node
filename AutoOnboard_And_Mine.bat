@@ -15,38 +15,34 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo 🔍 [PROFILE AUDIT] Verifying local user deployment ledger states...
+
+// ✅ FIXED: Explicitly target the script's local execution directory dynamically
+cd /d "%~dp0"
+
 if not exist miner_config.json (
-    echo {"miner_address": "CVN_UNCONFIGURED_LOCAL_NODE_ID"} > miner_config.json
+    echo {"miner_address":"CVN_UNCONFIGURED_LOCAL_NODE_ID"} > miner_config.json
 )
 
-rem Dynamic profile parsing tracks extract identity variables natively
-for /f "tokens=2 delims=:, " %%a in ('findstr "miner_address" miner_config.json') do (
-    set tmp_id=%%a
+set LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID
+for /f "tokens=2 delims=:," %%A in (miner_config.json) do (
+    set "val=%%A"
+    set "val=!val: =!"
+    set "val=!val:"=!"
+    set "val=!val:{=!"
+    set "val=!val:}=!"
+    set "val=!val:[=!"
+    set "val=!val:]=!"
 )
-set LOCAL_RIG_ID=%tmp_id:"=%
-set LOCAL_RIG_ID=%LOCAL_RIG_ID:}=%
-set LOCAL_RIG_ID=%LOCAL_RIG_ID:]=%
+set "LOCAL_RIG_ID=%val:"=%"
+set "LOCAL_RIG_ID=%LOCAL_RIG_ID: =%"
 
-rem ✅ VISUAL DISCRIMINATION ENGINE: Evaluates configuration variables to log status states
-if "%LOCAL_RIG_ID%" == "CVN_UNCONFIGURED_LOCAL_NODE_ID" (
-    echo 👤 [USER STATUS] New installation profile detected. Generating local keys...
-    echo 🟩 Initializing primary network handshake directories...
-) else (
-    echo 🎖️ [USER STATUS] Experienced Node Operator Authenticated!
-    echo 🪪 RECOGNIZED ADDRESS: %LOCAL_RIG_ID%
-    echo 📂 Re-mounting historical BoltDB table schemas from local disk sectors...
-)
-
-if exist cvn_node.exe (
-    echo ✅ SUCCESS: Valid production core executable found.
-    goto LAUNCH_NODE
-)
+if exist cvn_node.exe goto COMPILE_CHECK
 
 echo 📡 WARNING: Production core binary asset missing. Compiling package...
 if exist go.mod del /f /q go.mod
 if exist go.sum del /f /q go.sum
 go mod init cvn_node
-go get github.com/wailsapp/wails/v2
+go get ://github.com
 go get go.etcd.io/bbolt@v1.5.0
 go mod tidy
 go build -o cvn_node.exe main.go app.go blockchain_core.go gossip_mesh.go database_core.go backup_vault.go
@@ -54,7 +50,45 @@ go build -o cvn_node.exe main.go app.go blockchain_core.go gossip_mesh.go databa
 if %ERRORLEVEL% NEQ 0 (
     echo 🚨 CRITICAL FAULT: Node core compilation aborted.
     pause
-	exit /b
+    exit /b
+)
+
+:COMPILE_CHECK
+if "%LOCAL_RIG_ID%"=="CVN_UNCONFIGURED_LOCAL_NODE_ID" (
+    echo.
+    echo 👤 [USER STATUS] New installation profile detected.
+    echo 🟩 Initializing secure cryptographic identity generator...
+    echo --------------------------------------------------------------------
+    
+    .\cvn_node.exe --generate-wallet
+    
+    if %ERRORLEVEL% NEQ 0 (
+        echo 🚨 ERROR: Secure wallet initialization aborted.
+        pause
+        exit /b
+    )
+    
+    echo.
+    echo ⚠️  LOUD SECURITY WARNING: Your private keys have been exported to 'cvn_secret_backup.txt'.
+    echo KEEP THIS FILE COMPLETELY SECRET. IF YOU LOSE IT, YOUR FUNDS ARE GONE FOREVER.
+    echo --------------------------------------------------------------------
+    echo ⏸️  Onboarding paused. Verify your credentials above before starting the node.
+    pause
+    
+    set LOCAL_RIG_ID=
+    for /f "tokens=2 delims=:," %%A in (miner_config.json) do (
+        set "val=%%A"
+        set "val=!val: =!"
+        set "val=!val:"=!"
+        set "val=!val:{=!"
+        set "val=!val:}=!"
+    )
+    set "LOCAL_RIG_ID=%val:"=%"
+    set "LOCAL_RIG_ID=%LOCAL_RIG_ID: =%"
+) else (
+    echo 🎖️ [USER STATUS] Experienced Node Operator Authenticated!
+    echo 🪪 RECOGNIZED ADDRESS: %LOCAL_RIG_ID%
+    echo 📂 Re-mounting historical BoltDB table schemas from local disk sectors...
 )
 
 :LAUNCH_NODE
@@ -67,8 +101,9 @@ echo.
 if exist LaunchMiner.bat (
     start "Covenant Standard Hashing Engine" cmd /k ".\LaunchMiner.bat"
 ) else (
-    start "Covenant Standard Hashing Engine" cmd /k ".\cvn_node.exe --connect 207.148.67.11:8081"
+    start "Covenant Standard Hashing Engine" cmd /k ".\cvn_node.exe --miner-address %LOCAL_RIG_ID%"
 )
 
-echo ✅ Success: Mining engine unchained successfully into an isolated terminal panel!
-echo This window can now be safely minimized.
+echo ✅ Success: Node network service and ledger verification engine ignited.
+echo The active sync status progress bar is now updating live in your miner terminal.
+echo This orchestrator window can now be safely closed.
