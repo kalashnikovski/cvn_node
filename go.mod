@@ -3,6 +3,11 @@ module cvn_node
 go 1.27.1
 
 require (
+	github.com/wailsapp/wails/v2 v2.16.0
+	go.etcd.io/bbolt v1.5.0
+)
+
+require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -31,9 +36,4 @@ require (
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
-)
-
-require (
-	github.com/wailsapp/wails/v2 v2.16.0
-	go.etcd.io/bbolt v1.5.0
 )
