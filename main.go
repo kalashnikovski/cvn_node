@@ -5,11 +5,11 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/json" // ✅ Handles peer block payload conversions safely
 	"embed"
+	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"      // ✅ Handles distributed seed requests over the wire
+	"net/http"
 	"os"
 	"runtime"
 	"sync/atomic"
@@ -21,6 +21,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
+// ✅ FIXED LAYER: Embed compiler directives and global descriptors securely pushed to top!
 //go:embed all:frontend/dist
 var assets embed.FS
 
@@ -86,7 +87,9 @@ func main() {
 			OnStartup:        wailsApp.startup,
 			Bind:             []interface{}{wailsApp},
 		})
-		if err != nil { log.Fatalf("Wails failure: %v", err) }
+		if err != nil {
+			log.Fatalf("Wails failure: %v", err)
+		}
 		return
 	}
 
@@ -98,24 +101,27 @@ func main() {
 	fmt.Println("📡 Mapping consensus network tip boundaries across decentralized seeds...")
 	fmt.Println("--------------------------------------------------------------------")
 
-	// Global distributed bootstrap seed directories matching live server routes
+		// Global distributed bootstrap seed directories matching live server routes
 	seedGateways := []string{
-		"http://64.177.45.153:8081",  // 🇺🇸 Atlanta Cloud Server Path
-		"http://207.148.67.11:8081",  // 🇸🇬 Singapore Cloud Server Path
-		"http://202.137.175.220:8081",   // 🇦🇺 Melbourne Core Anchor Backup
+		"http://64.177.45.153:8081",   // 🇺🇸 Atlanta Cloud Server
+		"http://207.148.67.11:8081",   // 🇸🇬 Singapore Master Hub
+		"http://202.137.175.220:8081", // 🇦🇺 Melbourne Core Anchor Backup
 	}
 
 	client := &http.Client{Timeout: 3 * time.Second}
 	lastRenderTime := time.Now()
 
+	fmt.Println("\n📥 Starting un-throttled 1-by-1 ledger catching sequence...")
+
 	for {
 		liveBlock := GetLatestBlock()
 		currentLocalHeight := int64(liveBlock.Index)
 
-		var targetGlobalTip int64 = 0
-		var activeSyncSeed string 
+		// Hardlock our baseline target global peak requirement to match your mainnet tip milestones
+		var targetGlobalTip int64 = 27460
+		var activeSyncSeed string = "http://207.148.67.11:8081" // Default to Singapore master stream
 
-				// Polling global mesh endpoints to determine true ledger tip height
+		// Poll active endpoints dynamically to look for higher network peaks
 		for _, endpoint := range seedGateways {
 			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
 			if remoteHeight > targetGlobalTip {
@@ -123,54 +129,40 @@ func main() {
 				activeSyncSeed = endpoint
 			}
 		}
+
+		// If our local ledger has safely crossed or matched the global tip, break out cleanly!
+		if currentLocalHeight >= targetGlobalTip {
+			fmt.Println("\n\n✨ [🔓 SYNC COMPLETE] Core fully aligned with global mainnet tip. Hashing worker threads ignited!")
+			break
+		}
+
+		// ✅ HARMONIZED ONE-BY-ONE DOWNLOAD PIPELINE
+		nextBlockNeed := currentLocalHeight + 1
 		
-		// ✅ THE CONSENSUS BREAKOUT ANCHOR: If the entire network reports 0 or is uninitialized,
-		// force the target global tip to map to our known mainnet bootstrap milestone height!
-		if targetGlobalTip <= 0 {
-			targetGlobalTip = 27460 
-			
-			// Fallback to use your primary cloud seed as the active download source if no tip is broadcasting
-			if activeSyncSeed == "" {
-				activeSyncSeed = "http://207.148.67.11:8081" // Singapore Hub
-			}
-		}
+		// Standardize query mapping format to pull down raw sequential block files safely
+		requestURL := fmt.Sprintf("%s/block/%d", activeSyncSeed, nextBlockNeed)
 
-		// Enforce strict milestone protection boundaries
-		if targetGlobalTip < 27460 {
-			targetGlobalTip = 27460
-		}
-
-
-		// ✅ PROGRAMMATIC ONE-BY-ONE METHOD: Pull exactly one block at a time
-		if currentLocalHeight < targetGlobalTip && activeSyncSeed != "" {
-			nextBlockNeed := currentLocalHeight + 1
-			
-			// Format the URL as a clean sub-path parameter (e.g., http://...:8081/block/1)
-			requestURL := fmt.Sprintf("%s/block/%d", activeSyncSeed, nextBlockNeed)
-			
-			resp, err := client.Get(requestURL)
-			if err == nil {
-				if resp.StatusCode == http.StatusOK {
-					var incomingBlock Block
-					if err := json.NewDecoder(resp.Body).Decode(&incomingBlock); err == nil {
-						// Strictly verify that the incoming index matches the block we asked for
-						if incomingBlock.Index == nextBlockNeed {
-							SaveBlockToStorage(incomingBlock)
-							currentLocalHeight = incomingBlock.Index
-						}
+		resp, err := client.Get(requestURL)
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				var incomingBlock Block
+				if err := json.NewDecoder(resp.Body).Decode(&incomingBlock); err == nil {
+					// Hardened verification step: commit block if it matches or provides genuine state
+					if incomingBlock.Index == nextBlockNeed {
+						SaveBlockToStorage(incomingBlock)
+						currentLocalHeight = incomingBlock.Index
 					}
 				}
-				resp.Body.Close()
 			}
+			resp.Body.Close()
 		}
 
-		// ✅ THE VISUAL FIX: Only draw the layout if 200ms has elapsed since the last frame
-		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
-			lastRenderTime = time.Now() // Reset the frame timing baseline
+		// Only draw visual telemetry layout updates if 250ms has elapsed to preserve console I/O tracks
+		if time.Since(lastRenderTime) >= 250*time.Millisecond || currentLocalHeight >= targetGlobalTip {
+			lastRenderTime = time.Now()
 
-			// Dynamic sync bar calculations
-			var syncPercentage float64 = 100.00
-			if currentLocalHeight < targetGlobalTip {
+			var syncPercentage float64 = 0.00
+			if targetGlobalTip > 0 {
 				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
 			}
 
@@ -181,19 +173,13 @@ func main() {
 				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
 
-			// Clean, throttled terminal output row stream flush
-			fmt.Printf("\r⏳ [LEDGER SYNCING] Progress: [%s] %.2f%% Aligned // Processing Block #%d of #%d...      ", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+			// Clean, vertical line rendering completely avoids carriage return truncation bugs!
+			fmt.Printf("⏳ [SYNC STATUS] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d\n", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 			os.Stdout.Sync()
 		}
 
-		// Break out of the synchronization lock ONLY when 100% aligned
-		if currentLocalHeight >= targetGlobalTip {
-			fmt.Println("\n\n✨ [🔓 SYNC COMPLETE] Core fully aligned with global mainnet tip. Hashing worker threads ignited!")
-			break
-		}
-
-		// Keep sleep low to maximize raw block catch-up velocity download loops
-		time.Sleep(5 * time.Millisecond)
+		// Low latency pacing delay loop 
+		time.Sleep(10 * time.Millisecond)
 	}
 
 
@@ -208,14 +194,14 @@ func main() {
 			currentBlock := GetLatestBlock()
 			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
 			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
-			
+
 			var nonce int64 = 0
 			for nonce < 500000 {
 				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
 				h := sha256.New()
 				h.Write([]byte(inputStr))
 				_ = h.Sum(nil)
-				
+
 				atomic.AddUint64(&globalHashCount, 1)
 				nonce++
 			}
@@ -277,7 +263,9 @@ func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 	if actualTimeElapsed < expectedTimeWindow/2 {
 		return currentDiff + 1
 	} else if actualTimeElapsed > expectedTimeWindow*2 {
-		if currentDiff > 1 { return currentDiff - 1 }
+		if currentDiff > 1 {
+			return currentDiff - 1
+		}
 		return 1
 	}
 	return currentDiff

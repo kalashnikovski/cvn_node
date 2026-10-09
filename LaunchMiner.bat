@@ -8,10 +8,8 @@ echo 💎 COVENANT STANDARD CVN LEDGER SYNCHRONIZATION MATRIX CORE
 echo ====================================================================
 echo.
 
-echo 📡 [1/2] Releasing background network adapters and flushing sockets...
-taskkill /F /IM cvn_server.exe /T >nul 2>nul
-taskkill /F /IM cvn_node.exe /T >nul 2>nul
-powershell -Command "Stop-Process -Name cvn_server, cvn_node -Force -ErrorAction SilentlyContinue" >nul 2>nul
+echo 📡 [1/2] Preparing network socket channels safely...
+rem ✅ DETOXIFIED: Removed taskkill commands to prevent breaking active onboarding states mid-launch!
 
 echo ⚙️ [2/3] Extracting local identity token variables dynamically...
 if not exist miner_config.json (
