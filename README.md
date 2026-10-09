@@ -60,13 +60,19 @@ If your domestic internet connection experiences timeout resets during the initi
 
 To ensure absolute network redundancy, automated failover protection, and high-throughput data replication, the Covenant Standard mainnet relies on a distributed multi-anchor blueprint. Miners and full nodes can synchronize their ledger states through either of the live bootstrap entry gates below:
 
-### 🇸🇬 1. Cloud Master Seed Node (Singapore Hub)
+### 🇺🇸 1. Cloud Seed Node (Atlanta Hub)
+* **Visual Blockchain Explorer Dashboard:** http://64.177.45.153:8082
+* **Public Discovery Peer Roster Index:** http://64.177.45.153:8082/peers (Static Cloud Map)
+* **Unique Network Addresses Tracker:** http://64.177.45.153:8082/addresses (Server Side Loop)
+* **P2P Mesh Consensus Connection Gateway:** `64.177.45.153:8080`
+
+### 🇸🇬 2. Cloud Master Seed Node (Singapore Hub)
 * **Visual Blockchain Explorer Dashboard:** http://207.148.67.11:8081
 * **Public Discovery Peer Roster Index:** http://207.148.67.11:8081/peers
 * **Unique Network Addresses Tracker:** http://207.148.67.11:8081/addresses
 * **P2P Mesh Consensus Connection Gateway:** `207.148.67.11:8080`
 
-### 🇦🇺 2. Anchor Seed Node Rig (Melbourne Hub)
+### 🇦🇺 3. Anchor Seed Node Rig (Melbourne Hub)
 * **Visual Blockchain Explorer Dashboard:** http://202.137.175.220:8081/
 * **Public Discovery Peer Roster Index:** http://202.137.175.220:8081/peers
 * **Unique Network Addresses Tracker:** http://202.137.175.220:8081/addresses
