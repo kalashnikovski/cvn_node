@@ -100,9 +100,9 @@ func main() {
 
 	// Global distributed bootstrap seed directories matching live server routes
 	seedGateways := []string{
-		"http://64.177.45.153:8082/explorer",  // 🇺🇸 Atlanta Cloud Server Path
-		"http://207.148.67.11:8082/explorer",  // 🇸🇬 Singapore Cloud Server Path
-		"http://202.137.175.220:8081/block",   // 🇦🇺 Melbourne Core Anchor Backup
+		"http://64.177.45.153:8081",  // 🇺🇸 Atlanta Cloud Server Path
+		"http://207.148.67.11:8081",  // 🇸🇬 Singapore Cloud Server Path
+		"http://202.137.175.220:8081",   // 🇦🇺 Melbourne Core Anchor Backup
 	}
 
 	client := &http.Client{Timeout: 3 * time.Second}
@@ -115,7 +115,7 @@ func main() {
 		var targetGlobalTip int64 = 0
 		var activeSyncSeed string 
 
-		// Polling global mesh endpoints to determine true ledger tip height
+				// Polling global mesh endpoints to determine true ledger tip height
 		for _, endpoint := range seedGateways {
 			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
 			if remoteHeight > targetGlobalTip {
@@ -124,13 +124,22 @@ func main() {
 			}
 		}
 		
+		// ✅ THE CONSENSUS BREAKOUT ANCHOR: If the entire network reports 0 or is uninitialized,
+		// force the target global tip to map to our known mainnet bootstrap milestone height!
 		if targetGlobalTip <= 0 {
-			targetGlobalTip = currentLocalHeight
+			targetGlobalTip = 27460 
+			
+			// Fallback to use your primary cloud seed as the active download source if no tip is broadcasting
+			if activeSyncSeed == "" {
+				activeSyncSeed = "http://207.148.67.11:8081" // Singapore Hub
+			}
 		}
 
+		// Enforce strict milestone protection boundaries
 		if targetGlobalTip < 27460 {
 			targetGlobalTip = 27460
 		}
+
 
 		// ✅ PROGRAMMATIC ONE-BY-ONE METHOD: Pull exactly one block at a time
 		if currentLocalHeight < targetGlobalTip && activeSyncSeed != "" {
