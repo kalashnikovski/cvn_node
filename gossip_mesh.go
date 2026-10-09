@@ -185,37 +185,55 @@ func IsCoreMinerLocked() bool {
 
 // StartMeshNetwork initializes raw TCP sockets on 8080 and full Explorer API telemetry routes on 8081
 func StartMeshNetwork() {
-	fmt.Println("🛰️  P2P MATRIX: Binding to core data channels...")
-	
-	// 1. Spawning the Local HTTP Explorer Telemetry Server on Port 8081
-	go func() {
-		// Home Index Splash View Portal
-				// Home Index Splash View Portal
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/" {
-				http.NotFound(w, r)
-				return
-			}
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, `<html><body style="background:#0a0a0f;color:#00ff66;font-family:monospace;padding:3rem;text-align:center;">
-				<h1>💎 COVENANT STANDARD MELBOURNE CORE RIG</h1>
-				<p style="color:#00ffff;">SYSTEM STATUS: ACTIVE // BLOCK HEIGHT: #<span id="live-height">%d</span></p>
-				<script>
-					function updateBlockHeight() {
-						fetch('/block')
-							.then(response => response.json())
-							.then(data => {
-								if (data && (data.current_height || data.block_height)) {
-									const newHeight = data.current_height || data.block_height;
-									document.getElementById('live-height').innerText = newHeight;
-								}
-							})
-							.catch(err => console.error("Gossip tracking sync delay:", err));
-					}
-					setInterval(updateBlockHeight, 2000);
-				</script>
-			</body></html>`, GetLatestBlock().Index)
-		})
+        fmt.Println("📡 P2P MATRIX: Binding to core data channels...")
+
+        // ✅ PORT 8080: Spawn the raw P2P TCP Mesh Listener asynchronously in the background!
+        go func() {
+                listener, err := net.Listen("tcp", ":8080")
+                if err != nil {
+                        log.Printf("🚨 P2P Port 8080 connection delay or conflict notice: %v\n", err)
+                        return
+                }
+                defer listener.Close()
+                
+                for {
+                        conn, err := listener.Accept()
+                        if err != nil {
+                                continue
+                        }
+                        go handleIncomingPeerSession(conn)
+                }
+        }()
+
+        // ✅ PORT 8081: Spawn the Local HTTP Explorer Telemetry Server asynchronously in the background!
+        go func() {
+                // Home Index Splash View Portal
+                http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+                        if r.URL.Path != "/" {
+                                http.NotFound(w, r)
+                                return
+                        }
+                        w.Header().Set("Content-Type", "text/html; charset=utf-8")
+                        fmt.Fprintf(w, `<html><body style="background:#0a0a0f;color:#00ff66;font-family:monospace;padding:3rem;text-align:center;">
+                                <h1>💎 COVENANT STANDARD MELBOURNE CORE RIG</h1>
+                                <p style="color:#00ffff;">SYSTEM STATUS: ACTIVE // BLOCK HEIGHT: #<span id="live-height">%%d</span></p>
+                                <script>
+                                        function updateBlockHeight() {
+                                                fetch('/block')
+                                                        .then(response => response.json())
+                                                        .then(data => {
+                                                                if (data && (data.current_height || data.block_height)) {
+                                                                        const newHeight = data.current_height || data.block_height;
+                                                                        document.getElementById('live-height').innerText = newHeight;
+                                                                }
+                                                        })
+                                                        .catch(err => console.error("Gossip tracking sync delay:", err));
+                                        }
+                                        setInterval(updateBlockHeight, 2000);
+                                </script>
+                        </body></html>`, GetLatestBlock().Index)
+                })
+
 
 		// 🛰️ PEERS GATEWAY ENDPOINT: Feeds connection telemetry lists straight to your local panels
 		http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
