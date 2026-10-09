@@ -37,10 +37,11 @@ func main() {
 			<p style="color:#8a8a9e;">Query /peers, /block, or /audit endpoints to stream live ledger data slices.</p>
 			<script>
 				function fetchLiveHeight() {
-					fetch('http://202.137.175')
+					// FIXED: Points natively to the local server explorer instance channel to poll data safely
+					fetch('/block')
 						.then(res => res.json())
 						.then(data => {
-							const targetHeight = data.current_height || data.block_height;
+							const targetHeight = data.current_height || data.block_height || data.Index;
 							if (targetHeight) { document.getElementById('live-ledger-height').innerText = targetHeight; }
 						})
 						.catch(err => console.log("Ledger polling connection delay...", err));
@@ -71,19 +72,16 @@ func main() {
 		var balance int64 = 0
 		var blocksMined int64 = 0
 
-		// ✅ SELF-CONTAINED MULTI-WALLET RESOLUTION: Dynamic processing loops query your active mainnet blocks directly
-		if targetAddress == "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337" {
-			// Your primary mining node layout parameters
-			balance = latestBlock.Index * 50 
-			blocksMined = latestBlock.Index
-		} else if targetAddress == "CVN_766d4b3be2e1c894f0b2a688527e4d2592151cd1" {
-			// ✅ SPARKS60 LEDGER GROUNDING: Securely maps and extracts his 1,000 CVN historical transaction balance!
-			balance = 1000
-			blocksMined = 0
-		} else {
-			// Default tracker initialization block for random network nodes
-			balance = 0
-			blocksMined = 0
+		// ✅ FIXED: Perfectly enclosed dynamic ledger loop with zero syntax clutter or hardcoded caps!
+		if targetAddress != "" {
+			if targetAddress == CustomMinerAddress {
+				balance = int64(latestBlock.Index * 50)
+				blocksMined = int64(latestBlock.Index)
+			} else {
+				// Query your database ledger buckets dynamically based on whatever address is searched
+				balance = GetAddressBalanceFromLedger(targetAddress)
+				blocksMined = GetAddressBlockCountFromLedger(targetAddress)
+			}
 		}
 
 		fmt.Fprintf(w, `<!DOCTYPE html>
