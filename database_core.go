@@ -27,11 +27,39 @@ func InitBoltEngine() {
 	}
 
 	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(blocksBucket)
-		return err
+		b, err := tx.CreateBucketIfNotExists(blocksBucket)
+		if err != nil { return err }
+
+		// ✅ AUTOMATIC GENESIS SEED: If the database is brand new, programmatically inject Block #0
+		c := b.Cursor()
+		k, _ := c.First()
+		if k == nil {
+			fmt.Println("🌱 SEEDING GENESIS ARCHITECTURE: Injecting primary block parameters into BoltDB...")
+			
+			genesisTx := Transaction{
+				ID: "TX_GENESIS_INITIAL_POOL",
+				Outputs: []UTXOOutput{
+					{Recipient: "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337", Amount: 100000.00},
+				},
+				Witness: "GENESIS_VOID_REWARD_POOL",
+			}
+
+			genesisBlock := Block{
+				Index:        0,
+				Timestamp:    time.Now().Unix(),
+				Transactions: []Transaction{genesisTx},
+				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
+				Hash:         "85632def04401fccf7cbccd78b9ceb4d64c87a9195996921209dd653726b5ebd",
+				Difficulty:   4,
+			}
+
+			data, _ := json.Marshal(genesisBlock)
+			_ = b.Put([]byte("0"), data)
+		}
+		return nil
 	})
 
-	// Pre-load our atomic integer cache with the truest disk tip at launch
+	// Pre-load cache tracker sequence indices cleanly from disk
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(blocksBucket)
 		if b == nil { return nil }
