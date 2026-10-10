@@ -8,26 +8,34 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time" // ✅ FIXED: Added to support lightweight time.RFC3339 
 )
 
 var BackupMutex sync.Mutex
 
-// BackupLedgerManifest non-blockingly updates ONE single static backup file
-func BackupLedgerManifest(chain []Block) {
-	if len(chain) == 0 {
+// BackupLedgerManifest non-blockingly updates a lightweight structural tracking file
+func BackupLedgerManifest(latestBlock Block) {
+	if latestBlock.Index < 0 {
 		return
 	}
 
-	// Spin the backup process completely out into a background worker thread
-	go func(blocks []Block) {
+	// Spin the backup tracking process safely out into an isolated background worker thread
+	go func(block Block) {
 		BackupMutex.Lock()
 		defer BackupMutex.Unlock()
 
-		// FIXED: Enforce a single static file name so it overwrites instead of multiplying!
 		backupFileName := "ledger_vault_backup.json"
 
-		// Serialize the blocks array cleanly into the backup data slot
-		data, err := json.MarshalIndent(blocks, "", "  ")
+		// Create a lightweight, high-performance summary object to eliminate memory bloat entirely
+		summary := map[string]interface{}{
+			"last_updated": time.Now().Format(time.RFC3339),
+			"block_height": block.Index,
+			"block_hash":   block.Hash,
+			"difficulty":   block.Difficulty,
+			"prev_hash":    block.PrevHash,
+		}
+
+		data, err := json.MarshalIndent(summary, "", "  ")
 		if err != nil {
 			fmt.Printf("⚠️ [Backup Engine Alert] Serialization failure: %v\n", err)
 			return
@@ -40,6 +48,6 @@ func BackupLedgerManifest(chain []Block) {
 			return
 		}
 
-		fmt.Printf("💾 [Archive Vault] Single ledger snapshot updated cleanly to: %s\n", backupFileName)
-	}(chain)
+		fmt.Printf("💾 [Archive Vault] Single ledger snapshot updated cleanly to: %s (#%d)\n", backupFileName, block.Index)
+	}(latestBlock)
 }

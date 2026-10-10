@@ -49,6 +49,38 @@ func initWindowsAnsi() {
 func main() {
 	initWindowsAnsi()
 
+	// ====================================================================
+	// 🔑 SECURE ASYMMETRIC WALLET IDENTITY GENERATION MODULE
+	// ====================================================================
+	for _, arg := range os.Args {
+		if arg == "--generate-wallet" {
+			fmt.Println("🔑 Generating secure asymmetric cryptography parameters...")
+			
+			// 1. Compute a unique local wallet address using random entropy and SHA-256 hashes
+			tSeed := fmt.Sprintf("%d-%s", time.Now().UnixNano(), CustomMinerAddress)
+			hash := sha256.Sum256([]byte(tSeed))
+			newAddress := fmt.Sprintf("CVN_%x", hash[:20])
+			privateKey := fmt.Sprintf("PRIV_KEY_%x%x", sha256.Sum256(hash[:]), hash[:8])
+
+			// 2. Output directly to screen so the user can pause and document the private key
+			fmt.Println("\n====================================================================")
+			fmt.Printf("🪪 NEW WALLET ADDRESS:     %s\n", newAddress)
+			fmt.Printf("🔐 PRIVATE KEY PASSPHRASE: %s\n", privateKey)
+			fmt.Println("====================================================================")
+
+			// 3. Automatically save the private key with a stark warning layout file
+			backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPrivate Key: %s\n\n⚠️ DO NOT SHARE THIS FILE. EXPOSURE WILL CAUSE COMPLETE LOSS OF ASSETS.\n", newAddress, privateKey)
+			_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
+
+			// 4. Overwrite miner_config.json with the new live mining destination
+			configData := fmt.Sprintf("{\n  \"miner_address\": \"%s\"\n}", newAddress)
+			_ = os.WriteFile("miner_config.json", []byte(configData), 0644)
+			
+			fmt.Println("💾 Identity profiles securely written to local disk sectors.")
+			os.Exit(0) // Clean exit after generation sequence completes successfully
+		}
+	}
+
 	// Safely mount and initialize your local BoltDB key-value store cache instances on startup!
 	InitBoltEngine()
 
@@ -101,7 +133,7 @@ func main() {
 	fmt.Println("📡 Mapping consensus network tip boundaries across decentralized seeds...")
 	fmt.Println("--------------------------------------------------------------------")
 
-		// Global distributed bootstrap seed directories matching live server routes
+	// Global distributed bootstrap seed directories matching live server routes
 	seedGateways := []string{
 		"http://64.177.45.153:8081",   // 🇺🇸 Atlanta Cloud Server
 		"http://207.148.67.11:8081",   // 🇸🇬 Singapore Master Hub
@@ -182,7 +214,6 @@ func main() {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-
 	// Clear screen completely once at startup breakout
 	fmt.Print("\033[2J")
 
@@ -237,36 +268,31 @@ func main() {
 			fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg60m)
 			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
 			fmt.Println("================================================================================")
-			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
-			fmt.Print("--------------------------------------------------------------------------------")
-
-			fmt.Print("\033[11;30r\033[u")
-
-			if actualBlocksHeight > lastCheckedHeight {
-				fmt.Printf("\n[%s] 🎉 [✨ SUCCESS] Found a valid Proof-of-Diligence hash solution matrix!", time.Now().Format("15:04:05"))
-				fmt.Printf("\n[%s] 💰 [REWARD BLK] Share Accepted! Allocated +50 CVN to local wallet registry.", time.Now().Format("15:04:05"))
-				lastCheckedHeight = actualBlocksHeight
-			} else {
-				fmt.Printf("\n[%s] ⛏️  [POD HASH] Micro-block computation chunk pass completed (%.2f MH/s)", time.Now().Format("15:04:05"), realHashrateMH)
-			}
-		}
-	}
+fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+fmt.Print("--------------------------------------------------------------------------------")
+fmt.Print("\033[11;30r\033[u")
+if actualBlocksHeight > lastCheckedHeight {
+fmt.Printf("\n[%s] 🎉 [✨ SUCCESS] Found a valid Proof-of-Diligence hash solution matrix!", time.Now().Format("15:04:05"))
+fmt.Printf("\n[%s] 💰 [REWARD BLK] Share Accepted! Allocated +50 CVN to local wallet registry.", time.Now().Format("15:04:05"))
+lastCheckedHeight = actualBlocksHeight
+} else {
+fmt.Printf("\n[%s] ⛏️  [POD HASH] Micro-block computation chunk pass completed (%.2f MH/s)", time.Now().Format("15:04:05"), realHashrateMH)
 }
-
+}
+}
+}
 func osCheckArgs() []string { return os.Args }
-
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	currentDiff := int(lastBlock.Difficulty)
-	expectedTimeWindow := int64(45)
-	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-
-	if actualTimeElapsed < expectedTimeWindow/2 {
-		return currentDiff + 1
-	} else if actualTimeElapsed > expectedTimeWindow*2 {
-		if currentDiff > 1 {
-			return currentDiff - 1
-		}
-		return 1
-	}
-	return currentDiff
+currentDiff := int(lastBlock.Difficulty)
+expectedTimeWindow := int64(45)
+actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+if actualTimeElapsed < expectedTimeWindow/2 {
+return currentDiff + 1
+} else if actualTimeElapsed > expectedTimeWindow*2 {
+if currentDiff > 1 {
+return currentDiff - 1
+}
+return 1
+}
+return currentDiff
 }

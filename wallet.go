@@ -18,7 +18,7 @@ func RunWalletGUI() {
 
 	for {
 		fmt.Println("\n====================================================================")
-		fmt.Println("💎 COVENANT STANDARD (CVN) LIGHTWEIGHT COMMAND-LINE WALLET CORE v3.6")
+		fmt.Println("💎 COVENANT STANDARD (CVN) LIGHTWEIGHT COMMAND-LINE WALLET CORE v4.0")
 		fmt.Println("====================================================================")
 		fmt.Println(" 👑 1. Generate a Brand New Unique Wallet (Private Key & CVN Address)")
 		fmt.Println(" 🕊️  2. Send an Outbound Free-Will Offering Transaction Payload")
@@ -29,9 +29,9 @@ func RunWalletGUI() {
 		choiceStr, _ := reader.ReadString('\n')
 		choiceStr = strings.TrimSpace(choiceStr)
 
-				if choiceStr == "1" {
-			// 🔐 Hook directly into your crypto_auth.go generation mathematical rules
-			privHex, walletAddress, err := GenerateKeyPair()
+		if choiceStr == "1" {
+			// ✅ FIXED TYPE ASSIGNMENT: Extracts all 3 coordinate parameters from crypto_auth specs
+			privHex, pubHex, walletAddress, err := GenerateKeyPair()
 			if err != nil {
 				fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Unable to initialize secure entropy paths: %v\n", err)
 				continue
@@ -39,46 +39,49 @@ func RunWalletGUI() {
 			fmt.Println("\n====================================================================")
 			fmt.Println("🎉 NEW SECURE WALLET IDENTITY DETECTED & SCRIPTURALLY LOCKED")
 			fmt.Println("====================================================================")
-			fmt.Printf("🔑 YOUR PRIVATE KEY (SECRET): %s\n", privHex)
 			fmt.Printf("📋 YOUR CVN PUBLIC ADDRESS:   %s\n", walletAddress)
+			fmt.Printf("🔑 YOUR PUBLIC KEY (HEX):     %s\n", pubHex)
+			fmt.Printf("🔐 YOUR PRIVATE KEY (SECRET):   %s\n", privHex)
 			fmt.Println("--------------------------------------------------------------------")
 			fmt.Println("⚠️  WARNING: Copy and save your Private Key safely! It is never stored on disk.")
 			fmt.Println("====================================================================")
 
-			// ====================================================================
-			// 🟩 PASTE THE AUTOMATED BACKUP FIX DIRECTLY HERE:
-			// ====================================================================
 			backupContent := fmt.Sprintf(
 				"====================================================\n"+
 				"🛰️  COVENANT STANDARD (CVN) SOVEREIGN WALLET KEYS\n"+
 				"====================================================\n\n"+
 				"📋 PUBLIC WALLET ADDRESS (Safe to share with anyone):\n"+
 				"%s\n\n"+
-				"🔑 SECRET PRIVATE KEY (NEVER SHARE - Keep completely hidden):\n"+
+				"🔑 UN-TRUNCATED PUBLIC KEY (Required for validation fields):\n"+
+				"%s\n\n"+
+				"🔐 SECRET PRIVATE KEY (NEVER SHARE - Keep completely hidden):\n"+
 				"%s\n"+
 				"====================================================\n", 
-				walletAddress, privHex,
+				walletAddress, pubHex, privHex,
 			)
 			
-			// Write the file down to your disk storage directory using strict read/write security privileges
+			// Write backup log explicitly using strict read/write authorization keys
 			_ = os.WriteFile("my_crypto_address.txt", []byte(backupContent), 0600)
 			
-			// Also write the matching public profile format out to prevent configuration script bypasses
-			configMap := map[string]string{"saved_miner_address": walletAddress}
+			// ✅ FIXED IDENTIFIER: Writes using the precise key layout matching batch loops
+			configMap := map[string]string{"miner_address": walletAddress}
 			configBytes, _ := json.MarshalIndent(configMap, "", "  ")
 			_ = os.WriteFile("miner_config.json", configBytes, 0644)
 			
 			fmt.Println("💾 SUCCESS: Sovereign wallet credentials safely written to disk inside your directory!")
 			fmt.Println("====================================================================")
-			// ====================================================================
 
 			fmt.Println("Press [ENTER] to return to the core wallet menu window.")
 			_, _ = reader.ReadString('\n')
 
 		} else if choiceStr == "2" {
-			fmt.Print("\n🔑 Enter or Paste Sender Private Key (Hex Secret): ")
+			fmt.Print("\n🔐 Enter or Paste Sender Private Key (Hex Secret): ")
 			privKey, _ := reader.ReadString('\n')
 			privKey = strings.TrimSpace(privKey)
+
+			fmt.Print("📋 Enter Sender Public Key (Hex Format): ")
+			pubKey, _ := reader.ReadString('\n')
+			pubKey = strings.TrimSpace(pubKey)
 			
 			fmt.Print("📋 Enter Recipient Public Destination Address (CVN_...): ")
 			recipient, _ := reader.ReadString('\n')
@@ -105,45 +108,54 @@ func RunWalletGUI() {
 			fmt.Println("\n⏳ Authorizing, cryptographically signing, and formatting UTXO slices...")
 			time.Sleep(800 * time.Millisecond)
 
-			// Dynamically generate a localized pseudo-genesis entry hook to prevent double-spend collision drops
-						// 🌟 THE FIX: Map inputs straight to your verified historical genesis transaction ID!
-						// 🌟 THE FINISHED FIX: Declare payloadBytes at the top scope of Option 2!
-			var payloadBytes []byte
+			// Standardized message sequence framework to build an authentic ECDSA signature
+			txID := fmt.Sprintf("TX_OUTBOUND_%d", time.Now().UnixNano())
+			txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, offering)
 
-			uniqueInputSource := "TX_GENESIS_INITIAL_POOL"
+			// Sign payload natively leveraging the mathematical rules inside crypto_auth.go
+			rStr, sStr, err := SignTransactionPayload(privKey, txMessage)
+			if err != nil {
+				fmt.Printf("❌ CRYPTO FAULT: Asymmetric signing math aborted: %v\n", err)
+				continue
+			}
+			combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
 
 			tx := Transaction{
-				ID: fmt.Sprintf("TX_OUTBOUND_%d", time.Now().UnixNano()),
+				ID:        txID,
+				Signature: combinedSignature,
+				PublicKey: pubKey, // ✅ Fixed Field: Securely attaches public coordinates
 				Inputs: []UTXOInput{
-					{SourceTxID: uniqueInputSource, Index: 0},
+					{SourceTxID: "TX_GENESIS_INITIAL_POOL", Index: 0, Signature: combinedSignature},
 				},
 				Outputs: []UTXOOutput{
 					{Recipient: recipient, Amount: amount},
 				},
 				FreeWillOffering: offering,
+				Timestamp:        time.Now().Unix(),
 				DataSizeKB:       1.0,
-				Witness:          privKey,
+				Witness:          CustomMinerAddress,
 			}
 
-			payloadBytes, err = json.Marshal(tx)
+			payloadBytes, err := json.Marshal(tx)
 			if err != nil {
 				fmt.Println("❌ SERIALIZATION FAILURE: Unable to format data payload frame.")
 				continue
 			}
 
-			targetURL := "http://localhost:8081/inject_tx"
+			// ✅ FIXED URL INTERFACE: Route transaction propagation straight to your cloud gateway anchors
+			targetURL := "http://207.148.67" // Broadcast to live Singapore active data pool mesh
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Post(targetURL, "application/json", bytes.NewBuffer(payloadBytes))
 			if err != nil {
-				fmt.Printf("❌ HANDSHAKE FAILURE: Local server endpoint is offline or port is closed.\n")
+				fmt.Printf("❌ HANDSHAKE FAILURE: Gateway connection timed out over active interfaces.\n")
 				continue
 			}
 			defer resp.Body.Close()
 
-			if resp.StatusCode == http.StatusOK {
-				fmt.Println("\n🚀 BROADCAST SUCCESSFUL! Transaction payload injected into active network mempool queues.")
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+				fmt.Println("\n🚀 BROADCAST SUCCESSFUL! Transaction payload securely injected into active mainnet mempools.")
 			} else {
-				fmt.Printf("\n❌ SERVER REJECTION: Endpoint responded with status code %d\n", resp.StatusCode)
+				fmt.Printf("\n❌ MAINNET GATEWAY REJECTION: Interface responded with status code %d\n", resp.StatusCode)
 			}
 
 		} else if choiceStr == "3" {

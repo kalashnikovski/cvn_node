@@ -22,6 +22,7 @@ type Transaction struct {
 	Inputs           []UTXOInput  `json:"inputs"`
 	Outputs          []UTXOOutput `json:"outputs"`
 	Signature        string       `json:"signature"`
+	PublicKey        string       `json:"public_key"` // ✅ FIXED: Explicitly carries the sender's un-hashed public key for true validation checks
 	Timestamp        int64        `json:"timestamp"`
 	FreeWillOffering float64      `json:"free_will_offering"`
 	DataSizeKB       float64      `json:"data_size_kb"`
@@ -41,10 +42,10 @@ type UTXOOutput struct {
 	Amount    float64 `json:"amount"`
 }
 
-// MempoolType manages transaction states with native method support to satisfy app.go calls
+// MempoolType manages transaction states with strict type safety constraints
 type MempoolType struct {
 	sync.RWMutex
-	Transactions map[string]interface{}
+	Transactions map[string]Transaction // ✅ FIXED: Enforced strict Transaction type safety
 }
 
 // PushTransaction handles thread-safe transaction data injection hooks natively matching app.go return assignments
@@ -52,10 +53,10 @@ func (m *MempoolType) PushTransaction(tx Transaction) bool {
 	m.Lock()
 	defer m.Unlock()
 	if m.Transactions == nil {
-		m.Transactions = make(map[string]interface{})
+		m.Transactions = make(map[string]Transaction)
 	}
 	m.Transactions[tx.ID] = tx
-	return true // ✅ FIXED VALUE: Returns true to cleanly satisfy assignment context expectations inside app.go
+	return true 
 }
 
 // Global Ledger Tracking Storage Parameters
@@ -65,4 +66,4 @@ var CustomMinerAddress string
 // Global Memory State Cache and Mutex Registries to satisfy app.go framework tracking lookups
 var BalanceCacheMutex sync.RWMutex
 var StateBalanceCache = make(map[string]float64)
-var MempoolMatrix = &MempoolType{Transactions: make(map[string]interface{})}
+var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}

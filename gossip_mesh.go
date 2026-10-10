@@ -6,12 +6,11 @@ import (
 	"log"           
 	"net"
 	"net/http"
-	"strconv"       // ✅ Added to parse string heights safely
-	"strings"       // ✅ Added to handle URL route checking
+	"strconv"       
+	"strings"       
 	"sync"          
 	"time"
 )
-
 
 // ============================================================================
 // PART 1: CORE HORIZONTAL P2P GOSSIP MESH ENGINE & PHASE 3 FIREWALL
@@ -179,11 +178,9 @@ var GlobalSyncShield = &SyncGateMonitor{
 	TargetGlobalHeight:   0,
 }
 
-// GetGlobalMeshMaxHeight queries active peer tracking endpoints safely across standard nodes and cloud servers
 func GetGlobalMeshMaxHeight(seedPeerURL string) int64 {
 	client := http.Client{Timeout: 3 * time.Second}
 
-	// Strip duplicate paths if accidentally passed by main arrays
 	cleanURL := seedPeerURL
 	if !strings.HasSuffix(cleanURL, "/block") && !strings.HasSuffix(cleanURL, "/peers") {
 		cleanURL = seedPeerURL + "/block"
@@ -200,7 +197,6 @@ func GetGlobalMeshMaxHeight(seedPeerURL string) int64 {
 	}
 	
 	if err := json.NewDecoder(resp.Body).Decode(&targetData); err != nil {
-		// Fallback to decode raw Block index format if seed is standard node layout
 		var fallbackBlock struct {
 			Index int64 `json:"current_height"`
 		}
@@ -232,7 +228,7 @@ func EnforceSyncGateLock(seedPeerExplorerURL string, localHeightProvider func() 
 
 		GlobalSyncShield.IsFullySynchronized = false
 		GlobalSyncShield.mu.Unlock()
-
+		// ✅ FIXED: Removed the invalid backslash parentheses slips
 		fmt.Printf("\r⏳ [MAINNET SYNC LOCK] Local Ledger Height: %d / True Network Tip: %d. Waiting for synchronization equilibrium...", localHeight, globalMaxHeight)
 		time.Sleep(5 * time.Second) 
 	}
@@ -243,7 +239,6 @@ func IsCoreMinerLocked() bool {
 	defer GlobalSyncShield.mu.RUnlock()
 	return !GlobalSyncShield.IsFullySynchronized
 }
-
 // ============================================================================
 // PART 3: NATIVE IGNITION NETWORK CORES & EXPLORER ROUTES
 // ============================================================================
@@ -289,9 +284,12 @@ func StartMeshNetwork() {
 		}
 	}()
 
-	// ✅ PORT 8081: HTTP Explorer Telemetry Server
+	// ✅ PORT 8081: HTTP Explorer Telemetry Server (COLLISION SHIELDED)
 	go func() {
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Isolated Multiplexer prevents global DefaultServeMux routing namespace panics
+		mux8081 := http.NewServeMux()
+
+		mux8081.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
 				http.NotFound(w, r)
 				return
@@ -301,7 +299,7 @@ func StartMeshNetwork() {
 		})
 
 		// 🛰️ PEERS GATEWAY ENDPOINT
-		http.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+		mux8081.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -313,36 +311,31 @@ func StartMeshNetwork() {
 		})
 
 		// 📦 BLOCK METRICS ENDPOINT: Handles standard tips and explicit 1-by-1 path requests
-		http.HandleFunc("/block/", func(w http.ResponseWriter, r *http.Request) {
+		mux8081.HandleFunc("/block/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 
-			// Slice out the trailing URL string path to grab the target integer (e.g., /block/1 -> "1")
 			pathSegments := strings.Split(r.URL.Path, "/")
 			if len(pathSegments) > 2 && pathSegments[2] != "" {
 				requestedHeight, err := strconv.ParseInt(pathSegments[2], 10, 64)
 				if err == nil {
-					// Call your compiled disk reader to fetch the exact single block slice
 					specificBlock := GetBlockByHeightFromDB(requestedHeight)
 					json.NewEncoder(w).Encode(specificBlock)
 					return
 				}
 			}
-
-			// Fallback: if no trailing ID index is passed, return the standard tip block
 			json.NewEncoder(w).Encode(GetLatestBlock())
 		})
 
 		// Keep the base route active for general global tip checks
-		http.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
+		mux8081.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			json.NewEncoder(w).Encode(GetLatestBlock())
 		})
 
-
 		// 🔑 WALLET ADDRESSES GATEWAY ENDPOINT
-		http.HandleFunc("/addresses", func(w http.ResponseWriter, r *http.Request) {
+		mux8081.HandleFunc("/addresses", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -351,7 +344,7 @@ func StartMeshNetwork() {
 		})
 
 		// 📊 DYNAMIC WALLET AUDIT ENDPOINT LOOP PATH
-		http.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+		mux8081.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -378,13 +371,12 @@ func StartMeshNetwork() {
 		})
 
 		fmt.Println("📡 Explorer API Gateway Matrix listening natively on isolated port :8081...")
-		if err := http.ListenAndServe(":8081", nil); err != nil {
-			log.Printf("Network socket notice: %v\n", err)
+		if err := http.ListenAndServe(":8081", mux8081); err != nil {
+			log.Printf("Network socket notice for 8081: %v\n", err)
 		}
 	}() 
 }
 
-// handleIncomingPeerSession manages low-level mesh handshakes smoothly
 func handleIncomingPeerSession(conn net.Conn) {
 	defer conn.Close()
 	fmt.Printf("📡 [P2P MESH] Incoming handshake established from: %s\n", conn.RemoteAddr().String())
@@ -407,9 +399,9 @@ const htmlMelbourneTemplate = `<html><body style="background:#0a0a0f;color:#00ff
 			fetch('/block')
 				.then(response => response.json())
 				.then(data => {
-					if (data && (data.current_height || data.block_height)) {
-						const newHeight = data.current_height || data.block_height;
-						document.getElementById('live-height').innerText = newHeight;
+					const targetHeight = data.current_height || data.block_height || data.Index;
+					if (targetHeight) {
+						document.getElementById('live-height').innerText = targetHeight;
 					}
 				})
 				.catch(err => console.error("Gossip tracking sync delay:", err));

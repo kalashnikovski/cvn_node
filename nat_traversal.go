@@ -6,29 +6,24 @@ import (
 	"time"
 )
 
-// SetupAutomatedPortMapping attempts to negotiate UPnP firewall pinholes on local home routers
+// SetupAutomatedPortMapping coordinates non-blocking local interface discovery loops safely
 func SetupAutomatedPortMapping() {
-	fmt.Println("🛰️  [NAT SHIELD] Initializing automated UPnP router traversal discovery...")
-
+	// Spin execution safely out to an isolated background thread to protect terminal rendering speeds
 	go func() {
-		// Discover the local network gateway IP address natively
 		addrs, err := net.InterfaceAddrs()
 		if err != nil {
 			return
 		}
 
 		for _, address := range addrs {
-			// Check if the address is a local private IPv4 loopback loop
+			// Isolate private IPv4 address slices safely from local loops
 			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 				if ipnet.IP.To4() != nil {
-					// Local private machine IP found (e.g., 192.168.1.X)
 					localIP := ipnet.IP.String()
 					
-					// In a production build with a library like goupnp, this is where the 
-					// SSDP discover packet is transmitted to map external ports 8080/8081 
-					// back to this machine's localIP.
-					time.Sleep(1 * time.Second)
-					fmt.Printf("✅ [NAT SHIELD] UPnP broadcast successful! Router mapped internal %s:8080 to global wire.\n", localIP)
+					// Pacing delay loop to ensure main layout prints establish first 
+					time.Sleep(500 * time.Millisecond)
+					fmt.Printf("📡 [NAT SHIELD] Interface Bound Natively: %s (Listening on Port :8080)\n", localIP)
 					return
 				}
 			}

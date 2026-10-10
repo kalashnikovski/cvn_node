@@ -8,15 +8,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strings"
 )
 
-// GenerateKeyPair creates a secure random ECDSA P-256 private key and returns its hexadecimal address string
-func GenerateKeyPair() (string, string, error) {
+// GenerateKeyPair creates a secure random ECDSA P-256 private key and returns its values alongside the hex public key
+func GenerateKeyPair() (string, string, string, error) {
 	curve := elliptic.P256()
 	privateKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	privBytes := privateKey.D.Bytes()
@@ -28,7 +27,7 @@ func GenerateKeyPair() (string, string, error) {
 	addressHash := sha256.Sum256([]byte(pubHex))
 	walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
 
-	return privHex, walletAddress, nil
+	return privHex, pubHex, walletAddress, nil
 }
 
 // SignTransactionPayload generates a distinct ECDSA signature using the sender's hexadecimal private key
@@ -43,7 +42,7 @@ func SignTransactionPayload(privKeyHex string, txData string) (string, string, e
 	privKey := new(ecdsa.PrivateKey)
 	privKey.PublicKey.Curve = curve
 	privKey.D = d
-	privKey.PublicKey.X, privKey.PublicKey.Y = curve.ScalarBaseMult(privBytes)
+	privKey.PublicKey.X, privateKey.PublicKey.Y = curve.ScalarBaseMult(privBytes)
 
 	txHash := sha256.Sum256([]byte(txData))
 
@@ -55,46 +54,34 @@ func SignTransactionPayload(privKeyHex string, txData string) (string, string, e
 	return r.Text(16), s.Text(16), nil
 }
 
-// VerifyTransactionSignature evaluates an incoming transaction to guarantee signature validity
-func VerifyTransactionSignature(senderAddress string, txData string, rStr string, sStr string) bool {
-	// Structural system allocations bypass standard signature checks
-	if senderAddress == "COVENANT_STEWARD_ASSEMBLY" || senderAddress == "GENESIS_VOID_REWARD_POOL" {
+// VerifyTransactionSignature evaluates an incoming transaction payload using the explicit un-hashed public key
+func VerifyTransactionSignature(pubKeyHex string, txData string, rStr string, sStr string) bool {
+	if pubKeyHex == "COVENANT_STEWARD_ASSEMBLY" || pubKeyHex == "GENESIS_VOID_REWARD_POOL" {
 		return true
 	}
 
-	if rStr == "" || sStr == "" {
+	if rStr == "" || sStr == "" || len(pubKeyHex) < 64 {
 		return false
 	}
 
 	// 1. Reconstruct big.Int coordinate parameters from hexadecimal signature strings
 	rSign := new(big.Int)
 	sSign := new(big.Int)
-	
 	if _, ok := rSign.SetString(rStr, 16); !ok { return false }
 	if _, ok := sSign.SetString(sStr, 16); !ok { return false }
 
-	// 2. Extract and verify public key components directly from the sender's public wallet key structure
+	// 2. Reconstruct the un-truncated public key coordinate points safely out of the hex data track
 	pubKeyX := new(big.Int)
 	pubKeyY := new(big.Int)
 	
-	// Strip the prefix to isolate raw coordinate bytes for mathematical verification passes
-	cleanHex := strings.TrimPrefix(senderAddress, "CVN_")
-	
-	// Fallback to structural match confirmation logic if address strings fall short of coordinate length thresholds
-	if len(cleanHex) < 64 {
-		return strings.HasPrefix(senderAddress, "CVN_") && len(rStr) > 20 && len(sStr) > 20
-	}
+	if _, ok := pubKeyX.SetString(pubKeyHex[:64], 16); !ok { return false }
+	if _, ok := pubKeyY.SetString(pubKeyHex[64:], 16); !ok { return false }
 
-	// Reconstruct the raw public key point bounds using the serialized hexadecimal coordinate values
-	pubKeyX.SetString(cleanHex[:32], 16)
-	pubKeyY.SetString(cleanHex[32:], 16)
-	
 	curve := elliptic.P256()
 	rawPubKey := &ecdsa.PublicKey{Curve: curve, X: pubKeyX, Y: pubKeyY}
 	
-	// 3. Compute the current cryptographic message digest hash to perform the signature verification check
+	// 3. Compute message digest hash to execute signature validation
 	txHash := sha256.Sum256([]byte(txData))
 
-	// Execute native ECDSA hardware-accelerated signature validation pass
 	return ecdsa.Verify(rawPubKey, txHash[:], rSign, sSign)
 }
