@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,93 +32,78 @@
             document.getElementById("addr-display").innerText = targetAddress;
 
             try {
-                const res = await fetch("/req_chain");
-                const chain = await res.json();
-                const blocks = chain.blocks || chain;
+                // ✅ FIXED TARGET ENDPOINT: Pull directly from the live production block gateway route
+                const res = await fetch("/block");
+                const currentBlock = await res.json();
 
                 let unspentMap = {};
                 let receiptsCount = 0;
                 let sendsCount = 0;
                 let tableHtml = "";
 
-                blocks.forEach(block => {
-                    const txList = block.transactions || block.Transactions;
-                    if (!txList) return;
+                // Safely trace properties using exact L1 production JSON tags
+                const txList = currentBlock.transactions || [];
+                const bIdx = currentBlock.current_height !== undefined ? currentBlock.current_height : 0;
+                const bTime = currentBlock.timestamp || 0;
+                
+                txList.forEach(tx => {
+                    const outList = tx.outputs || [];
                     
-                    txList.forEach(tx => {
-                        const outList = tx.outputs || tx.Outputs;
-                        if (!outList) return;
+                    outList.forEach((out, idx) => {
+                        const recipient = out.recipient;
+                        const amount = out.amount;
+                        const txID = tx.tx_id;
                         
-                        outList.forEach((out, idx) => {
-                            const recipient = out.recipient || out.Recipient;
-                            const amount = out.amount || out.Amount;
-                            const txID = tx.id || tx.ID;
-                            
-                            if (recipient === targetAddress) {
-                                const utxoKey = txID + "_" + idx;
-                                unspentMap[utxoKey] = amount;
-                                receiptsCount++;
-
-                                const bIdx = block.index !== undefined ? block.index : block.Index;
-                                const bTime = block.timestamp || block.Timestamp;
-
-                                tableHtml += `<tr>
-                                    <td><span class="badge receive">RECEIVE (UTXO)</span></td>
-                                    <td>#${bIdx}</td>
-                                    <td style="font-family:monospace;">${txID.substring(0,16)}... [Idx ${idx}]</td>
-                                    <td style="font-weight:bold; color:#fff;">+${amount.toFixed(2)} CVN</td>
-                                    <td>${new Date(bTime * 1000).toLocaleString()}</td>
-                                </tr>`;
-                            }
-                        });
-                    });
-                });
-
-                blocks.forEach(block => {
-                    const txList = block.transactions || block.Transactions;
-                    if (!txList) return;
-                    
-                    txList.forEach(tx => {
-                        let dynamicTxSpentOurCoins = false;
-                        const inList = tx.inputs || tx.Inputs;
-                        const outList = tx.outputs || tx.Outputs;
-                        const txID = tx.id || tx.ID;
-                        
-                        if (inList) {
-                            inList.forEach(inItem => {
-                                const inTxID = inItem.tx_id || inItem.TxID;
-                                const inOutIdx = inItem.output_idx !== undefined ? inItem.output_idx : inItem.OutputIdx;
-                                const spentKey = inTxID + "_" + inOutIdx;
-                                if (unspentMap.hasOwnProperty(spentKey)) {
-                                    delete unspentMap[spentKey];
-                                    dynamicTxSpentOurCoins = true;
-                                }
-                            });
-                        }
-                        
-                        if (dynamicTxSpentOurCoins) {
-                            sendsCount++;
-                            let outgoingVolume = 0;
-                            if (outList) {
-                                outList.forEach(out => {
-                                    const recipient = out.recipient || out.Recipient;
-                                    const amount = out.amount || out.Amount;
-                                    if (recipient !== targetAddress) outgoingVolume += amount;
-                                });
-                            }
-
-                            const bIdx = block.index !== undefined ? block.index : block.Index;
-                            const bTime = block.timestamp || block.Timestamp;
+                        if (recipient === targetAddress) {
+                            const utxoKey = txID + "_" + idx;
+                            unspentMap[utxoKey] = amount;
+                            receiptsCount++;
 
                             tableHtml += `<tr>
-                                <td><span class="badge send">SEND (SPENT)</span></td>
+                                <td><span class="badge receive">RECEIVE (UTXO)</span></td>
                                 <td>#${bIdx}</td>
-                                <td style="font-family:monospace;">${txID.substring(0,16)}...</td>
-                                <td style="font-weight:bold; color:#f85149;">-${outgoingVolume.toFixed(2)} CVN</td>
-                                <td>${new Date(bTime * 1000).toLocaleString()}</td>
+                                <td style="font-family:monospace;">${txID.substring(0,16)}... [Idx ${idx}]</td>
+                                <td style="font-weight:bold; color:#238636;">+${amount.toFixed(2)} CVN</td>
+                                <td>${bTime > 0 ? new Date(bTime * 1000).toLocaleString() : "Genesis Epoch"}</td>
                             </tr>`;
                         }
                     });
+                });
+
+                txList.forEach(tx => {
+                    let dynamicTxSpentOurCoins = false;
+                    const inList = tx.inputs || [];
+                    const outList = tx.outputs || [];
+                    const txID = tx.tx_id;
+                    
+                    inList.forEach(inItem => {
+                        // ✅ FIXED UTXO INPUT KEYS: Maps directly to source_tx_id and output_index constraints
+                        const inTxID = inItem.source_tx_id;
+                        const inOutIdx = inItem.output_index;
+                        const spentKey = inTxID + "_" + inOutIdx;
+                        if (unspentMap.hasOwnProperty(spentKey)) {
+                            delete unspentMap[spentKey];
+                            dynamicTxSpentOurCoins = true;
+                        }
+                    });
+                    
+                    if (dynamicTxSpentOurCoins) {
+                        sendsCount++;
+                        let outgoingVolume = 0;
+                        outList.forEach(out => {
+                            const recipient = out.recipient;
+                            const amount = out.amount;
+                            if (recipient !== targetAddress) outgoingVolume += amount;
+                        });
+
+                        tableHtml += `<tr>
+                            <td><span class="badge send">SEND (SPENT)</span></td>
+                            <td>#${bIdx}</td>
+                            <td style="font-family:monospace;">${txID.substring(0,16)}...</td>
+                            <td style="font-weight:bold; color:#f85149;">-${outgoingVolume.toFixed(2)} CVN</td>
+                            <td>${bTime > 0 ? new Date(bTime * 1000).toLocaleString() : "Genesis Epoch"}</td>
+                        </tr>`;
+                    }
                 });
 
                 let finalBalance = 0;
@@ -146,7 +130,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>📜 Sovereign Ledger Account Statement</h1>
+ <h1>📜 Sovereign Ledger Account Statement</h1>
     <p style="color: #8b949e; margin-top:-15px; margin-bottom:25px;">Cryptographic Statement Audit Verification Pass</p>
     
     <div style="color:#8b949e; margin-bottom:5px; font-size:0.9rem; text-transform:uppercase;">Target Account Address:</div>
