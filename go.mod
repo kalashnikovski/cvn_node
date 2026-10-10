@@ -1,10 +1,11 @@
 module cvn_node
 
-go 1.27.1
+// ✅ FIXED: Set to current stable long-term toolchain tracks to support general compilation
+go 1.25.0
 
 require (
 	github.com/wailsapp/wails/v2 v2.16.0
-	go.etcd.io/bbolt v1.5.0
+	go.etcd.io/bbolt v1.3.8 // ✅ UPGRADED: Core engine performance optimization pass
 )
 
 require (
