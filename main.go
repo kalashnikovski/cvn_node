@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"       // ✅ FIXED: Added to handle difficulty prefix evaluation checks!
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -229,25 +230,81 @@ func main() {
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
 	go func() {
+		var nonce int64 = 0
+		targetPrefix := "0000"
+
+		// Enforce a strict consensus block production pacing baseline (10 Seconds)
+		const TargetBlockTimeWindow = 10 
+
 		for {
+			// Record the exact Unix epoch time right when this block height mining pass kicks off
+			blockMiningStartTime := time.Now().Unix()
+
 			currentBlock := GetLatestBlock()
 			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
 			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
 
-			var nonce int64 = 0
-			for nonce < 500000 {
+			chunkCeiling := nonce + 500000
+			blockSolved := false
+
+			for nonce < chunkCeiling {
 				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
+				
 				h := sha256.New()
 				h.Write([]byte(inputStr))
-				_ = h.Sum(nil)
+				hashBytes := h.Sum(nil)
+				computedHashHex := fmt.Sprintf("%x", hashBytes)
+
+				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					newBlock := Block{
+						Index:     currentBlock.Index + 1,
+						Timestamp: time.Now().Unix(),
+						Transactions: []Transaction{
+							{
+								ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
+								Witness:   "COVENANT_STEWARD_ASSEMBLY",
+								PublicKey: "GENESIS_VOID_REWARD_POOL",
+								Outputs: []UTXOOutput{
+									{Recipient: CustomMinerAddress, Amount: 50.0},
+								},
+							},
+						},
+						PrevHash:   currentBlock.Hash,
+						Hash:       computedHashHex,
+						Difficulty: targetDifficulty,
+						Nonce:      nonce,
+					}
+
+					if SaveBlockToStorage(newBlock) {
+						go BroadcastNewBlock(newBlock)
+					}
+					
+					nonce = 0
+					blockSolved = true
+					break
+				}
 
 				atomic.AddUint64(&globalHashCount, 1)
 				nonce++
 			}
-			time.Sleep(1 * time.Microsecond)
+
+			// ✅ REGULATOR GATEWAY: Enforce strict macro-temporal pacing rules on block finalization
+			if blockSolved {
+				blockMiningEndTime := time.Now().Unix()
+				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+
+				// If our high-performance hardware solved the block faster than the 10-second consensus target,
+				// calculate the exact remaining delta and stall the engine programmatically!
+				if actualTimeElapsed < TargetBlockTimeWindow {
+					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+				}
+			} else {
+				// Low-latency cooling cycle if the 500k nonce chunk loop completes without a solved block matrix
+				time.Sleep(1 * time.Microsecond)
+			}
 		}
 	}()
-
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
