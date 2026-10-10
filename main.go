@@ -156,6 +156,13 @@ func main() {
 
 		// Poll active endpoints dynamically to look for higher network peaks
 		for _, endpoint := range seedGateways {
+			
+			// 🛡️ BARE-METAL LOOPBACK SHIELD: Detects if the node is evaluating its own local identity
+			if strings.Contains(endpoint, "202.137.175.220") {
+				// Intentionally skips self-dialing entirely to eliminate socket loopback exhaustion
+				continue 
+			}
+
 			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
 			if remoteHeight > targetGlobalTip {
 				targetGlobalTip = remoteHeight
