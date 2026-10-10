@@ -1,44 +1,48 @@
-Phase 1: Stabilization
-
-\[x] UTXO Cash Graph Engineering
-
-\[x] Linear Balance Sweeper Optimization
-
-\[x] Macroeconomic Sabbatical Loop Sandbox
-
-\[x] Fork-Proof Data Protection Daemon
+\# 💎 Covenant Standard (CVN) Development Roadmap 🛰️
 
 
 
-Phase 2: Mesh Expansion (Q4 2026)
+\## Phase 1: Stabilization (In Progress)
 
-\[x] Dynamic Peer Discovery Seeds
+\- \[ ] UTXO Cash Graph Engineering (Wallet currently tracking static inputs)
 
-\[x] NAT Router Traversal (UPnP)
+\- \[x] Linear Balance Sweeper Optimization
 
-\[x] Continuous Roster P2P Gossip Loops
+\- \[x] Macroeconomic Sabbatical Loop Sandbox
 
-\[x] Serialized Wire Protocol Optimization
-
-
-
-Phase 3: Hardening (Q1 2027)
-
-\[ ] Automated Peer Whitelisting / Banning
-
-\[ ] Mempool Flooding Safeguards
-
-\[ ] Isolated Stack Scripting Engine
-
-\[ ] Master Alert Gateway Protocol
+\- \[x] Fork-Proof Data Protection Daemon
 
 
 
-Phase 4: Industrial Scale (Q2 2027)
+\## Phase 2: Mesh Expansion (Q4 2026)
 
-\[ ] Indexed Database Migration
+\- \[x] Dynamic Peer Discovery Seeds
 
-\[ ] Standalone SPV Light Client Bridging
+\- \[ ] NAT Router Traversal (UPnP) (Currently utilizing interface logging stubs)
 
-\[ ] ASIC-Neutral PoD Optimization
+\- \[x] Continuous Roster P2P Gossip Loops
+
+\- \[x] Serialized Wire Protocol Optimization
+
+
+
+\## Phase 3: Hardening (Q1 2027)
+
+\- \[x] Automated Peer Whitelisting / Banning (Phase 3 Infraction Firewall Active)
+
+\- \[ ] Mempool Flooding Safeguards
+
+\- \[ ] Isolated Stack Scripting Engine
+
+\- \[ ] Master Alert Gateway Protocol
+
+
+
+\## Phase 4: Industrial Scale (Q2 2027)
+
+\- \[ ] Indexed Database Migration
+
+\- \[ ] Standalone SPV Light Client Bridging
+
+\- \[ ] ASIC-Neutral PoD Optimization
 
