@@ -21,8 +21,11 @@ func main() {
 	// 2. Start the native P2P Gossip core engine listener loop background processes
 	StartMeshNetwork()
 
+	// ✅ COLLISION SHIELDED: Isolate Port 8082 entirely into an explicit, private multiplexer
+	serverMux8082 := http.NewServeMux()
+
 	// 3. 🌐 MAINNET BASE ROUTE Explorer Welcome Splash Portal (Port 8082 Layout)
-	http.HandleFunc("/explorer", func(w http.ResponseWriter, r *http.Request) {
+	serverMux8082.HandleFunc("/explorer", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/explorer" {
 			http.NotFound(w, r)
 			return
@@ -32,13 +35,13 @@ func main() {
 		fmt.Fprintf(w, `<html>
 		<head><title>💎 CVN MAINNET EXPLORER</title></head>
 		<body style="background:#0a0a0f;color:#00ff66;font-family:monospace;padding:3rem;text-align:center;margin:0;">
-			<h1>💎 COVENANT STANDARD MELBOURNE CORE RIG</h1>
+			<h1>💎 COVENANT STANDARD CLOUD SEED ANCHOR RIG</h1>
 			<p style="color:#00ffff;font-size:1.2rem;">SYSTEM STATUS: ACTIVE // LOCAL HEIGHT: #<span id="live-ledger-height">%d</span></p>
-			<p style="color:#8a8a9e;">Query /peers, /block, or /audit endpoints to stream live ledger data slices.</p>
+			<p style="color:#8a8a9e;">Streaming verified structural data blocks on port 8081 data channels.</p>
 			<script>
 				function fetchLiveHeight() {
-					// FIXED: Points natively to the local server explorer instance channel to poll data safely
-					fetch('/block')
+					// FIXED: Points natively to the local server explorer instance data channel to poll height safely
+					fetch('http://' + window.location.hostname + ':8081/block')
 						.then(res => res.json())
 						.then(data => {
 							const targetHeight = data.current_height || data.block_height || data.Index;
@@ -54,7 +57,7 @@ func main() {
 	})
 
 	// 4. 📊 DYNAMIC WALLET AUDIT ENDPOINT LOOP PATH (Port 8082 HTML Table Dash)
-	http.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+	serverMux8082.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -72,7 +75,6 @@ func main() {
 		var balance int64 = 0
 		var blocksMined int64 = 0
 
-		// ✅ FIXED: Perfectly enclosed dynamic ledger loop with zero syntax clutter or hardcoded caps!
 		if targetAddress != "" {
 			if targetAddress == CustomMinerAddress {
 				balance = int64(latestBlock.Index * 50)
@@ -135,7 +137,7 @@ func main() {
 	})
 
 	fmt.Println("📡 Explorer API Gateway Matrix listening natively on isolated port :8082...")
-	if err := http.ListenAndServe(":8082", nil); err != nil {
+	if err := http.ListenAndServe(":8082", serverMux8082); err != nil {
 		log.Fatalf("Critical network socket failure: %v", err)
 	}
 }
