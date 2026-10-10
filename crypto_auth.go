@@ -39,10 +39,15 @@ func SignTransactionPayload(privKeyHex string, txData string) (string, string, e
 
 	curve := elliptic.P256()
 	d := new(big.Int).SetBytes(privBytes)
-	privKey := new(ecdsa.PrivateKey)
-	privKey.PublicKey.Curve = curve
-	privKey.D = d
-	privKey.PublicKey.X, privateKey.PublicKey.Y = curve.ScalarBaseMult(privBytes)
+	
+	// ✅ FIXED: Instantiated the ecdsa.PrivateKey struct fields correctly
+	privKey := &ecdsa.PrivateKey{
+		PublicKey: ecdsa.PublicKey{
+			Curve: curve,
+		},
+		D: d,
+	}
+	privKey.PublicKey.X, privKey.PublicKey.Y = curve.ScalarBaseMult(privBytes)
 
 	txHash := sha256.Sum256([]byte(txData))
 
