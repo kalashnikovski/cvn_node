@@ -149,9 +149,9 @@ func main() {
 		liveBlock := GetLatestBlock()
 		currentLocalHeight := int64(liveBlock.Index)
 
-		// Hardlock our baseline target global peak requirement to match your mainnet tip milestones
-		var targetGlobalTip int64 = 27460
-		var activeSyncSeed string = "http://207.148.67.11:8081" // Default to Singapore master stream
+		// ✅ FIXED: Hard baseline set to 0. Real data overrides this via seed queries.
+		var targetGlobalTip int64 = 0
+		var activeSyncSeed string = "http://207.148.67.11:8081" // Default Singapore master stream
 
 		// Poll active endpoints dynamically to look for higher network peaks
 		for _, endpoint := range seedGateways {
@@ -162,11 +162,19 @@ func main() {
 			}
 		}
 
+		// ✅ FIXED INITIALIZATION BYPASS: If all global seeds are at 0 because they are blank,
+		// break out of the sync lock cleanly and establish this machine as the main genesis network root!
+		if targetGlobalTip <= 0 || targetGlobalTip == currentLocalHeight {
+			fmt.Println("\n\n✨ [🔓 INITIALIZATION BYPASS] Global seeds are fresh. Establishing local node as network root tip!")
+			break
+		}
+
 		// If our local ledger has safely crossed or matched the global tip, break out cleanly!
 		if currentLocalHeight >= targetGlobalTip {
 			fmt.Println("\n\n✨ [🔓 SYNC COMPLETE] Core fully aligned with global mainnet tip. Hashing worker threads ignited!")
 			break
 		}
+
 
 		// ✅ HARMONIZED ONE-BY-ONE DOWNLOAD PIPELINE
 		nextBlockNeed := currentLocalHeight + 1
