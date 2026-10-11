@@ -201,7 +201,7 @@ func main() {
 		}
 		return
 	}
-// ====================================================================
+	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
@@ -216,7 +216,18 @@ func main() {
 	}
 
 	lastRenderTime := time.Now()
-
+	for i, arg := range os.Args {
+		if arg == "--connect" && i+1 < len(os.Args) {
+			customTargetIP := os.Args[i+1]
+			// Sift out raw ports and format to point to the remote node's HTTP explorer engine natively
+			if strings.Contains(customTargetIP, ":") {
+				parts := strings.Split(customTargetIP, ":")
+				customTargetIP = parts[0]
+			}
+			seedGateways = []string{fmt.Sprintf("http://%s:8081", customTargetIP)}
+			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced straight to target peer: %s\n", seedGateways[0])
+		}
+	}
 	for {
 		liveBlock := GetLatestBlock()
 		currentLocalHeight := int64(liveBlock.Index)
