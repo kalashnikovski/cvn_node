@@ -68,9 +68,9 @@ func main() {
 	}
 
 	// 🟩 THE CORRECTION: Safe pacing delay ensures database locks never collide on startup!
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		StartMeshNetwork()
+//	go func() {
+	//	time.Sleep(100 * time.Millisecond)
+	//	StartMeshNetwork()
 	}()
 
 	// 👑 THE UNIVERSAL THREE-PORT DATA ENGINE INITIALIZATION: Opens ports universally on all systems!
@@ -150,9 +150,9 @@ func main() {
 			}
 		})
 
-		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
-		if err := http.ListenAndServe(":8081", winMux); err != nil {
-			log.Printf("Port 8081 bind alert: %v\n", err)
+	//	fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
+	//	if err := http.ListenAndServe(":8081", winMux); err != nil {
+	//		log.Printf("Port 8081 bind alert: %v\n", err)
 		}
 	}()
 
@@ -163,11 +163,11 @@ func main() {
 			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
 		})
 		
-		fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
-		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
-			log.Printf("Port 8082 bind alert: %v\n", err)
-		}
-	}()
+	//	fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
+	//	if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
+	//		log.Printf("Port 8082 bind alert: %v\n", err)
+	//	}
+//	}()
 
 		// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS (Natively ignored on headless server targets)
 	RunDesktopUIFrameworkIfApplicable()
