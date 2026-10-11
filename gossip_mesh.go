@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log"           
 	"net"
-	"net/http"
-	"os"
-	"strconv"       
+	"net/http"     
 	"strings"       
 	"sync"          
 	"time"
@@ -281,6 +279,7 @@ func StartMeshNetwork() {
 
 
 	// ✅ PORT 8081: HTTP Explorer Telemetry Server (COLLISION SHIELDED)
+	/*
 	go func() {
 		mux8081 := http.NewServeMux()
 
@@ -300,7 +299,7 @@ func StartMeshNetwork() {
 				return
 			}
 			w.Write(htmlBytes)
-		})
+		}) 
 
 		// 🛰️ PEERS GATEWAY ENDPOINT
 		mux8081.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
@@ -381,13 +380,15 @@ blocksMined = int64(GetAddressBlockCountFromLedger(targetAddress))
 auditHTML := fmt.Sprintf("Covenant Standard Audit LedgerTarget: %sBalance: %d CVNMined: %d Blocks", targetAddress, balance, blocksMined)
 w.Write([]byte(auditHTML))
 })
-log.Println("📡 Explorer API Gateway Matrix listening natively on port :8081...")
-if err := http.ListenAndServe(":8081", mux8081); err != nil {
-log.Printf("Network socket notice for 8081: %v\n", err)
+		log.Println("📡 Explorer API Gateway Matrix listening natively on port :8081...")
+		if err := http.ListenAndServe(":8081", mux8081); err != nil {
+			log.Printf("Network socket notice for 8081: %v\n", err)
+		}
+	}()
+	*/ // 👑 THE MASTER FIX: Closing block comment bracket locks out the duplicate server!
 }
-}()
-}
+
 func handleIncomingPeerSession(conn net.Conn) {
-defer conn.Close()
-fmt.Printf("📡 [P2P MESH] Incoming handshake established from: %s\n", conn.RemoteAddr().String())
+	defer conn.Close()
+	fmt.Printf("📡 [P2P MESH] Incoming handshake established from: %s\n", conn.RemoteAddr().String())
 }
