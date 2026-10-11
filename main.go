@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	// We only include the Wails framework link if we are compiling natively on a desktop GUI target environment
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -24,9 +23,10 @@ var assets embed.FS
 
 var globalHashCount uint64
 
-// initWindowsAnsi is a platform stub. The native Windows console overrides 
-// are cleanly managed inside 'ansi_windows.go' to ensure cross-compilation safety on Linux VPS hosts.
-func initWindowsAnsi() {}
+// initWindowsAnsi safely configures ANSI color rendering ONLY if executing on a Windows host
+func initWindowsAnsi() {
+	// Left empty on purpose. Built-in Go file matching will override this automatically on Windows!
+}
 
 func main() {
 	initWindowsAnsi()
@@ -104,16 +104,13 @@ func main() {
 		return
 	}
 
-		// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
-	// This spins up cleanly on your Linux cloud seeds to host your explorer dashboard natively!
+	// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
 	if runtime.GOOS != "windows" {
 		go func() {
 			serverMux := http.NewServeMux()
 
-			// Serve the pre-neutered explorer dashboard natively on Port 8081
 			serverMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				// Read your clean explorer.html file from local disk sectors
 				htmlBytes, err := os.ReadFile("explorer.html")
 				if err != nil {
 					fmt.Fprintf(w, "<h2>📊 Covenant Standard Core Engine Node Matrix Active</h2><p>Local Height: #%d</p>", GetLatestBlock().Index)
@@ -122,7 +119,6 @@ func main() {
 				w.Write(htmlBytes)
 			})
 
-			// Expose live block metrics to feed your explorer's async javascript polling loops
 			serverMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -142,7 +138,6 @@ func main() {
 			}
 		}()
 	}
-
 
 	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED SYNCHRONIZATION
@@ -238,7 +233,6 @@ func main() {
 	// ====================================================================
 	go func() {
 		var nonce int64 = 0
-		targetPrefix := "0000"
 		const TargetBlockTimeWindow = 10 
 
 		for {
@@ -246,6 +240,9 @@ func main() {
 			currentBlock := GetLatestBlock()
 			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
 			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
+
+			// 👑 DYNAMIC DIFFICULTY HEARTBEAT: Generate prefix checks dynamically matching hardware speeds
+			targetPrefix := strings.Repeat("0", targetDifficulty)
 
 			chunkCeiling := nonce + 500000
 			blockSolved := false
@@ -274,7 +271,7 @@ func main() {
 						},
 						PrevHash:   currentBlock.Hash,
 						Hash:       computedHashHex,
-						Difficulty: targetDifficulty,
+						Difficulty: targetDifficulty, // 👑 TYPE ALIGNED: Native pure int formatting passed cleanly!
 						Nonce:      nonce,
 					}
 
@@ -306,13 +303,15 @@ func main() {
 	}()
 
 	ticker := time.NewTicker(3 * time.Second)
-defer ticker.Stop()
-lastCheckedHeight := GetLatestBlock().Index
-fmt.Print("\033[11;1H")
-for {
-select {
-case <-ticker.C:
-liveBlock := GetLatestBlock()
+	defer ticker.Stop()
+
+	lastCheckedHeight := GetLatestBlock().Index
+	fmt.Print("\033[11;1H")
+
+	for {
+		select {
+		case <-ticker.C:
+			liveBlock := GetLatestBlock()
 actualBlocksHeight := liveBlock.Index
 actualCvnBalance := liveBlock.Index * 50
 hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
