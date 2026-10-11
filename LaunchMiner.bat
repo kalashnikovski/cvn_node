@@ -1,5 +1,5 @@
 @echo off
-title Administrator: Covenant Standard Layer-1 Node Miner Launcher
+title Covenant Standard Hashing Engine
 color 0A
 cls
 
@@ -12,43 +12,34 @@ echo 📡 [1/2] Preparing network socket channels safely...
 cd /d "%~dp0"
 
 echo ⚙️ [2/3] Extracting local identity token variables dynamically...
-if not exist miner_config.json (
-    echo {"miner_address":"CVN_UNCONFIGURED_LOCAL_NODE_ID"} > miner_config.json
-)
-
-rem ✅ FIXED: Enabled delayed expansion to support exclamation point string scrubbing variables safely
+:: 👑 THE FIXED: Hard-locks variable expansion inside an isolated environment block!
 setlocal enabledelayedexpansion
-set "LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID"
+set LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID
 
-for /f "tokens=2 delims=:," %%A in (miner_config.json) do (
-    set "val=%%A"
-    set "val=!val: =!"
-    set "val=!val:"=!"
-    set "val=!val:{=!"
-    set "val=!val:}=!"
-    set "val=!val:[=!"
-    set "val=!val:]=!"
-    set "LOCAL_RIG_ID=!val!"
-)
-
-if "!LOCAL_RIG_ID!"=="" (
-    set "LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID"
+for /f "usebackq tokens=*" %%A in ("miner_config.json") do (
+    set "line=%%A"
+    set "line=!line: =!"
+    set "line=!line:"=!"
+    set "line=!line:{=!"
+    set "line=!line:}=!"
+    for /f "tokens=2 delims=:" %%B in ("!line!") do (
+        set "LOCAL_RIG_ID=%%B"
+    )
 )
 
 echo 🚀 [3/3] Igniting un-throttled Proof-of-Diligence (PoD) hashing engine...
 echo --------------------------------------------------------------------
 echo ACTIVE RIG IDENTITY: !LOCAL_RIG_ID!
+echo --------------------------------------------------------------------
 echo.
 
-E:
-cd \cvn_node
-
-if exist ".\cvn_node.exe" (
-    .\cvn_node.exe --miner-address !LOCAL_RIG_ID!
+if exist ".\cvn_miner.exe" (
+    .\cvn_miner.exe --miner-address !LOCAL_RIG_ID!
 ) else if exist ".\build\bin\cvn_node.exe" (
     .\build\bin\cvn_node.exe --miner-address !LOCAL_RIG_ID!
 ) else (
-    echo 🚨 CRITICAL ERROR: cvn_node.exe core binary was not found inside your workspace directory!
+    color 0C
+    echo 🚨 CRITICAL ERROR: cvn_miner.exe core engine binary was not found!
     echo Please run '.\build_clean.bat' to bake your production executable first.
     pause
 )
