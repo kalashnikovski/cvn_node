@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net" // 👈 MAKE SURE THIS IS PRESENT IN YOUR IMPORTS LIST
 	"net/http"
 	"os"
 	"runtime"
@@ -14,9 +15,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
 //go:embed all:frontend/dist
@@ -171,36 +169,9 @@ func main() {
 		}
 	}()
 
-	runDesktopUI := true
-	if runtime.GOOS != "windows" {
-		runDesktopUI = false 
-	} else {
-		for _, arg := range os.Args {
-			if arg == "--connect" || arg == "--miner-address" {
-				runDesktopUI = false
-			}
-		}
-	}
+		// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS (Natively ignored on headless server targets)
+	RunDesktopUIFrameworkIfApplicable()
 
-	if runDesktopUI {
-		fmt.Println("🎨 [WAILS ENGINE] Initiating thread-safe graphical matrix windows...")
-		wailsApp := NewApp()
-		err := wails.Run(&options.App{
-			Title:            "💎 COVENANT STANDARD (CVN) MATRIX CORE",
-			Width:            1100,
-			Height:           760,
-			AssetServer: &assetserver.Options{
-				Assets: assets,
-			},
-			BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 1},
-			OnStartup:        wailsApp.startup,
-			Bind:             []interface{}{wailsApp},
-		})
-		if err != nil {
-			log.Fatalf("Wails failure: %v", err)
-		}
-		return
-	}
 
 	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
@@ -258,30 +229,34 @@ func main() {
 
 		nextBlockNeed := currentLocalHeight + 1
 		
-		// 🟩 THE REPAIR: Respects custom targets natively without truncation errors
-		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
-		
-		// 🟩 THE TIMEOUT PROTECTION ENGINE: Hard-limits socket connection handshakes to 1 second flat!
-		syncHttpClient := &http.Client{
-			Timeout: 1 * time.Second,
+		// 🟩 THE MASTER FIX: Connect straight to your raw P2P Mesh Engine on Port 8080!
+		// Extract the remote target's host IP address from your seed gateway configuration string
+		targetPeerMeshAddr := "202.137.175.220:8080" // Defaults straight to your Melbourne Rig Mesh Port
+		if strings.Contains(activeSyncSeed, "207.148.67.11") {
+			targetPeerMeshAddr = "207.148.67.11:8080"
+		} else if strings.Contains(activeSyncSeed, "64.177.45.153") {
+			targetPeerMeshAddr = "64.177.45.153:8080"
 		}
-		
-		resp, err := syncHttpClient.Get(requestURL)
+
+		// Dial an unencrypted network socket directly into your native gossip mesh listener loop
+		conn8080, err := net.DialTimeout("tcp", targetPeerMeshAddr, 2*time.Second)
 		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var incomingBatch []Block
-				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
-					for _, incomingBlock := range incomingBatch {
-						if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
-							SaveBlockToStorage(incomingBlock)
-							currentLocalHeight = incomingBlock.Index
-						}
+			// Format and transmit your custom raw chunk engine token string down the wire
+			fmt.Fprintf(conn8080, "GET_BATCH:%d\n", nextBlockNeed)
+			
+			var incomingBatch []Block
+			err = json.NewDecoder(conn8080).Decode(&incomingBatch)
+			if err == nil && len(incomingBatch) > 0 {
+				for _, incomingBlock := range incomingBatch {
+					if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
+						SaveBlockToStorage(incomingBlock)
+						currentLocalHeight = incomingBlock.Index
 					}
 				}
 			}
-			resp.Body.Close()
+			conn8080.Close()
 		} else {
-			fmt.Printf("\n⚠️ Handshake timeout on target endpoint %s. Retrying loop tracks...", activeSyncSeed)
+			fmt.Printf("\n⚠️ Raw P2P Mesh timeout on port 8080 to %s. Retrying loop channels...", targetPeerMeshAddr)
 			time.Sleep(1 * time.Second)
 			continue
 		}
