@@ -247,7 +247,7 @@ func IsCoreMinerLocked() bool {
 func StartMeshNetwork() {
 	fmt.Println("📡 P2P MATRIX: Binding to core data channels...")
 
-	// ✅ PORT 8080: TCP P2P Listener integrated with Phase 3 Firewall Checks
+		// ✅ PORT 8080: TCP P2P Listener with Dynamic Peer Discovery Ingestion
 	go func() {
 		listener, err := net.Listen("tcp", ":8080")
 		if err != nil {
@@ -262,6 +262,14 @@ func StartMeshNetwork() {
 				continue
 			}
 
+			// 🚀 THE DYNAMIC DISCOVERY GATE: Extract the remote server's real IP address
+			remoteAddr := conn.RemoteAddr().String()
+			host, _, err := net.SplitHostPort(remoteAddr)
+			if err == nil {
+				// Forcefully inject Atlanta or Singapore into our active broadcasting pool!
+				GlobalRoster.RegisterPeer(host)
+			}
+
 			if !GlobalRoster.IsIPAllowed(conn.RemoteAddr().String()) {
 				conn.Close() 
 				continue
@@ -270,6 +278,7 @@ func StartMeshNetwork() {
 			go handleIncomingPeerSession(conn)
 		}
 	}()
+
 
 	// ✅ PORT 8081: HTTP Explorer Telemetry Server (COLLISION SHIELDED)
 	go func() {
