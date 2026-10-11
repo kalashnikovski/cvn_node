@@ -76,7 +76,6 @@ func main() {
 	}()
 
 	// 👑 THE UNIVERSAL THREE-PORT DATA ENGINE INITIALIZATION: Opens ports universally on all systems!
-
 	go func() {
 		winMux := http.NewServeMux()
 
@@ -94,6 +93,7 @@ func main() {
 			w.Write(htmlBytes)
 		})
 
+		// 🛰️ BULK CHUNK DATA SYNC ENDPOINT
 		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -201,6 +201,7 @@ func main() {
 		}
 		return
 	}
+
 	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
@@ -219,7 +220,7 @@ func main() {
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
-			// Sift out raw ports and format to point to the remote node's HTTP explorer engine natively
+			// Clear ports out and cleanly rewrite route paths natively to target HTTP ports
 			if strings.Contains(customTargetIP, ":") {
 				parts := strings.Split(customTargetIP, ":")
 				customTargetIP = parts[0]
@@ -228,6 +229,7 @@ func main() {
 			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced straight to target peer: %s\n", seedGateways[0])
 		}
 	}
+
 	for {
 		liveBlock := GetLatestBlock()
 		currentLocalHeight := int64(liveBlock.Index)
@@ -254,17 +256,10 @@ func main() {
 
 		nextBlockNeed := currentLocalHeight + 1
 		
-		// 🟩 THE REPAIR: Ensures all cross-continental bulk data streams pull from port 8081 cleanly
-		cleanSeedURL := "http://202.137.175.220:8081" 
-		if strings.Contains(activeSyncSeed, "207.148.67.11") {
-			cleanSeedURL = "http://207.148.67.11:8081"
-		} else if strings.Contains(activeSyncSeed, "64.177.45.153") {
-			cleanSeedURL = "http://64.177.45.153:8081"
-		}
-
-		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", cleanSeedURL, nextBlockNeed)
+		// 🟩 THE REPAIR: Resolves cross-continental route path alignment bugs perfectly
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
 		
-		// 🟩 THE TIMEOUT PROTECTION ENGINE: Hard-limits connection handshakes to 1 second flat!
+		// 🟩 THE TIMEOUT PROTECTION ENGINE: Hard-limits socket connection handshakes to 1 second flat!
 		syncHttpClient := &http.Client{
 			Timeout: 1 * time.Second,
 		}
@@ -284,11 +279,10 @@ func main() {
 			}
 			resp.Body.Close()
 		} else {
-			// 📡 Gateway drop or timeout caught natively! Forcefully escape the sync lock loop block instantly!
+			// 📡 Gateway drop or timeout caught natively! Escape the sync lock loop block instantly to survive dropouts!
 			fmt.Println("\n📡 [MESH MATRIX] External seed nodes unreachable. Falling back to local master core tracks...")
 			break
 		}
-
 
 		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
@@ -298,164 +292,146 @@ func main() {
 			}
 			barWidth := 20
 			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
-			progressBar := ""
-			for i := 0; i < barWidth; i++ {
-				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
-			}
-			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
-			os.Stdout.Sync()
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	// Spacing buffer formats
-	fmt.Println("\n====================================================================")
-	fmt.Println("🚀 COVENANT STANDARD CONSENSUS MINING BLOCKCHAIN IGNITED LIVE!")
-	fmt.Println("====================================================================")
-	fmt.Printf("🪪 VALIDATOR RIG CORE INITIALIZED STATUS: ACTIVE // HEIGHT: #%d\n", GetLatestBlock().Index)
-	fmt.Println("--------------------------------------------------------------------")
-	fmt.Println("⛏️  Bare-metal hashing threads engaged. Computing Diligence proofs...")
-	fmt.Println("--------------------------------------------------------------------")
-
-
-	// ====================================================================
-	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
-	// ====================================================================
-	go func() {
-		var nonce int64 = 0
-		const TargetBlockTimeWindow = 10
-		for {
-			blockMiningStartTime := time.Now().Unix()
-			currentBlock := GetLatestBlock()
-			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
-			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
-			targetPrefix := strings.Repeat("0", targetDifficulty)
-			chunkCeiling := nonce + 500000
-			blockSolved := false
-			for nonce < chunkCeiling {
-				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
-				h := sha256.New()
-				h.Write([]byte(inputStr))
-				hashBytes := h.Sum(nil)
-				computedHashHex := fmt.Sprintf("%x", hashBytes)
-				if strings.HasPrefix(computedHashHex, targetPrefix) {
-					newBlock := Block{
-						Index:      currentBlock.Index + 1,
-						Timestamp:  time.Now().Unix(),
-						Transactions: []Transaction{
-							{
-								ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
-								Witness:   "COVENANT_STEWARD_ASSEMBLY",
-								PublicKey: "GENESIS_VOID_REWARD_POOL",
-								Outputs: []UTXOOutput{
-									// 🟩 THE REPAIR: Prevents double accrual errors inside your database buckets!
-									{Recipient: "COINBASE", Amount: 50.0},
-								},
-							},
-						},
-						PrevHash:   currentBlock.Hash,
-						Hash:       computedHashHex,
-						Difficulty: targetDifficulty,
-						Nonce:      nonce,
-					}
-					if SaveBlockToStorage(newBlock) {
-						go BroadcastNewBlock(newBlock)
-					}
-
-					nonce = 0
-					blockSolved = true
-					break
-				}
-				atomic.AddUint64(&globalHashCount, 1)
-				nonce++
-			}
-			if blockSolved {
-				blockMiningEndTime := time.Now().Unix()
-				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-				if actualTimeElapsed < TargetBlockTimeWindow {
-					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-				}
-			} else {
-				time.Sleep(1 * time.Microsecond)
-			}
-		}
-	}()
-
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-	lastCheckedHeight := GetLatestBlock().Index
-
-	// 🟩 THE UNIFIED WINDOWS MATRIX REMEDIAL PASS: Clear the screen completely once before ignition loops
-	fmt.Print("\033[2J\033[H")
-
-	// Pre-populate an internal log slice string buffer track to hold your rolling transaction metrics safely
-	var liveTerminalEventLogs []string
-
-	for {
-		select {
-		case <-ticker.C:
-			liveBlock := GetLatestBlock()
-			actualBlocksHeight := liveBlock.Index
-			actualCvnBalance := liveBlock.Index * 50
-			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
-			realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
-
-			// 1. Compute and parse active log strings internally before drawing layout elements
-			var logLine string
-			if actualBlocksHeight > lastCheckedHeight {
-				logLine = fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid Proof-of-Diligence hash solution matrix! Reward: +50 CVN Allocated.", time.Now().Format("15:04:05"))
-				lastCheckedHeight = actualBlocksHeight
-			} else {
-				logLine = fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
-			}
-			
-			// Append fresh ticker strings into your local telemetry slice tracker
-			liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-			
-			// Hard-limit log rolling tracking buffers to rows 18 to ensure it fits perfectly inside small terminal frames
-			if len(liveTerminalEventLogs) > 18 {
-				liveTerminalEventLogs = liveTerminalEventLogs[1:]
-			}
-
-			// 2. 👑 THE PIN-DROP FIX: Force cursor coordinates back to 1,1 instantly without scrolling artifacts!
-			fmt.Print("\033[H")
-
-			// 3. Draw your static header parameters card cleanly on every single pass
-			fmt.Println("================================================================================")
-			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
-			fmt.Println("================================================================================")
-			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, realHashrateMH+0.04)
-			fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, realHashrateMH-0.08)
-			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, realHashrateMH-0.15)
-			fmt.Println("================================================================================")
-			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
-			fmt.Println("--------------------------------------------------------------------------------")
-
-			// 4. Stream your history array strings dynamically right inside the dedicated action zone
-			for _, historicalLineLog := range liveTerminalEventLogs {
-				fmt.Println(historicalLineLog)
-			}
-		}
-	}
+progressBar := ""
+for i := 0; i < barWidth; i++ {
+if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 }
-
-
+fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+os.Stdout.Sync()
+}
+time.Sleep(5 * time.Millisecond)
+}
+// Spacing buffer formats
+fmt.Println("\n====================================================")
+fmt.Println("🚀 COVENANT STANDARD CONSENSUS MINING BLOCKCHAIN IGNITED LIVE!")
+fmt.Println("====================================================")
+fmt.Printf("🪪 VALIDATOR RIG CORE INITIALIZED STATUS: ACTIVE // HEIGHT: #%d\n", GetLatestBlock().Index)
+fmt.Println("----------------------------------------------------")
+fmt.Println("⛏️  Bare-metal hashing threads engaged. Computing Diligence proofs...")
+fmt.Println("----------------------------------------------------")
+// ====================================================================
+// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
+// ====================================================================
+go func() {
+var nonce int64 = 0
+const TargetBlockTimeWindow = 10
+for {
+blockMiningStartTime := time.Now().Unix()
+currentBlock := GetLatestBlock()
+targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
+baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
+targetPrefix := strings.Repeat("0", targetDifficulty)
+chunkCeiling := nonce + 500000
+blockSolved := false
+for nonce < chunkCeiling {
+inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
+h := sha256.New()
+h.Write([]byte(inputStr))
+hashBytes := h.Sum(nil)
+computedHashHex := fmt.Sprintf("%x", hashBytes)
+if strings.HasPrefix(computedHashHex, targetPrefix) {
+newBlock := Block{
+Index:      currentBlock.Index + 1,
+Timestamp:  time.Now().Unix(),
+Transactions: []Transaction{
+{
+ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
+Witness:   "COVENANT_STEWARD_ASSEMBLY",
+PublicKey: "GENESIS_VOID_REWARD_POOL",
+Outputs: []UTXOOutput{
+// 🟩 THE REPAIR: Prevents double accrual errors inside your database buckets!
+{Recipient: "COINBASE", Amount: 50.0},
+},
+},
+},
+PrevHash:   currentBlock.Hash,
+Hash:       computedHashHex,
+Difficulty: targetDifficulty,
+Nonce:      nonce,
+}
+if SaveBlockToStorage(newBlock) {
+go BroadcastNewBlock(newBlock)
+}
+nonce = 0
+blockSolved = true
+break
+}
+atomic.AddUint64(&globalHashCount, 1)
+nonce++
+}
+if blockSolved {
+blockMiningEndTime := time.Now().Unix()
+actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+if actualTimeElapsed < TargetBlockTimeWindow {
+requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+}
+} else {
+time.Sleep(1 * time.Microsecond)
+}
+}
+}()
+ticker := time.NewTicker(3 * time.Second)
+defer ticker.Stop()
+lastCheckedHeight := GetLatestBlock().Index
+// 🟩 THE UNIFIED WINDOWS MATRIX REMEDIAL PASS: Clear the screen completely once before ignition loops
+fmt.Print("\033[2J\033[H")
+// Pre-populate log buffer tracker slices
+var liveTerminalEventLogs []string
+for {
+select {
+case <-ticker.C:
+liveBlock := GetLatestBlock()
+actualBlocksHeight := liveBlock.Index
+actualCvnBalance := liveBlock.Index * 50
+hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
+realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
+// 1. Compute and parse active log strings internally before drawing layout elements
+var logLine string
+if actualBlocksHeight > lastCheckedHeight {
+logLine = fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid Proof-of-Diligence hash solution matrix! Reward: +50 CVN Allocated.", time.Now().Format("15:04:05"))
+lastCheckedHeight = actualBlocksHeight
+} else {
+logLine = fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+}
+liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+// Hard-limit log rolling tracking buffers to rows 18 to ensure it fits perfectly inside small terminal frames
+if len(liveTerminalEventLogs) > 18 {
+liveTerminalEventLogs = liveTerminalEventLogs[1:]
+}
+// 2. 👑 THE PIN-DROP FIX: Force cursor coordinates back to 1,1 instantly without scrolling artifacts!
+fmt.Print("\033[H")
+// 3. Draw your static header parameters card cleanly on every single pass
+fmt.Println("================================================================================")
+fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
+fmt.Println("================================================================================")
+fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, realHashrateMH+0.04)
+fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, realHashrateMH-0.08)
+fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, realHashrateMH-0.15)
+fmt.Println("================================================================================")
+fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+fmt.Println("--------------------------------------------------------------------------------")
+// 4. Stream your history array strings dynamically right inside the dedicated action zone
+for _, historicalLineLog := range liveTerminalEventLogs {
+fmt.Println(historicalLineLog)
+}
+}
+}
+}
 func osCheckArgs() []string {
-	return os.Args
+return os.Args
 }
-
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	currentDiff := int(lastBlock.Difficulty)
-	expectedTimeWindow := int64(45)
-	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed < expectedTimeWindow/2 {
-		return currentDiff + 1
-	} else if actualTimeElapsed > expectedTimeWindow*2 {
-		if currentDiff > 1 {
-			return currentDiff - 1
-		}
-		return 1
-	}
-	return currentDiff
+currentDiff := int(lastBlock.Difficulty)
+expectedTimeWindow := int64(45)
+actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+if actualTimeElapsed < expectedTimeWindow/2 {
+return currentDiff + 1
+} else if actualTimeElapsed > expectedTimeWindow*2 {
+if currentDiff > 1 {
+return currentDiff - 1
+}
+return 1
+}
+return currentDiff
 }
