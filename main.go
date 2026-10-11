@@ -14,7 +14,6 @@ import (
 	"runtime"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	// We only include the Wails framework link if we are compiling natively on a desktop GUI target environment
@@ -29,23 +28,10 @@ var assets embed.FS
 var globalHashCount uint64
 
 // initWindowsAnsi safely configures ANSI color rendering ONLY if executing on a Windows host
+// initWindowsAnsi is a platform stub. The native Windows console overrides 
+// have been cleanly migrated to 'ansi_windows.go' to ensure cross-compilation safety on Linux VPS hosts.
 func initWindowsAnsi() {
-	if runtime.GOOS != "windows" {
-		return // Natively skips syscall execution on Linux VPS environments to prevent compilation failure
-	}
-	
-	// Dynamically load procedures to ensure safe multi-platform deployment pipelines
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	if kernel32 != nil {
-		setConsoleModeProc := kernel32.NewProc("SetConsoleMode")
-		getStdHandleProc := kernel32.NewProc("GetStdHandle")
-		
-		// STD_OUTPUT_HANDLE identifier is 11 natively
-		handle, _, _ := getStdHandleProc.Call(uintptr(11))
-		var mode uint32 = 0x0004 // ENABLE_VIRTUAL_TERMINAL_PROCESSING
-		
-		_, _, _ = setConsoleModeProc.Call(handle, uintptr(mode))
-	}
+	// Left empty on purpose. Built-in Go file matching will override this automatically on Windows!
 }
 
 func main() {
