@@ -168,6 +168,11 @@ func main() {
 
 	// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS (Natively ignored on headless server targets)
 	RunDesktopUIFrameworkIfApplicable()
+	// 🛰️ THE UNIVERSAL P2P IGNITION FIX: Spins up your raw TCP Port 8080 Gossip mesh natively!
+	go func() {
+		time.Sleep(200 * time.Millisecond) // Precise pacing delay ensures database setup finishes first
+		StartMeshNetwork()
+	}()
 // ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
