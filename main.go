@@ -197,11 +197,11 @@ func main() {
 	}
 
 	// ====================================================================
-	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED SYNCHRONIZATION
+	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
-	fmt.Println("🚀 INITIALIZING COVENANT STANDARD NODE SERVICE CORES...")
+	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
 	fmt.Println("🔒 [PHASE 1: SYNC LOCK] Mining engine workers are strictly PAUSED.")
-	fmt.Println("📡 Mapping consensus network tip boundaries across decentralized seeds...")
+	fmt.Println("📡 Mapping consensus network boundaries across decentralized seeds...")
 	fmt.Println("--------------------------------------------------------------------")
 
 	seedGateways := []string{
@@ -210,10 +210,8 @@ func main() {
 		"http://202.137.175.220:8081", // 🇦🇺 Melbourne Core Anchor Backup
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 	lastRenderTime := time.Now()
-
-	fmt.Println("\n📥 Starting un-throttled 1-by-1 ledger catching sequence...")
 
 	for {
 		liveBlock := GetLatestBlock()
@@ -234,17 +232,12 @@ func main() {
 			}
 		}
 
-		if targetGlobalTip <= 0 || targetGlobalTip == currentLocalHeight {
-			fmt.Println("\n\n✨ [🔓 INITIALIZATION BYPASS] Global seeds are fresh. Establishing local node as network root tip!")
-			break
-		}
-
-		if currentLocalHeight >= targetGlobalTip {
+		if targetGlobalTip <= 0 || currentLocalHeight >= targetGlobalTip {
 			fmt.Println("\n\n✨ [🔓 SYNC COMPLETE] Core fully aligned with global mainnet tip. Hashing worker threads ignited!")
 			break
 		}
 
-		// 👑 THE BULK COMPRESSION PATCH: Point to your clean chunk streaming parameters
+		// 👑 THE 512-BLOCK BATCH PASS: Fetch a compressed batch slice array over a single request
 		nextBlockNeed := currentLocalHeight + 1
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
 
@@ -253,6 +246,8 @@ func main() {
 			if resp.StatusCode == http.StatusOK {
 				var incomingBatch []Block
 				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+					
+					// 👑 BULK TRANSACTION COMMIT: Save blocks in a high-velocity memory flush
 					for _, incomingBlock := range incomingBatch {
 						if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
 							SaveBlockToStorage(incomingBlock)
@@ -264,8 +259,8 @@ func main() {
 			resp.Body.Close()
 		}
 
-
-		if time.Since(lastRenderTime) >= 250*time.Millisecond || currentLocalHeight >= targetGlobalTip {
+		// Render the high-velocity visual streaming progress bar cleanly on a single line via \r
+		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
 
 			var syncPercentage float64 = 0.00
@@ -280,14 +275,15 @@ func main() {
 				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
 
-			fmt.Printf("⏳ [SYNC STATUS] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d\n", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 			os.Stdout.Sync()
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	fmt.Print("\033[2J")
+
 
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
