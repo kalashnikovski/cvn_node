@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strings"       // ✅ FIXED: Added to handle difficulty prefix evaluation checks!
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -22,14 +22,13 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
-// ✅ FIXED LAYER: Embed compiler directives and global descriptors securely pushed to top!
 //go:embed all:frontend/dist
 var assets embed.FS
 
 // Global atomic counters to track real cryptographic performance metrics safely across threads
 var globalHashCount uint64
 
-// initWindowsAnsi Mode explicitly instructs the Windows Host Console kernel to execute ANSI rules natively
+// initWindowsAnsi safely routes platform terminal initialization logic dynamically
 func initWindowsAnsi() {
 	if runtime.GOOS != "windows" {
 		return
@@ -57,35 +56,29 @@ func main() {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters...")
 			
-			// 1. Compute a unique local wallet address using random entropy and SHA-256 hashes
 			tSeed := fmt.Sprintf("%d-%s", time.Now().UnixNano(), CustomMinerAddress)
 			hash := sha256.Sum256([]byte(tSeed))
 			newAddress := fmt.Sprintf("CVN_%x", hash[:20])
 			privateKey := fmt.Sprintf("PRIV_KEY_%x%x", sha256.Sum256(hash[:]), hash[:8])
 
-			// 2. Output directly to screen so the user can pause and document the private key
 			fmt.Println("\n====================================================================")
 			fmt.Printf("🪪 NEW WALLET ADDRESS:     %s\n", newAddress)
 			fmt.Printf("🔐 PRIVATE KEY PASSPHRASE: %s\n", privateKey)
 			fmt.Println("====================================================================")
 
-			// 3. Automatically save the private key with a stark warning layout file
 			backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPrivate Key: %s\n\n⚠️ DO NOT SHARE THIS FILE. EXPOSURE WILL CAUSE COMPLETE LOSS OF ASSETS.\n", newAddress, privateKey)
 			_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
 
-			// 4. Overwrite miner_config.json with the new live mining destination
 			configData := fmt.Sprintf("{\n  \"miner_address\": \"%s\"\n}", newAddress)
 			_ = os.WriteFile("miner_config.json", []byte(configData), 0644)
 			
 			fmt.Println("💾 Identity profiles securely written to local disk sectors.")
-			os.Exit(0) // Clean exit after generation sequence completes successfully
+			os.Exit(0)
 		}
 	}
 
-	// Safely mount and initialize your local BoltDB key-value store cache instances on startup!
 	InitBoltEngine()
 
-	// Extracts flags natively to protect personal developer identities
 	for i, arg := range os.Args {
 		if arg == "--miner-address" && i+1 < len(os.Args) {
 			CustomMinerAddress = os.Args[i+1]
@@ -96,7 +89,6 @@ func main() {
 		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
 	}
 
-	// Ignite P2P mesh network architecture lanes asynchronously in the background
 	go StartMeshNetwork()
 
 	runDesktopUI := true
@@ -134,7 +126,6 @@ func main() {
 	fmt.Println("📡 Mapping consensus network tip boundaries across decentralized seeds...")
 	fmt.Println("--------------------------------------------------------------------")
 
-	// Global distributed bootstrap seed directories matching live server routes
 	seedGateways := []string{
 		"http://64.177.45.153:8081",   // 🇺🇸 Atlanta Cloud Server
 		"http://207.148.67.11:8081",   // 🇸🇬 Singapore Master Hub
@@ -150,16 +141,11 @@ func main() {
 		liveBlock := GetLatestBlock()
 		currentLocalHeight := int64(liveBlock.Index)
 
-		// ✅ FIXED: Hard baseline set to 0. Real data overrides this via seed queries.
 		var targetGlobalTip int64 = 0
-		var activeSyncSeed string = "http://207.148.67.11:8081" // Default Singapore master stream
+		var activeSyncSeed string = "http://207.148.67.11:8081"
 
-		// Poll active endpoints dynamically to look for higher network peaks
 		for _, endpoint := range seedGateways {
-			
-			// 🛡️ BARE-METAL LOOPBACK SHIELD: Detects if the node is evaluating its own local identity
 			if strings.Contains(endpoint, "202.137.175.220") {
-				// Intentionally skips self-dialing entirely to eliminate socket loopback exhaustion
 				continue 
 			}
 
@@ -170,24 +156,17 @@ func main() {
 			}
 		}
 
-		// ✅ FIXED INITIALIZATION BYPASS: If all global seeds are at 0 because they are blank,
-		// break out of the sync lock cleanly and establish this machine as the main genesis network root!
 		if targetGlobalTip <= 0 || targetGlobalTip == currentLocalHeight {
 			fmt.Println("\n\n✨ [🔓 INITIALIZATION BYPASS] Global seeds are fresh. Establishing local node as network root tip!")
 			break
 		}
 
-		// If our local ledger has safely crossed or matched the global tip, break out cleanly!
 		if currentLocalHeight >= targetGlobalTip {
 			fmt.Println("\n\n✨ [🔓 SYNC COMPLETE] Core fully aligned with global mainnet tip. Hashing worker threads ignited!")
 			break
 		}
 
-
-		// ✅ HARMONIZED ONE-BY-ONE DOWNLOAD PIPELINE
 		nextBlockNeed := currentLocalHeight + 1
-		
-		// Standardize query mapping format to pull down raw sequential block files safely
 		requestURL := fmt.Sprintf("%s/block/%d", activeSyncSeed, nextBlockNeed)
 
 		resp, err := client.Get(requestURL)
@@ -195,7 +174,6 @@ func main() {
 			if resp.StatusCode == http.StatusOK {
 				var incomingBlock Block
 				if err := json.NewDecoder(resp.Body).Decode(&incomingBlock); err == nil {
-					// Hardened verification step: commit block if it matches or provides genuine state
 					if incomingBlock.Index == nextBlockNeed {
 						SaveBlockToStorage(incomingBlock)
 						currentLocalHeight = incomingBlock.Index
@@ -205,7 +183,6 @@ func main() {
 			resp.Body.Close()
 		}
 
-		// Only draw visual telemetry layout updates if 250ms has elapsed to preserve console I/O tracks
 		if time.Since(lastRenderTime) >= 250*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
 
@@ -221,16 +198,13 @@ func main() {
 				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
 
-			// Clean, vertical line rendering completely avoids carriage return truncation bugs!
 			fmt.Printf("⏳ [SYNC STATUS] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d\n", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 			os.Stdout.Sync()
 		}
 
-		// Low latency pacing delay loop 
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	// Clear screen completely once at startup breakout
 	fmt.Print("\033[2J")
 
 	// ====================================================================
@@ -239,14 +213,10 @@ func main() {
 	go func() {
 		var nonce int64 = 0
 		targetPrefix := "0000"
-
-		// Enforce a strict consensus block production pacing baseline (10 Seconds)
 		const TargetBlockTimeWindow = 10 
 
 		for {
-			// Record the exact Unix epoch time right when this block height mining pass kicks off
 			blockMiningStartTime := time.Now().Unix()
-
 			currentBlock := GetLatestBlock()
 			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
 			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
@@ -295,23 +265,20 @@ func main() {
 				nonce++
 			}
 
-			// ✅ REGULATOR GATEWAY: Enforce strict macro-temporal pacing rules on block finalization
 			if blockSolved {
 				blockMiningEndTime := time.Now().Unix()
 				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
 
-				// If our high-performance hardware solved the block faster than the 10-second consensus target,
-				// calculate the exact remaining delta and stall the engine programmatically!
 				if actualTimeElapsed < TargetBlockTimeWindow {
 					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
 					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
 				}
 			} else {
-				// Low-latency cooling cycle if the 500k nonce chunk loop completes without a solved block matrix
 				time.Sleep(1 * time.Microsecond)
 			}
 		}
 	}()
+
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
@@ -340,7 +307,7 @@ func main() {
 			fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg60m)
 			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
 			fmt.Println("================================================================================")
-fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Print("--------------------------------------------------------------------------------")
 fmt.Print("\033[11;30r\033[u")
 if actualBlocksHeight > lastCheckedHeight {
