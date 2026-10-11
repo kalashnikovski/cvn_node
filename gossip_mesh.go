@@ -6,6 +6,7 @@ import (
 	"log"           
 	"net"
 	"net/http"
+	"os"
 	"strconv"       
 	"strings"       
 	"sync"          
@@ -228,7 +229,6 @@ func EnforceSyncGateLock(seedPeerExplorerURL string, localHeightProvider func() 
 
 		GlobalSyncShield.IsFullySynchronized = false
 		GlobalSyncShield.mu.Unlock()
-		// ✅ FIXED: Removed the invalid backslash parentheses slips
 		fmt.Printf("\r⏳ [MAINNET SYNC LOCK] Local Ledger Height: %d / True Network Tip: %d. Waiting for synchronization equilibrium...", localHeight, globalMaxHeight)
 		time.Sleep(5 * time.Second) 
 	}
@@ -239,26 +239,13 @@ func IsCoreMinerLocked() bool {
 	defer GlobalSyncShield.mu.RUnlock()
 	return !GlobalSyncShield.IsFullySynchronized
 }
+
 // ============================================================================
 // PART 3: NATIVE IGNITION NETWORK CORES & EXPLORER ROUTES
 // ============================================================================
 
 func StartMeshNetwork() {
 	fmt.Println("📡 P2P MATRIX: Binding to core data channels...")
-
-	// ✅ PORT 8082 BACKUP EXPLORER LAYER
-	go func() {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/explorer", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprint(w, htmlBackupTemplate)
-		})
-		
-		log.Println("📡 Initializing Port 8082 Backup Matrix listener...")
-		if err := http.ListenAndServe(":8082", mux); err != nil {
-			log.Printf("Network socket notice for 8082: %v\n", err)
-		}
-	}()
 
 	// ✅ PORT 8080: TCP P2P Listener integrated with Phase 3 Firewall Checks
 	go func() {
@@ -286,16 +273,24 @@ func StartMeshNetwork() {
 
 	// ✅ PORT 8081: HTTP Explorer Telemetry Server (COLLISION SHIELDED)
 	go func() {
-		// Isolated Multiplexer prevents global DefaultServeMux routing namespace panics
 		mux8081 := http.NewServeMux()
 
+		// 👑 Point root path straight to our clean disk driven file
 		mux8081.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
 				http.NotFound(w, r)
 				return
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, htmlMelbourneTemplate, GetLatestBlock().Index)
+			
+			htmlBytes, err := os.ReadFile("explorer.html")
+			if err != nil {
+				// 🛡️ CRITICAL REFACTOR: Routed through a standard escape string function to bypass compiler syntax limits
+				msg := fmt.Sprintf("<h2>Network Dashboard Active</h2><p>Local Height: #%d</p>", GetLatestBlock().Index)
+				w.Write([]byte(msg))
+				return
+			}
+			w.Write(htmlBytes)
 		})
 
 		// 🛰️ PEERS GATEWAY ENDPOINT
@@ -306,7 +301,7 @@ func StartMeshNetwork() {
 				"status":         "ONLINE",
 				"current_height": GetLatestBlock().Index,
 				"global_tip":     GetLatestBlock().Index,
-				"peers":          []string{"207.148.67.11"},
+				"peers":          GlobalRoster.GetPeerList(),
 			})
 		})
 
@@ -327,11 +322,19 @@ func StartMeshNetwork() {
 			json.NewEncoder(w).Encode(GetLatestBlock())
 		})
 
-		// Keep the base route active for general global tip checks
+		// Base route fallback handler ensures continuous height verification loops
 		mux8081.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			json.NewEncoder(w).Encode(GetLatestBlock())
+			
+			latest := GetLatestBlock()
+			payload := map[string]interface{}{
+				"current_height": latest.Index,
+				"block_hash":     latest.Hash,
+				"timestamp":      latest.Timestamp,
+				"transactions":   latest.Transactions,
+			}
+			json.NewEncoder(w).Encode(payload)
 		})
 
 		// 🔑 WALLET ADDRESSES GATEWAY ENDPOINT
@@ -351,7 +354,7 @@ func StartMeshNetwork() {
 			targetAddress := r.URL.Query().Get("address")
 			if targetAddress == "" {
 				w.WriteHeader(http.StatusBadRequest)
-				fmt.Fprint(w, htmlAuditErrorTemplate)
+				w.Write([]byte("<h2>🚨 ERROR: Missing required address token</h2>"))
 				return
 			}
 
@@ -362,83 +365,20 @@ func StartMeshNetwork() {
 			if targetAddress == CustomMinerAddress {
 				balance = latestBlock.Index * 50 
 				blocksMined = latestBlock.Index
-			} else if targetAddress == "CVN_766d4b3be2e1c894f0b2a688527e4d2592151cd1" {
-				balance = 1000
-				blocksMined = 0
-			}
-
-			fmt.Fprintf(w, htmlAuditTemplate, latestBlock.Index, targetAddress, balance, blocksMined)
-		})
-
-		fmt.Println("📡 Explorer API Gateway Matrix listening natively on isolated port :8081...")
-		if err := http.ListenAndServe(":8081", mux8081); err != nil {
-			log.Printf("Network socket notice for 8081: %v\n", err)
-		}
-	}() 
+			} else {
+balance = int64(GetAddressBalanceFromLedger(targetAddress))
+blocksMined = int64(GetAddressBlockCountFromLedger(targetAddress))
 }
-
+auditHTML := fmt.Sprintf("Covenant Standard Audit LedgerTarget: %sBalance: %d CVNMined: %d Blocks", targetAddress, balance, blocksMined)
+w.Write([]byte(auditHTML))
+})
+log.Println("📡 Explorer API Gateway Matrix listening natively on port :8081...")
+if err := http.ListenAndServe(":8081", mux8081); err != nil {
+log.Printf("Network socket notice for 8081: %v\n", err)
+}
+}()
+}
 func handleIncomingPeerSession(conn net.Conn) {
-	defer conn.Close()
-	fmt.Printf("📡 [P2P MESH] Incoming handshake established from: %s\n", conn.RemoteAddr().String())
+defer conn.Close()
+fmt.Printf("📡 [P2P MESH] Incoming handshake established from: %s\n", conn.RemoteAddr().String())
 }
-
-// ============================================================================
-// PART 4: ISOLATED HTML RAW STRING LITERAL TEMPLATES
-// ============================================================================
-
-const htmlBackupTemplate = `<html><body style="background:#0a0a0f;color:#00ff66;font-family:monospace;padding:3rem;text-align:center;">
-	<h1>💎 COVENANT STANDARD MELBOURNE BACKUP CORE</h1>
-	<p style="color:#00ffff;">SYSTEM STATUS: ONLINE // LISTENING ON PORT 8082</p>
-</body></html>`
-
-const htmlMelbourneTemplate = `<html><body style="background:#0a0a0f;color:#00ff66;font-family:monospace;padding:3rem;text-align:center;">
-	<h1>💎 COVENANT STANDARD MELBOURNE CORE RIG</h1>
-	<p style="color:#00ffff;">SYSTEM STATUS: ACTIVE // BLOCK HEIGHT: #<span id="live-height">%d</span></p>
-	<script>
-		function updateBlockHeight() {
-			fetch('/block')
-				.then(response => response.json())
-				.then(data => {
-					const targetHeight = data.current_height || data.block_height || data.Index;
-					if (targetHeight) {
-						document.getElementById('live-height').innerText = targetHeight;
-					}
-				})
-				.catch(err => console.error("Gossip tracking sync delay:", err));
-		}
-		setInterval(updateBlockHeight, 2000);
-	</script>
-</body></html>`
-
-const htmlAuditErrorTemplate = `<html><body style="background:#0a0a0f;color:#ff3333;font-family:monospace;padding:3rem;text-align:center;">
-	<h2>🚨 ERROR: Missing required 'address' query token parameter</h2>
-</body></html>`
-
-const htmlAuditTemplate = `<!DOCTYPE html>
-<html>
-<head>
-	<title>💎 CVN AUDIT NETWORK</title>
-	<meta charset="utf-8">
-	<style>
-		body { background: #0a0a0f; color: #00ff66; font-family: monospace; padding: 3rem; text-align: center; margin: 0; }
-		.container { max-width: 900px; margin: 0 auto; background: #11111a; border: 1px solid #1f1f2e; border-radius: 8px; padding: 2.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
-		h1 { font-size: 1.8rem; letter-spacing: 2px; margin-bottom: 0.5rem; text-transform: uppercase; }
-		.status-bar { color: #00ffff; font-size: 0.95rem; margin-bottom: 2.5rem; text-transform: uppercase; }
-		.metric-card { background: #0d0d14; border-left: 4px solid #00ff66; margin: 1rem 0; padding: 1.2rem 2rem; text-align: left; display: flex; justify-content: space-between; align-items: center; }
-		.label { color: #8a8a9e; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 1px; }
-		.value { font-size: 1.1rem; color: #00ff66; word-break: break-all; padding-left: 1rem; }
-		.value-address { color: #00ffff; }
-		.footer { margin-top: 3rem; color: #4a4a5a; font-size: 0.8rem; }
-	</style>
-</head>
-<body>
-	<div class="container">
-		<h1>💎 COVENANT STANDARD AUDIT LEDGER</h1>
-		<div class="status-bar">SYSTEM STATUS: ACTIVE // CURRENT TIP: #%d</div>
-		<div class="metric-card" style="border-left-color: #00ffff;"><span class="label">Target Address</span><span class="value value-address">%s</span></div>
-		<div class="metric-card"><span class="label">CVN Balance</span><span class="value">%d CVN</span></div>
-		<div class="metric-card"><span class="label">Total Blocks Mined</span><span class="value">%d Blocks</span></div>
-		<div class="metric-card" style="border-left-color: #00ffff;"><span class="label">Ledger Alignment</span><span class="value" style="color: #00ffff;">100%% VERIFIED</span></div>
-	</div>
-</body>
-</html>`
