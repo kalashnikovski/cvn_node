@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +28,70 @@ func NewApp() *App {
 // startup is called when the app starts. The context is saved
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	fmt.Println("🛰️ [WAILS LIFECYCLE] Core context securely mounted into application interface framework.")
+
+	// 👑 THE THREE-PORT IGNITION ENGINE: Multi-port network gateway unchained natively on boot!
+	go func() {
+		winMux := http.NewServeMux()
+
+		// 🧱 PORT 8081: The Compressed 512-Block Batch Streaming Gateway
+		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+
+			startStr := r.URL.Query().Get("start")
+			startHeight, err := strconv.ParseInt(startStr, 10, 64)
+			if err != nil || startHeight < 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			var blockBatch []Block
+			currentTip := int64(GetLatestBlock().Index)
+			endHeight := startHeight + 511
+			if endHeight > currentTip {
+				endHeight = currentTip
+			}
+
+			for h := startHeight; h <= endHeight; h++ {
+				blockBatch = append(blockBatch, GetBlockByHeightFromDB(h))
+			}
+			json.NewEncoder(w).Encode(blockBatch)
+		})
+
+		// 🧱 PORT 8081 fallback: Single block status verification loop
+		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			latest := GetLatestBlock()
+			payload := map[string]interface{}{
+				"current_height": latest.Index,
+				"block_hash":     latest.Hash,
+				"timestamp":      latest.Timestamp,
+				"transactions":   latest.Transactions,
+			}
+			json.NewEncoder(w).Encode(payload)
+		})
+
+		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels...")
+		if err := http.ListenAndServe(":8081", winMux); err != nil {
+			log.Printf("Port 8081 bind alert: %v", err)
+		}
+	}()
+
+	// 🧱 PORT 8082: Dedicated Telemetry & Front-End Mirror Port
+	go func() {
+		mirrorMux := http.NewServeMux()
+		mirrorMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
+		})
+		
+		fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix...")
+		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
+			log.Printf("Port 8082 bind alert: %v", err)
+		}
+	}()
 }
 
 // GetLocalNodeTelemetry marshals real-time L1 telemetry straight to your Svelte frontend
