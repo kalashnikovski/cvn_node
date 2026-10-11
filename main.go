@@ -242,6 +242,8 @@ func main() {
 		}
 
 		nextBlockNeed := currentLocalHeight + 1
+		
+		// 🟩 THE REPAIR: Ensures all cross-continental bulk data streams pull from port 8081 cleanly
 		cleanSeedURL := "http://202.137.175.220:8081" 
 		if strings.Contains(activeSyncSeed, "207.148.67.11") {
 			cleanSeedURL = "http://207.148.67.11:8081"
