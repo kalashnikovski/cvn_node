@@ -217,16 +217,18 @@ func main() {
 	}
 
 	lastRenderTime := time.Now()
+	// 👑 THE UNIVERSAL SYNCHRONIZATION PORT FIX
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
-			// 👑 UNIVERSAL PORT PRESERVATION ENGINE
+			
+			// If it doesn't have an HTTP prefix, add it but preserve the exact port!
 			if !strings.HasPrefix(customTargetIP, "http://") {
 				seedGateways = []string{fmt.Sprintf("http://%s", customTargetIP)}
 			} else {
 				seedGateways = []string{customTargetIP}
 			}
-			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways[0])
+			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to true peer endpoint: %s\n", seedGateways[0])
 		}
 	}
 
