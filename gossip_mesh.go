@@ -6,7 +6,8 @@ import (
 	"log"           
 	"net"
 	"net/http"     
-	"strings"       
+	"strings"   
+	"strconv"    
 	"sync"          
 	"time"
 )
@@ -390,5 +391,42 @@ w.Write([]byte(auditHTML))
 
 func handleIncomingPeerSession(conn net.Conn) {
 	defer conn.Close()
+	
+	// Create a dynamic command reader interface buffer
+	buf := make([]byte, 4096)
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, err := conn.Read(buf)
+	if err != nil {
+		return
+	}
+
+	msg := string(buf[:n])
+	
+	// 👑 THE P2P BATCH GATE: Intercepts compressed chunk queries straight over port 8080!
+	if strings.HasPrefix(msg, "GET_BATCH:") {
+		startStr := strings.TrimPrefix(msg, "GET_BATCH:")
+		startStr = strings.TrimSpace(startStr)
+		startHeight, err := strconv.ParseInt(startStr, 10, 64)
+		if err != nil {
+			return
+		}
+
+		var blockBatch []Block
+		currentTip := int64(GetLatestBlock().Index)
+		endHeight := startHeight + 511
+		if endHeight > currentTip {
+			endHeight = currentTip
+		}
+
+		for h := startHeight; h <= endHeight; h++ {
+			blockBatch = append(blockBatch, GetBlockByHeightFromDB(h))
+		}
+
+		payload, _ := json.Marshal(blockBatch)
+		conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		conn.Write(append(payload, '\n')) // Flush compressed blocks directly down the P2P wire!
+		return
+	}
+
 	fmt.Printf("📡 [P2P MESH] Incoming handshake established from: %s\n", conn.RemoteAddr().String())
 }

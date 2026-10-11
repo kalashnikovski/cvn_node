@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"          // 🟩 ADD THIS LINE RIGHT HERE
 	"net/http"
 	"os"
 	"runtime"
@@ -86,6 +87,51 @@ func main() {
 	}
 
 	if runDesktopUI {
+		// 🌐 UNIVERSAL WINDOWS DATA PIPELINE GATEWAY: Exposes batch endpoints to your cloud seeds natively
+		go func() {
+			winMux := http.NewServeMux()
+			winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+
+				startStr := r.URL.Query().Get("start")
+				startHeight, err := strconv.ParseInt(startStr, 10, 64)
+				if err != nil || startHeight < 0 {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				var blockBatch []Block
+				currentTip := int64(GetLatestBlock().Index)
+				endHeight := startHeight + 511
+				if endHeight > currentTip {
+					endHeight = currentTip
+				}
+
+				for h := startHeight; h <= endHeight; h++ {
+					blk := GetBlockByHeightFromDB(h) 
+					blockBatch = append(blockBatch, blk)
+				}
+				json.NewEncoder(w).Encode(blockBatch)
+			})
+
+			// Expose live block metrics to feed your explorers
+			winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				latest := GetLatestBlock()
+				payload := map[string]interface{}{
+					"current_height": latest.Index,
+					"block_hash":     latest.Hash,
+					"timestamp":      latest.Timestamp,
+					"transactions":   latest.Transactions,
+				}
+				json.NewEncoder(w).Encode(payload)
+			})
+
+			_ = http.ListenAndServe(":8081", winMux)
+		}()
+
 		fmt.Println("🎨 [WAILS ENGINE] Initiating thread-safe graphical matrix windows...")
 		wailsApp := NewApp()
 		err := wails.Run(&options.App{
@@ -108,7 +154,6 @@ func main() {
 	// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
 	if runtime.GOOS != "windows" {
 		go func() {
-			// 👑 The multiplexer is created here natively:
 			serverMux := http.NewServeMux()
 
 			serverMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +204,6 @@ func main() {
 
 			// 🌐 NEW BATCH STREAMING GATEWAY: Serves up to 512 compressed blocks in a single network pass
 			serverMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
-
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -170,18 +214,15 @@ func main() {
 					return
 				}
 
-				// Pull a compressed array slice of blocks natively out of your ledger database
 				var blockBatch []Block
 				currentTip := int64(GetLatestBlock().Index)
 				
-				// Stream up to 512 blocks maximum per query to protect network socket thresholds
 				endHeight := startHeight + 511
 				if endHeight > currentTip {
 					endHeight = currentTip
 				}
 
 				for h := startHeight; h <= endHeight; h++ {
-					// Pulls the verified block directly out of your local BoltDB engine buckets
 					blk := GetBlockByHeightFromDB(h) 
 					blockBatch = append(blockBatch, blk)
 				}
@@ -210,7 +251,6 @@ func main() {
 		"http://202.137.175.220:8081", // 🇦🇺 Melbourne Core Anchor Backup
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
 	lastRenderTime := time.Now()
 
 	for {
@@ -237,17 +277,29 @@ func main() {
 			break
 		}
 
-		// 👑 THE 512-BLOCK BATCH PASS: Fetch a compressed batch slice array over a single request
+		// 👑 THE P2P CHUNK ENGAGEMENT PASS: Direct TCP dial bypassing HTTP router blocks
 		nextBlockNeed := currentLocalHeight + 1
-		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
+		
+		// Map gateway seed URL natively to extract raw IP and P2P connection parameters
+		cleanSeedIP := "202.137.175.220" // Default back to master home IP anchor
+		if strings.Contains(activeSyncSeed, "207.148.67.11") {
+			cleanSeedIP = "207.148.67.11"
+		} else if strings.Contains(activeSyncSeed, "64.177.45.153") {
+			cleanSeedIP = "64.177.45.153"
+		}
 
-		resp, err := client.Get(requestURL)
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(cleanSeedIP, "8080"), 4*time.Second)
 		if err == nil {
-			if resp.StatusCode == http.StatusOK {
+			// Broadcast bulk request payload over the unblocked P2P matrix lanes
+			conn.SetWriteDeadline(time.Now().Add(4 * time.Second))
+			_, err = conn.Write([]byte(fmt.Sprintf("GET_BATCH:%d", nextBlockNeed)))
+			
+			if err == nil {
+				conn.SetReadDeadline(time.Now().Add(12 * time.Second))
 				var incomingBatch []Block
-				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+				if err := json.NewDecoder(conn).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
 					
-					// 👑 BULK TRANSACTION COMMIT: Save blocks in a high-velocity memory flush
+					// Swallows up to 512 blocks natively inside an ultra-fast ACID transaction flush
 					for _, incomingBlock := range incomingBatch {
 						if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
 							SaveBlockToStorage(incomingBlock)
@@ -256,119 +308,99 @@ func main() {
 					}
 				}
 			}
-			resp.Body.Close()
+			conn.Close()
 		}
 
 		// Render the high-velocity visual streaming progress bar cleanly on a single line via \r
 		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
-
 			var syncPercentage float64 = 0.00
 			if targetGlobalTip > 0 {
 				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
 			}
-
 			barWidth := 20
 			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
 			progressBar := ""
 			for i := 0; i < barWidth; i++ {
 				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
-
 			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 			os.Stdout.Sync()
 		}
-
 		time.Sleep(5 * time.Millisecond)
 	}
-
 	fmt.Print("\033[2J")
 
-
-	// ====================================================================
-	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
-	// ====================================================================
-	go func() {
-		var nonce int64 = 0
-		const TargetBlockTimeWindow = 10 
-
-		for {
-			blockMiningStartTime := time.Now().Unix()
-			currentBlock := GetLatestBlock()
-			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
-			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
-
-			// 👑 DYNAMIC DIFFICULTY HEARTBEAT: Generate prefix checks dynamically matching hardware speeds
-			targetPrefix := strings.Repeat("0", targetDifficulty)
-
-			chunkCeiling := nonce + 500000
-			blockSolved := false
-
-			for nonce < chunkCeiling {
-				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
-				
-				h := sha256.New()
-				h.Write([]byte(inputStr))
-				hashBytes := h.Sum(nil)
-				computedHashHex := fmt.Sprintf("%x", hashBytes)
-
-				if strings.HasPrefix(computedHashHex, targetPrefix) {
-					newBlock := Block{
-						Index:     currentBlock.Index + 1,
-						Timestamp: time.Now().Unix(),
-						Transactions: []Transaction{
-							{
-								ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
-								Witness:   "COVENANT_STEWARD_ASSEMBLY",
-								PublicKey: "GENESIS_VOID_REWARD_POOL",
-								Outputs: []UTXOOutput{
-									{Recipient: CustomMinerAddress, Amount: 50.0},
-								},
-							},
-						},
-						PrevHash:   currentBlock.Hash,
-						Hash:       computedHashHex,
-						Difficulty: targetDifficulty, // 👑 TYPE ALIGNED: Native pure int formatting passed cleanly!
-						Nonce:      nonce,
-					}
-
-					if SaveBlockToStorage(newBlock) {
-						go BroadcastNewBlock(newBlock)
-					}
-					
-					nonce = 0
-					blockSolved = true
-					break
-				}
-
-				atomic.AddUint64(&globalHashCount, 1)
-				nonce++
-			}
-
-			if blockSolved {
-				blockMiningEndTime := time.Now().Unix()
-				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-
-				if actualTimeElapsed < TargetBlockTimeWindow {
-					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-				}
-			} else {
-				time.Sleep(1 * time.Microsecond)
-			}
-		}
-	}()
-
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	lastCheckedHeight := GetLatestBlock().Index
-	fmt.Print("\033[11;1H")
-
-	for {
-		select {
-		case <-ticker.C:
-			liveBlock := GetLatestBlock()
+// ====================================================================
+// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
+// ====================================================================
+go func() {
+var nonce int64 = 0
+const TargetBlockTimeWindow = 10
+for {
+blockMiningStartTime := time.Now().Unix()
+currentBlock := GetLatestBlock()
+targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
+baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
+// 👑 DYNAMIC DIFFICULTY HEARTBEAT: Generate prefix checks dynamically matching hardware speeds
+targetPrefix := strings.Repeat("0", targetDifficulty)
+chunkCeiling := nonce + 500000
+blockSolved := false
+for nonce < chunkCeiling {
+inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
+h := sha256.New()
+h.Write([]byte(inputStr))
+hashBytes := h.Sum(nil)
+computedHashHex := fmt.Sprintf("%x", hashBytes)
+if strings.HasPrefix(computedHashHex, targetPrefix) {
+newBlock := Block{
+Index:     currentBlock.Index + 1,
+Timestamp: time.Now().Unix(),
+Transactions: []Transaction{
+{
+ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
+Witness:   "COVENANT_STEWARD_ASSEMBLY",
+PublicKey: "GENESIS_VOID_REWARD_POOL",
+Outputs: []UTXOOutput{
+{Recipient: CustomMinerAddress, Amount: 50.0},
+},
+},
+},
+PrevHash:   currentBlock.Hash,
+Hash:       computedHashHex,
+Difficulty: targetDifficulty,
+Nonce:      nonce,
+}
+if SaveBlockToStorage(newBlock) {
+go BroadcastNewBlock(newBlock)
+}
+nonce = 0
+blockSolved = true
+break
+}
+atomic.AddUint64(&globalHashCount, 1)
+nonce++
+}
+if blockSolved {
+blockMiningEndTime := time.Now().Unix()
+actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+if actualTimeElapsed < TargetBlockTimeWindow {
+requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+}
+} else {
+time.Sleep(1 * time.Microsecond)
+}
+}
+}()
+ticker := time.NewTicker(3 * time.Second)
+defer ticker.Stop()
+lastCheckedHeight := GetLatestBlock().Index
+fmt.Print("\033[11;1H")
+for {
+select {
+case <-ticker.C:
+liveBlock := GetLatestBlock()
 actualBlocksHeight := liveBlock.Index
 actualCvnBalance := liveBlock.Index * 50
 hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
@@ -397,7 +429,9 @@ fmt.Printf("\n[%s] ⛏️  [POD HASH] Micro-block computation chunk pass complet
 }
 }
 }
-func osCheckArgs() []string { return os.Args }
+func osCheckArgs() []string {
+return os.Args
+}
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 currentDiff := int(lastBlock.Difficulty)
 expectedTimeWindow := int64(45)
