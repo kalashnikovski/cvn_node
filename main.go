@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	// We only include the Wails framework link if we are compiling natively on a desktop GUI target environment
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -25,25 +26,26 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// Global atomic counters to track real cryptographic performance metrics safely across threads
 var globalHashCount uint64
 
-// initWindowsAnsi safely routes platform terminal initialization logic dynamically
+// initWindowsAnsi safely configures ANSI color rendering ONLY if executing on a Windows host
 func initWindowsAnsi() {
 	if runtime.GOOS != "windows" {
-		return
+		return // Natively skips syscall execution on Linux VPS environments to prevent compilation failure
 	}
-	handle, err := syscall.GetStdHandle(syscall.STD_OUTPUT_HANDLE)
-	if err != nil {
-		return
+	
+	// Dynamically load procedures to ensure safe multi-platform deployment pipelines
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	if kernel32 != nil {
+		setConsoleModeProc := kernel32.NewProc("SetConsoleMode")
+		getStdHandleProc := kernel32.NewProc("GetStdHandle")
+		
+		// STD_OUTPUT_HANDLE identifier is 11 natively
+		handle, _, _ := getStdHandleProc.Call(uintptr(11))
+		var mode uint32 = 0x0004 // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+		
+		_, _, _ = setConsoleModeProc.Call(handle, uintptr(mode))
 	}
-	var mode uint32
-	err = syscall.GetConsoleMode(handle, &mode)
-	if err != nil {
-		return
-	}
-	mode |= 0x0004 // ENABLE_VIRTUAL_TERMINAL_PROCESSING
-	_, _, _ = syscall.NewLazyDLL("kernel32.dll").NewProc("SetConsoleMode").Call(uintptr(handle), uintptr(mode))
 }
 
 func main() {
@@ -55,7 +57,6 @@ func main() {
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters...")
-			
 			tSeed := fmt.Sprintf("%d-%s", time.Now().UnixNano(), CustomMinerAddress)
 			hash := sha256.Sum256([]byte(tSeed))
 			newAddress := fmt.Sprintf("CVN_%x", hash[:20])
@@ -91,10 +92,15 @@ func main() {
 
 	go StartMeshNetwork()
 
+	// 🛰️ CROSS-PLATFORM GRAPHICS FILTER
 	runDesktopUI := true
-	for _, arg := range os.Args {
-		if arg == "--connect" || arg == "--miner-address" {
-			runDesktopUI = false
+	if runtime.GOOS != "windows" {
+		runDesktopUI = false // Automatically deactivates visual Wails window wrappers on headless Linux hosts
+	} else {
+		for _, arg := range os.Args {
+			if arg == "--connect" || arg == "--miner-address" {
+				runDesktopUI = false
+			}
 		}
 	}
 
@@ -145,7 +151,8 @@ func main() {
 		var activeSyncSeed string = "http://207.148.67.11:8081"
 
 		for _, endpoint := range seedGateways {
-			if strings.Contains(endpoint, "202.137.175.220") {
+			// 🛡️ BARE-METAL LOOPBACK SHIELD: Instantly detects and filters out self-dialing loops
+			if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
 				continue 
 			}
 
@@ -302,12 +309,12 @@ func main() {
 			fmt.Print("\033[s\033[r\033[1;1H")
 			fmt.Println("================================================================================")
 			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
-			fmt.Println("================================================================================")
-			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
-			fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg60m)
-			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
-			fmt.Println("================================================================================")
-			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+fmt.Println("================================================================================")
+fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
+fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg60m)
+fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
+fmt.Println("================================================================================")
+fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Print("--------------------------------------------------------------------------------")
 fmt.Print("\033[11;30r\033[u")
 if actualBlocksHeight > lastCheckedHeight {
