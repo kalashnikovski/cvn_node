@@ -143,7 +143,7 @@ func RunWalletGUI() {
 			}
 
 			// ✅ FIXED URL INTERFACE: Route transaction propagation straight to your cloud gateway anchors
-			targetURL := "http://207.148.67" // Broadcast to live Singapore active data pool mesh
+			targetURL := "http://207.148.67.11" // Broadcast to live Singapore active data pool mesh
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Post(targetURL, "application/json", bytes.NewBuffer(payloadBytes))
 			if err != nil {

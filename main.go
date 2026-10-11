@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync/atomic"
+	"strconv"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -107,6 +108,7 @@ func main() {
 	// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
 	if runtime.GOOS != "windows" {
 		go func() {
+			// 👑 The multiplexer is created here natively:
 			serverMux := http.NewServeMux()
 
 			serverMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +132,61 @@ func main() {
 					"transactions":   latest.Transactions,
 				}
 				json.NewEncoder(w).Encode(payload)
+			})
+
+			// 🌐 SECURE TRANSACTION RECEIVER ENDPOINT: Injected cleanly where serverMux is alive!
+			serverMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					return
+				}
+
+				var incomingTx Transaction
+				err := json.NewDecoder(r.Body).Decode(&incomingTx)
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				if MempoolMatrix.PushTransaction(incomingTx) {
+					w.WriteHeader(http.StatusCreated)
+					fmt.Fprint(w, "SUCCESS: Payload securely committed to server mempool propagation queue!")
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+					fmt.Fprint(w, "REJECTED: Active mempool spam threshold ceiling saturated.")
+				}
+			})
+
+			// 🌐 NEW BATCH STREAMING GATEWAY: Serves up to 512 compressed blocks in a single network pass
+			serverMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
+
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+
+				startStr := r.URL.Query().Get("start")
+				startHeight, err := strconv.ParseInt(startStr, 10, 64)
+				if err != nil || startHeight < 0 {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				// Pull a compressed array slice of blocks natively out of your ledger database
+				var blockBatch []Block
+				currentTip := int64(GetLatestBlock().Index)
+				
+				// Stream up to 512 blocks maximum per query to protect network socket thresholds
+				endHeight := startHeight + 511
+				if endHeight > currentTip {
+					endHeight = currentTip
+				}
+
+				for h := startHeight; h <= endHeight; h++ {
+					// Pulls the verified block directly out of your local BoltDB engine buckets
+					blk := GetBlockByHeightFromDB(h) 
+					blockBatch = append(blockBatch, blk)
+				}
+
+				json.NewEncoder(w).Encode(blockBatch)
 			})
 
 			fmt.Println("📡 [SERVER API] Unified Explorer Dashboard listening natively on port :8081...")

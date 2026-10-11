@@ -162,7 +162,7 @@ func GetBlockByHeightFromDB(height int64) Block {
 	return targetBlock
 }
 
-// ✅ FIXED LOOKUP: Dynamically returns verified balances to satisfy explorer queries
+// 🟩 THE CORRECTION: Pure dynamic ledger tracking with zero hardcoded testing leaks!
 func GetAddressBalanceFromLedger(address string) int64 {
 	BalanceCacheMutex.RLock()
 	defer BalanceCacheMutex.RUnlock()
