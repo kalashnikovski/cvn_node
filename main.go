@@ -220,13 +220,13 @@ func main() {
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
-			// Clear ports out and cleanly rewrite route paths natively to target HTTP ports
-			if strings.Contains(customTargetIP, ":") {
-				parts := strings.Split(customTargetIP, ":")
-				customTargetIP = parts[0]
+			// 👑 UNIVERSAL PORT PRESERVATION ENGINE
+			if !strings.HasPrefix(customTargetIP, "http://") {
+				seedGateways = []string{fmt.Sprintf("http://%s", customTargetIP)}
+			} else {
+				seedGateways = []string{customTargetIP}
 			}
-			seedGateways = []string{fmt.Sprintf("http://%s:8081", customTargetIP)}
-			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced straight to target peer: %s\n", seedGateways[0])
+			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways[0])
 		}
 	}
 
@@ -256,7 +256,7 @@ func main() {
 
 		nextBlockNeed := currentLocalHeight + 1
 		
-		// 🟩 THE REPAIR: Resolves cross-continental route path alignment bugs perfectly
+		// 🟩 THE REPAIR: Respects custom targets natively without truncation errors
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
 		
 		// 🟩 THE TIMEOUT PROTECTION ENGINE: Hard-limits socket connection handshakes to 1 second flat!
@@ -279,9 +279,9 @@ func main() {
 			}
 			resp.Body.Close()
 		} else {
-			// 📡 Gateway drop or timeout caught natively! Escape the sync lock loop block instantly to survive dropouts!
-			fmt.Println("\n📡 [MESH MATRIX] External seed nodes unreachable. Falling back to local master core tracks...")
-			break
+			fmt.Printf("\n⚠️ Handshake timeout on target endpoint %s. Retrying loop tracks...", activeSyncSeed)
+			time.Sleep(1 * time.Second)
+			continue
 		}
 
 		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
@@ -292,10 +292,10 @@ func main() {
 			}
 			barWidth := 20
 			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
-progressBar := ""
-for i := 0; i < barWidth; i++ {
-if i < filledChars { progressBar += "█" } else { progressBar += "░" }
-}
+			progressBar := ""
+			for i := 0; i < barWidth; i++ {
+				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
+			}
 fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 os.Stdout.Sync()
 }
@@ -339,7 +339,6 @@ ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
 Witness:   "COVENANT_STEWARD_ASSEMBLY",
 PublicKey: "GENESIS_VOID_REWARD_POOL",
 Outputs: []UTXOOutput{
-// 🟩 THE REPAIR: Prevents double accrual errors inside your database buckets!
 {Recipient: "COINBASE", Amount: 50.0},
 },
 },
@@ -374,9 +373,7 @@ time.Sleep(1 * time.Microsecond)
 ticker := time.NewTicker(3 * time.Second)
 defer ticker.Stop()
 lastCheckedHeight := GetLatestBlock().Index
-// 🟩 THE UNIFIED WINDOWS MATRIX REMEDIAL PASS: Clear the screen completely once before ignition loops
 fmt.Print("\033[2J\033[H")
-// Pre-populate log buffer tracker slices
 var liveTerminalEventLogs []string
 for {
 select {
@@ -386,7 +383,6 @@ actualBlocksHeight := liveBlock.Index
 actualCvnBalance := liveBlock.Index * 50
 hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
-// 1. Compute and parse active log strings internally before drawing layout elements
 var logLine string
 if actualBlocksHeight > lastCheckedHeight {
 logLine = fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid Proof-of-Diligence hash solution matrix! Reward: +50 CVN Allocated.", time.Now().Format("15:04:05"))
@@ -395,13 +391,10 @@ lastCheckedHeight = actualBlocksHeight
 logLine = fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
 }
 liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-// Hard-limit log rolling tracking buffers to rows 18 to ensure it fits perfectly inside small terminal frames
 if len(liveTerminalEventLogs) > 18 {
 liveTerminalEventLogs = liveTerminalEventLogs[1:]
 }
-// 2. 👑 THE PIN-DROP FIX: Force cursor coordinates back to 1,1 instantly without scrolling artifacts!
 fmt.Print("\033[H")
-// 3. Draw your static header parameters card cleanly on every single pass
 fmt.Println("================================================================================")
 fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 fmt.Println("================================================================================")
@@ -411,7 +404,6 @@ fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\
 fmt.Println("================================================================================")
 fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Println("--------------------------------------------------------------------------------")
-// 4. Stream your history array strings dynamically right inside the dedicated action zone
 for _, historicalLineLog := range liveTerminalEventLogs {
 fmt.Println(historicalLineLog)
 }
