@@ -244,22 +244,26 @@ func main() {
 			break
 		}
 
+		// 👑 THE BULK COMPRESSION PATCH: Point to your clean chunk streaming parameters
 		nextBlockNeed := currentLocalHeight + 1
-		requestURL := fmt.Sprintf("%s/block/%d", activeSyncSeed, nextBlockNeed)
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
 
 		resp, err := client.Get(requestURL)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK {
-				var incomingBlock Block
-				if err := json.NewDecoder(resp.Body).Decode(&incomingBlock); err == nil {
-					if incomingBlock.Index == nextBlockNeed {
-						SaveBlockToStorage(incomingBlock)
-						currentLocalHeight = incomingBlock.Index
+				var incomingBatch []Block
+				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+					for _, incomingBlock := range incomingBatch {
+						if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
+							SaveBlockToStorage(incomingBlock)
+							currentLocalHeight = incomingBlock.Index
+						}
 					}
 				}
 			}
 			resp.Body.Close()
 		}
+
 
 		if time.Since(lastRenderTime) >= 250*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
