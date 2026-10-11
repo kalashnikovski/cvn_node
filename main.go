@@ -6,15 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net" // 👈 MAKE SURE THIS IS PRESENT IN YOUR IMPORTS LIST
+	"net"
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
-	"strconv"
 	"time"
-
 )
 
 //go:embed all:frontend/dist
@@ -67,13 +66,12 @@ func main() {
 		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
 	}
 
-	// 🟩 THE CORRECTION: Safe pacing delay ensures database locks never collide on startup!
-//	go func() {
-	//	time.Sleep(100 * time.Millisecond)
-	//	StartMeshNetwork()
-	}()
+	// 🟩 THE CORRECTION: Safe pacing delay managed dynamically via InitBoltEngine
+	// Concurrency network setups run natively inside their dedicated goroutine hooks below.
 
-	// 👑 THE UNIVERSAL THREE-PORT DATA ENGINE INITIALIZATION: Opens ports universally on all systems!
+	// ====================================================================
+	// 👑 THE UNIVERSAL THREE-PORT DATA ENGINE INITIALIZATION
+	// ====================================================================
 	go func() {
 		winMux := http.NewServeMux()
 
@@ -150,9 +148,9 @@ func main() {
 			}
 		})
 
-	//	fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
-	//	if err := http.ListenAndServe(":8081", winMux); err != nil {
-	//		log.Printf("Port 8081 bind alert: %v\n", err)
+		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
+		if err := http.ListenAndServe(":8081", winMux); err != nil {
+			log.Printf("Port 8081 bind alert: %v\n", err)
 		}
 	}()
 
@@ -163,17 +161,15 @@ func main() {
 			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
 		})
 		
-	//	fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
-	//	if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
-	//		log.Printf("Port 8082 bind alert: %v\n", err)
-	//	}
-//	}()
+		fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
+		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
+			log.Printf("Port 8082 bind alert: %v\n", err)
+		}
+	}()
 
-		// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS (Natively ignored on headless server targets)
+	// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS (Natively ignored on headless server targets)
 	RunDesktopUIFrameworkIfApplicable()
-
-
-	// ====================================================================
+// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
@@ -182,13 +178,14 @@ func main() {
 	fmt.Println("--------------------------------------------------------------------")
 
 	seedGateways := []string{
-		"http://64.177.45.153:8081",   
+		"http://202.137.175.220:8081", // Melbourne Core Port 8081 Gateway
 		"http://207.148.67.11:8081",   
-		"http://202.137.175.220:8081", 
+		"http://64.177.45.153:8081",   
 	}
 
 	lastRenderTime := time.Now()
-		// 👑 THE UNIVERSAL OVERRIDE REPAIR
+	
+	// 👑 THE UNIVERSAL OVERRIDE REPAIR
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
@@ -202,7 +199,6 @@ func main() {
 			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways[0])
 		}
 	}
-
 
 	for {
 		liveBlock := GetLatestBlock()
@@ -231,7 +227,6 @@ func main() {
 		nextBlockNeed := currentLocalHeight + 1
 		
 		// 🟩 THE MASTER FIX: Connect straight to your raw P2P Mesh Engine on Port 8080!
-		// Extract the remote target's host IP address from your seed gateway configuration string
 		targetPeerMeshAddr := "202.137.175.220:8080" // Defaults straight to your Melbourne Rig Mesh Port
 		if strings.Contains(activeSyncSeed, "207.148.67.11") {
 			targetPeerMeshAddr = "207.148.67.11:8080"
@@ -274,134 +269,157 @@ func main() {
 			for i := 0; i < barWidth; i++ {
 				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
-fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
-os.Stdout.Sync()
+			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+			os.Stdout.Sync()
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Spacing buffer formats
+	fmt.Println("\n====================================================")
+	fmt.Println("🚀 COVENANT STANDARD CONSENSUS MINING BLOCKCHAIN IGNITED LIVE!")
+	fmt.Println("====================================================")
+	fmt.Printf("🪪 VALIDATOR RIG CORE INITIALIZED STATUS: ACTIVE // HEIGHT: #%d\n", GetLatestBlock().Index)
+	fmt.Println("----------------------------------------------------")
+	fmt.Println("⛏️  Bare-metal hashing threads engaged. Computing Diligence proofs...")
+	fmt.Println("----------------------------------------------------")
+
+	// ====================================================================
+	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
+	// ====================================================================
+	go func() {
+		var nonce int64 = 0
+		const TargetBlockTimeWindow = 10
+		for {
+			blockMiningStartTime := time.Now().Unix()
+			currentBlock := GetLatestBlock()
+			
+			// 👑 THE GENESIS IGNITION REPAIR: Prevent cloud nodes from front-running Genesis!
+			// If compiled for headless servers, completely block hashing loop ignition if height is 0.
+			if runtime.GOOS == "linux" && currentBlock.Index == 0 {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
+			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
+			targetPrefix := strings.Repeat("0", targetDifficulty)
+			chunkCeiling := nonce + 500000
+			blockSolved := false
+			
+			for nonce < chunkCeiling {
+				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
+				h := sha256.New()
+				h.Write([]byte(inputStr))
+				hashBytes := h.Sum(nil)
+				computedHashHex := fmt.Sprintf("%x", hashBytes)
+				
+				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					newBlock := Block{
+						Index:      currentBlock.Index + 1,
+						Timestamp:  time.Now().Unix(),
+						Transactions: []Transaction{
+							{
+								ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
+								Witness:   "COVENANT_STEWARD_ASSEMBLY",
+								PublicKey: "GENESIS_VOID_REWARD_POOL",
+								Outputs: []UTXOOutput{
+									{Recipient: "COINBASE", Amount: 50.0},
+								},
+							},
+						},
+						PrevHash:   currentBlock.Hash,
+						Hash:       computedHashHex,
+						Difficulty: targetDifficulty,
+						Nonce:      nonce,
+					}
+					if SaveBlockToStorage(newBlock) {
+						go BroadcastNewBlock(newBlock)
+					}
+
+					nonce = 0
+					blockSolved = true
+					break
+				}
+				atomic.AddUint64(&globalHashCount, 1)
+				nonce++
+			}
+			
+			if blockSolved {
+				blockMiningEndTime := time.Now().Unix()
+				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+				if actualTimeElapsed < TargetBlockTimeWindow {
+					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+				}
+			} else {
+				time.Sleep(1 * time.Microsecond)
+			}
+		}
+	}()
+
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	lastCheckedHeight := GetLatestBlock().Index
+
+	fmt.Print("\033[2J\033[H")
+	var liveTerminalEventLogs []string
+
+	for {
+		select {
+		case <-ticker.C:
+			liveBlock := GetLatestBlock()
+			actualBlocksHeight := liveBlock.Index
+			actualCvnBalance := liveBlock.Index * 50
+			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
+			realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
+
+			var logLine string
+			if actualBlocksHeight > lastCheckedHeight {
+				logLine = fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid Proof-of-Diligence hash solution matrix! Reward: +50 CVN Allocated.", time.Now().Format("15:04:05"))
+				lastCheckedHeight = actualBlocksHeight
+			} else {
+				logLine = fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+			}
+			
+			liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+			if len(liveTerminalEventLogs) > 18 {
+				liveTerminalEventLogs = liveTerminalEventLogs[1:]
+			}
+
+			fmt.Print("\033[H")
+			fmt.Println("================================================================================")
+			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
+			fmt.Println("================================================================================")
+			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, realHashrateMH+0.04)
+			fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, realHashrateMH-0.08)
+			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, realHashrateMH-0.15)
+			fmt.Println("================================================================================")
+			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+			fmt.Println("--------------------------------------------------------------------------------")
+
+			for _, historicalLineLog := range liveTerminalEventLogs {
+				fmt.Println(historicalLineLog)
+			}
+		}
+	}
 }
-time.Sleep(5 * time.Millisecond)
-}
-// Spacing buffer formats
-fmt.Println("\n====================================================")
-fmt.Println("🚀 COVENANT STANDARD CONSENSUS MINING BLOCKCHAIN IGNITED LIVE!")
-fmt.Println("====================================================")
-fmt.Printf("🪪 VALIDATOR RIG CORE INITIALIZED STATUS: ACTIVE // HEIGHT: #%d\n", GetLatestBlock().Index)
-fmt.Println("----------------------------------------------------")
-fmt.Println("⛏️  Bare-metal hashing threads engaged. Computing Diligence proofs...")
-fmt.Println("----------------------------------------------------")
-// ====================================================================
-// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
-// ====================================================================
-go func() {
-var nonce int64 = 0
-const TargetBlockTimeWindow = 10
-for {
-blockMiningStartTime := time.Now().Unix()
-currentBlock := GetLatestBlock()
-targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
-baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
-targetPrefix := strings.Repeat("0", targetDifficulty)
-chunkCeiling := nonce + 500000
-blockSolved := false
-for nonce < chunkCeiling {
-inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
-h := sha256.New()
-h.Write([]byte(inputStr))
-hashBytes := h.Sum(nil)
-computedHashHex := fmt.Sprintf("%x", hashBytes)
-if strings.HasPrefix(computedHashHex, targetPrefix) {
-newBlock := Block{
-Index:      currentBlock.Index + 1,
-Timestamp:  time.Now().Unix(),
-Transactions: []Transaction{
-{
-ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
-Witness:   "COVENANT_STEWARD_ASSEMBLY",
-PublicKey: "GENESIS_VOID_REWARD_POOL",
-Outputs: []UTXOOutput{
-{Recipient: "COINBASE", Amount: 50.0},
-},
-},
-},
-PrevHash:   currentBlock.Hash,
-Hash:       computedHashHex,
-Difficulty: targetDifficulty,
-Nonce:      nonce,
-}
-if SaveBlockToStorage(newBlock) {
-go BroadcastNewBlock(newBlock)
-}
-nonce = 0
-blockSolved = true
-break
-}
-atomic.AddUint64(&globalHashCount, 1)
-nonce++
-}
-if blockSolved {
-blockMiningEndTime := time.Now().Unix()
-actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-if actualTimeElapsed < TargetBlockTimeWindow {
-requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-}
-} else {
-time.Sleep(1 * time.Microsecond)
-}
-}
-}()
-ticker := time.NewTicker(3 * time.Second)
-defer ticker.Stop()
-lastCheckedHeight := GetLatestBlock().Index
-fmt.Print("\033[2J\033[H")
-var liveTerminalEventLogs []string
-for {
-select {
-case <-ticker.C:
-liveBlock := GetLatestBlock()
-actualBlocksHeight := liveBlock.Index
-actualCvnBalance := liveBlock.Index * 50
-hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
-realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
-var logLine string
-if actualBlocksHeight > lastCheckedHeight {
-logLine = fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid Proof-of-Diligence hash solution matrix! Reward: +50 CVN Allocated.", time.Now().Format("15:04:05"))
-lastCheckedHeight = actualBlocksHeight
-} else {
-logLine = fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
-}
-liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-if len(liveTerminalEventLogs) > 18 {
-liveTerminalEventLogs = liveTerminalEventLogs[1:]
-}
-fmt.Print("\033[H")
-fmt.Println("================================================================================")
-fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
-fmt.Println("================================================================================")
-fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, realHashrateMH+0.04)
-fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, realHashrateMH-0.08)
-fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, realHashrateMH-0.15)
-fmt.Println("================================================================================")
-fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
-fmt.Println("--------------------------------------------------------------------------------")
-for _, historicalLineLog := range liveTerminalEventLogs {
-fmt.Println(historicalLineLog)
-}
-}
-}
-}
+
 func osCheckArgs() []string {
-return os.Args
+	return os.Args
 }
+
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-currentDiff := int(lastBlock.Difficulty)
-expectedTimeWindow := int64(45)
-actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-if actualTimeElapsed < expectedTimeWindow/2 {
-return currentDiff + 1
-} else if actualTimeElapsed > expectedTimeWindow*2 {
-if currentDiff > 1 {
-return currentDiff - 1
-}
-return 1
-}
-return currentDiff
+	currentDiff := int(lastBlock.Difficulty)
+	expectedTimeWindow := int64(45)
+	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+	if actualTimeElapsed < expectedTimeWindow/2 {
+		return currentDiff + 1
+	} else if actualTimeElapsed > expectedTimeWindow*2 {
+		if currentDiff > 1 {
+			return currentDiff - 1
+		}
+		return 1
+	}
+	return currentDiff
 }
