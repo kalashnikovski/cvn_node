@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"          // 🟩 ADD THIS LINE RIGHT HERE
 	"net/http"
 	"os"
 	"runtime"
@@ -277,27 +276,23 @@ func main() {
 			break
 		}
 
-		// 👑 THE P2P CHUNK ENGAGEMENT PASS: Direct TCP dial bypassing HTTP router blocks
+		// 👑 THE CHUNK ENGAGEMENT PASS: Direct HTTP download from the best available public seed node gateway
 		nextBlockNeed := currentLocalHeight + 1
 		
-		// Map gateway seed URL natively to extract raw IP and P2P connection parameters
-		cleanSeedIP := "202.137.175.220" // Default back to master home IP anchor
+		// Map gateway seed URL natively to match port 8081 web routing parameters
+		cleanSeedURL := "http://202.137.175.220:8081" // Default back to master home IP anchor
 		if strings.Contains(activeSyncSeed, "207.148.67.11") {
-			cleanSeedIP = "207.148.67.11"
+			cleanSeedURL = "http://207.148.67.11:8081"
 		} else if strings.Contains(activeSyncSeed, "64.177.45.153") {
-			cleanSeedIP = "64.177.45.153"
+			cleanSeedURL = "http://64.177.45.153:8081"
 		}
 
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort(cleanSeedIP, "8080"), 4*time.Second)
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", cleanSeedURL, nextBlockNeed)
+		resp, err := http.Get(requestURL)
 		if err == nil {
-			// Broadcast bulk request payload over the unblocked P2P matrix lanes
-			conn.SetWriteDeadline(time.Now().Add(4 * time.Second))
-			_, err = conn.Write([]byte(fmt.Sprintf("GET_BATCH:%d", nextBlockNeed)))
-			
-			if err == nil {
-				conn.SetReadDeadline(time.Now().Add(12 * time.Second))
+			if resp.StatusCode == http.StatusOK {
 				var incomingBatch []Block
-				if err := json.NewDecoder(conn).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
 					
 					// Swallows up to 512 blocks natively inside an ultra-fast ACID transaction flush
 					for _, incomingBlock := range incomingBatch {
@@ -308,7 +303,7 @@ func main() {
 					}
 				}
 			}
-			conn.Close()
+			resp.Body.Close()
 		}
 
 		// Render the high-velocity visual streaming progress bar cleanly on a single line via \r
@@ -330,6 +325,7 @@ func main() {
 		time.Sleep(5 * time.Millisecond)
 	}
 	fmt.Print("\033[2J")
+
 
 // ====================================================================
 // ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
