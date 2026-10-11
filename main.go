@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -227,32 +226,30 @@ func main() {
 		nextBlockNeed := currentLocalHeight + 1
 		
 		// 🟩 THE MASTER FIX: Connect straight to your raw P2P Mesh Engine on Port 8080!
-		targetPeerMeshAddr := "202.137.175.220:8080" // Defaults straight to your Melbourne Rig Mesh Port
-		if strings.Contains(activeSyncSeed, "207.148.67.11") {
-			targetPeerMeshAddr = "207.148.67.11:8080"
-		} else if strings.Contains(activeSyncSeed, "64.177.45.153") {
-			targetPeerMeshAddr = "64.177.45.153:8080"
-		}
-
 		// Dial an unencrypted network socket directly into your native gossip mesh listener loop
-		conn8080, err := net.DialTimeout("tcp", targetPeerMeshAddr, 2*time.Second)
+				// 🟩 THE BULLETPROOF FIXED: Fetch block batches natively over wide-open HTTP port 8081!
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
+		
+		syncHttpClient := &http.Client{
+			Timeout: 3 * time.Second,
+		}
+		
+		resp, err := syncHttpClient.Get(requestURL)
 		if err == nil {
-			// Format and transmit your custom raw chunk engine token string down the wire
-			fmt.Fprintf(conn8080, "GET_BATCH:%d\n", nextBlockNeed)
-			
-			var incomingBatch []Block
-			err = json.NewDecoder(conn8080).Decode(&incomingBatch)
-			if err == nil && len(incomingBatch) > 0 {
-				for _, incomingBlock := range incomingBatch {
-					if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
-						SaveBlockToStorage(incomingBlock)
-						currentLocalHeight = incomingBlock.Index
+			if resp.StatusCode == http.StatusOK {
+				var incomingBatch []Block
+				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+					for _, incomingBlock := range incomingBatch {
+						if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
+							SaveBlockToStorage(incomingBlock)
+							currentLocalHeight = incomingBlock.Index
+						}
 					}
 				}
 			}
-			conn8080.Close()
+			resp.Body.Close()
 		} else {
-			fmt.Printf("\n⚠️ Raw P2P Mesh timeout on port 8080 to %s. Retrying loop channels...", targetPeerMeshAddr)
+			fmt.Printf("\n⚠️ HTTP Sync timeout on target endpoint %s. Retrying loop tracks...", activeSyncSeed)
 			time.Sleep(1 * time.Second)
 			continue
 		}
