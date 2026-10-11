@@ -188,20 +188,21 @@ func main() {
 	}
 
 	lastRenderTime := time.Now()
-	// 👑 THE UNIVERSAL SYNCHRONIZATION PORT FIX
+		// 👑 THE UNIVERSAL OVERRIDE REPAIR
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
 			
-			// If it doesn't have an HTTP prefix, add it but preserve the exact port!
+			// Force raw IP strings into clean web format structures cleanly
 			if !strings.HasPrefix(customTargetIP, "http://") {
-				seedGateways = []string{fmt.Sprintf("http://%s", customTargetIP)}
-			} else {
-				seedGateways = []string{customTargetIP}
+				customTargetIP = "http://" + customTargetIP
 			}
-			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to true peer endpoint: %s\n", seedGateways[0])
+			
+			seedGateways = []string{customTargetIP}
+			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways[0])
 		}
 	}
+
 
 	for {
 		liveBlock := GetLatestBlock()
