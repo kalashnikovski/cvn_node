@@ -104,7 +104,7 @@ func main() {
 		return
 	}
 
-	// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
+		// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
 	// This spins up cleanly on your Linux cloud seeds to host your explorer dashboard natively!
 	if runtime.GOOS != "windows" {
 		go func() {
@@ -142,6 +142,7 @@ func main() {
 			}
 		}()
 	}
+
 
 	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED SYNCHRONIZATION
