@@ -77,6 +77,21 @@ func main() {
 	go func() {
 		winMux := http.NewServeMux()
 
+		// 👑 THE GLOBAL EXPLORER GATEWAY: Serves your dark-mode dashboard natively on all platforms!
+		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/" {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			htmlBytes, err := os.ReadFile("explorer.html")
+			if err != nil {
+				fmt.Fprintf(w, "<h2>📊 Covenant Standard Core Matrix Active</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
+				return
+			}
+			w.Write(htmlBytes)
+		})
+
 		// 🧱 PORT 8081: The Compressed 512-Block Batch Streaming Gateway
 		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -115,6 +130,27 @@ func main() {
 				"transactions":   latest.Transactions,
 			}
 			json.NewEncoder(w).Encode(payload)
+		})
+
+		// 🌐 SECURE TRANSACTION RECEIVER ENDPOINT: Injected globally into your multi-platform engine!
+		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var incomingTx Transaction
+			err := json.NewDecoder(r.Body).Decode(&incomingTx)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if MempoolMatrix.PushTransaction(incomingTx) {
+				w.WriteHeader(http.StatusCreated)
+				fmt.Fprint(w, "SUCCESS: Payload securely committed to server mempool propagation queue!")
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, "REJECTED: Active mempool spam threshold ceiling saturated.")
+			}
 		})
 
 		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
@@ -169,92 +205,6 @@ func main() {
 		return
 	}
 
-	// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
-	if runtime.GOOS != "windows" {
-		go func() {
-			serverMux := http.NewServeMux()
-
-			serverMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				htmlBytes, err := os.ReadFile("explorer.html")
-				if err != nil {
-					fmt.Fprintf(w, "<h2>📊 Covenant Standard Core Engine Node Matrix Active</h2><p>Local Height: #%d</p>", GetLatestBlock().Index)
-					return
-				}
-				w.Write(htmlBytes)
-			})
-
-			serverMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-				latest := GetLatestBlock()
-				payload := map[string]interface{}{
-					"current_height": latest.Index,
-					"block_hash":     latest.Hash,
-					"timestamp":      latest.Timestamp,
-					"transactions":   latest.Transactions,
-				}
-				json.NewEncoder(w).Encode(payload)
-			})
-
-			// 🌐 SECURE TRANSACTION RECEIVER ENDPOINT: Injected cleanly where serverMux is alive!
-			serverMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodPost {
-					w.WriteHeader(http.StatusMethodNotAllowed)
-					return
-				}
-
-				var incomingTx Transaction
-				err := json.NewDecoder(r.Body).Decode(&incomingTx)
-				if err != nil {
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-
-				if MempoolMatrix.PushTransaction(incomingTx) {
-					w.WriteHeader(http.StatusCreated)
-					fmt.Fprint(w, "SUCCESS: Payload securely committed to server mempool propagation queue!")
-				} else {
-					w.WriteHeader(http.StatusInternalServerError)
-					fmt.Fprint(w, "REJECTED: Active mempool spam threshold ceiling saturated.")
-				}
-			})
-
-			// 🌐 NEW BATCH STREAMING GATEWAY: Serves up to 512 compressed blocks in a single network pass
-			serverMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-
-				startStr := r.URL.Query().Get("start")
-				startHeight, err := strconv.ParseInt(startStr, 10, 64)
-				if err != nil || startHeight < 0 {
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-
-				var blockBatch []Block
-				currentTip := int64(GetLatestBlock().Index)
-				
-				endHeight := startHeight + 511
-				if endHeight > currentTip {
-					endHeight = currentTip
-				}
-
-				for h := startHeight; h <= endHeight; h++ {
-					blk := GetBlockByHeightFromDB(h) 
-					blockBatch = append(blockBatch, blk)
-				}
-
-				json.NewEncoder(w).Encode(blockBatch)
-			})
-
-			fmt.Println("📡 [SERVER API] Unified Explorer Dashboard listening natively on port :8081...")
-			if err := http.ListenAndServe(":8081", serverMux); err != nil {
-				log.Printf("Server port bind lock warning: %v", err)
-			}
-		}()
-	}
-
 	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
@@ -294,43 +244,48 @@ func main() {
 			fmt.Println("\n\n✨ [🔓 SYNC COMPLETE] Core fully aligned with global mainnet tip. Hashing worker threads ignited!")
 			break
 		}
+
 		// 👑 THE CHUNK ENGAGEMENT PASS: Direct HTTP download from the best available public seed node gateway
-nextBlockNeed := currentLocalHeight + 1
-// Map gateway seed URL natively to match port 8081 web routing parameters
-cleanSeedURL := "http://202.137.175.220:8081" // Default back to master home IP anchor
-if strings.Contains(activeSyncSeed, "207.148.67.11") {
-cleanSeedURL = "http://207.148.67.11:8081"
-} else if strings.Contains(activeSyncSeed, "64.177.45.153") {
-cleanSeedURL = "http://64.177.45.153:8081"
-}
-requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", cleanSeedURL, nextBlockNeed)
-resp, err := http.Get(requestURL)
-if err == nil {
-if resp.StatusCode == http.StatusOK {
-var incomingBatch []Block
-if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
-// Swallows up to 512 blocks natively inside an ultra-fast ACID transaction flush
-for _, incomingBlock := range incomingBatch {
-if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
-SaveBlockToStorage(incomingBlock)
-currentLocalHeight = incomingBlock.Index
-}
-}
-}
-}
-resp.Body.Close()
-}
-// Render the high-velocity visual streaming progress bar cleanly on a single line via \r
-if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
-lastRenderTime = time.Now()
-var syncPercentage float64 = 0.00
-if targetGlobalTip > 0 {
-syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
-}
-barWidth := 20
-filledChars := int((syncPercentage / 100.0) * float64(barWidth))
-progressBar := ""
-for i := 0; i < barWidth; i++ {
+		nextBlockNeed := currentLocalHeight + 1
+		
+		// Map gateway seed URL natively to match port 8081 web routing parameters
+		cleanSeedURL := "http://202.137.175.220:8081" // Default back to master home IP anchor
+		if strings.Contains(activeSyncSeed, "207.148.67.11") {
+			cleanSeedURL = "http://207.148.67.11:8081"
+		} else if strings.Contains(activeSyncSeed, "64.177.45.153") {
+			cleanSeedURL = "http://64.177.45.153:8081"
+		}
+
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", cleanSeedURL, nextBlockNeed)
+		resp, err := http.Get(requestURL)
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				var incomingBatch []Block
+				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+					
+					// Swallows up to 512 blocks natively inside an ultra-fast ACID transaction flush
+					for _, incomingBlock := range incomingBatch {
+						if incomingBlock.Index == int64(GetLatestBlock().Index)+1 {
+							SaveBlockToStorage(incomingBlock)
+							currentLocalHeight = incomingBlock.Index
+						}
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+
+		// Render the high-velocity visual streaming progress bar cleanly on a single line via \r
+		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
+			lastRenderTime = time.Now()
+			var syncPercentage float64 = 0.00
+			if targetGlobalTip > 0 {
+				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
+			}
+			barWidth := 20
+			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
+			progressBar := ""
+			for i := 0; i < barWidth; i++ {
 if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 }
 fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
