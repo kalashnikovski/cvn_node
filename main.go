@@ -24,12 +24,9 @@ var assets embed.FS
 
 var globalHashCount uint64
 
-// initWindowsAnsi safely configures ANSI color rendering ONLY if executing on a Windows host
 // initWindowsAnsi is a platform stub. The native Windows console overrides 
-// have been cleanly migrated to 'ansi_windows.go' to ensure cross-compilation safety on Linux VPS hosts.
-func initWindowsAnsi() {
-	// Left empty on purpose. Built-in Go file matching will override this automatically on Windows!
-}
+// are cleanly managed inside 'ansi_windows.go' to ensure cross-compilation safety on Linux VPS hosts.
+func initWindowsAnsi() {}
 
 func main() {
 	initWindowsAnsi()
@@ -107,6 +104,45 @@ func main() {
 		return
 	}
 
+	// 🌐 HEADLESS VPS SERVER API HANDLER GATEWAY (PORT 8081)
+	// This spins up cleanly on your Linux cloud seeds to host your explorer dashboard natively!
+	if runtime.GOOS != "windows" {
+		go func() {
+			serverMux := http.NewServeMux()
+
+			// Serve the pre-neutered explorer dashboard natively on Port 8081
+			serverMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				// Read your clean explorer.html file from local disk sectors
+				htmlBytes, err := os.ReadFile("explorer.html")
+				if err != nil {
+					fmt.Fprintf(w, "<h2>📊 Covenant Standard Core Engine Node Matrix Active</h2><p>Local Height: #%d</p>", GetLatestBlock().Index)
+					return
+				}
+				w.Write(htmlBytes)
+			})
+
+			// Expose live block metrics to feed your explorer's async javascript polling loops
+			serverMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				latest := GetLatestBlock()
+				payload := map[string]interface{}{
+					"current_height": latest.Index,
+					"block_hash":     latest.Hash,
+					"timestamp":      latest.Timestamp,
+					"transactions":   latest.Transactions,
+				}
+				json.NewEncoder(w).Encode(payload)
+			})
+
+			fmt.Println("📡 [SERVER API] Unified Explorer Dashboard listening natively on port :8081...")
+			if err := http.ListenAndServe(":8081", serverMux); err != nil {
+				log.Printf("Server port bind lock warning: %v", err)
+			}
+		}()
+	}
+
 	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED SYNCHRONIZATION
 	// ====================================================================
@@ -134,7 +170,6 @@ func main() {
 		var activeSyncSeed string = "http://207.148.67.11:8081"
 
 		for _, endpoint := range seedGateways {
-			// 🛡️ BARE-METAL LOOPBACK SHIELD: Instantly detects and filters out self-dialing loops
 			if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
 				continue 
 			}
@@ -270,28 +305,23 @@ func main() {
 	}()
 
 	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	lastCheckedHeight := GetLatestBlock().Index
-	fmt.Print("\033[11;1H")
-
-	for {
-		select {
-		case <-ticker.C:
-			liveBlock := GetLatestBlock()
-			actualBlocksHeight := liveBlock.Index
-			actualCvnBalance := liveBlock.Index * 50
-
-			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
-			realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
-
-			avg15m := realHashrateMH + 0.04
-			avg60m := realHashrateMH - 0.08
-			avg24h := realHashrateMH - 0.15
-
-			fmt.Print("\033[s\033[r\033[1;1H")
-			fmt.Println("================================================================================")
-			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
+defer ticker.Stop()
+lastCheckedHeight := GetLatestBlock().Index
+fmt.Print("\033[11;1H")
+for {
+select {
+case <-ticker.C:
+liveBlock := GetLatestBlock()
+actualBlocksHeight := liveBlock.Index
+actualCvnBalance := liveBlock.Index * 50
+hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
+realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
+avg15m := realHashrateMH + 0.04
+avg60m := realHashrateMH - 0.08
+avg24h := realHashrateMH - 0.15
+fmt.Print("\033[s\033[r\033[1;1H")
+fmt.Println("================================================================================")
+fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 fmt.Println("================================================================================")
 fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
 fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg60m)
