@@ -75,13 +75,13 @@ func handleIncomingPeerStream(conn net.Conn) {
 
 			var blocks []Block
 			currentTip := GetLatestBlock().Index
-			
+
 			endHeight := startHeight + 511
 			if endHeight > currentTip {
 				endHeight = currentTip
 			}
 
-						for h := startHeight; h <= endHeight; h++ {
+			for h := startHeight; h <= endHeight; h++ {
 				blk := GetBlockByHeightFromDB(h)
 				blocks = append(blocks, blk)
 			}
@@ -185,4 +185,3 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 		PeerMapMutex.Unlock()
 	}
 }
-

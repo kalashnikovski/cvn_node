@@ -114,9 +114,23 @@ func main() {
 			json.NewEncoder(w).Encode(blockBatch)
 		})
 
-		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
+			winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
+			
+			// 👑 THE CORE BRIDGE: Handle incoming live block broadcasts from peer nodes!
+			if r.Method == http.MethodPost {
+				var incomingBlock Block
+				if err := json.NewDecoder(r.Body).Decode(&incomingBlock); err == nil {
+					go ProcessIncomingNetworkBlock(incomingBlock)
+					w.WriteHeader(http.StatusAccepted)
+					return
+				}
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Handle default browser/explorer display GET requests
 			latest := GetLatestBlock()
 			payload := map[string]interface{}{
 				"current_height": latest.Index,
@@ -126,6 +140,7 @@ func main() {
 			}
 			json.NewEncoder(w).Encode(payload)
 		})
+
 
 		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
