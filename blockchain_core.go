@@ -111,15 +111,19 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	return 0
 }
 
-// ProcessIncomingNetworkBlock handles incoming blocks from the network under strict consensus rules
-// ProcessIncomingNetworkBlock handles incoming blocks under strict consensus, resolving forks automatically
+// ProcessIncomingNetworkBlock handles incoming peer blocks with a state-lock protection shield
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	currentTip := GetLatestBlock()
 
-	// 👑 THE LONGEST-CHAIN FORK RESOLUTION ENGINE: If a peer presents a higher block count, force re-sync alignment!
+	// 🛡️ RACE CONDITION SHIELD: Reject incoming blocks if we are already at or past this height!
+	// This prevents external nodes from silently overwriting your local verified ledger states.
+	if incomingBlock.Index <= currentTip.Index {
+		return
+	}
+
+	// 👑 THE LONGEST-CHAIN FORK RESOLUTION ENGINE: If a peer presents a higher block count, force re-sync!
 	if incomingBlock.Index > currentTip.Index + 1 {
 		fmt.Printf("🛰️  [FORK THREAT DETECTED] Network sequence height mismatch (#%d vs local #%d). Triggering immediate state realignment...\n", incomingBlock.Index, currentTip.Index)
-		go TriggerActiveReSyncPass()
 		return
 	}
 
@@ -135,6 +139,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		}
 	}
 }
+
 
 // TriggerActiveReSyncPass re-aligns a lagging node with the master peer gateway
 func TriggerActiveReSyncPass() {
