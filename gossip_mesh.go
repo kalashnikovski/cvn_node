@@ -44,13 +44,17 @@ func StartMeshNetwork() {
 		case MaxMeshConnectionPool <- struct{}{}:
 			go handleIncomingPeerStream(conn)
 		default:
-			log.Printf("⚠️  TRAFFIC THRESHOLD SATURATED: Dropping incoming socket connection from %s to secure memory blocks.\n", conn.RemoteAddr())
+			log.Printf("⚠️ TRAFFIC THRESHOLD SATURATED: Dropping connection from %s\n", conn.RemoteAddr())
 			conn.Close()
 		}
 	}
 }
 
 func handleIncomingPeerStream(conn net.Conn) {
+	// Dynamically capture the true remote public IP address of the connecting server
+	remoteAddr := conn.RemoteAddr().String()
+	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
+
 	defer func() {
 		conn.Close()
 		<-MaxMeshConnectionPool
@@ -75,24 +79,24 @@ func handleIncomingPeerStream(conn net.Conn) {
 
 			var blocks []Block
 			currentTip := GetLatestBlock().Index
-
 			endHeight := startHeight + 511
 			if endHeight > currentTip {
 				endHeight = currentTip
 			}
 
 			for h := startHeight; h <= endHeight; h++ {
-				blk := GetBlockByHeightFromDB(h)
-				blocks = append(blocks, blk)
+				blocks = append(blocks, GetBlockByHeightFromDB(h))
 			}
+
 			jsonBytes, err := json.Marshal(blocks)
 			if err == nil {
 				_, _ = conn.Write(append(jsonBytes, '\n'))
 			}
 			return
 		}
-		if strings.HasPrefix(msg, "TX_Broadcast:") {
-			txPayload := strings.TrimPrefix(msg, "TX_Broadcast:")
+
+		if strings.HasPrefix(msg, "TX_BROADCAST:") {
+			txPayload := strings.TrimPrefix(msg, "TX_BROADCAST:")
 			var incomingTx Transaction
 			if err := json.Unmarshal([]byte(txPayload), &incomingTx); err == nil {
 				if MempoolMatrix.PushTransaction(incomingTx) {
@@ -101,6 +105,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 			}
 			return
 		}
+
 		if strings.HasPrefix(msg, "BLOCK_BROADCAST:") {
 			blockPayload := strings.TrimPrefix(msg, "BLOCK_BROADCAST:")
 			var incomingBlock Block
@@ -109,18 +114,21 @@ func handleIncomingPeerStream(conn net.Conn) {
 			}
 			return
 		}
+
 		if strings.HasPrefix(msg, "PEER_PING:") {
-			peerAddr := strings.TrimPrefix(msg, "PEER_PING:")
+			// Register the remote node cluster entry using its true, validated network connection IP
 			PeerMapMutex.Lock()
-			if _, exists := ActivePeerMap[peerAddr]; !exists {
-				fmt.Printf("🌐 [GOSSIP MESH] Registered 1 new node cluster entry: %s\n", peerAddr)
+			peerMeshKey := fmt.Sprintf("%s:8080", remoteIP)
+			if _, exists := ActivePeerMap[peerMeshKey]; !exists {
+				fmt.Printf("🌐 [GOSSIP MESH] Handshake verified from raw cloud seed source: %s\n", peerMeshKey)
 			}
-			ActivePeerMap[peerAddr] = time.Now()
+			ActivePeerMap[peerMeshKey] = time.Now()
 			PeerMapMutex.Unlock()
 			return
 		}
 	}
 }
+
 func BroadcastNewBlock(block Block) {
 	jsonBytes, err := json.Marshal(block)
 	if err != nil {
@@ -129,14 +137,16 @@ func BroadcastNewBlock(block Block) {
 	payload := fmt.Sprintf("BLOCK_BROADCAST:%s\n", string(jsonBytes))
 	transmitPayloadToNetworkBoundary(payload)
 }
+
 func BroadcastTransactionToMesh(tx Transaction) {
 	jsonBytes, err := json.Marshal(tx)
 	if err != nil {
 		return
 	}
-	payload := fmt.Sprintf("TX_BROADcast:%s\n", string(jsonBytes))
+	payload := fmt.Sprintf("TX_BROADCAST:%s\n", string(jsonBytes))
 	transmitPayloadToNetworkBoundary(payload)
 }
+
 func transmitPayloadToNetworkBoundary(payload string) {
 	PeerMapMutex.RLock()
 	var targets []string
@@ -144,6 +154,7 @@ func transmitPayloadToNetworkBoundary(payload string) {
 		targets = append(targets, peer)
 	}
 	PeerMapMutex.RUnlock()
+
 	for _, address := range targets {
 		go func(addr string) {
 			conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
@@ -154,32 +165,33 @@ func transmitPayloadToNetworkBoundary(payload string) {
 		}(address)
 	}
 }
+
 func runNetworkTopologyDiscoveryDiscoveryLoop() {
+	// Standard static network backplane topology seeds
 	staticMeshSeeds := []string{
-		"202.137.175.220:8080",
-		"207.148.67.11:8080",
-		"64.177.45.153:8080",
+		"202.137.175.220:8080", // Melbourne
+		"207.148.67.11:8080",   // Singapore
+		"64.177.45.153:8080",   // Atlanta
 	}
-	myPublicIdentitySignature := "UNCONFIGURED_PEER"
-	if CustomMinerAddress != "" {
-		myPublicIdentitySignature = CustomMinerAddress
-	}
+
 	for {
 		for _, seedAddr := range staticMeshSeeds {
 			go func(addr string) {
 				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 				if err == nil {
-					_, _ = fmt.Fprintf(conn, "PEER_PING:%s:8080\n", myPublicIdentitySignature)
+					_, _ = fmt.Fprintf(conn, "PEER_PING:DISCOVERY_REQUEST\n")
 					conn.Close()
 				}
 			}(seedAddr)
 		}
-		time.Sleep(30 * time.Second)
+
+		time.Sleep(20 * time.Second)
+
 		PeerMapMutex.Lock()
 		for peer, lastSeen := range ActivePeerMap {
-			if time.Since(lastSeen) > (3 * time.Minute) {
+			if time.Since(lastSeen) > (2 * time.Minute) {
 				delete(ActivePeerMap, peer)
-				fmt.Printf("❌ [GOSSIP MESH] Dropped inactive peer node channel: %s\n", peer)
+				fmt.Printf("❌ [GOSSIP MESH] Severed inactive channel: %s\n", peer)
 			}
 		}
 		PeerMapMutex.Unlock()
