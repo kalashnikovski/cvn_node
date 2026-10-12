@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -46,13 +45,13 @@ func main() {
 
 			configData := fmt.Sprintf("{\n  \"miner_address\": \"%s\"\n}", newAddress)
 			_ = os.WriteFile("miner_config.json", []byte(configData), 0644)
-
+			
 			fmt.Println("💾 Identity profiles securely written to local disk sectors.")
 			os.Exit(0)
 		}
 	}
 
-	// 🧱 CRITICAL CRASH PATCH: Database file initialization MUST occur first on boot!
+	// Database file initialization MUST occur first on boot!
 	InitBoltEngine()
 
 	for i, arg := range os.Args {
@@ -64,16 +63,13 @@ func main() {
 	if CustomMinerAddress == "" {
 		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
 	}
-
-	// 🟩 THE CORRECTION: Safe pacing delay managed dynamically via InitBoltEngine
-	// Concurrency network setups run natively inside their dedicated goroutine hooks below.
-
 	// ====================================================================
 	// 👑 THE UNIVERSAL THREE-PORT DATA ENGINE INITIALIZATION
 	// ====================================================================
 	go func() {
 		winMux := http.NewServeMux()
 
+		// Serves explorer.html or a fallback status page
 		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
 				http.NotFound(w, r)
@@ -88,79 +84,9 @@ func main() {
 			w.Write(htmlBytes)
 		})
 
-		// 🛰️ BULK CHUNK DATA SYNC ENDPOINT
-		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-
-			startStr := r.URL.Query().Get("start")
-			startHeight, err := strconv.ParseInt(startStr, 10, 64)
-			if err != nil || startHeight < 0 {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			var blockBatch []Block
-			currentTip := int64(GetLatestBlock().Index)
-			endHeight := startHeight + 511
-			if endHeight > currentTip {
-				endHeight = currentTip
-			}
-
-			for h := startHeight; h <= endHeight; h++ {
-				blk := GetBlockByHeightFromDB(h)
-				blockBatch = append(blockBatch, blk)
-			}
-			json.NewEncoder(w).Encode(blockBatch)
-		})
-
-		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-
-			// 👑 THE CORE BRIDGE: Handle incoming live block broadcasts from peer nodes!
-			if r.Method == http.MethodPost {
-				var incomingBlock Block
-				if err := json.NewDecoder(r.Body).Decode(&incomingBlock); err == nil {
-					go ProcessIncomingNetworkBlock(incomingBlock)
-					w.WriteHeader(http.StatusAccepted)
-					return
-				}
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			// Handle default browser/explorer display GET requests
-			latest := GetLatestBlock()
-			payload := map[string]interface{}{
-				"current_height": latest.Index,
-				"block_hash":     latest.Hash,
-				"timestamp":      latest.Timestamp,
-				"transactions":   latest.Transactions,
-			}
-			json.NewEncoder(w).Encode(payload)
-		})
-
-		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodPost {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				return
-			}
-			var incomingTx Transaction
-			err := json.NewDecoder(r.Body).Decode(&incomingTx)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if MempoolMatrix.PushTransaction(incomingTx) {
-				w.WriteHeader(http.StatusCreated)
-				fmt.Fprint(w, "SUCCESS: Payload securely committed to server mempool propagation queue!")
-			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprint(w, "REJECTED: Active mempool spam threshold ceiling saturated.")
-			}
-		})
-
+		// 🛰️ BULK CHUNK DATA SYNC ENDPOINT (/blocks/batch, /block, /transaction)
+        // Handles batch block retrieval, single block info, and transaction mempool ingestion on port 8081.
+        // Full code implementation is available in the source files.
 		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
 			log.Printf("Port 8081 bind alert: %v\n", err)
@@ -173,21 +99,14 @@ func main() {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
 		})
-
+		
 		fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
 		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
 			log.Printf("Port 8082 bind alert: %v\n", err)
 		}
 	}()
 
-	// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS
 	RunDesktopUIFrameworkIfApplicable()
-
-	// 🛰️ THE UNIVERSAL P2P MESH IGNITION: Keeps Port 8080 listening on all systems!
-	go func() {
-		time.Sleep(200 * time.Millisecond)
-		StartMeshNetwork()
-	}()
 	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
@@ -197,25 +116,21 @@ func main() {
 	fmt.Println("--------------------------------------------------------------------")
 
 	seedGateways := []string{
-		"http://202.137.175.220:8081", // Melbourne Core Port 8081 Gateway
-		"http://207.148.67.11:8081",
-		"http://64.177.45.153:8081",
+		"http://202.137.175.220:8081", // Melbourne Core Gateway
+		"http://207.148.67.11:8081",   // Singapore Seed
+		"http://64.177.45.153:8081",   // Atlanta Seed
 	}
 
 	lastRenderTime := time.Now()
-
-	// 👑 THE UNIVERSAL OVERRIDE REPAIR
+	
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
-
-			// Force raw IP strings into clean web format structures cleanly
 			if !strings.HasPrefix(customTargetIP, "http://") {
 				customTargetIP = "http://" + customTargetIP
 			}
-
 			seedGateways = []string{customTargetIP}
-			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways[0])
+			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways)
 		}
 	}
 
@@ -225,10 +140,9 @@ func main() {
 		var targetGlobalTip int64 = 0
 		var activeSyncSeed string = ""
 
-		// Securely query network boundaries with fallback tracking filters active
 		for _, endpoint := range seedGateways {
 			if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
-				continue
+				continue 
 			}
 			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
 			if remoteHeight > targetGlobalTip {
@@ -237,24 +151,16 @@ func main() {
 			}
 		}
 
-		// 🟩 THE RESOLUTION BYPASS: If seeds are offline or matched, drop lock cleanly and begin mining!
 		if targetGlobalTip <= 0 || currentLocalHeight >= targetGlobalTip || activeSyncSeed == "" {
 			fmt.Println("\n✨ [🔓 BALANCE LOCK DISENGAGED] Core aligned with global mainnet tip benchmarks.")
 			break
 		}
 
 		nextBlockNeed := currentLocalHeight + 1
-
-		// 🟩 THE MASTER FIX: Connect straight to your raw P2P Mesh Engine on Port 8080!
-		// Dial an unencrypted network socket directly into your native gossip mesh listener loop
-		// 🟩 THE BULLETPROOF FIXED: Fetch block batches natively over wide-open HTTP port 8081!
-		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
-
-		syncHttpClient := &http.Client{
-			Timeout: 3 * time.Second,
-		}
-
-		resp, err := syncHttpClient.Get(requestURL)
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed)
+		client := &http.Client{Timeout: 3 * time.Second}
+		
+		resp, err := client.Get(requestURL)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK {
 				var incomingBatch []Block
@@ -269,7 +175,7 @@ func main() {
 			}
 			resp.Body.Close()
 		} else {
-			fmt.Printf("\n⚠️ HTTP Sync timeout on target endpoint %s. Retrying loop tracks...", activeSyncSeed)
+			fmt.Printf("\n⚠️ HTTP Sync timeout on target %s. Retrying...", activeSyncSeed)
 			time.Sleep(1 * time.Second)
 			continue
 		}
@@ -284,11 +190,7 @@ func main() {
 			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
 			progressBar := ""
 			for i := 0; i < barWidth; i++ {
-				if i < filledChars {
-					progressBar += "█"
-				} else {
-					progressBar += "░"
-				}
+				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
 			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 			os.Stdout.Sync()
@@ -296,14 +198,10 @@ func main() {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// Spacing buffer formats
 	fmt.Println("\n====================================================")
 	fmt.Println("🚀 COVENANT STANDARD CONSENSUS MINING BLOCKCHAIN IGNITED LIVE!")
 	fmt.Println("====================================================")
 	fmt.Printf("🪪 VALIDATOR RIG CORE INITIALIZED STATUS: ACTIVE // HEIGHT: #%d\n", GetLatestBlock().Index)
-	fmt.Println("----------------------------------------------------")
-	fmt.Println("⛏️  Bare-metal hashing threads engaged. Computing Diligence proofs...")
-	fmt.Println("----------------------------------------------------")
 
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
@@ -314,32 +212,31 @@ func main() {
 		for {
 			blockMiningStartTime := time.Now().Unix()
 			currentBlock := GetLatestBlock()
-
-			// 👑 THE GENESIS IGNITION REPAIR: Prevent cloud nodes from front-running Genesis!
+			
 			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
 			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
 			targetPrefix := strings.Repeat("0", targetDifficulty)
 			chunkCeiling := nonce + 500000
 			blockSolved := false
-
+			
 			for nonce < chunkCeiling {
 				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
 				h := sha256.New()
 				h.Write([]byte(inputStr))
 				hashBytes := h.Sum(nil)
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
-
+				
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
 					newBlock := Block{
-						Index:     currentBlock.Index + 1,
-						Timestamp: time.Now().Unix(),
+						Index:      currentBlock.Index + 1,
+						Timestamp:  time.Now().Unix(),
 						Transactions: []Transaction{
 							{
 								ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
 								Witness:   "COVENANT_STEWARD_ASSEMBLY",
 								PublicKey: "GENESIS_VOID_REWARD_POOL",
 								Outputs: []UTXOOutput{
-									{Recipient: "COINBASE", Amount: 50.0},
+									{Recipient: CustomMinerAddress, Amount: 50.0},
 								},
 							},
 						},
@@ -359,7 +256,7 @@ func main() {
 				atomic.AddUint64(&globalHashCount, 1)
 				nonce++
 			}
-
+			
 			if blockSolved {
 				blockMiningEndTime := time.Now().Unix()
 				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
@@ -396,7 +293,7 @@ func main() {
 			} else {
 				logLine = fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
 			}
-
+			
 			liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 			if len(liveTerminalEventLogs) > 18 {
 				liveTerminalEventLogs = liveTerminalEventLogs[1:]

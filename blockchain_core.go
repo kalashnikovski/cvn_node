@@ -16,16 +16,15 @@ import (
 
 // Block represents a single verified ledger block segment on the mainnet wire
 type Block struct {
-	Index        int64         `json:"current_height"` // 🟩 Unified L1 Meta Tag Standard
+	Index        int64         `json:"current_height"`
 	Timestamp    int64         `json:"timestamp"`
 	Transactions []Transaction `json:"transactions"`
 	PrevHash     string        `json:"prev_hash"`
-	Hash         string        `json:"block_hash"`     // 🟩 Unified L1 Meta Tag Standard
+	Hash         string        `json:"block_hash"`
 	Difficulty   int           `json:"difficulty"` 
 	Nonce        int64         `json:"nonce"`
 	GuardMatrix  string        `json:"guard_matrix"` 
 }
-
 
 // Transaction maps the cryptographic dual-chamber cash value transfer payload
 type Transaction struct {
@@ -111,11 +110,11 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	return 0
 }
 
-// ProcessIncomingNetworkBlock handles incoming peer blocks with full cryptographic continuity checks
+// ProcessIncomingNetworkBlock handles incoming blocks from the network under strict consensus rules
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	currentTip := GetLatestBlock()
 
-	// 🛡️ HEIGHT PROTECTION GATE: Reject incoming blocks if we have already moved past this height index!
+	// 🛡️ HEIGHT LOGIC SECURITY GATE: Reject incoming blocks if we have already moved past this height index!
 	if incomingBlock.Index <= currentTip.Index {
 		return
 	}
@@ -126,7 +125,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		return
 	}
 
-	// 🧱 CRYPTOGRAPHIC LINK CHECK: Verify the incoming block builds directly on top of our current tip hash!
+	// 🧱 CRYPTOGRAPHIC BACKPLANE LINK CHECK: Verify the incoming block builds directly on top of our current tip hash!
 	if incomingBlock.Index == currentTip.Index + 1 {
 		if incomingBlock.PrevHash != currentTip.Hash {
 			fmt.Printf("❌ [CONSENSUS REJECTION] Rejected block #%d due to invalid PrevHash pointer mismatch.\n", incomingBlock.Index)
@@ -136,19 +135,15 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		if ValidateBlockSignatures(incomingBlock) {
 			if SaveBlockToStorage(incomingBlock) {
 				fmt.Printf("🧱 [CONSENSUS EQUILIBRIUM] Successfully linked network block #%d Hash: %s\n", incomingBlock.Index, incomingBlock.Hash[:16])
+				
+				// 🛰️ PROPAGATION PROTECTION LOCK GATE: Force a tiny sleep window to let continental data frames align
+				time.Sleep(500 * time.Millisecond)
+				
 				go BroadcastNewBlock(incomingBlock)
 			}
 		}
 	}
 }
-
-
-// TriggerActiveReSyncPass re-aligns a lagging node with the master peer gateway
-func TriggerActiveReSyncPass() {
-	// Re-executes the core boot sync sequence over port 8081 to pull true history blocks down the wire
-	fmt.Println("🚀 Realignment thread engaged. Overwriting localized split forks with authentic mainchain ledger...")
-}
-
 
 // ValidateBlockSignatures runs low-level hash validations against block headers
 func ValidateBlockSignatures(b Block) bool {
