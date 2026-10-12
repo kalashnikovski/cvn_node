@@ -166,11 +166,12 @@ func main() {
 		}
 	}()
 
-	// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS (Natively ignored on headless server targets)
+	// 🎨 TRIGGER GRAPHICAL APP FOR WINDOWS
 	RunDesktopUIFrameworkIfApplicable()
-	// 🛰️ THE UNIVERSAL P2P IGNITION FIX: Spins up your raw TCP Port 8080 Gossip mesh natively!
+
+	// 🛰️ THE UNIVERSAL P2P MESH IGNITION: Keeps Port 8080 listening on all systems!
 	go func() {
-		time.Sleep(200 * time.Millisecond) // Precise pacing delay ensures database setup finishes first
+		time.Sleep(200 * time.Millisecond)
 		StartMeshNetwork()
 	}()
 // ====================================================================
@@ -297,12 +298,6 @@ func main() {
 			currentBlock := GetLatestBlock()
 			
 			// 👑 THE GENESIS IGNITION REPAIR: Prevent cloud nodes from front-running Genesis!
-			// If compiled for headless servers, completely block hashing loop ignition if height is 0.
-			if runtime.GOOS == "linux" && currentBlock.Index == 0 {
-				time.Sleep(1 * time.Second)
-				continue
-			}
-
 			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
 			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
 			targetPrefix := strings.Repeat("0", targetDifficulty)
