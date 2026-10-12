@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-)
 
-// ====================================================================
-// 🧱 COVENANT STANDARD LAYER-1 DATA STRUCT LAYOUTS
-// ====================================================================
+	"go.etcd.io/bbolt"
+)
 
 type Block struct {
 	Index        int64         `json:"current_height"`
@@ -64,14 +63,8 @@ func (m *MempoolType) PushTransaction(tx Transaction) bool {
 	return true 
 }
 
-// ====================================================================
-// 📡 GLOBAL NETWORK STATE & CONSENSUS INTERFACES
-// ====================================================================
-
 var BlockchainFile = "cvn_mainnet.db"
 var CustomMinerAddress string
-
-// IsSyncingActive functions as the hard state gate to pause miners during alignment loops
 var IsSyncingActive int32 = 0
 
 var BalanceCacheMutex sync.RWMutex
@@ -106,14 +99,23 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 }
 
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
-	// If the node is currently in the middle of a destructive re-sync pass, drop new messages
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
 	}
 
 	currentTip := GetLatestBlock()
 
-	if incomingBlock.Index <= currentTip.Index {
+	if incomingBlock.Index == currentTip.Index {
+		if incomingBlock.Hash != currentTip.Hash {
+			if incomingBlock.Timestamp < currentTip.Timestamp || runtime.GOOS == "linux" {
+				fmt.Printf("⚠️ [TIE-BREAKER ACTIVATED] Detected hash collision at height #%d. Rolling back to resolve fork split...\n", incomingBlock.Index)
+				go TriggerActiveReSyncPass("http://202.137.175.220:8081")
+			}
+		}
+		return
+	}
+
+	if incomingBlock.Index < currentTip.Index {
 		return
 	}
 
@@ -122,11 +124,9 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		return
 	}
 
-	// 👑 LONGEST-CHAIN ROLLBACK MATRIX TRIGGERS NATIVELY HERE:
-	// If an incoming valid block has an index greater than our expected step, we are on a minority fork!
 	if incomingBlock.Index > currentTip.Index+1 {
 		fmt.Printf("🛰️  [FORK DETECTED] Network height #%d outpaces local tip #%d. Engaging rollback alignment engine...\n", incomingBlock.Index, currentTip.Index)
-		go TriggerActiveReSyncPass("http://202.137.175.220:8081") // Target your master Melbourne seed gateway
+		go TriggerActiveReSyncPass("http://202.137.175.220:8081")
 		return
 	}
 
@@ -146,17 +146,28 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	}
 }
 
-// TriggerActiveReSyncPass destructively pulls true mainnet blocks to overwrite minority forks cleanly
 func TriggerActiveReSyncPass(seedURL string) {
-	// Set atomic state gate to freeze background mining loops instantly
 	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
-		return // Re-sync thread is already running
+		return
 	}
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 
 	fmt.Println("⏳ [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
-	
 	client := &http.Client{Timeout: 5 * time.Second}
+	
+	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+		bBlocks := tx.Bucket(blocksBucket)
+		bMeta := tx.Bucket(metaBucket)
+		if bBlocks != nil && bMeta != nil {
+			currentTip := GetLatestBlock()
+			if currentTip.Index > 0 {
+				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
+				_ = bBlocks.Delete([]byte(paddedKey))
+				_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%d", currentTip.Index-1)))
+			}
+		}
+		return nil
+	})
 	
 	for {
 		localTip := GetLatestBlock()
