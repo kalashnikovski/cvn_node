@@ -12,7 +12,9 @@ import (
 	"go.etcd.io/bbolt"
 )
 
+// ====================================================================
 // 🛰️ GLOBAL CORE DATABASE ENGINE INTERFACE VARIANT FIELDS
+// ====================================================================
 var GlobalBoltEngine *bbolt.DB
 var blocksBucket = []byte("blocks")
 var metaBucket = []byte("metadata")
@@ -42,7 +44,6 @@ func InitBoltEngine() {
 	}
 	fmt.Println("--------------------------------------------------------------------")
 
-	// 👑 THE MASTER REPAIR: Enforce strict 2-second timeout protection to avoid infinite background locks
 	options := &bbolt.Options{Timeout: 2 * time.Second}
 
 	var openErr error
@@ -51,7 +52,6 @@ func InitBoltEngine() {
 		log.Fatalf("🚨 DATABASE ENGINE MOUNT FAILURE: Close competing node binaries and retry.\nError details: %v", openErr)
 	}
 
-	// 👑 THE HARMONIZATION TRANS-MATRIX: Securely establish all required bucket schemas simultaneously
 	err = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists(blocksBucket)
 		if err != nil {
@@ -63,7 +63,6 @@ func InitBoltEngine() {
 			return fmt.Errorf("failed to build metadata bucket: %v", err)
 		}
 
-		// If this is a pristine database boot sequence, seed the official Genesis block index natively
 		if meta.Get([]byte("height")) == nil {
 			err = meta.Put([]byte("height"), []byte("0"))
 			if err != nil {
@@ -78,7 +77,6 @@ func InitBoltEngine() {
 		log.Fatalf("🚨 CRITICAL LEDGER STRUCTURAL INITIALIZATION FAULT: %v", err)
 	}
 
-	// Pre-load our cache tracker index using our repaired, adaptive scanner
 	tipBlock := GetLatestBlock()
 	atomic.StoreInt64(&localHeightState, tipBlock.Index)
 
@@ -89,7 +87,6 @@ func InitBoltEngine() {
 func GetLatestBlock() Block {
 	var latestBlock Block
 
-	// Default baseline configurations safely
 	latestBlock.Index = 0
 	latestBlock.Difficulty = 4
 	latestBlock.Hash = "85632def04401fccf7cbccd78b9ceb4d64c87a9195996921209dd653726b5ebd"
@@ -105,13 +102,10 @@ func GetLatestBlock() Block {
 			return nil
 		}
 
-		// 👑 HIGH VELOCITY INDEX READING: Pull the exact height string to instantly skip full table cursor scanning!
 		heightBytes := bMeta.Get([]byte("height"))
 		if heightBytes != nil {
-			// Query via standard unpadded string key matches
 			v := bBlocks.Get(heightBytes)
 			if v == nil {
-				// Fallback variant lookups targeting legacy padded key maps
 				hIdx, _ := bBlocks.Cursor().Seek(heightBytes)
 				if hIdx != nil {
 					v = bBlocks.Get(hIdx)
@@ -128,7 +122,6 @@ func GetLatestBlock() Block {
 			}
 		}
 
-		// 🛰️ FALLBACK ADAPTIVE SCANNER: Trigger table scan loops only if the metadata pointer breaks down
 		c := bBlocks.Cursor()
 		var internalMaxHeight int64 = -1
 		for k, v := c.First(); k != nil; k, v = c.Next() {
@@ -168,7 +161,6 @@ func SaveBlockToStorage(block Block) bool {
 			return err
 		}
 
-		// Write using standard high-velocity padded layout strings to guarantee chronological disk sequencing
 		keyStr := fmt.Sprintf("%016d", block.Index)
 		keyBytes := []byte(keyStr)
 		
@@ -177,20 +169,17 @@ func SaveBlockToStorage(block Block) bool {
 			return err
 		}
 
-		// 👑 CRITICAL COREPERSISTENCE PATCH: Update the height index key string natively on disk inside the metadata bucket!
 		err = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%d", block.Index)))
 		if err != nil {
 			return err
 		}
 
-		// ✅ LIVE ACCRUAL ENGINE: Dynamically parse block rewards straight into memory states on write
 		BalanceCacheMutex.Lock()
 		for _, txPayload := range block.Transactions {
 			for _, out := range txPayload.Outputs {
 				StateBalanceCache[out.Recipient] += out.Amount
 			}
 		}
-		// Allocate standard coinbase block reward allocation safely
 		StateBalanceCache[CustomMinerAddress] += 50.0
 		BalanceCacheMutex.Unlock()
 
@@ -206,33 +195,29 @@ func SaveBlockToStorage(block Block) bool {
 	return true
 }
 
-// GetBlockByHeightFromDB performs a high-velocity direct index lookup match query against the disk file
+// GetBlockByHeightFromDB fetches block records using the standardized 16-character padded string key format
 func GetBlockByHeightFromDB(height int64) Block {
-	var targetBlock Block
+	var block Block
+	
 	if GlobalBoltEngine == nil {
-		return targetBlock
+		return block
 	}
-
+	
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(blocksBucket)
-		if b == nil {
+		bBlocks := tx.Bucket(blocksBucket)
+		if bBlocks == nil {
 			return nil
 		}
-
-		// Dual compatibility lookup pass
-		keyPadded := []byte(fmt.Sprintf("%016d", height))
-		v := b.Get(keyPadded)
-		if v == nil {
-			keyUnpadded := []byte(fmt.Sprintf("%d", height))
-			v = b.Get(keyUnpadded)
-		}
-
-		if v != nil {
-			_ = json.Unmarshal(v, &targetBlock)
+		
+		// Enforces strict 16-character string padding to fix historical lookup mismatches
+		paddedKey := fmt.Sprintf("%016d", height)
+		blockData := bBlocks.Get([]byte(paddedKey))
+		if blockData != nil {
+			_ = json.Unmarshal(blockData, &block)
 		}
 		return nil
 	})
-	return targetBlock
+	return block
 }
 
 // GetAddressBalanceFromLedger queries cached balance values inside thread-safe configurations

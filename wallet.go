@@ -142,10 +142,14 @@ func RunWalletGUI() {
 				continue
 			}
 
-			// ✅ FIXED URL INTERFACE: Route transaction propagation straight to your cloud gateway anchors
-			targetURL := "http://207.148.67.11" // Broadcast to live Singapore active data pool mesh
+			// ====================================================================
+			// 🚀 THE MASTER FIX: ROUTING OUTBOUND LIFECYCLES TO PORT 8081/TRANSACTION
+			// ====================================================================
+			// Connects directly to your exposed mainnet transaction ingestion endpoint
+			targetURL := "http://207.148.67.11:8081/transaction" 
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Post(targetURL, "application/json", bytes.NewBuffer(payloadBytes))
+
 			if err != nil {
 				fmt.Printf("❌ HANDSHAKE FAILURE: Gateway connection timed out over active interfaces.\n")
 				continue
