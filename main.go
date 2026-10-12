@@ -268,6 +268,13 @@ func main() {
 		var nonce int64 = 0
 		const TargetBlockTimeWindow = 10
 		for {
+			// 🟩 ADD THIS ATOMIC SYNC STATE GATE HERE:
+			// If the alignment engine is active, stall the mining worker loops completely
+			if atomic.LoadInt32(&IsSyncingActive) == 1 {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+
 			blockMiningStartTime := time.Now().Unix()
 			currentBlock := GetLatestBlock()
 			
