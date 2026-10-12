@@ -51,7 +51,6 @@ func StartMeshNetwork() {
 }
 
 func handleIncomingPeerStream(conn net.Conn) {
-	// Dynamically capture the true remote public IP address of the connecting server
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
 
@@ -116,7 +115,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 		}
 
 		if strings.HasPrefix(msg, "PEER_PING:") {
-			// Register the remote node cluster entry using its true, validated network connection IP
 			PeerMapMutex.Lock()
 			peerMeshKey := fmt.Sprintf("%s:8080", remoteIP)
 			if _, exists := ActivePeerMap[peerMeshKey]; !exists {
@@ -167,7 +165,6 @@ func transmitPayloadToNetworkBoundary(payload string) {
 }
 
 func runNetworkTopologyDiscoveryDiscoveryLoop() {
-	// Standard static network backplane topology seeds
 	staticMeshSeeds := []string{
 		"202.137.175.220:8080", // Melbourne
 		"207.148.67.11:8080",   // Singapore
