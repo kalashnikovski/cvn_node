@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -84,15 +85,72 @@ func main() {
 			w.Write(htmlBytes)
 		})
 
-		// 🛰️ BULK CHUNK DATA SYNC ENDPOINT (/blocks/batch, /block, /transaction)
-        // Handles batch block retrieval, single block info, and transaction mempool ingestion on port 8081.
-        // Full code implementation is available in the source files.
+		// 🟩 THE RESTORED BATCH SYNC ENDPOINT: Streams raw blocks back to syncing peers
+		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			
+			startStr := r.URL.Query().Get("start")
+			startHeight, err := strconv.ParseInt(startStr, 10, 64)
+			if err != nil || startHeight < 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			var blocks []Block
+			currentTip := GetLatestBlock().Index
+			endHeight := startHeight + 511
+			if endHeight > currentTip {
+				endHeight = currentTip
+			}
+
+			for h := startHeight; h <= endHeight; h++ {
+				blocks = append(blocks, GetBlockByHeightFromDB(h))
+			}
+
+			json.NewEncoder(w).Encode(blocks)
+		})
+// 🧱 THE LIVE BLOCK METADATA ENDPOINT: Serves the current tip to the mesh
+		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			latest := GetLatestBlock()
+			payload := map[string]interface{}{
+				"current_height": latest.Index,
+				"block_hash":     latest.Hash,
+				"timestamp":      latest.Timestamp,
+				"transactions":   latest.Transactions,
+			}
+			json.NewEncoder(w).Encode(payload)
+		})
+
+		// 💸 THE TRANSACTION INGESTION ENDPOINT: Captures wallet transmissions into the mempool
+		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var tx Transaction
+			if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			if MempoolMatrix.PushTransaction(tx) {
+				w.WriteHeader(http.StatusCreated)
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
 		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
 			log.Printf("Port 8081 bind alert: %v\n", err)
 		}
 	}()
 
+	// 📊 PORT 8082: DEDICATED ANALYTICS BACKPLANE MATRIX
 	go func() {
 		mirrorMux := http.NewServeMux()
 		mirrorMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +165,7 @@ func main() {
 	}()
 
 	RunDesktopUIFrameworkIfApplicable()
-	// ====================================================================
+// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
@@ -130,7 +188,7 @@ func main() {
 				customTargetIP = "http://" + customTargetIP
 			}
 			seedGateways = []string{customTargetIP}
-			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways)
+			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %v\n", seedGateways)
 		}
 	}
 
