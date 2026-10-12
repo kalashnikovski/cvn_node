@@ -1,109 +1,95 @@
 @echo off
 title Covenant Standard Node Onboarding Daemon (CVN)
 cls
+
+:: FORCE WORKING DIRECTORY CONTEXT LOCK
+cd /d "%~dp0"
+
 echo ====================================================================
-echo 💎 COVENANT STANDARD (CVN) LAYER-1 AUTOMATED NODE ONBOARDING MATRIX
+echo Covenant Standard Layer-1 Onboarding Matrix
 echo ====================================================================
 echo.
 echo [SYSTEM STATUS] Analyzing system runtime environment tracks...
 
 where go >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo 🚨 ERROR: The Go Programming Language runtime engine was not found!
+    echo Error: The Go Programming Language runtime engine was not found!
     pause
     exit /b
 )
 
-echo 🔍 [PROFILE AUDIT] Verifying local user deployment ledger states...
+echo [FIREWALL CONFIG] Optimizing local network security policies...
+netsh advfirewall firewall add rule name="CVN_P2P_8080" dir=in action=allow protocol=TCP localport=8080 >nul 2>&1
+netsh advfirewall firewall add rule name="CVN_P2P_8080_OUT" dir=out action=allow protocol=TCP localport=8080 >nul 2>&1
 
-// ✅ FIXED: Explicitly target the script's local execution directory dynamically
-cd /d "%~dp0"
+echo [NAT TRAVERSAL] Requesting dynamic port map lease from Eero gateway via UPnP...
+powershell -Command "$u=New-Object -ComObject HNetCfg.NATUPnP; $m=$u.StaticPortMappingCollection; if($m){$m.Add(8080,'TCP',8080,'127.0.0.1',$true,'CVN_P2P'); $m.Add(8081,'TCP',8081,'127.0.0.1',$true,'CVN_HTTP')}else{Write-Host 'UPnP not responding. Ensure UPnP is enabled inside your Eero app settings.'}"
 
+echo [PROFILE AUDIT] Verifying local user deployment ledger states...
 if not exist miner_config.json (
-    echo {"miner_address":"CVN_UNCONFIGURED_LOCAL_NODE_ID"} > miner_config.json
+    echo {"miner_address": "CVN_UNCONFIGURED_LOCAL_NODE_ID"} > miner_config.json
 )
 
-set LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID
-for /f "tokens=2 delims=:," %%A in (miner_config.json) do (
-    set "val=%%A"
-    set "val=!val: =!"
-    set "val=!val:"=!"
-    set "val=!val:{=!"
-    set "val=!val:}=!"
-    set "val=!val:[=!"
-    set "val=!val:]=!"
+for /f "tokens=2 delims=:, " %%a in ('findstr "miner_address" miner_config.json') do (
+    set tmp_id=%%a
 )
-set "LOCAL_RIG_ID=%val:"=%"
-set "LOCAL_RIG_ID=%LOCAL_RIG_ID: =%"
+set LOCAL_RIG_ID=%tmp_id:"=%
+set LOCAL_RIG_ID=%LOCAL_RIG_ID:}=%
+set LOCAL_RIG_ID=%LOCAL_RIG_ID:]=%
+set LOCAL_RIG_ID=%LOCAL_RIG_ID: =%
 
-if exist cvn_node.exe goto COMPILE_CHECK
+if "%LOCAL_RIG_ID%" == "CVN_UNCONFIGURED_LOCAL_NODE_ID" (
+    echo New installation profile detected. Generating local keys...
+    
+    if not exist cvn_node.exe (
+        if exist go.mod del /f /q go.mod
+        if exist go.sum del /f /q go.sum
+        go mod init cvn_node
+        go get github.com/wailsapp/wails/v2
+        go get go.etcd.io/bbolt@v1.5.0
+        go mod tidy
+        go build -o cvn_node.exe .
+    )
+    
+    echo.
+    .\cvn_node.exe --generate-wallet
+    echo.
+    
+    for /f "tokens=2 delims=:, " %%a in ('findstr "miner_address" miner_config.json') do (
+        set tmp_id=%%a
+    )
+    set LOCAL_RIG_ID=%%a
+    set LOCAL_RIG_ID=%LOCAL_RIG_ID:"=%
+    set LOCAL_RIG_ID=%LOCAL_RIG_ID:}=%
+    set LOCAL_RIG_ID=%LOCAL_RIG_ID:]=%
+    set LOCAL_RIG_ID=%LOCAL_RIG_ID: =%
+) else (
+    echo Authenticated Address: %LOCAL_RIG_ID%
+)
 
-echo 📡 WARNING: Production core binary asset missing. Compiling package...
+if exist cvn_node.exe goto LAUNCH_NODE
+
 if exist go.mod del /f /q go.mod
 if exist go.sum del /f /q go.sum
 go mod init cvn_node
-go get ://github.com
+go get github.com/wailsapp/wails/v2
 go get go.etcd.io/bbolt@v1.5.0
 go mod tidy
-go build -o cvn_node.exe main.go app.go blockchain_core.go gossip_mesh.go database_core.go backup_vault.go
+go build -o cvn_node.exe .
 
 if %ERRORLEVEL% NEQ 0 (
-    echo 🚨 CRITICAL FAULT: Node core compilation aborted.
+    echo Critical fault: Node core compilation aborted.
     pause
     exit /b
-)
-
-:COMPILE_CHECK
-if "%LOCAL_RIG_ID%"=="CVN_UNCONFIGURED_LOCAL_NODE_ID" (
-    echo.
-    echo 👤 [USER STATUS] New installation profile detected.
-    echo 🟩 Initializing secure cryptographic identity generator...
-    echo --------------------------------------------------------------------
-    
-    .\cvn_node.exe --generate-wallet
-    
-    if %ERRORLEVEL% NEQ 0 (
-        echo 🚨 ERROR: Secure wallet initialization aborted.
-        pause
-        exit /b
-    )
-    
-    echo.
-    echo ⚠️  LOUD SECURITY WARNING: Your private keys have been exported to 'cvn_secret_backup.txt'.
-    echo KEEP THIS FILE COMPLETELY SECRET. IF YOU LOSE IT, YOUR FUNDS ARE GONE FOREVER.
-    echo --------------------------------------------------------------------
-    echo ⏸️  Onboarding paused. Verify your credentials above before starting the node.
-    pause
-    
-    set LOCAL_RIG_ID=
-    for /f "tokens=2 delims=:," %%A in (miner_config.json) do (
-        set "val=%%A"
-        set "val=!val: =!"
-        set "val=!val:"=!"
-        set "val=!val:{=!"
-        set "val=!val:}=!"
-    )
-    set "LOCAL_RIG_ID=%val:"=%"
-    set "LOCAL_RIG_ID=%LOCAL_RIG_ID: =%"
-) else (
-    echo 🎖️ [USER STATUS] Experienced Node Operator Authenticated!
-    echo 🪪 RECOGNIZED ADDRESS: %LOCAL_RIG_ID%
-    echo 📂 Re-mounting historical BoltDB table schemas from local disk sectors...
 )
 
 :LAUNCH_NODE
 echo.
-echo ====================================================================
-echo 🚀 UNCHAINING COVENANT STANDARD BLOCKCHAIN CONSENSUS MINER ENGINE...
-echo ====================================================================
+echo Launching Covenant Standard Blockchain Consensus Miner Engine...
 echo.
 
 if exist LaunchMiner.bat (
     start "Covenant Standard Hashing Engine" cmd /k ".\LaunchMiner.bat"
 ) else (
-    start "Covenant Standard Hashing Engine" cmd /k ".\cvn_node.exe --miner-address %LOCAL_RIG_ID%"
+    start "Covenant Standard Hashing Engine" cmd /k ".\cvn_node.exe --connect 202.137.175.220:8081"
 )
-
-echo ✅ Success: Node network service and ledger verification engine ignited.
-echo The active sync status progress bar is now updating live in your miner terminal.
-echo This orchestrator window can now be safely closed.

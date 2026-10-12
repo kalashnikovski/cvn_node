@@ -46,7 +46,7 @@ func main() {
 
 			configData := fmt.Sprintf("{\n  \"miner_address\": \"%s\"\n}", newAddress)
 			_ = os.WriteFile("miner_config.json", []byte(configData), 0644)
-			
+
 			fmt.Println("💾 Identity profiles securely written to local disk sectors.")
 			os.Exit(0)
 		}
@@ -108,16 +108,16 @@ func main() {
 			}
 
 			for h := startHeight; h <= endHeight; h++ {
-				blk := GetBlockByHeightFromDB(h) 
+				blk := GetBlockByHeightFromDB(h)
 				blockBatch = append(blockBatch, blk)
 			}
 			json.NewEncoder(w).Encode(blockBatch)
 		})
 
-			winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
+		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			
+
 			// 👑 THE CORE BRIDGE: Handle incoming live block broadcasts from peer nodes!
 			if r.Method == http.MethodPost {
 				var incomingBlock Block
@@ -140,7 +140,6 @@ func main() {
 			}
 			json.NewEncoder(w).Encode(payload)
 		})
-
 
 		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
@@ -174,7 +173,7 @@ func main() {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
 		})
-		
+
 		fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
 		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
 			log.Printf("Port 8082 bind alert: %v\n", err)
@@ -189,7 +188,7 @@ func main() {
 		time.Sleep(200 * time.Millisecond)
 		StartMeshNetwork()
 	}()
-// ====================================================================
+	// ====================================================================
 	// 🛰️  STATE PHASE 1: DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION
 	// ====================================================================
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
@@ -199,22 +198,22 @@ func main() {
 
 	seedGateways := []string{
 		"http://202.137.175.220:8081", // Melbourne Core Port 8081 Gateway
-		"http://207.148.67.11:8081",   
-		"http://64.177.45.153:8081",   
+		"http://207.148.67.11:8081",
+		"http://64.177.45.153:8081",
 	}
 
 	lastRenderTime := time.Now()
-	
+
 	// 👑 THE UNIVERSAL OVERRIDE REPAIR
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
-			
+
 			// Force raw IP strings into clean web format structures cleanly
 			if !strings.HasPrefix(customTargetIP, "http://") {
 				customTargetIP = "http://" + customTargetIP
 			}
-			
+
 			seedGateways = []string{customTargetIP}
 			fmt.Printf("🎯 [DYNAMIC MESH] Synchronization channel forced to peer: %s\n", seedGateways[0])
 		}
@@ -229,7 +228,7 @@ func main() {
 		// Securely query network boundaries with fallback tracking filters active
 		for _, endpoint := range seedGateways {
 			if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
-				continue 
+				continue
 			}
 			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
 			if remoteHeight > targetGlobalTip {
@@ -245,16 +244,16 @@ func main() {
 		}
 
 		nextBlockNeed := currentLocalHeight + 1
-		
+
 		// 🟩 THE MASTER FIX: Connect straight to your raw P2P Mesh Engine on Port 8080!
 		// Dial an unencrypted network socket directly into your native gossip mesh listener loop
-				// 🟩 THE BULLETPROOF FIXED: Fetch block batches natively over wide-open HTTP port 8081!
+		// 🟩 THE BULLETPROOF FIXED: Fetch block batches natively over wide-open HTTP port 8081!
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", activeSyncSeed, nextBlockNeed)
-		
+
 		syncHttpClient := &http.Client{
 			Timeout: 3 * time.Second,
 		}
-		
+
 		resp, err := syncHttpClient.Get(requestURL)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK {
@@ -285,7 +284,11 @@ func main() {
 			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
 			progressBar := ""
 			for i := 0; i < barWidth; i++ {
-				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
+				if i < filledChars {
+					progressBar += "█"
+				} else {
+					progressBar += "░"
+				}
 			}
 			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 			os.Stdout.Sync()
@@ -311,25 +314,25 @@ func main() {
 		for {
 			blockMiningStartTime := time.Now().Unix()
 			currentBlock := GetLatestBlock()
-			
+
 			// 👑 THE GENESIS IGNITION REPAIR: Prevent cloud nodes from front-running Genesis!
 			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
 			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
 			targetPrefix := strings.Repeat("0", targetDifficulty)
 			chunkCeiling := nonce + 500000
 			blockSolved := false
-			
+
 			for nonce < chunkCeiling {
 				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
 				h := sha256.New()
 				h.Write([]byte(inputStr))
 				hashBytes := h.Sum(nil)
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
-				
+
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
 					newBlock := Block{
-						Index:      currentBlock.Index + 1,
-						Timestamp:  time.Now().Unix(),
+						Index:     currentBlock.Index + 1,
+						Timestamp: time.Now().Unix(),
 						Transactions: []Transaction{
 							{
 								ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
@@ -356,7 +359,7 @@ func main() {
 				atomic.AddUint64(&globalHashCount, 1)
 				nonce++
 			}
-			
+
 			if blockSolved {
 				blockMiningEndTime := time.Now().Unix()
 				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
@@ -393,7 +396,7 @@ func main() {
 			} else {
 				logLine = fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
 			}
-			
+
 			liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 			if len(liveTerminalEventLogs) > 18 {
 				liveTerminalEventLogs = liveTerminalEventLogs[1:]
