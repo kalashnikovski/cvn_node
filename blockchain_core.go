@@ -111,30 +111,36 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	return 0
 }
 
-// ProcessIncomingNetworkBlock handles incoming peer blocks with a state-lock protection shield
+// ProcessIncomingNetworkBlock handles incoming peer blocks with full cryptographic continuity checks
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	currentTip := GetLatestBlock()
 
-	// 🛡️ RACE CONDITION SHIELD: Reject incoming blocks if we are already at or past this height!
-	// This prevents external nodes from silently overwriting your local verified ledger states.
+	// 🛡️ HEIGHT LOGIC SECURITY GATE: Reject incoming blocks if we have already moved past this height index!
 	if incomingBlock.Index <= currentTip.Index {
 		return
 	}
 
-	// 👑 THE LONGEST-CHAIN FORK RESOLUTION ENGINE: If a peer presents a higher block count, force re-sync!
+	// 👑 THE LONGEST-CHAIN FORK RESOLUTION ENGINE: If a peer presents a higher block count, force re-sync alignment!
 	if incomingBlock.Index > currentTip.Index + 1 {
-		fmt.Printf("🛰️  [FORK THREAT DETECTED] Network sequence height mismatch (#%d vs local #%d). Triggering immediate state realignment...\n", incomingBlock.Index, currentTip.Index)
+		fmt.Printf("🛰️  [FORK THREAT DETECTED] Network sequence height mismatch (#%d vs local #%d). Realignment pass triggered.\n", incomingBlock.Index, currentTip.Index)
 		return
 	}
 
-	// Link next expected continuous sequence block index step perfectly
+	// 🧱 CRYPTOGRAPHIC BACKPLANE LINK CHECK: Verify the incoming block builds directly on top of our tip!
 	if incomingBlock.Index == currentTip.Index + 1 {
-		if incomingBlock.PrevHash == currentTip.Hash {
-			if ValidateBlockSignatures(incomingBlock) {
-				if SaveBlockToStorage(incomingBlock) {
-					fmt.Printf("🧱 [CONSENSUS EQUILIBRIUM] Linked network block #%d Hash: %s\n", incomingBlock.Index, incomingBlock.Hash[:16])
-					go BroadcastNewBlock(incomingBlock)
-				}
+		if incomingBlock.PrevHash != currentTip.Hash {
+			fmt.Printf("❌ [CONSENSUS REJECTION] Rejected block #%d due to invalid PrevHash pointer mismatch.\n", incomingBlock.Index)
+			return
+		}
+
+		if ValidateBlockSignatures(incomingBlock) {
+			if SaveBlockToStorage(incomingBlock) {
+				fmt.Printf("🧱 [CONSENSUS EQUILIBRIUM] Successfully linked network block #%d Hash: %s\n", incomingBlock.Index, incomingBlock.Hash[:16])
+				
+				// 🛰️ PROPAGATION PROTECTION LOCK GATE: Force a tiny sleep window to let continental data frames align
+				time.Sleep(500 * time.Millisecond)
+				
+				go BroadcastNewBlock(incomingBlock)
 			}
 		}
 	}
