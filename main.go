@@ -1,17 +1,17 @@
 package main
 
 import (
-"crypto/sha256"
-"embed"
-"encoding/json"
-"fmt"
-"net/http"
-"os"
-"runtime"
-"strconv"
-"strings"
-"sync/atomic"
-"time"
+	"crypto/sha256"
+	"embed"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
 )
 
 //go:embed all:frontend/dist
@@ -188,12 +188,23 @@ continue
 blockMiningStartTime := time.Now().Unix()
 currentBlock := GetLatestBlock()
 
+// ?? THE GENESIS TIMESTAMP BOUNDARY REPAIR:
+// If our current block timestamp on a fresh boot is 0, initialize it to the current clock cycle!
+if currentBlock.Timestamp <= 0 {
+currentBlock.Timestamp = time.Now().Unix() - 45
+}
+
 targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
+
+// Defensive safety shield: Force difficulty bounds strictly between 1 and 8 to prevent string panics
+if targetDifficulty < 1 { targetDifficulty = 1 }
+if targetDifficulty > 8 { targetDifficulty = 4 }
+
 baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
 targetPrefix := strings.Repeat("0", targetDifficulty)
 
 nonce = 0 
-chunkCeiling := nonce + 500000
+chunkCeiling := nonce + 1000000
 blockSolved := false
 
 for nonce < chunkCeiling {
@@ -271,19 +282,18 @@ if len(liveTerminalEventLogs) > 15 { liveTerminalEventLogs = liveTerminalEventLo
 
 fmt.Print("\033[H")
 fmt.Println("================================================================================")
-fmt.Println("?? COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
+fmt.Println("COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 fmt.Println("================================================================================")
-fmt.Printf("???  NETWORK HEIGHT: #%-15d | ?? 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, realHashrateMH+0.04)
-fmt.Printf("?? WALLET BALANCE: %-16d CVN | ?? 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, realHashrateMH-0.08)
-fmt.Printf("?? RIG IDENTITY:   %-15.15s... | ?? 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, realHashrateMH-0.15)
+fmt.Printf("NETWORK HEIGHT: #%-15d | 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, realHashrateMH+0.04)
+fmt.Printf("WALLET BALANCE: %-16d CVN | 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, realHashrateMH-0.08)
+fmt.Printf("RIG IDENTITY:   %-15.15s... | 4h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, realHashrateMH-0.15)
 fmt.Println("================================================================================")
-fmt.Println("? LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+fmt.Println("LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Println("--------------------------------------------------------------------------------")
 for _, historicalLineLog := range liveTerminalEventLogs { fmt.Println(historicalLineLog) }
 }
 }
 }
-
 func osCheckArgs() []string { return os.Args }
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 currentDiff := int(lastBlock.Difficulty)
