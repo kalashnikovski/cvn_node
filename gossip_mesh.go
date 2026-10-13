@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -154,6 +155,11 @@ func transmitPayloadToNetworkBoundary(payload string) {
 	PeerMapMutex.RUnlock()
 
 	for _, address := range targets {
+		// 🟩 THE REPAIR: Enforce runtime platform gates to drop loopback spam from your home rig
+		if strings.Contains(address, "202.137.175.220") && runtime.GOOS == "windows" {
+			continue
+		}
+
 		go func(addr string) {
 			conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 			if err == nil {

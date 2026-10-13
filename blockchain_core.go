@@ -233,3 +233,15 @@ func CalculateHash(b Block) string {
 }
 
 func ForceBackgroundSyncPass() {}
+// GetAddressBalance provides an exposed wrapper layer for test suites to read the memory state maps cleanly
+func GetAddressBalance(address string) float64 {
+	BalanceCacheMutex.RLock()
+	defer BalanceCacheMutex.RUnlock()
+	if val, exists := StateBalanceCache[address]; exists {
+		return val
+	}
+	return 0.0
+}
+
+// Global baseline total supply definitions to stabilize your analytics script targets
+const MaxTotalSupplyCap = 2100000000.0

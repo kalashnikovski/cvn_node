@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -38,12 +39,39 @@ func InitBoltEngine() {
 	}
 
 	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-		_, _ = tx.CreateBucketIfNotExists(blocksBucket)
+		bBlocks, _ := tx.CreateBucketIfNotExists(blocksBucket)
 		meta, _ := tx.CreateBucketIfNotExists(metaBucket)
 
+		// Seed a physical Block #0 if the database is pristine
 		if meta.Get([]byte("height")) == nil {
-			_ = meta.Put([]byte("height"), []byte("0"))
-			fmt.Println("🌱 [GENESIS MATRIX INITIALIZED] Height synchronized to #0.")
+			genesisBlock := Block{
+				Index:     0,
+				Timestamp: 1790640000,
+				Transactions: []Transaction{
+					{
+						ID:        "TX_GENESIS_INITIAL_POOL",
+						Witness:   "COVENANT_STEWARD_ASSEMBLY",
+						PublicKey: "GENESIS_VOID_REWARD_POOL",
+						Outputs: []UTXOOutput{
+							{Recipient: "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337", Amount: 2100000000.0},
+						},
+					},
+				},
+				PrevHash:   "0000000000000000000000000000000000000000000000000000000000000000",
+				Hash:       "85632def04401fccf7cbccd78b9ceb4d64c87a9195996921209dd653726b5ebd",
+				Difficulty: 4,
+				Nonce:      0,
+			}
+
+			genesisData, _ := json.Marshal(genesisBlock)
+			paddedKey := fmt.Sprintf("%016d", genesisBlock.Index)
+			
+			_ = bBlocks.Put([]byte(paddedKey), genesisData)
+			
+			// Write metadata height keys using strict 16-character padding alignment!
+			_ = meta.Put([]byte("height"), []byte(paddedKey))
+			
+			fmt.Println("🌱 [GENESIS MATRIX SECURELY SEEDED] Physical Block #0 written directly to disk.")
 		}
 		return nil
 	})
@@ -55,6 +83,7 @@ func GetLatestBlock() Block {
 	var latestBlock Block
 	latestBlock.Index = 0
 	latestBlock.Difficulty = 4
+	latestBlock.Timestamp = 1790640000
 	latestBlock.Hash = "85632def04401fccf7cbccd78b9ceb4d64c87a9195996921209dd653726b5ebd"
 
 	if GlobalBoltEngine == nil {
@@ -71,6 +100,15 @@ func GetLatestBlock() Block {
 		heightBytes := bMeta.Get([]byte("height"))
 		if heightBytes != nil {
 			v := bBlocks.Get(heightBytes)
+			if v == nil {
+				hStr := string(heightBytes)
+				hIdx, err := strconv.ParseInt(hStr, 10, 64)
+				if err == nil {
+					paddedKey := fmt.Sprintf("%016d", hIdx)
+					v = bBlocks.Get([]byte(paddedKey))
+				}
+			}
+
 			if v != nil {
 				var bData Block
 				if json.Unmarshal(v, &bData) == nil {
@@ -101,9 +139,10 @@ func SaveBlockToStorage(block Block) bool {
 			return err
 		}
 
-		keyStr := fmt.Sprintf("%016d", block.Index)
-		_ = bBlocks.Put([]byte(keyStr), data)
-		_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%d", block.Index)))
+		paddedKey := fmt.Sprintf("%016d", block.Index)
+		_ = bBlocks.Put([]byte(paddedKey), data)
+		
+		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
 		BalanceCacheMutex.Lock()
 		for _, txPayload := range block.Transactions {
