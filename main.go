@@ -20,18 +20,21 @@ var assets embed.FS
 
 var globalHashCount uint64
 
-// 🟩 GLOBALLY SCOPED CONCURRENCY ASSETS: Placed here to prevent variable shadowing crashes
+// 🟩 GLOBALLY SCOPED LAYER-1 TRACKING ASSETS
 var liveTerminalEventLogs []string
 var logMutex sync.Mutex
+
+// 📈 ACCURATE HASHRATE WINDOW REGISTERS: Track historical compute outputs for real calculations
+var hashRateHistory15m []float64
+var hashRateHistory1h  []float64
+var hashRateHistory24h []float64
+var hashrateMutex      sync.Mutex
 
 func initWindowsAnsi() {}
 
 func main() {
 	initWindowsAnsi()
 
-	// ====================================================================
-	// 🔑 SECURE ASYMMETRIC WALLET IDENTITY GENERATION MODULE
-	// ====================================================================
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters...")
@@ -54,11 +57,13 @@ func main() {
 		}
 	}
 
-	// Database file initialization MUST occur first on boot!
 	InitBoltEngine()
 
-	// Allocate memory backing arrays cleanly on startup loop entry
+	// Cleanly allocate memory backing arrays on boot sequence initialization
 	liveTerminalEventLogs = make([]string, 0)
+	hashRateHistory15m   = make([]float64, 0)
+	hashRateHistory1h    = make([]float64, 0)
+	hashRateHistory24h   = make([]float64, 0)
 
 	for i, arg := range os.Args {
 		if arg == "--miner-address" && i+1 < len(os.Args) {
@@ -69,13 +74,13 @@ func main() {
 	if CustomMinerAddress == "" {
 		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
 	}
+
 	// ====================================================================
 	// 👑 THE UNIVERSAL THREE-PORT DATA ENGINE INITIALIZATION
 	// ====================================================================
 	go func() {
 		winMux := http.NewServeMux()
 
-		// Serves explorer.html or a fallback status page
 		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
 				http.NotFound(w, r)
@@ -90,7 +95,6 @@ func main() {
 			w.Write(htmlBytes)
 		})
 
-		// Restores the un-truncated Layer-1 history batch streaming pipeline
 		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -116,7 +120,6 @@ func main() {
 			json.NewEncoder(w).Encode(blocks)
 		})
 
-		// The live block metadata endpoint
 		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -130,7 +133,6 @@ func main() {
 			json.NewEncoder(w).Encode(payload)
 		})
 
-		// Transaction ingestion endpoint into the mempool
 		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -150,13 +152,11 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
-		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
 			fmt.Printf("Port 8081 bind alert: %v\n", err)
 		}
 	}()
 
-	// Dedicated analytics matrix plane
 	go func() {
 		mirrorMux := http.NewServeMux()
 		mirrorMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +164,6 @@ func main() {
 			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
 		})
 		
-		fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
 		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
 			fmt.Printf("Port 8082 bind alert: %v\n", err)
 		}
@@ -174,6 +173,9 @@ func main() {
 
 	go StartMeshNetwork()
 
+	// ====================================================================
+	// 🛰️  DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION PHASE
+	// ====================================================================
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
 	seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	
@@ -186,6 +188,8 @@ func main() {
 			seedGateways = []string{customTargetIP}
 		}
 	}
+
+	lastRenderTime := time.Now()
 
 	for {
 		liveBlock := GetLatestBlock()
@@ -226,7 +230,24 @@ func main() {
 			}
 			resp.Body.Close()
 		}
-		time.Sleep(10 * time.Millisecond)
+
+		// 👑 THE RESTORED SYNC STATUS BAR INDICATOR
+		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
+			lastRenderTime = time.Now()
+			var syncPercentage float64 = 0.00
+			if targetGlobalTip > 0 {
+				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
+			}
+			barWidth := 20
+			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
+			progressBar := ""
+			for i := 0; i < barWidth; i++ {
+				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
+			}
+			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+			os.Stdout.Sync()
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	// ====================================================================
@@ -288,78 +309,98 @@ func main() {
 					
 					if SaveBlockToStorage(newBlock) {
 						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid block #%d! Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16])
-						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-						logMutex.Unlock()
-						go BroadcastNewBlock(newBlock)
-					}
-					
-					nonce = 0
-					chunkCeiling = 1000000
-					blockSolved = true
-					break
-				}
-				atomic.AddUint64(&globalHashCount, 1)
-				nonce++
-			}
-
-			if blockSolved {
-				blockMiningEndTime := time.Now().Unix()
-				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-				if actualTimeElapsed < TargetBlockTimeWindow {
-					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-				}
-			} else {
-				chunkCeiling = nonce + 1000000
-				runtime.Gosched()
-			}
-		}
-	}()
-
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			// Directly poll the true on-disk BoltDB bucket depth on each update tick
-			liveBlock := GetLatestBlock()
-			actualBlocksHeight := liveBlock.Index
-			actualCvnBalance := liveBlock.Index * 50
-			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
-			realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
-
-			fmt.Println("\n================================================================================")
-			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
-			fmt.Println("================================================================================")
-			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 HASHRATE: %.2f MH/s\n", actualBlocksHeight, realHashrateMH)
-			fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 🪪 ADDRESS:  %s...\n", actualCvnBalance, CustomMinerAddress[:24])
-			fmt.Println("================================================================================")
-			
-			logMutex.Lock()
-			if len(liveTerminalEventLogs) > 0 {
-				fmt.Println("⚡ LIVE CONSENSUS EVENTS:")
-				for _, event := range liveTerminalEventLogs {
-					fmt.Println(event)
-				}
-				if len(liveTerminalEventLogs) > 10 {
-					liveTerminalEventLogs = liveTerminalEventLogs[1:]
-				}
-			} else {
-				fmt.Printf("[%s] ⛏️ Hashing active at %.2f MH/s... Searching for next block consensus parameters...\n", time.Now().Format("15:04:05"), realHashrateMH)
-			}
-			logMutex.Unlock()
-		}
-	}
+logLine := fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid block #%d! Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16])
+liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+logMutex.Unlock()
+go BroadcastNewBlock(newBlock)
 }
-
+nonce = 0
+chunkCeiling = 1000000
+blockSolved = true
+break
+}
+atomic.AddUint64(&globalHashCount, 1)
+nonce++
+}
+if blockSolved {
+blockMiningEndTime := time.Now().Unix()
+actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+if actualTimeElapsed < TargetBlockTimeWindow {
+requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+}
+} else {
+chunkCeiling = nonce + 1000000
+runtime.Gosched()
+}
+}
+}()
+ticker := time.NewTicker(3 * time.Second)
+defer ticker.Stop()
+// Clean out the screen completely before locking the stationary display
+fmt.Print("\033[2J\033[H")
+for {
+select {
+case <-ticker.C:
+liveBlock := GetLatestBlock()
+actualBlocksHeight := liveBlock.Index
+actualCvnBalance := liveBlock.Index * 50
+hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
+realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
+// 📊 CONSTRUCT MOVING AVERAGES NATIVELY WITH ABSOLUTE ARITHMETIC PRECISION
+hashrateMutex.Lock()
+// Append current window slice
+hashRateHistory15m = append(hashRateHistory15m, realHashrateMH)
+hashRateHistory1h  = append(hashRateHistory1h, realHashrateMH)
+hashRateHistory24h = append(hashRateHistory24h, realHashrateMH)
+// Bound sizes to ticker intervals (3s ticks: 15m=300, 1h=1200, 24h=28800)
+if len(hashRateHistory15m) > 300   { hashRateHistory15m = hashRateHistory15m[1:] }
+if len(hashRateHistory1h)  > 1200  { hashRateHistory1h = hashRateHistory1h[1:] }
+if len(hashRateHistory24h) > 28800 { hashRateHistory24h = hashRateHistory24h[1:] }
+var sum15m, sum1h, sum24h float64
+for _, v := range hashRateHistory15m { sum15m += v }
+for _, v := range hashRateHistory1h  { sum1h += v }
+for _, v := range hashRateHistory24h { sum24h += v }
+avg15m := sum15m / float64(len(hashRateHistory15m))
+avg1h  := sum1h / float64(len(hashRateHistory1h))
+avg24h := sum24h / float64(len(hashRateHistory24h))
+hashrateMutex.Unlock()
+// 👑 THE MASTER STATIONARY SCREEN ALIGNMENT ENGINE: Lock dashboard frame at \033[H
+fmt.Print("\033[H")
+fmt.Println("================================================================================")
+fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
+fmt.Println("================================================================================")
+fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
+fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
+fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
+fmt.Println("================================================================================")
+fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+fmt.Println("--------------------------------------------------------------------------------")
+// Render the moving logging stream cleanly below the stationary barrier table lines
+logMutex.Lock()
+if len(liveTerminalEventLogs) > 0 {
+for _, event := range liveTerminalEventLogs {
+fmt.Println(event)
+}
+// Constrain total scrolling logs down to 14 slots to prevent screen overflow breaks
+if len(liveTerminalEventLogs) > 14 {
+liveTerminalEventLogs = liveTerminalEventLogs[1:]
+}
+} else {
+fmt.Printf("[%s] ⛏️ Hashing active at %.2f MH/s... Searching for next block parameters...\n", time.Now().Format("15:04:05"), realHashrateMH)
+}
+logMutex.Unlock()
+// Force explicit Windows stdout stream cleanup passes on tick boundaries
+os.Stdout.Sync()
+}
+}
+}
 func osCheckArgs() []string { return os.Args }
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	currentDiff := int(lastBlock.Difficulty)
-	expectedTimeWindow := int64(45)
-	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed < expectedTimeWindow/2 { return currentDiff + 1 }
-	if actualTimeElapsed > expectedTimeWindow*2 { if currentDiff > 1 { return currentDiff - 1 }; return 1 }
-	return currentDiff
+currentDiff := int(lastBlock.Difficulty)
+expectedTimeWindow := int64(45)
+actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+if actualTimeElapsed < expectedTimeWindow/2 { return currentDiff + 1 }
+if actualTimeElapsed > expectedTimeWindow*2 { if currentDiff > 1 { return currentDiff - 1 }; return 1 }
+return currentDiff
 }
