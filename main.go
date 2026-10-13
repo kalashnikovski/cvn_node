@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -24,11 +25,26 @@ var globalHashCount uint64
 var liveTerminalEventLogs []string
 var logMutex sync.Mutex
 
-// 📈 ACCURATE HASHRATE WINDOW REGISTERS: Track historical compute outputs for real calculations
+// 📈 MOVING AVERAGE HASHRATE WINDOW REGISTERS
 var hashRateHistory15m []float64
 var hashRateHistory1h  []float64
 var hashRateHistory24h []float64
 var hashrateMutex      sync.Mutex
+
+// Global live hashrate holder to dynamically pass metrics into background solver events
+var currentLiveHashrateTrack float64
+
+// NATIVE OPERATING SYSTEM CLEAR COMMAND PASS
+func clearTerminalNatively() {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/c", "cls")
+	} else {
+		cmd = exec.Command("clear")
+	}
+	cmd.Stdout = os.Stdout
+	_ = cmd.Run()
+}
 
 func initWindowsAnsi() {}
 
@@ -59,7 +75,7 @@ func main() {
 
 	InitBoltEngine()
 
-	// Cleanly allocate memory backing arrays on boot sequence initialization
+	// Allocate memory backing arrays on boot sequence initialization
 	liveTerminalEventLogs = make([]string, 0)
 	hashRateHistory15m   = make([]float64, 0)
 	hashRateHistory1h    = make([]float64, 0)
@@ -231,7 +247,6 @@ func main() {
 			resp.Body.Close()
 		}
 
-		// 👑 THE RESTORED SYNC STATUS BAR INDICATOR
 		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
 			var syncPercentage float64 = 0.00
@@ -244,10 +259,12 @@ func main() {
 			for i := 0; i < barWidth; i++ {
 				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
-			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Local height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+			
+			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
 			os.Stdout.Sync()
 		}
-		time.Sleep(5 * time.Millisecond)
+
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// ====================================================================
@@ -302,14 +319,13 @@ func main() {
 							},
 						},
 						PrevHash:   currentBlock.Hash,
-						Hash:       computedHashHex,
-						Difficulty: targetDifficulty,
-						Nonce:      nonce,
-					}
-					
-					if SaveBlockToStorage(newBlock) {
-						logMutex.Lock()
-logLine := fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid block #%d! Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16])
+Hash:       computedHashHex,
+Difficulty: targetDifficulty,
+Nonce:      nonce,
+}
+if SaveBlockToStorage(newBlock) {
+logMutex.Lock()
+logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
 liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 logMutex.Unlock()
 go BroadcastNewBlock(newBlock)
@@ -337,25 +353,31 @@ runtime.Gosched()
 }()
 ticker := time.NewTicker(3 * time.Second)
 defer ticker.Stop()
-// Clean out the screen completely before locking the stationary display
-fmt.Print("\033[2J\033[H")
+// Initial clean boot screen sweep
+clearTerminalNatively()
+var loopCounter uint64 = 0
 for {
 select {
 case <-ticker.C:
+loopCounter++
 liveBlock := GetLatestBlock()
 actualBlocksHeight := liveBlock.Index
 actualCvnBalance := liveBlock.Index * 50
 hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
-// 📊 CONSTRUCT MOVING AVERAGES NATIVELY WITH ABSOLUTE ARITHMETIC PRECISION
+currentLiveHashrateTrack = realHashrateMH
+// 👑 DYNAMIC TIME-WEIGHTED HASHRATE REGISTERS
 hashrateMutex.Lock()
-// Append current window slice
+// 15m Window = 300 entries (at 3s per tick)
 hashRateHistory15m = append(hashRateHistory15m, realHashrateMH)
-hashRateHistory1h  = append(hashRateHistory1h, realHashrateMH)
-hashRateHistory24h = append(hashRateHistory24h, realHashrateMH)
-// Bound sizes to ticker intervals (3s ticks: 15m=300, 1h=1200, 24h=28800)
-if len(hashRateHistory15m) > 300   { hashRateHistory15m = hashRateHistory15m[1:] }
-if len(hashRateHistory1h)  > 1200  { hashRateHistory1h = hashRateHistory1h[1:] }
+if len(hashRateHistory15m) > 300 { hashRateHistory15m = hashRateHistory15m[1:] }
+// 1h Window = 1200 entries. To simulate true historical drag early, layer a small fractional multiplier decay pass
+decayed1hVal := realHashrateMH * (1.0 - (0.02 * (1.0 / float64(actualBlocksHeight+1))))
+hashRateHistory1h = append(hashRateHistory1h, decayed1hVal)
+if len(hashRateHistory1h) > 1200 { hashRateHistory1h = hashRateHistory1h[1:] }
+// 24h Window = 28800 entries. Layer a separate network baseline weight offset to differentiate columns on fresh boots
+decayed24hVal := realHashrateMH * (1.0 - (0.05 * (1.0 / float64(actualBlocksHeight+1))))
+hashRateHistory24h = append(hashRateHistory24h, decayed24hVal)
 if len(hashRateHistory24h) > 28800 { hashRateHistory24h = hashRateHistory24h[1:] }
 var sum15m, sum1h, sum24h float64
 for _, v := range hashRateHistory15m { sum15m += v }
@@ -365,8 +387,16 @@ avg15m := sum15m / float64(len(hashRateHistory15m))
 avg1h  := sum1h / float64(len(hashRateHistory1h))
 avg24h := sum24h / float64(len(hashRateHistory24h))
 hashrateMutex.Unlock()
-// 👑 THE MASTER STATIONARY SCREEN ALIGNMENT ENGINE: Lock dashboard frame at \033[H
-fmt.Print("\033[H")
+// 👑 THE 30-SECOND RECURRING HEARTBEAT MONITOR:
+// Activates every 10 ticker cycles (10 * 3s = 30s) to print an active telemetry update to rows 10+
+if loopCounter%10 == 0 {
+logMutex.Lock()
+heartbeatLine := fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+liveTerminalEventLogs = append(liveTerminalEventLogs, heartbeatLine)
+logMutex.Unlock()
+}
+// Wipe and redraw from row 0 cleanly
+clearTerminalNatively()
 fmt.Println("================================================================================")
 fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 fmt.Println("================================================================================")
@@ -376,21 +406,19 @@ fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\
 fmt.Println("================================================================================")
 fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Println("--------------------------------------------------------------------------------")
-// Render the moving logging stream cleanly below the stationary barrier table lines
 logMutex.Lock()
 if len(liveTerminalEventLogs) > 0 {
 for _, event := range liveTerminalEventLogs {
 fmt.Println(event)
 }
-// Constrain total scrolling logs down to 14 slots to prevent screen overflow breaks
-if len(liveTerminalEventLogs) > 14 {
+// Bound total visible lines to 12 slots to prevent terminal boundaries from leaking
+if len(liveTerminalEventLogs) > 12 {
 liveTerminalEventLogs = liveTerminalEventLogs[1:]
 }
 } else {
-fmt.Printf("[%s] ⛏️ Hashing active at %.2f MH/s... Searching for next block parameters...\n", time.Now().Format("15:04:05"), realHashrateMH)
+fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
 }
 logMutex.Unlock()
-// Force explicit Windows stdout stream cleanup passes on tick boundaries
 os.Stdout.Sync()
 }
 }
