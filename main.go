@@ -424,11 +424,31 @@ os.Stdout.Sync()
 }
 }
 func osCheckArgs() []string { return os.Args }
+// CalculateNextDifficulty applies a strict, responsive heartbeat adjustment targeting exactly 45s per block
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-currentDiff := int(lastBlock.Difficulty)
-expectedTimeWindow := int64(45)
-actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-if actualTimeElapsed < expectedTimeWindow/2 { return currentDiff + 1 }
-if actualTimeElapsed > expectedTimeWindow*2 { if currentDiff > 1 { return currentDiff - 1 }; return 1 }
-return currentDiff
+	currentDiff := int(lastBlock.Difficulty)
+	expectedTargetWindow := int64(45)
+	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+
+	// Defensive safeguard against erratic clock drifts or startup zero states
+	if actualTimeElapsed <= 0 {
+		return currentDiff
+	}
+
+	// 👑 STRICTER CORRECTION MATRIX: Step difficulty up instantly if the block was found too fast
+	if actualTimeElapsed < expectedTargetWindow {
+		fmt.Printf("⏱️  [DIFFICULTY ESCALATION] Block found too fast (%ds vs %ds). Stepping up network constraints...\n", actualTimeElapsed, expectedTargetWindow)
+		return currentDiff + 1
+	}
+
+	// Step difficulty down if block generation stalls beyond the target threshold
+	if actualTimeElapsed > expectedTargetWindow {
+		fmt.Printf("⏱️  [DIFFICULTY MITIGATION] Block generation lagging (%ds vs %ds). Easing network constraints...\n", actualTimeElapsed, expectedTargetWindow)
+		if currentDiff > 1 {
+			return currentDiff - 1
+		}
+		return 1
+	}
+
+	return currentDiff
 }
