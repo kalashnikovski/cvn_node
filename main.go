@@ -173,87 +173,98 @@ resp.Body.Close()
 time.Sleep(10 * time.Millisecond)
 }
 
-// ====================================================================
-// ??  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
-// ====================================================================
-go func() {
-var nonce int64 = 0
-const TargetBlockTimeWindow = 10
-for {
-if atomic.LoadInt32(&IsSyncingActive) == 1 {
-time.Sleep(100 * time.Millisecond)
-continue
-}
+	// ====================================================================
+	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
+	// ====================================================================
+	go func() {
+		// 👑 STRUCTURAL FIX 1: Variables lifted outside the outer execution block 
+		// This ensures nonce state and chunk parameters persist across iterations
+		var nonce int64 = 0
+		var chunkCeiling int64 = 1000000
+		const TargetBlockTimeWindow = 10
 
-blockMiningStartTime := time.Now().Unix()
-currentBlock := GetLatestBlock()
+		for {
+			// 👑 STRUCTURAL FIX 3: Atomic state gate remains intact
+			// Effectively stalls the mining worker loops safely during sync passes
+			if atomic.LoadInt32(&IsSyncingActive) == 1 {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 
-// ?? THE GENESIS TIMESTAMP BOUNDARY REPAIR:
-// If our current block timestamp on a fresh boot is 0, initialize it to the current clock cycle!
-if currentBlock.Timestamp <= 0 {
-currentBlock.Timestamp = time.Now().Unix() - 45
-}
+			blockMiningStartTime := time.Now().Unix()
+			currentBlock := GetLatestBlock()
+			
+			// Defensive Genesis boundary backup check
+			if currentBlock.Timestamp <= 0 {
+				currentBlock.Timestamp = time.Now().Unix() - 45
+			}
+			
+			targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
+			
+			// Defensive safety constraints to prevent Go string panics
+			if targetDifficulty < 1 { targetDifficulty = 1 }
+			if targetDifficulty > 8 { targetDifficulty = 4 }
+			
+			baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
+			targetPrefix := strings.Repeat("0", targetDifficulty)
+			blockSolved := false
+			
+			// 👑 STRUCTURAL FIX 2: Loop processes the current chunk allocation cleanly
+			for nonce < chunkCeiling {
+				inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
+				h := sha256.New()
+				h.Write([]byte(inputStr))
+				computedHashHex := fmt.Sprintf("%x", h.Sum(nil))
+				
+				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					newBlock := Block{
+						Index:      currentBlock.Index + 1,
+						Timestamp:  time.Now().Unix(),
+						Transactions: []Transaction{
+							{
+								ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
+								Witness:   "COVENANT_STEWARD_ASSEMBLY",
+								PublicKey: "GENESIS_VOID_REWARD_POOL",
+								Outputs: []UTXOOutput{
+									{Recipient: CustomMinerAddress, Amount: 50.0},
+								},
+							},
+						},
+						PrevHash:   currentBlock.Hash,
+						Hash:       computedHashHex,
+						Difficulty: targetDifficulty,
+						Nonce:      nonce,
+					}
+					if SaveBlockToStorage(newBlock) {
+						go BroadcastNewBlock(newBlock)
+					}
+					
+					// Reset counters ONLY when a block is successfully solved!
+					nonce = 0
+					chunkCeiling = 1000000
+					blockSolved = true
+					break
+				}
+				atomic.AddUint64(&globalHashCount, 1)
+				nonce++
+			}
+			
+			if blockSolved {
+				blockMiningEndTime := time.Now().Unix()
+				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+				if actualTimeElapsed < TargetBlockTimeWindow {
+					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+				}
+			} else {
+				// 👑 STRUCTURAL FIX 2: If false, naturally advance the chunk boundaries 
+				// without resetting the underlying base nonce counters
+				chunkCeiling = nonce + 1000000
+				time.Sleep(1 * time.Microsecond)
+			}
+		}
+	}()
 
-targetDifficulty := CalculateNextDifficulty(currentBlock, time.Now().Unix())
-
-// Defensive safety shield: Force difficulty bounds strictly between 1 and 8 to prevent string panics
-if targetDifficulty < 1 { targetDifficulty = 1 }
-if targetDifficulty > 8 { targetDifficulty = 4 }
-
-baseData := fmt.Sprintf("%d-%d-%d", currentBlock.Index, currentBlock.Timestamp, targetDifficulty)
-targetPrefix := strings.Repeat("0", targetDifficulty)
-
-nonce = 0 
-chunkCeiling := nonce + 1000000
-blockSolved := false
-
-for nonce < chunkCeiling {
-inputStr := fmt.Sprintf("%s-%d", baseData, nonce)
-h := sha256.New()
-h.Write([]byte(inputStr))
-computedHashHex := fmt.Sprintf("%x", h.Sum(nil))
-
-if strings.HasPrefix(computedHashHex, targetPrefix) {
-newBlock := Block{
-Index:      currentBlock.Index + 1,
-Timestamp:  time.Now().Unix(),
-Transactions: []Transaction{
-{
-ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
-Witness:   "COVENANT_STEWARD_ASSEMBLY",
-PublicKey: "GENESIS_VOID_REWARD_POOL",
-Outputs: []UTXOOutput{
-{Recipient: CustomMinerAddress, Amount: 50.0},
-},
-},
-},
-PrevHash:   currentBlock.Hash,
-Hash:       computedHashHex,
-Difficulty: targetDifficulty,
-Nonce:      nonce,
-}
-if SaveBlockToStorage(newBlock) {
-go BroadcastNewBlock(newBlock)
-}
-blockSolved = true
-break
-}
-atomic.AddUint64(&globalHashCount, 1)
-nonce++
-}
-
-if blockSolved {
-blockMiningEndTime := time.Now().Unix()
-actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-if actualTimeElapsed < TargetBlockTimeWindow {
-requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-}
-} else {
-time.Sleep(1 * time.Microsecond)
-}
-}
-}()
 
 ticker := time.NewTicker(3 * time.Second)
 defer ticker.Stop()
