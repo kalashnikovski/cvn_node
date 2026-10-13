@@ -34,7 +34,7 @@ To ensure the network files run securely on your computer, we must create a dedi
 
 The network requires a foundational, open-source programming runtime environment to run natively on Windows hardware slots.
 
-1. Open your internet browser and visit the official download page: golang.org/dl
+1. Open your internet browser and visit the official download page: https://go.dev/dl/
 2. Locate the Featured Downloads section and click the link for Microsoft Windows (it will end in .msi).
 3. Once the installer finishes downloading, double-click the file to run it.
 4. Click Next on all prompts, accept the standard license terms, and click Install.
