@@ -243,5 +243,11 @@ func GetAddressBalance(address string) float64 {
 	return 0.0
 }
 
-// Global baseline total supply definitions to stabilize your analytics script targets
+// 🟩 Ensure your global supply ceiling constraints match this pure structure:
 const MaxTotalSupplyCap = 2100000000.0
+
+func GetCurrentCirculatingSupply() float64 {
+	// Dynamically reads the current on-chain tip height and maps out the 50 CVN block reward generation
+	latestBlock := GetLatestBlock()
+	return float64(latestBlock.Index) * 50.0
+}

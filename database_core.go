@@ -47,20 +47,12 @@ func InitBoltEngine() {
 			genesisBlock := Block{
 				Index:     0,
 				Timestamp: 1790640000,
-				Transactions: []Transaction{
-					{
-						ID:        "TX_GENESIS_INITIAL_POOL",
-						Witness:   "COVENANT_STEWARD_ASSEMBLY",
-						PublicKey: "GENESIS_VOID_REWARD_POOL",
-						Outputs: []UTXOOutput{
-							{Recipient: "CVN_c43b46f2506955b920b5981bf0a6375fc0bc0337", Amount: 2100000000.0},
-						},
-					},
-				},
-				PrevHash:   "0000000000000000000000000000000000000000000000000000000000000000",
-				Hash:       "85632def04401fccf7cbccd78b9ceb4d64c87a9195996921209dd653726b5ebd",
-				Difficulty: 4,
-				Nonce:      0,
+				// 👑 No addresses are pre-allocated anything. Total initial circulating supply = 0 CVN.
+				Transactions: []Transaction{}, 
+				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
+				Hash:         "000000c43b46f2506955b920b5981bf0a6375fc0bc033744921209dd653726be", // Formatted zero-state hash signature
+				Difficulty:   4,
+				Nonce:        0,
 			}
 
 			genesisData, _ := json.Marshal(genesisBlock)
