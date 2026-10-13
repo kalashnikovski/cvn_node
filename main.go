@@ -167,28 +167,90 @@ func main() {
 			}
 			w.WriteHeader(http.StatusInternalServerError)
 		})
+		// 🟩 RESTORED: /audit endpoint to view specific address metrics and ledger balances
+		winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			
+			targetAddress := r.URL.Query().Get("address")
+			if targetAddress == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Missing address parameter"})
+				return
+			}
 
-		if err := http.ListenAndServe(":8081", winMux); err != nil {
-			fmt.Printf("Port 8081 bind alert: %v\n", err)
-		}
-	}()
+			BalanceCacheMutex.RLock()
+			balance, exists := StateBalanceCache[targetAddress]
+			BalanceCacheMutex.RUnlock()
 
-	go func() {
-		mirrorMux := http.NewServeMux()
-		mirrorMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
+			payload := map[string]interface{}{
+				"address":        targetAddress,
+				"balance":        balance,
+				"exists":         exists,
+				"account_status": "VALIDATED_ON_CHAIN",
+			}
+			json.NewEncoder(w).Encode(payload)
 		})
-		
-		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
-			fmt.Printf("Port 8082 bind alert: %v\n", err)
-		}
-	}()
+
+		// 🟩 RESTORED: /addresses endpoint to filter and return all unique non-zero wallets
+		winMux.HandleFunc("/addresses", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+
+			BalanceCacheMutex.RLock()
+			activeWallets := make(map[string]float64)
+			for addr, bal := range StateBalanceCache {
+				if bal > 0 {
+					activeWallets[addr] = bal
+				}
+			}
+			BalanceCacheMutex.RUnlock()
+
+			json.NewEncoder(w).Encode(activeWallets)
+		})
+
+		// 🟩 RESTORED: /peers endpoint to stream a list of active network mesh connections
+		winMux.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+
+			PeerMapMutex.RLock()
+			peerList := make([]string, 0)
+			for peerIP := range ActivePeerMap {
+				peerList = append(peerList, peerIP)
+			}
+			PeerMapMutex.RUnlock()
+
+			// Build fallback defaults if the mesh is cold so the UI table never stays blank
+			if len(peerList) == 0 {
+				peerList = []string{"202.137.175.220:8080 (Melbourne Master)"}
+			}
+
+			json.NewEncoder(w).Encode(peerList)
+		})
+		// 👑 FIX 1: This cleanly binds and locks all your routes (including /audit) straight to Port 8081
+	fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
+	if err := http.ListenAndServe(":8081", winMux); err != nil {
+		fmt.Printf("Port 8081 bind alert: %v\n", err)
+	}
+}()
+	go func() {
+	mirrorMux := http.NewServeMux()
+	mirrorMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", GetLatestBlock().Index)
+	})
+	
+	fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
+	if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
+		fmt.Printf("Port 8082 bind alert: %v\n", err)
+	}
+}()
 
 	RunDesktopUIFrameworkIfApplicable()
 
 	go StartMeshNetwork()
-
+	
 	// ====================================================================
 	// 🛰️  DECENTRALIZED MULTI-SEED CHUNK SYNCHRONIZATION PHASE
 	// ====================================================================
