@@ -1,4 +1,28 @@
-💎 Covenant Standard (CVN) Onboarding Guide
+\*\*Established: October 13, 2026\*\*
+
+
+
+The Covenant Standard (CVN) Layer-1 network protocol was birthed under a strict, uncorrupted \*\*Fair Launch Mandate\*\*. The network coordinator and the Assembly of Stewards hereby declare that the network adheres to the following immutable economic pillars:
+
+
+
+1\. \*\*Absolute Zero Pre-Mine:\*\* The Genesis Block (Block #0) contains exactly \*\*0.00 CVN\*\* in circulating supply. There are no developer allocations, no founder reserve pools, and no venture capital token buckets baked into the code layout.
+
+2\. \*\*Organic Distribution Only:\*\* Every single CVN token in existence must be earned openly and transparently. New tokens only enter circulation when an honest node processor provides computational work to solve a Proof-of-Diligence (PoD) block reward block (+50 CVN).
+
+3\. \*\*No Private Pre-Sales or ICOs:\*\* No cheap tokens were sold to private insiders or early investors before the mainnet went live. Every participant starts their wallet balance at absolute zero on their very first boot.
+
+4\. \*\*Democratized Hardware Access:\*\* The network's difficulty constants are tuned exclusively for consumer-grade desktop processors (CPUs). This prevents centralized ASIC mining factories or millionaire staking pools from monopolizing the ledger, keeping validation accessible to ordinary household hardware slots forever.
+
+
+
+Covenant Standard is an open-source, public-validated, decentralized ecosystem owned entirely by the community from block number one.
+
+
+
+
+
+💎 **Covenant Standard (CVN) Onboarding Guide**
 
 
 
