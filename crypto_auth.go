@@ -61,10 +61,7 @@ func SignTransactionPayload(privKeyHex string, txData string) (string, string, e
 
 // VerifyTransactionSignature evaluates an incoming transaction payload using the explicit un-hashed public key
 func VerifyTransactionSignature(pubKeyHex string, txData string, rStr string, sStr string) bool {
-	if pubKeyHex == "COVENANT_STEWARD_ASSEMBLY" || pubKeyHex == "GENESIS_VOID_REWARD_POOL" {
-		return true
-	}
-
+	
 	if rStr == "" || sStr == "" || len(pubKeyHex) < 64 {
 		return false
 	}
