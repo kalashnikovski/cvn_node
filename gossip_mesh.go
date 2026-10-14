@@ -51,6 +51,7 @@ func StartMeshNetwork() {
 	}
 }
 
+// 🟩 FIX 2: Explicitly name input interface parameter variable 'conn' to rectify type-scoping errors
 func handleIncomingPeerStream(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
@@ -78,7 +79,11 @@ func handleIncomingPeerStream(conn net.Conn) {
 			}
 
 			var blocks []Block
-			currentTip := GetLatestBlock().Index
+			
+			StateMutex.RLock()
+			currentTip := GetLatestBlockInternal().Index
+			StateMutex.RUnlock()
+
 			endHeight := startHeight + 511
 			if endHeight > currentTip {
 				endHeight = currentTip
@@ -99,8 +104,12 @@ func handleIncomingPeerStream(conn net.Conn) {
 			txPayload := strings.TrimPrefix(msg, "TX_BROADCAST:")
 			var incomingTx Transaction
 			if err := json.Unmarshal([]byte(txPayload), &incomingTx); err == nil {
-				if MempoolMatrix.PushTransaction(incomingTx) {
-					go BroadcastTransactionToMesh(incomingTx)
+				if VerifyIncomingWireTransaction(incomingTx) {
+					if MempoolMatrix.PushTransaction(incomingTx) {
+						go BroadcastTransactionToMesh(incomingTx)
+					}
+				} else {
+					log.Printf("🚨 [GATE FIREWALL] Dropped unauthenticated or spent transaction: %s\n", incomingTx.ID)
 				}
 			}
 			return
@@ -110,7 +119,11 @@ func handleIncomingPeerStream(conn net.Conn) {
 			blockPayload := strings.TrimPrefix(msg, "BLOCK_BROADCAST:")
 			var incomingBlock Block
 			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err == nil {
-				go ProcessIncomingNetworkBlock(incomingBlock)
+				if VerifyIncomingWireBlock(incomingBlock) {
+					go ProcessIncomingNetworkBlock(incomingBlock)
+				} else {
+					log.Printf("🚨 [GATE FIREWALL] Block #%d failed deep front-gate audit! Discarding.\n", incomingBlock.Index)
+				}
 			}
 			return
 		}
@@ -155,7 +168,6 @@ func transmitPayloadToNetworkBoundary(payload string) {
 	PeerMapMutex.RUnlock()
 
 	for _, address := range targets {
-		// 🟩 THE REPAIR: Enforce runtime platform gates to drop loopback spam from your home rig
 		if strings.Contains(address, "202.137.175.220") && runtime.GOOS == "windows" {
 			continue
 		}
@@ -172,9 +184,9 @@ func transmitPayloadToNetworkBoundary(payload string) {
 
 func runNetworkTopologyDiscoveryDiscoveryLoop() {
 	staticMeshSeeds := []string{
-		"202.137.175.220:8080", // Melbourne
-		"207.148.67.11:8080",   // Singapore
-		"64.177.45.153:8080",   // Atlanta
+		"202.137.175.220:8080", 
+		"207.148.67.11:8080",   
+		"64.177.45.153:8080",   
 	}
 
 	for {

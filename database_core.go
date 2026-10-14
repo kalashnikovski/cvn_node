@@ -16,6 +16,8 @@ import (
 var GlobalBoltEngine *bbolt.DB
 var blocksBucket = []byte("blocks")
 var metaBucket = []byte("metadata")
+var utxoBucket = []byte("utxo")
+var jubileeVaultBucket = []byte("jubilee_vault")
 var localHeightState int64 = 0
 
 func InitBoltEngine() {
@@ -39,28 +41,27 @@ func InitBoltEngine() {
 	}
 
 	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-		bBlocks, _ := tx.CreateBucketIfNotExists(blocksBucket)
+		_, _ = tx.CreateBucketIfNotExists(blocksBucket)
 		meta, _ := tx.CreateBucketIfNotExists(metaBucket)
+		_, _ = tx.CreateBucketIfNotExists(utxoBucket)
+		_, _ = tx.CreateBucketIfNotExists(jubileeVaultBucket)
 
-		// Seed a physical Block #0 if the database is pristine
 		if meta.Get([]byte("height")) == nil {
 			genesisBlock := Block{
-				Index:     0,
-				Timestamp: 1790640000,
-				// 👑 No addresses are pre-allocated anything. Total initial circulating supply = 0 CVN.
+				Index:        0,
+				Timestamp:    1790640000,
 				Transactions: []Transaction{}, 
 				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
-				Hash:         "000000c43b46f2506955b920b5981bf0a6375fc0bc033744921209dd653726be", // Formatted zero-state hash signature
+				Hash:         "000000c43b46f2506955b920b5981bf0a6375fc0bc033744921209dd653726be",
 				Difficulty:   4,
 				Nonce:        0,
+				GuardMatrix:  "",
 			}
 
 			genesisData, _ := json.Marshal(genesisBlock)
 			paddedKey := fmt.Sprintf("%016d", genesisBlock.Index)
 			
-			_ = bBlocks.Put([]byte(paddedKey), genesisData)
-			
-			// Write metadata height keys using strict 16-character padding alignment!
+			_ = tx.Bucket(blocksBucket).Put([]byte(paddedKey), genesisData)
 			_ = meta.Put([]byte("height"), []byte(paddedKey))
 			
 			fmt.Println("🌱 [GENESIS MATRIX SECURELY SEEDED] Physical Block #0 written directly to disk.")
@@ -71,7 +72,16 @@ func InitBoltEngine() {
 	RebuildStateBalanceCache()
 }
 
+// GetLatestBlock exposes an RLock synchronized gateway path for external tracking modules.
 func GetLatestBlock() Block {
+	// 🟩 CRITERIA 3: Force thread coordination using Read-locking mechanics
+	StateMutex.RLock()
+	defer StateMutex.RUnlock()
+	return GetLatestBlockInternal()
+}
+
+// GetLatestBlockInternal retrieves data straight from disk assumptions (Internal use under StateMutex wrapper).
+func GetLatestBlockInternal() Block {
 	var latestBlock Block
 	latestBlock.Index = 0
 	latestBlock.Difficulty = 4
@@ -114,7 +124,15 @@ func GetLatestBlock() Block {
 	return latestBlock
 }
 
+// SaveBlockToStorage exposes an architecture-conforming synchronized wrapper layer.
 func SaveBlockToStorage(block Block) bool {
+	StateMutex.Lock()
+	defer StateMutex.Unlock()
+	return SaveBlockToStorageInternal(block)
+}
+
+// SaveBlockToStorageInternal implements direct atomic modifications (Internal use under StateMutex wrapper).
+func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil {
 		return false
 	}
@@ -122,8 +140,9 @@ func SaveBlockToStorage(block Block) bool {
 	err := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
 		bMeta := tx.Bucket(metaBucket)
-		if bBlocks == nil || bMeta == nil {
-			return fmt.Errorf("buckets missing")
+		bUTXO := tx.Bucket(utxoBucket)
+		if bBlocks == nil || bMeta == nil || bUTXO == nil {
+			return fmt.Errorf("required consensus partitions are missing")
 		}
 
 		data, err := json.Marshal(block)
@@ -133,23 +152,31 @@ func SaveBlockToStorage(block Block) bool {
 
 		paddedKey := fmt.Sprintf("%016d", block.Index)
 		_ = bBlocks.Put([]byte(paddedKey), data)
-		
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		BalanceCacheMutex.Lock()
 		for _, txPayload := range block.Transactions {
-			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") && txPayload.Witness != "" {
-				var totalOutput float64 = 0.0
-				for _, out := range txPayload.Outputs {
-					totalOutput += out.Amount
+			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") {
+				for _, input := range txPayload.Inputs {
+					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
+					_ = bUTXO.Delete([]byte(compoundInputKey))
 				}
-				StateBalanceCache[txPayload.Witness] -= (totalOutput + txPayload.FreeWillOffering)
 			}
-			for _, out := range txPayload.Outputs {
-				StateBalanceCache[out.Recipient] += out.Amount
+
+			for outIdx, output := range txPayload.Outputs {
+				compoundOutputKey := fmt.Sprintf("%s_%d", txPayload.ID, outIdx)
+				
+				utxoRecord := UTXORecord{
+					Amount:    output.Amount,
+					Recipient: output.Recipient,
+				}
+				
+				utxoData, err := json.Marshal(utxoRecord)
+				if err != nil {
+					return err
+				}
+				_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
 			}
 		}
-		BalanceCacheMutex.Unlock()
 
 		return nil
 	})
@@ -157,11 +184,16 @@ func SaveBlockToStorage(block Block) bool {
 	if err != nil {
 		return false
 	}
+	
 	atomic.StoreInt64(&localHeightState, block.Index)
+	RebuildStateBalanceCacheInternal()
 	return true
 }
 
 func GetBlockByHeightFromDB(height int64) Block {
+	StateMutex.RLock()
+	defer StateMutex.RUnlock()
+	
 	var block Block
 	if GlobalBoltEngine == nil {
 		return block
@@ -180,7 +212,15 @@ func GetBlockByHeightFromDB(height int64) Block {
 	return block
 }
 
+// RebuildStateBalanceCache wraps in-memory mapping reconstructions under a thread-safe fence.
 func RebuildStateBalanceCache() {
+	StateMutex.Lock()
+	defer StateMutex.Unlock()
+	RebuildStateBalanceCacheInternal()
+}
+
+// RebuildStateBalanceCacheInternal implements state compilation (Internal use under StateMutex wrapper).
+func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
 	
@@ -190,26 +230,16 @@ func RebuildStateBalanceCache() {
 	}
 
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		bBlocks := tx.Bucket(blocksBucket)
-		if bBlocks == nil {
+		bUTXO := tx.Bucket(utxoBucket)
+		if bUTXO == nil {
 			return nil
 		}
-		c := bBlocks.Cursor()
+		
+		c := bUTXO.Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var block Block
-			if json.Unmarshal(v, &block) == nil {
-				for _, txPayload := range block.Transactions {
-					if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") && txPayload.Witness != "" {
-						var totalOutput float64 = 0.0
-						for _, out := range txPayload.Outputs {
-							totalOutput += out.Amount
-						}
-						StateBalanceCache[txPayload.Witness] -= (totalOutput + txPayload.FreeWillOffering)
-					}
-					for _, out := range txPayload.Outputs {
-						StateBalanceCache[out.Recipient] += out.Amount
-					}
-				}
+			var record UTXORecord
+			if json.Unmarshal(v, &record) == nil {
+				StateBalanceCache[record.Recipient] += record.Amount
 			}
 		}
 		return nil
@@ -223,5 +253,7 @@ func GetAddressBalanceFromLedger(address string) int64 {
 }
 
 func GetAddressBlockCountFromLedger(address string) int64 {
-	return GetLatestBlock().Index
+	StateMutex.RLock()
+	defer StateMutex.RUnlock()
+	return GetLatestBlockInternal().Index
 }

@@ -1,37 +1,36 @@
 @echo off
-title Covenant Standard Native Core Compiler Pass
+title Covenant Standard Production Compiler Toolchain
+color 0A
+cls
 
 echo ====================================================================
-echo 💎 COVENANT STANDARD (CVN) FIXED ARCHITECTURE COMPILER DAEMON
+echo 🔨 BAKING COVENANT STANDARD LAYER-1 DUAL-ENGINE ECOSYSTEM...
 echo ====================================================================
 echo.
 
-:: 1. Clear out any residual, corrupted module metadata files
-if exist go.mod del /f /q go.mod
-if exist go.sum del /f /q go.sum
+cd /d "%~dp0"
 
-echo [1/4] Initializing clean module namespace registry path...
-go mod init cvn_node
+:: Clear out lingering assets
+if exist ".\cvn_node.exe" del /f /q ".\cvn_node.exe"
+if exist ".\cvn_miner.exe" del /f /q ".\cvn_miner.exe"
 
-echo [2/4] Hard-locking uncensored Wails core framework bindings...
-go get github.com/wailsapp/wails/v2
-
-echo [3/4] Pulling BoltDB mainnet ledger database wheels...
-go get go.etcd.io/bbolt@v1.5.0
-
-echo [4/4] Aligning dependencies and verifying structural hashes...
-go mod tidy
+echo 📦 [1/2] Baking Headless Consensus Hashing Core (cvn_miner.exe)...
+:: 👑 THE FIXED: Forcefully compiles the binary as a true Console sub-system utility so text streams roll alive!
+go build -tags server -o cvn_miner.exe .
 
 echo.
-echo 🚀 ROLLING TELEMETRY COMPILE PASS IGNITED...
-echo --------------------------------------------------------------------
-go build -o cvn_node.exe main.go app.go blockchain_core.go gossip_mesh.go database_core.go backup_vault.go
+echo 🎨 [2/2] Baking Graphical Desktop Wallet Client (cvn_node.exe)...
+go build -o cvn_node.exe .
 
 if %ERRORLEVEL% EQU 0 (
     echo.
-    echo ✅ SUCCESS: cvn_node.exe compiled with zero syntax errors!
+    echo ====================================================================
+    echo ✅ PRODUCTION MASTER PLATFORM SUCCESSFUL: Dual suites locked on disk!
+    echo ====================================================================
+    timeout /t 2 >nul
 ) else (
+    color 0C
     echo.
-    echo 🚨 ERROR: Compilation pass aborted due to internal syntax boundaries.
+    echo 🚨 ERROR: Graphical asset pipeline aborted.
+    pause
 )
-pause
