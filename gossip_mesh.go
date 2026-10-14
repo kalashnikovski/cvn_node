@@ -51,7 +51,6 @@ func StartMeshNetwork() {
 	}
 }
 
-// 🟩 FIX 2: Explicitly name input interface parameter variable 'conn' to rectify type-scoping errors
 func handleIncomingPeerStream(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
@@ -128,6 +127,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 			return
 		}
 
+		// 👑 THE REPAIR 1: Serialized PEX Exchange response down the active TCP channel handle
 		if strings.HasPrefix(msg, "PEER_PING:") {
 			PeerMapMutex.Lock()
 			peerMeshKey := fmt.Sprintf("%s:8080", remoteIP)
@@ -135,7 +135,72 @@ func handleIncomingPeerStream(conn net.Conn) {
 				fmt.Printf("🌐 [GOSSIP MESH] Handshake verified from raw cloud seed source: %s\n", peerMeshKey)
 			}
 			ActivePeerMap[peerMeshKey] = time.Now()
+			
+			// Build list snapshot safely inside lock boundary
+			var activePeersList []string
+			for currentPeer := range ActivePeerMap {
+				activePeersList = append(activePeersList, currentPeer)
+			}
 			PeerMapMutex.Unlock()
+
+			// Marshal and push peer snapshot arrays back down open interfaces
+			jsonPeers, err := json.Marshal(activePeersList)
+			if err == nil {
+				payloadResponse := fmt.Sprintf("PEER_LIST:%s\n", string(jsonPeers))
+				_, _ = fmt.Fprint(conn, payloadResponse)
+			}
+			return
+		}
+
+		// 👑 THE REPAIR 2: Dynamic Parsing and Background Handshake Ingestion for Discovery Lists
+		if strings.HasPrefix(msg, "PEER_LIST:") {
+			rawPayload := strings.TrimPrefix(msg, "PEER_LIST:")
+			var receivedAddresses []string
+			if err := json.Unmarshal([]byte(rawPayload), &receivedAddresses); err != nil {
+				return
+			}
+
+			for _, potentialPeer := range receivedAddresses {
+				cleanedPeer := strings.TrimSpace(potentialPeer)
+				if cleanedPeer == "" {
+					continue
+				}
+
+				// Safe check for loopback boundaries
+				if strings.HasPrefix(cleanedPeer, "127.0.0.1") || strings.HasPrefix(cleanedPeer, "localhost") {
+					continue
+				}
+
+				PeerMapMutex.RLock()
+				_, alreadyConnected := ActivePeerMap[cleanedPeer]
+				PeerMapMutex.RUnlock()
+
+				// Non-blocking worker routines for zero latency on message execution tracks
+				if !alreadyConnected {
+					go func(targetIP string) {
+						// Isolate local address parameters to avoid self-dialing loops
+						localInterfaces, err := net.InterfaceAddrs()
+						if err == nil {
+							for _, interfaceAddr := range localInterfaces {
+								if ipnet, ok := interfaceAddr.(*net.IPNet); ok {
+									if strings.Split(targetIP, ":")[0] == ipnet.IP.String() {
+										return
+									}
+								}
+							}
+						}
+
+						dialerConnection, dialErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
+						if dialErr != nil {
+							return
+						}
+						defer dialerConnection.Close()
+
+						// Synchronize identities immediately
+						_, _ = fmt.Fprintf(dialerConnection, "PEER_PING:PEX_AUTO_DISCOVERY\n")
+					}(cleanedPeer)
+				}
+			}
 			return
 		}
 	}
@@ -195,6 +260,37 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 				if err == nil {
 					_, _ = fmt.Fprintf(conn, "PEER_PING:DISCOVERY_REQUEST\n")
+					
+					// Read PEX payload down seed channels to rapidly build topological graphs
+					reader := bufio.NewReader(conn)
+					responseString, readErr := reader.ReadString('\n')
+					if readErr == nil {
+						responseString = strings.TrimSpace(responseString)
+						if strings.HasPrefix(responseString, "PEER_LIST:") {
+							rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
+							var receivedAddresses []string
+							if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
+								for _, ip := range receivedAddresses {
+									if ip == "" || strings.HasPrefix(ip, "127.0.0.1") {
+										continue
+									}
+									PeerMapMutex.RLock()
+									_, exits := ActivePeerMap[ip]
+									PeerMapMutex.RUnlock()
+									
+									if !exits {
+										go func(targetIP string) {
+											dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
+											if dErr == nil {
+												_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_AUTO_JOIN\n")
+												dConn.Close()
+											}
+										}(ip)
+									}
+								}
+							}
+						}
+					}
 					conn.Close()
 				}
 			}(seedAddr)

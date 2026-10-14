@@ -10,10 +10,23 @@ import (
 	"math/big"
 )
 
+// DeriveAddressFromPublicKey takes a 128-character public key hex string, computes
+// a SHA-256 digest, and returns the unique public ledger handle formatted with the CVN prefix.
+func DeriveAddressFromPublicKey(pubHex string) (string, error) {
+	if len(pubHex) < 128 {
+		return "", fmt.Errorf("invalid public key length: expected 128 characters, got %d", len(pubHex))
+	}
+
+	// Compute the unique public ledger address wallet handle (CVN_...) using a SHA-256 digest
+	addressHash := sha256.Sum256([]byte(pubHex))
+	walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
+
+	return walletAddress, nil
+}
+
 // GenerateKeyPair creates a cryptographically secure random ECDSA P-256 key pair
 // using Go's native CSPRNG engine ("crypto/rand"), completely isolated from system clocks.
 func GenerateKeyPair() (string, string, string, error) {
-	// 🟩 CRITERIA 1 & 2: Rely exclusively on crypto/rand to enforce true high-entropy CSPRNG paths
 	curve := elliptic.P256()
 	privateKey, err := ecdsa.GenerateKey(curve, rand.Reader)
 	if err != nil {
@@ -27,9 +40,11 @@ func GenerateKeyPair() (string, string, string, error) {
 	// Format public key by serializing coordinate markers cleanly into a uniform 128-character hex string
 	pubHex := fmt.Sprintf("%064x%064x", privateKey.PublicKey.X, privateKey.PublicKey.Y)
 
-	// Derive the unique public ledger address wallet handle (CVN_...) using a SHA-256 digest
-	addressHash := sha256.Sum256([]byte(pubHex))
-	walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
+	// Derive the wallet address handling logic using our shared function path
+	walletAddress, err := DeriveAddressFromPublicKey(pubHex)
+	if err != nil {
+		return "", "", "", err
+	}
 
 	return privHex, pubHex, walletAddress, nil
 }
@@ -67,7 +82,6 @@ func SignTransactionPayload(privKeyHex string, txData string) (string, string, e
 
 // VerifyTransactionSignature evaluates an incoming transaction signature using the explicit public key coordinates.
 func VerifyTransactionSignature(pubKeyHex string, txData string, rStr string, sStr string) bool {
-	// Early validation fence to drop empty parameters or truncated public keys
 	if rStr == "" || sStr == "" || len(pubKeyHex) < 128 {
 		return false
 	}

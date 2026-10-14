@@ -1,6 +1,3 @@
-//go:build !server
-// +build !server
-
 package main
 
 import (
@@ -11,7 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.etcd.io/bbolt" // Make sure this line is exactly here
 )
+
 
 // App struct
 type App struct {
@@ -70,29 +70,88 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr strin
 		return "ALERT: Transaction rejected by Phase 3 address validation firewall filters."
 	}
 
-	BalanceCacheMutex.RLock()
-	availableBalance := StateBalanceCache[CustomMinerAddress]
-	BalanceCacheMutex.RUnlock()
+	requiredTotal := amount + fee
+	var gatheredUTXOs []struct {
+		txID  string
+		index int
+		value float64
+	}
+	var totalAvailable float64
 
-	if availableBalance < (amount + fee) {
-		return "REJECTED: Insufficient unspent cryptographic utility reserves."
+	err := GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte("utxo"))
+		if b == nil {
+			return fmt.Errorf("utxo bucket partition missing from engine disk")
+		}
+
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var record UTXORecord
+			if err := json.Unmarshal(v, &record); err != nil {
+				continue
+			}
+
+			if record.Recipient == CustomMinerAddress {
+				keyStr := string(k)
+				parts := strings.Split(keyStr, "_")
+				if len(parts) < 2 {
+					continue
+				}
+				parsedIdx, err := strconv.Atoi(parts[len(parts)-1])
+				if err != nil {
+					continue
+				}
+				sourceTxID := strings.Join(parts[:len(parts)-1], "_")
+
+				totalAvailable += record.Amount
+				gatheredUTXOs = append(gatheredUTXOs, struct {
+					txID  string
+					index int
+					value float64
+				}{txID: sourceTxID, index: parsedIdx, value: record.Amount})
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Sprintf("REJECTED: Internal storage engine error scanning inputs: %v", err)
+	}
+
+	if totalAvailable < requiredTotal {
+		return fmt.Sprintf("REJECTED: Insufficient unspent cryptographic utility reserves. Required: %f, Available: %f", requiredTotal, totalAvailable)
+	}
+
+	var selectedInputs []UTXOInput
+	var inputsValueSum float64
+
+	for _, utxo := range gatheredUTXOs {
+		selectedInputs = append(selectedInputs, UTXOInput{
+			SourceTxID: utxo.txID,
+			Index:      utxo.index,
+			Signature:  "",
+		})
+		inputsValueSum += utxo.value
+		if inputsValueSum >= requiredTotal {
+			break
+		}
 	}
 
 	tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
 	txID := fmt.Sprintf("TX_DESKTOP_%x", sha256.Sum256([]byte(tSeed)))
 
+	var finalOutputs []UTXOOutput
+	finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
+
+	if inputsValueSum > requiredTotal {
+		changeAmount := inputsValueSum - requiredTotal
+		finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
+	}
+
 	tx := Transaction{
-		ID: txID,
-		Inputs: []UTXOInput{
-			{
-				SourceTxID: "TX_GENESIS_INITIAL_POOL",
-				Index:      0,
-			},
-		},
-		Outputs: []UTXOOutput{
-			{Recipient: recipient, Amount: amount},
-			{Recipient: CustomMinerAddress, Amount: availableBalance - (amount + fee)}, 
-		},
+		ID:               txID,
+		Inputs:           selectedInputs,
+		Outputs:          finalOutputs,
 		FreeWillOffering: fee,
 		Witness:          CustomMinerAddress,
 	}

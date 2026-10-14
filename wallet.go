@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.etcd.io/bbolt"
 )
 
 // RunWalletGUI acts as the direct console operational interface loop for your UTXO core network
@@ -30,7 +32,6 @@ func RunWalletGUI() {
 		choiceStr = strings.TrimSpace(choiceStr)
 
 		if choiceStr == "1" {
-			// ✅ FIXED TYPE ASSIGNMENT: Extracts all 3 coordinate parameters from crypto_auth specs
 			privHex, pubHex, walletAddress, err := GenerateKeyPair()
 			if err != nil {
 				fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Unable to initialize secure entropy paths: %v\n", err)
@@ -60,10 +61,8 @@ func RunWalletGUI() {
 				walletAddress, pubHex, privHex,
 			)
 			
-			// Write backup log explicitly using strict read/write authorization keys
 			_ = os.WriteFile("my_crypto_address.txt", []byte(backupContent), 0600)
 			
-			// ✅ FIXED IDENTIFIER: Writes using the precise key layout matching batch loops
 			configMap := map[string]string{"miner_address": walletAddress}
 			configBytes, _ := json.MarshalIndent(configMap, "", "  ")
 			_ = os.WriteFile("miner_config.json", configBytes, 0644)
@@ -106,13 +105,85 @@ func RunWalletGUI() {
 			}
 
 			fmt.Println("\n⏳ Authorizing, cryptographically signing, and formatting UTXO slices...")
-			time.Sleep(800 * time.Millisecond)
+			
+			senderAddress, err := DeriveAddressFromPublicKey(pubKey)
+			if err != nil {
+				fmt.Printf("❌ ADDRESS FAULT: Unable to derive wallet address from public key: %v\n", err)
+				continue
+			}
 
-			// Standardized message sequence framework to build an authentic ECDSA signature
+			requiredTotal := amount + offering
+			var gatheredUTXOs []struct {
+				txID  string
+				index int
+				value float64
+			}
+			var totalAvailable float64
+
+			err = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+				b := tx.Bucket([]byte("utxo"))
+				if b == nil {
+					return fmt.Errorf("utxo bucket partition missing from engine disk")
+				}
+
+				c := b.Cursor()
+				for k, v := c.First(); k != nil; k, v = c.Next() {
+					var record UTXORecord
+					if err := json.Unmarshal(v, &record); err != nil {
+						continue
+					}
+
+					if record.Recipient == senderAddress {
+						keyStr := string(k)
+						parts := strings.Split(keyStr, "_")
+						if len(parts) < 2 {
+							continue
+						}
+						parsedIdx, err := strconv.Atoi(parts[len(parts)-1])
+						if err != nil {
+							continue
+						}
+						sourceTxID := strings.Join(parts[:len(parts)-1], "_")
+
+						totalAvailable += record.Amount
+						gatheredUTXOs = append(gatheredUTXOs, struct {
+							txID  string
+							index int
+							value float64
+						}{txID: sourceTxID, index: parsedIdx, value: record.Amount})
+					}
+				}
+				return nil
+			})
+
+			if err != nil {
+				fmt.Printf("❌ DATABASE STORAGE ERROR: %v\n", err)
+				continue
+			}
+
+			if totalAvailable < requiredTotal {
+				fmt.Printf("❌ INSUFFICIENT FUNDS: Required %f CVN (Amount: %f + Fee: %f), but your wallet only holds %f CVN available.\n", requiredTotal, amount, offering, totalAvailable)
+				continue
+			}
+
+			var selectedInputs []UTXOInput
+			var inputsValueSum float64
+
+			for _, utxo := range gatheredUTXOs {
+				selectedInputs = append(selectedInputs, UTXOInput{
+					SourceTxID: utxo.txID,
+					Index:      utxo.index,
+					Signature:  "",
+				})
+				inputsValueSum += utxo.value
+				if inputsValueSum >= requiredTotal {
+					break
+				}
+			}
+
 			txID := fmt.Sprintf("TX_OUTBOUND_%d", time.Now().UnixNano())
 			txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, offering)
 
-			// Sign payload natively leveraging the mathematical rules inside crypto_auth.go
 			rStr, sStr, err := SignTransactionPayload(privKey, txMessage)
 			if err != nil {
 				fmt.Printf("❌ CRYPTO FAULT: Asymmetric signing math aborted: %v\n", err)
@@ -120,16 +191,24 @@ func RunWalletGUI() {
 			}
 			combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
 
+			for i := range selectedInputs {
+				selectedInputs[i].Signature = combinedSignature
+			}
+
+			var finalOutputs []UTXOOutput
+			finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
+
+			if inputsValueSum > requiredTotal {
+				changeAmount := inputsValueSum - requiredTotal
+				finalOutputs = append(finalOutputs, UTXOOutput{Recipient: senderAddress, Amount: changeAmount})
+			}
+
 			tx := Transaction{
-				ID:        txID,
-				Signature: combinedSignature,
-				PublicKey: pubKey, // ✅ Fixed Field: Securely attaches public coordinates
-				Inputs: []UTXOInput{
-					{SourceTxID: "TX_GENESIS_INITIAL_POOL", Index: 0, Signature: combinedSignature},
-				},
-				Outputs: []UTXOOutput{
-					{Recipient: recipient, Amount: amount},
-				},
+				ID:               txID,
+				Signature:        combinedSignature,
+				PublicKey:        pubKey,
+				Inputs:           selectedInputs,
+				Outputs:          finalOutputs,
 				FreeWillOffering: offering,
 				Timestamp:        time.Now().Unix(),
 				DataSizeKB:       1.0,
@@ -142,11 +221,7 @@ func RunWalletGUI() {
 				continue
 			}
 
-			// ====================================================================
-			// 🚀 THE MASTER FIX: ROUTING OUTBOUND LIFECYCLES TO PORT 8081/TRANSACTION
-			// ====================================================================
-			// Connects directly to your exposed mainnet transaction ingestion endpoint
-			targetURL := "http://207.148.67.11:8081/transaction" 
+			targetURL := "http://207.148.67" 
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Post(targetURL, "application/json", bytes.NewBuffer(payloadBytes))
 

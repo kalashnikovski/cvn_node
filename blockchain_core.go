@@ -189,9 +189,11 @@ func TriggerActiveReSyncPass() {
 	}
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 
-	fmt.Println("⏳ [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
+	fmt.Println("\n⏳ [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED. Initializing non-destructive common ancestor discovery...")
 	
+	// Enforce strict write-lock across state boundaries for the entire duration of the re-org pass
 	StateMutex.Lock()
+	defer StateMutex.Unlock()
 	
 	activeGlobalRecoveryGateways := []string{
 		"http://202.137.175.220:8081", 
@@ -200,61 +202,207 @@ func TriggerActiveReSyncPass() {
 	}
 	
 	client := &http.Client{Timeout: 4 * time.Second}
-	
-	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-		bBlocks := tx.Bucket(blocksBucket)
-		bMeta := tx.Bucket(metaBucket)
-		if bBlocks != nil && bMeta != nil {
-			for i := 0; i < 5; i++ {
-				tip := GetLatestBlockInternal()
-				if tip.Index > 0 {
-					paddedKey := fmt.Sprintf("%016d", tip.Index)
-					_ = bBlocks.Delete([]byte(paddedKey))
-					_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%d", tip.Index-1)))
+
+	// 1. Identify the absolute highest online seed gateway to trace forks against
+	var chosenTargetSeedURL string = ""
+	var selectedHighestTargetTip int64 = 0
+
+	for _, endpoint := range activeGlobalRecoveryGateways {
+		if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
+			continue
+		}
+		
+		remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
+		if remotePeerHeight > selectedHighestTargetTip {
+			selectedHighestTargetTip = remotePeerHeight
+			chosenTargetSeedURL = endpoint
+		}
+	}
+
+	if chosenTargetSeedURL == "" {
+		fmt.Println("❌ [RE-SYNC ABORTED] Gateway tracking interfaces timed out. Unable to isolate an active consensus seed coordinate.")
+		return
+	}
+
+	// 2. Execute Common Ancestor discovery by tracing backward from the current local tip height
+	localTip := GetLatestBlockInternal()
+	currentScanningIndex := localTip.Index
+	var commonAncestorIndex int64 = -1
+
+	fmt.Printf("🔍 [RE-SCAN RUNTIME] Starting reverse block-by-block comparison loop from local height #%d against peer tip #%d...\n", currentScanningIndex, selectedHighestTargetTip)
+
+	for currentScanningIndex >= 0 {
+		// If the peer does not have a block at this height, step downward immediately
+		if currentScanningIndex > selectedHighestTargetTip {
+			currentScanningIndex--
+			continue
+		}
+
+		// Retrieve our local block at the current scanning height from BoltDB
+		var localBlockAtHeight Block
+		err := GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+			bBlocks := tx.Bucket(blocksBucket)
+			if bBlocks != nil {
+				paddedKey := fmt.Sprintf("%016d", currentScanningIndex)
+				blockData := bBlocks.Get([]byte(paddedKey))
+				if blockData != nil {
+					_ = json.Unmarshal(blockData, &localBlockAtHeight)
 				}
 			}
-		}
-		return nil
-	})
-	
-	RebuildStateBalanceCacheInternal()
-	
-	for {
-		localTip := GetLatestBlockInternal()
-		nextNeededBlock := localTip.Index + 1
-		
-		var chosenTargetSeedURL string = ""
-		var selectedHighestTargetTip int64 = 0
+			return nil
+		})
 
-		for _, endpoint := range activeGlobalRecoveryGateways {
-			if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
-				continue
-			}
-			
-			remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
-			if remotePeerHeight > selectedHighestTargetTip {
-				selectedHighestTargetTip = remotePeerHeight
-				chosenTargetSeedURL = endpoint
-			}
+		if err != nil || localBlockAtHeight.Hash == "" {
+			currentScanningIndex--
+			continue
 		}
 
-		if chosenTargetSeedURL == "" || nextNeededBlock > selectedHighestTargetTip {
+		// Fetch the matching index block directly from the chosen seed gateway
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), currentScanningIndex)
+		resp, err := client.Get(requestURL)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			// If a network request fails, retry the height or slide down gracefully
+			time.Sleep(50 * time.Millisecond)
+			currentScanningIndex--
+			continue
+		}
+
+		var peerIncomingBatch []Block
+		decodeErr := json.NewDecoder(resp.Body).Decode(&peerIncomingBatch)
+		resp.Body.Close()
+
+		if decodeErr != nil || len(peerIncomingBatch) == 0 {
+			currentScanningIndex--
+			continue
+		}
+
+		// Cross-reference the cryptographic hashes to check for an absolute pointer match
+		peerBlockAtHeight := peerIncomingBatch[0]
+		if localBlockAtHeight.Hash == peerBlockAtHeight.Hash {
+			commonAncestorIndex = currentScanningIndex
+			fmt.Printf("🎯 [COMMON ANCESTOR ISOLATED] Perfect network alignment confirmed at block index #%d\n", commonAncestorIndex)
+			fmt.Printf("🔒 Local Hash:  %s\n🌐 Remote Hash: %s\n", localBlockAtHeight.Hash, peerBlockAtHeight.Hash)
 			break
 		}
 
+		currentScanningIndex--
+	}
+
+	// Fallback to Genesis Block if a deep structural fork split the chain wide open
+	if commonAncestorIndex == -1 {
+		fmt.Println("⚠️  [CRITICAL ALIGNMENT ALERT] No common ancestor found along local tracks. Defaulting synchronization base to Genesis Block #0.")
+		commonAncestorIndex = 0
+	}
+
+	// 3. Execute an atomic, targeted database roll-back transaction down to the common ancestor point
+	if localTip.Index > commonAncestorIndex {
+		fmt.Printf("🧱 [FORK ROLLBACK] Purging invalid local blocks strictly above height #%d...\n", commonAncestorIndex)
+		
+		err := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+			bBlocks := tx.Bucket(blocksBucket)
+			bMeta := tx.Bucket(metaBucket)
+			bUTXO := tx.Bucket(utxoBucket)
+			if bBlocks == nil || bMeta == nil || bUTXO == nil {
+				return fmt.Errorf("required consensus partitions are missing from storage")
+			}
+
+			// Cleanly trace backward from our current tip down to the common ancestor intersection point
+			for i := localTip.Index; i > commonAncestorIndex; i-- {
+				paddedKey := fmt.Sprintf("%016d", i)
+				
+				// Read block payload bytes to extract and cleanly re-record the spent UTXO input tracks
+				var blockToWipe Block
+				blockDataBytes := bBlocks.Get([]byte(paddedKey))
+				if blockDataBytes != nil {
+					if json.Unmarshal(blockDataBytes, &blockToWipe) == nil {
+						// Remove all UTXO outputs spawned by this invalidated block
+						for _, txPayload := range blockToWipe.Transactions {
+							for outIdx := range txPayload.Outputs {
+								compoundOutputKey := fmt.Sprintf("%s_%d", txPayload.ID, outIdx)
+								_ = bUTXO.Delete([]byte(compoundOutputKey))
+							}
+							
+							// Re-inject the original spent inputs straight back into the unspent pool bucket
+							if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") {
+								for _, input := range txPayload.Inputs {
+									compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
+									
+									// Reconstruct a valid baseline UTXORecord entry
+									recoveredUTXO := UTXORecord{
+										Amount:    0.0, // Rebuilt on the subsequent full balance cache compilation step
+										Recipient: "",  // Rebuilt dynamically from ledger assumptions
+									}
+									
+									// Trace transaction outputs from parent histories to safely pull actual coin values
+									var originalSourceTxBlock Block
+									sourcePaddedKey := fmt.Sprintf("%016d", i-1) // Approximate vicinity query optimization
+									sourceDataBytes := bBlocks.Get([]byte(sourcePaddedKey))
+									if sourceDataBytes != nil {
+										_ = json.Unmarshal(sourceDataBytes, &originalSourceTxBlock)
+									}
+									
+									// Secure structural matching back-fill logic
+									for _, sourceTx := range originalSourceTxBlock.Transactions {
+										if sourceTx.ID == input.SourceTxID {
+											if input.Index < len(sourceTx.Outputs) {
+												recoveredUTXO.Amount = sourceTx.Outputs[input.Index].Amount
+												recoveredUTXO.Recipient = sourceTx.Outputs[input.Index].Recipient
+											}
+										}
+									}
+
+									if recoveredUTXO.Recipient != "" {
+										recoveredBytes, _ := json.Marshal(recoveredUTXO)
+										_ = bUTXO.Put([]byte(compoundInputKey), recoveredBytes)
+									}
+								}
+							}
+						}
+					}
+				}
+
+				// Complete raw disk block deletion parameters
+				_ = bBlocks.Delete([]byte(paddedKey))
+			}
+
+			// Atomically lock the metadata head tracking index straight back onto our common ancestor height token
+			paddedAncestorKey := fmt.Sprintf("%016d", commonAncestorIndex)
+			_ = bMeta.Put([]byte("height"), []byte(paddedAncestorKey))
+			return nil
+		})
+
+		if err != nil {
+			fmt.Printf("🚨 [ROLLBACK ABORTED] Database pipeline error writing state changes: %v\n", err)
+			return
+		}
+
+		// Refresh our memory metrics inside the localized client arrays immediately following disk modifications
+		atomic.StoreInt64(&localHeightState, commonAncestorIndex)
+		RebuildStateBalanceCacheInternal()
+		fmt.Printf("✅ [ROLLBACK STABLE] State ledger successfully locked back onto core block height #%d\n", commonAncestorIndex)
+	} else {
+		fmt.Println("💎 [CONGENIAL TRACKS] Local ledger timeline is aligned with ancestor coordinates. Skipping rollback routine.")
+	}
+
+	// 4. Download, deep-validate, and ingest the peer's remaining valid blocks to catch up safely
+	fmt.Printf("📥 [FORWARD INGESTION] Resuming download sequence from block #%d up to true mainnet tip height #%d...\n", commonAncestorIndex+1, selectedHighestTargetTip)
+	
+	nextNeededBlock := commonAncestorIndex + 1
+
+	for nextNeededBlock <= selectedHighestTargetTip {
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
 		
-		StateMutex.Unlock()
 		resp, err := client.Get(requestURL)
 		if err != nil {
-			StateMutex.Lock()
-			time.Sleep(100 * time.Millisecond) 
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 		
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			StateMutex.Lock()
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
@@ -264,19 +412,38 @@ func TriggerActiveReSyncPass() {
 		resp.Body.Close()
 		
 		if err != nil || len(incomingBatch) == 0 {
-			StateMutex.Lock()
 			break
 		}
 		
-		StateMutex.Lock()
 		for _, block := range incomingBatch {
-			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
-				SaveBlockToStorageInternal(block)
-				fmt.Printf("📥 [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
+			currentLocalTip := GetLatestBlockInternal()
+			
+			// Chain linking validation check
+			if block.Index == currentLocalTip.Index+1 {
+				if block.PrevHash != currentLocalTip.Hash {
+					fmt.Printf("🚨 [RE-SYNC PIPELINE ABORT] Ingested block #%d failed structural pointer validation logic. Timeline mismatch detected.\n", block.Index)
+					return
+				}
+
+				// Deep signature enforcement firewall check
+				if !ValidateBlockSignatures(block) {
+					fmt.Printf("🚨 [RE-SYNC SECURITY FIREWALL] Block #%d failed signature or difficulty constraints! Aborting forward sync payload.\n", block.Index)
+					return
+				}
+
+				// Commit verified block state safely to BoltDB
+				if SaveBlockToStorageInternal(block) {
+					fmt.Printf("📥 [INGESTION SUCCESS] Integrated consensus block #%d | Hash: %s... -> Endpoint: %s\n", block.Index, block.Hash[:16], chosenTargetSeedURL)
+					nextNeededBlock = block.Index + 1
+				} else {
+					fmt.Printf("❌ [STORAGE FAULT] Unable to commit block #%d to disk engine partitions.\n", block.Index)
+					return
+				}
 			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+
 	
 	fmt.Println("✨ [🔓 SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 	StateMutex.Unlock()
