@@ -1,3 +1,7 @@
+\# 🏛️ Covenant Standard (CVN) Protocol
+
+\## Layer-1 Core Network Onboarding Specification
+
 \*\*Established: October 13, 2026\*\*
 
 
@@ -20,62 +24,117 @@ Covenant Standard is an open-source, public-validated, decentralized ecosystem o
 
 
 
-
-
-💎 **Covenant Standard (CVN) Onboarding Guide**
+\---
 
 
 
-Zero-Configuration Household Hardware Setup
+\## 💎 Covenant Standard (CVN) Onboarding Guide
+
+\### Zero-Configuration Household Hardware Setup
+
+
 
 Covenant Standard is an open-source Layer-1 network optimized for standard consumer processors (CPUs). By following this guide, you will initialize a sovereign validation rig on your computer to secure the global ledger and collect transaction fees.
 
 
 
-📂 Step 1: Create and Populate Your Workspace Folder
-
-
+\### 📂 Step 1: Create and Populate Your Workspace Folder
 
 To ensure the network files run securely on your computer, we must create a dedicated home directory and populate it with the core software suite.
 
-1\. Open your internet browser and visit the official repository release page: https://github.com/kalashnikovski/cvn\_node
 
-2\. Click the green Code button near the top right of the file grid, then click Download ZIP.
+
+1\. Open your internet browser and visit the official repository release page: `https://github.com/kalashnikovski/cvn\_node`
+
+2\. Click the green \*\*Code\*\* button near the top right of the file grid, then click \*\*Download ZIP\*\*.
 
 3\. Open your File Explorer (the folder icon on your taskbar).
 
-4\. Click on This PC in the left sidebar, then double-click your primary hard drive (usually labeled Local Disk (C:)).
+4\. Click on \*\*This PC\*\* in the left sidebar, then double-click your primary hard drive (usually labeled \*\*Local Disk (C:)\*\*).
 
-5\. Right-click inside any empty white space, hover over New, select Folder, and name it exactly: cvn\_node
+5\. Right-click inside any empty white space, hover over \*\*New\*\*, select \*\*Folder\*\*, and name it exactly: `cvn\_node`
 
-6\. Go to your Downloads folder, double-click the cvn\_node-main.zip file you just grabbed from GitHub, and drag all the contents directly out of the zip file and drop them straight inside your newly created C:\\cvn\_node directory folder.
-
-
-
-📦 Step 2: Install the Framework Runtime Engine
+6\. Go to your Downloads folder, double-click the `cvn\_node-main.zip` file you just grabbed from GitHub, and drag all the contents directly out of the zip file and drop them straight inside your newly created `C:\\cvn\_node` directory folder.
 
 
+
+\---
+
+
+
+\### 📦 Step 2: Install the Framework Runtime Engine
 
 The network requires a foundational, open-source programming runtime environment to run natively on Windows hardware slots.
 
-1. Open your internet browser and visit the official download page: https://go.dev/dl/
-2. Locate the Featured Downloads section and click the link for Microsoft Windows (it will end in .msi).
-3. Once the installer finishes downloading, double-click the file to run it.
-4. Click Next on all prompts, accept the standard license terms, and click Install.
-5. When the installation completes, click Finish. Your operating system is now fully upgraded.
+
+
+1. 1\. Open your internet browser and visit the official download page: https://go.dev/dl/
 
 
 
-🚀 Step 3: Launch on Autopilot
+2\. Locate the Featured Downloads section and click the link for \*\*Microsoft Windows\*\* (it will end in `.msi`).
+
+3\. Once the installer finishes downloading, double-click the file to run it.
+
+4\. Click \*\*Next\*\* on all prompts, accept the standard license terms, and click \*\*Install\*\*.
+
+5\. When the installation completes, click \*\*Finish\*\*. Your operating system is now fully upgraded.
 
 
 
-1. Open your C:\\cvn\_node folder.
-2. Right-click the file named AutoOnboard\_And\_Mine.bat and choose "Run as Administrator".
-3. First-Time Boot Routine: The system will immediately detect that you are a new node. It will automatically generate your secure asymmetric cryptographic wallet keys and save your backup file (cvn\_secret\_backup.txt) straight to disk.
-4. Network Alignment: The terminal will instantly draw the Master Dashboard at the top of your screen.
-• If your ledger is trailing: It will display a live ⏳ \[BULK SYNC] progress loading tracking bar across row 11 while cloning historical blocks from the network seeds over wide-open HTTP channels.
-• If your ledger is aligned: The sync lock will disengage, and your un-throttled core thread will begin computing Proof-of-Diligence solutions.
+\---
+
+
+
+\### 🚀 Step 3: Launch on Autopilot
+
+
+
+1\. Open your `C:\\cvn\_node` folder.
+
+2\. Locate the file named \*\*`AutoOnboard\_And\_Mine.ps1`\*\*.
+
+3\. Right-click the file and choose \*\*"Run with PowerShell"\*\* (or run inside an Administrator PowerShell terminal window).
+
+
+
+\---
+
+
+
+\### 🪪 Step 4: The Infallible Dual-Profile Routing Rule
+
+The automation script automatically executes a pre-flight identity check to manage your node credentials with absolute state-safety:
+
+
+
+\*   \*\*Scenario A (Brand New Users):\*\* If you are joining the ecosystem for the first time, the script will immediately detect that your workspace lacks a configuration profile. It will instantly launch our secure, clock-isolated \*\*CSPRNG Elliptic Curve Factory Module\*\*. This derives a mathematically unique private key passphrase, constructs your public identity key parameters, and locks your credentials natively onto your hard drive. 
+
+\*   \*\*Scenario B (Returning Alpha Testers / Pre-Existing Wallets):\*\* If you are an active miner who already owns a wallet or has a configuration sheet sitting inside your directory, \*\*the script automatically recognizes your pre-existing profile variables.\*\* It bypasses the generation sequence entirely and safely locks your hardware into your verified public identity. Your accumulated block mining balances can never be accidentally overwritten, dropped, or reset.
+
+
+
+\---
+
+
+
+\### ⚡ Step 5: Global Consensus Sync and Active Validation
+
+Once your wallet profile is securely aligned, the onboarding script automatically fires up your un-throttled core execution path:
+
+
+
+\*   \*\*Network Alignment Phase:\*\* The terminal will instantly load the Master Telemetry Dashboard at the top of your screen. 
+
+&#x20;   \*   \*If your ledger is trailing:\* The system engages a strict, synchronized multi-seed chunk pipeline. It will display a live \*\*`⏳ \[BULK SYNC]`\*\* loading tracking bar across row 11 while cloning historical blocks from the cross-continental cloud gateways in compressed batch blocks.
+
+&#x20;   \*   \*If your ledger is aligned:\* The consensus sync gate automatically disengages. Your processor instantly initiates full bare-metal computational work, solving Proof-of-Diligence block puzzles directly to your wallet address and broadcasting new hashes across our global mesh network on total autopilot.
+
+
+
+\---
+
+
 
 🪪 Finding Your Public Address \& Backups
 
