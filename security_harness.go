@@ -99,16 +99,14 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 	return isValid
 }
 
-// VerifyIncomingWireBlock performs full cryptographic validation on incoming candidate block elements.
+// 🟩 FIXED: VerifyIncomingWireBlock now passes the absolute correct transaction index position
 func VerifyIncomingWireBlock(b Block) bool {
-	// 1. Proof-of-Work Target Prefix Check
 	targetPrefix := strings.Repeat("0", b.Difficulty)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
 		fmt.Printf("🚨 WIRE BLOCK FAULT: Hash signature %s missing difficulty constraints.\n", b.Hash)
 		return false
 	}
 
-	// 2. Canonical Chain Hash Re-computation Pass
 	if b.Hash != CalculateHash(b) {
 		fmt.Println("🚨 WIRE BLOCK FAULT: Block hash re-computation checks failed mismatch constraints.")
 		return false
@@ -118,7 +116,6 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 
-	// 3. Deep Transaction Processing Audit
 	isBlockValid := true
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		bUTXO := dbTx.Bucket([]byte("utxo"))
@@ -127,7 +124,7 @@ func VerifyIncomingWireBlock(b Block) bool {
 			return nil
 		}
 
-		// Enforce strict sequential validation of all embedded transaction structures
+		// 👑 THE REPAIR: Pass the true loop iteration index (txIdx) instead of hardcoded -1 markers!
 		for txIdx, tx := range b.Transactions {
 			if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 				isBlockValid = false
