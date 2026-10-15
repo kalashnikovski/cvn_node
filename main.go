@@ -46,7 +46,6 @@ func initWindowsAnsi() {}
 func main() {
 	initWindowsAnsi()
 
-	// Refactor --generate-wallet route to execute un-guessable CSPRNG factory generation
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
@@ -72,7 +71,6 @@ func main() {
 		}
 	}
 
-	// Validate and intercept unconfigured user bootstraps using true cryptographic keys
 	if _, err := os.Stat("miner_config.json"); os.IsNotExist(err) {
 		fmt.Println("👤 [USER STATUS] Pristine installation path detected. Initializing secure configuration parameters...")
 		privHex, pubHex, walletAddress, err := GenerateKeyPair()
@@ -101,7 +99,6 @@ func main() {
 	}
 
 	if CustomMinerAddress == "" {
-		// Read values out of the newly created profile json sheet if custom address variables were skipped
 		configFileBytes, err := os.ReadFile("miner_config.json")
 		if err == nil {
 			var parsedConfig map[string]string
@@ -115,9 +112,6 @@ func main() {
 		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
 	}
 
-	// ====================================================================
-	// 👑 THE UNIVERSAL THREE-PORT DATA ENGINE INITIALIZATION
-	// ====================================================================
 	go func() {
 		winMux := http.NewServeMux()
 
@@ -322,17 +316,17 @@ func main() {
 		}
 
 		nextBlockNeed := currentLocalHeight + 1
-requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed)
-client := &http.Client{Timeout: 3 * time.Second}
-resp, err := client.Get(requestURL)
-if err == nil {
-if resp.StatusCode == http.StatusOK {
-var incomingBatch []Block
-if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
-for _, incomingBlock := range incomingBatch {
-StateMutex.RLock()
-currentHeightCheck := GetLatestBlockInternal().Index
-StateMutex.RUnlock()
+		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed)
+		client := &http.Client{Timeout: 3 * time.Second}
+		resp, err := client.Get(requestURL)
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				var incomingBatch []Block
+				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+					for _, incomingBlock := range incomingBatch {
+						StateMutex.RLock()
+						currentHeightCheck := GetLatestBlockInternal().Index
+						StateMutex.RUnlock()
 if incomingBlock.Index == int64(currentHeightCheck)+1 {
 SaveBlockToStorage(incomingBlock)
 currentLocalHeight = incomingBlock.Index
@@ -365,17 +359,13 @@ time.Sleep(10 * time.Millisecond)
 go func() {
 var nonce int64 = 0
 var chunkCeiling int64 = 1000000
-const TargetBlockTimeWindow = 10
 for {
 if atomic.LoadInt32(&IsSyncingActive) == 1 {
 time.Sleep(100 * time.Millisecond)
 continue
 }
-// 👑 THE MASTER PACING CORRECTION GATE:
-// Enforce strict 45-second mainnet block pacing alignment globally
 const TargetBlockTimeWindow = 45
 blockMiningStartTime := time.Now().Unix()
-// Intact Task 5 Read-fencing synchronization bounds
 StateMutex.RLock()
 currentBlock := GetLatestBlockInternal()
 var targetDifficulty int
@@ -393,11 +383,11 @@ targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
 simulatedTime := time.Now().Unix()
 var guardMatrixPlaceholder = ""
-// Natively invoke our flat, single-channel reward function CalculateBlockReward
 allowedEmission := CalculateBlockReward(nextIndex)
+coinbaseTxID := fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano())
 candidateTransactions := []Transaction{
 {
-ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
+ID:        coinbaseTxID,
 Witness:   "COVENANT_STEWARD_ASSEMBLY",
 PublicKey: "GENESIS_VOID_REWARD_POOL",
 Outputs: []UTXOOutput{
@@ -406,10 +396,16 @@ Outputs: []UTXOOutput{
 Timestamp: simulatedTime,
 },
 }
-// Intact Task 1 complete state commitment preimages
-txBytes, _ := json.Marshal(candidateTransactions)
-hTx := sha256.Sum256(txBytes)
-txHashStr := fmt.Sprintf("%x", hTx[:])
+// 👑 THE CRITICAL SYMMETRY UPGRADE:
+// Construct the exact internal transaction preimage text string natively inside the miner thread!
+var txSummaryBuilder strings.Builder
+for _, tx := range candidateTransactions {
+txSummaryBuilder.WriteString(fmt.Sprintf("%s-%s-%s-%.8f-", tx.ID, tx.Witness, tx.PublicKey, tx.FreeWillOffering))
+for _, out := range tx.Outputs {
+txSummaryBuilder.WriteString(fmt.Sprintf("%s-%.8f-", out.Recipient, out.Amount))
+}
+}
+txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
 nextIndex,
 simulatedTime,
@@ -418,7 +414,6 @@ txHashStr,
 targetDifficulty,
 guardMatrixPlaceholder,
 )
-// Standard SHA-256 non-destructive nonce space iteration loop
 for nonce < chunkCeiling {
 inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
 hashBytes := sha256.Sum256([]byte(inputStr))
@@ -458,10 +453,7 @@ time.Sleep(time.Duration(requiredStallDelay) * time.Second)
 }
 } else {
 chunkCeiling = nonce + 1000000
-// 👑 THE PACING OVERHAUL:
-	// Replace runtime.Gosched() with an explicit 100ms network buffer stall
-	// to allow the P2P Gossip Mesh to seamlessly sync new headers!
-    time.Sleep(100 * time.Millisecond)
+time.Sleep(100 * time.Millisecond)
 runtime.Gosched()
 }
 }
@@ -534,34 +526,24 @@ os.Stdout.Sync()
 }
 }
 func osCheckArgs() []string { return os.Args }
-// CalculateNextDifficulty enforces absolute consensus parity across all international nodes
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	currentDiff := int(lastBlock.Difficulty)
-	
-	// 👑 THE CONSENSUS STABILIZER:
-	// If mining from Genesis or early block frames, lock the system to a 
-	// standard baseline difficulty of 4 to prevent early clock drift splits.
-	if lastBlock.Index < 1000 {
-		return 4
-	}
-	
-	expectedTargetWindow := int64(45)
-	
-	// Evaluate time elapsed based on the prior two block issuance records 
-	// rather than erratic local machine system clocks!
-	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed <= 0 {
-		return currentDiff
-	}
-	
-	if actualTimeElapsed < expectedTargetWindow {
-		return currentDiff + 1
-	}
-	if actualTimeElapsed > expectedTargetWindow {
-		if currentDiff > 1 {
-			return currentDiff - 1
-		}
-		return 1
-	}
-	return currentDiff
+currentDiff := int(lastBlock.Difficulty)
+if lastBlock.Index < 1000 {
+return 4
+}
+expectedTargetWindow := int64(45)
+actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+if actualTimeElapsed <= 0 {
+return currentDiff
+}
+if actualTimeElapsed < expectedTargetWindow {
+return currentDiff + 1
+}
+if actualTimeElapsed > expectedTargetWindow {
+if currentDiff > 1 {
+return currentDiff - 1
+}
+return 1
+}
+return currentDiff
 }

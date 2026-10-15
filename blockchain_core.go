@@ -15,7 +15,6 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-// Prevent unused variable issues for embedded front-end assets if referenced across files
 var _ embed.FS
 
 type Block struct {
@@ -133,11 +132,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	if incomingBlock.Index == currentTip.Index+1 {
 		if incomingBlock.PrevHash != currentTip.Hash { StateMutex.Unlock(); go TriggerActiveReSyncPass(); return }
 		if SaveBlockToStorageInternal(incomingBlock) {
-			// 👑 THE CRITICAL STATE ALIGNMENT FIX:
-			// Instantly update the local memory height tracker to interrupt stale local 
-			// miners the very millisecond a peer block is written down to disk ledger files.
 			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
-			
 			StateMutex.Unlock()
 			time.Sleep(50 * time.Millisecond)
 			go BroadcastNewBlock(incomingBlock)
@@ -219,17 +214,15 @@ func TriggerActiveReSyncPass() {
 	if commonAncestorHeight == -1 { return }
 
 	StateMutex.Lock()
-	defer StateMutex.Unlock()
-
-	localTip = GetLatestBlockInternal()
-	if commonAncestorHeight < localTip.Index {
+	shadowTip := GetLatestBlockInternal()
+	if commonAncestorHeight < shadowTip.Index {
 		_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 			bBlocks := tx.Bucket(blocksBucket)
 			bMeta := tx.Bucket(metaBucket)
 			bUTXO := tx.Bucket(utxoBucket)
 			if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
 
-			for h := localTip.Index; h > commonAncestorHeight; h-- {
+			for h := shadowTip.Index; h > commonAncestorHeight; h-- {
 				paddedKey := []byte(fmt.Sprintf("%016d", h))
 				if data := bBlocks.Get(paddedKey); data != nil {
 					var block Block
@@ -293,6 +286,7 @@ func TriggerActiveReSyncPass() {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	StateMutex.Unlock()
 	fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
 
@@ -318,7 +312,7 @@ func ValidateBlockSignatures(b Block) bool {
 			}
 			for txIdx, tx := range b.Transactions {
 				if txIdx == 0 {
-					continue // Coinbase has no parent references on disk, safely bypass check
+					continue 
 				}
 				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 					isBlockValid = false
@@ -332,11 +326,11 @@ func ValidateBlockSignatures(b Block) bool {
 		return false
 	}
 	
-coinbaseTx := b.Transactions[0]
-if !strings.HasPrefix(coinbaseTx.ID, "TX_COINBASE_") {
-return false
-}
-var totalCoinbasePayout float64 = 0.0
+	coinbaseTx := b.Transactions[0]
+	if !strings.HasPrefix(coinbaseTx.ID, "TX_COINBASE_") {
+		return false
+	}
+	var totalCoinbasePayout float64 = 0.0
 for _, out := range coinbaseTx.Outputs {
 totalCoinbasePayout += out.Amount
 }
@@ -350,30 +344,26 @@ return false
 return true
 }
 func CalculateHash(b Block) string {
-	// 👑 THE DETERMINISTIC SERIALIZATION OVERHAUL:
-	// Completely abandon volatile JSON marshaling which shifts across architectures.
-	// Build a flat, deterministic text string loop using exact explicit transaction keys!
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(fmt.Sprintf("%s-%s-%s-%.8f-", tx.ID, tx.Witness, tx.PublicKey, tx.FreeWillOffering))
-		for _, out := range tx.Outputs {
-			txSummaryBuilder.WriteString(fmt.Sprintf("%s-%.8f-", out.Recipient, out.Amount))
-		}
-	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
-		b.Index,
-		b.Timestamp,
-		b.PrevHash,
-		txHashStr,
-		b.Difficulty,
-		b.GuardMatrix,
-		b.Nonce,
-	)
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
+var txSummaryBuilder strings.Builder
+for _, tx := range b.Transactions {
+txSummaryBuilder.WriteString(fmt.Sprintf("%s-%s-%s-%.8f-", tx.ID, tx.Witness, tx.PublicKey, tx.FreeWillOffering))
+for _, out := range tx.Outputs {
+txSummaryBuilder.WriteString(fmt.Sprintf("%s-%.8f-", out.Recipient, out.Amount))
+}
+}
+txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
+b.Index,
+b.Timestamp,
+b.PrevHash,
+txHashStr,
+b.Difficulty,
+b.GuardMatrix,
+b.Nonce,
+)
+h := sha256.New()
+h.Write([]byte(inputStr))
+return fmt.Sprintf("%x", h.Sum(nil))
 }
 func ForceBackgroundSyncPass() {}
 func GetAddressBalance(address string) float64 {
