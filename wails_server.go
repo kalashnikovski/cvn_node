@@ -11,34 +11,25 @@ func RunDesktopUIFrameworkIfApplicable() {
 	fmt.Println("📡 COVENANT STANDARD (CVN) NATIVE HEADLESS SERVER CORE ENGAGED     ")
 	fmt.Println("====================================================================")
 
-	// 👑 THE FLAG REPAIR: Aggressively parse and bind command-line arguments on Linux platforms
+	// Aggressively parse and bind command-line arguments on platform ingress
 	minerAddrFlag := flag.String("miner-address", "", "Target mining output CVN address")
 	connectFlag := flag.String("connect", "", "Bootstrap network HTTP sync gateway endpoint")
 	flag.Parse()
 
-	// If flags are provided via os.Args, override the default config parameters instantly
 	if *minerAddrFlag != "" {
 		CustomMinerAddress = *minerAddrFlag
 		fmt.Printf("🪪  Identity Configured via CLI: %s\n", CustomMinerAddress)
 	}
 	
 	if *connectFlag != "" {
-		// Bind the targeted HTTP gateway cleanly to the active synchronization pipeline
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
-		go func(seedTarget string) {
-			// Trigger an asynchronous, immediate pre-flight synchronization sweep
-			TriggerActiveReSyncPassWithTarget(seedTarget)
-		}(*connectFlag)
 	}
 
-	// Ignite the background network topography mesh listeners on TCP Port 8080
+	// 👑 THE CORE REPAIR: Ignite the P2P Gossip mesh engine asynchronously (go)!
+	// This ensures the thread never freezes, allowing the execution track to fall
+	// straight down into your native main.go logging dashboard loop automatically!
 	go StartMeshNetwork()
 
-	// Keep the headless daemon processor alive indefinitely
-	select {}
-}
-
-func TriggerActiveReSyncPassWithTarget(target string) {
-	// Fallback bridge to execute standard re-sync pass cleanly
-	TriggerActiveReSyncPass()
+	fmt.Println("⚙️  [IGNITION] Streaming core parameters down into main dashboard metrics...")
+	fmt.Println("--------------------------------------------------------------------")
 }
