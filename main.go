@@ -325,8 +325,8 @@ func main() {
 				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
 					for _, incomingBlock := range incomingBatch {
 						StateMutex.RLock()
-						currentHeightCheck := GetLatestBlockInternal().Index
-						StateMutex.RUnlock()
+currentHeightCheck := GetLatestBlockInternal().Index
+StateMutex.RUnlock()
 if incomingBlock.Index == int64(currentHeightCheck)+1 {
 SaveBlockToStorage(incomingBlock)
 currentLocalHeight = incomingBlock.Index
@@ -368,46 +368,49 @@ const TargetBlockTimeWindow = 45
 blockMiningStartTime := time.Now().Unix()
 StateMutex.RLock()
 currentBlock := GetLatestBlockInternal()
+nextIndex := currentBlock.Index + 1
+parentBlockTipHash := currentBlock.Hash
+// 👑 ABSOLUTE TIME-DETERMINISM:
+// Unify candidate timestamps directly into a single consensus evaluation window
+simulatedTime := time.Now().Unix()
+if simulatedTime <= currentBlock.Timestamp {
+simulatedTime = currentBlock.Timestamp + 1
+}
 var targetDifficulty int
 if currentBlock.Index == 0 {
 targetDifficulty = 2
 } else {
-targetDifficulty = CalculateNextDifficulty(currentBlock, time.Now().Unix())
+targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
 }
 if targetDifficulty < 1 { targetDifficulty = 1 }
 if targetDifficulty > 8 { targetDifficulty = 8 }
-nextIndex := currentBlock.Index + 1
-parentBlockTipHash := currentBlock.Hash
 StateMutex.RUnlock()
 targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
-simulatedTime := time.Now().Unix()
 var guardMatrixPlaceholder = ""
-			allowedEmission := CalculateBlockReward(nextIndex)
-			coinbaseTxID := fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano())
-			
-			candidateTransactions := []Transaction{
-				{
-					ID:        coinbaseTxID,
-					Witness:   "COVENANT_STEWARD_ASSEMBLY",
-					PublicKey: "GENESIS_VOID_REWARD_POOL",
-					Outputs: []UTXOOutput{
-						{Recipient: CustomMinerAddress, Amount: allowedEmission},
-					},
-					// 👑 THE MASTER TIMESTAMP LOCK:
-					// Force the inner transaction payload to match your block's 
-					// simulatedTime EXACTLY, eliminating system clock variation forks!
-					Timestamp: simulatedTime, 
-				},
-			}
-// 👑 THE CRITICAL SYMMETRY UPGRADE:
-// Construct the exact internal transaction preimage text string natively inside the miner thread!
+allowedEmission := CalculateBlockReward(nextIndex)
+// 👑 DETERMINISTIC COINBASE TRANS-ID LOCK:
+// Lock the transaction identifier to the unique height index to prevent nano clock drift forks!
+coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
+candidateTransactions := []Transaction{
+{
+ID:               coinbaseTxID,
+Witness:          "COVENANT_STEWARD_ASSEMBLY",
+PublicKey:        "GENESIS_VOID_REWARD_POOL",
+Outputs: []UTXOOutput{
+{Recipient: CustomMinerAddress, Amount: allowedEmission},
+},
+Timestamp:        simulatedTime,
+FreeWillOffering: 0.0,
+DataSizeKB:       0.1,
+Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+},
+}
+// 👑 STRIPPED PREIMAGE SERIALIZATION PARITY:
+// Formulate the exact structural hash string matching blockchain_core specs
 var txSummaryBuilder strings.Builder
 for _, tx := range candidateTransactions {
-txSummaryBuilder.WriteString(fmt.Sprintf("%s-%s-%s-%.8f-", tx.ID, tx.Witness, tx.PublicKey, tx.FreeWillOffering))
-for _, out := range tx.Outputs {
-txSummaryBuilder.WriteString(fmt.Sprintf("%s-%.8f-", out.Recipient, out.Amount))
-}
+txSummaryBuilder.WriteString(tx.ID + "-")
 }
 txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
@@ -440,8 +443,6 @@ liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 logMutex.Unlock()
 go BroadcastNewBlock(newBlock)
 }
-nonce = 0
-chunkCeiling = 1000000
 blockSolved = true
 break
 }
@@ -449,22 +450,18 @@ atomic.AddUint64(&globalHashCount, 1)
 nonce++
 }
 if blockSolved {
-				blockMiningEndTime := time.Now().Unix()
-				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-				if actualTimeElapsed < TargetBlockTimeWindow {
-					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-				}
-			} else {
-				// 👑 THE METRIC FIX:
-				// Reset nonce to 0 alongside adjusting your chunkCeiling target boundaries.
-				// This guarantees the inner loop runs a full 1,000,000 hashes every single pass!
-				nonce = 0
-				chunkCeiling = 1000000
-				
-				time.Sleep(100 * time.Millisecond)
-				runtime.Gosched()
-			}
+nonce = 0
+chunkCeiling = 1000000
+blockMiningEndTime := time.Now().Unix()
+actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+if actualTimeElapsed < TargetBlockTimeWindow {
+requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+}
+} else {
+chunkCeiling = nonce + 1000000
+runtime.Gosched()
+}
 }
 }()
 ticker := time.NewTicker(3 * time.Second)

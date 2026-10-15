@@ -331,11 +331,11 @@ func ValidateBlockSignatures(b Block) bool {
 		return false
 	}
 	var totalCoinbasePayout float64 = 0.0
-for _, out := range coinbaseTx.Outputs {
-totalCoinbasePayout += out.Amount
-}
-allowedEmission := CalculateBlockReward(b.Index)
-if b.Index > 21024000 {
+	for _, out := range coinbaseTx.Outputs {
+		totalCoinbasePayout += out.Amount
+	}
+	allowedEmission := CalculateBlockReward(b.Index)
+	if b.Index > 21024000 {
 allowedEmission += 5.0
 }
 if totalCoinbasePayout > allowedEmission {
@@ -344,28 +344,23 @@ return false
 return true
 }
 func CalculateHash(b Block) string {
-	// 👑 THE CRYPTOGRAPHIC LOCKDOWN:
-	// Isolate the hash strictly to the block metadata and the unique identifiers 
-	// of the included transactions. This completely prevents unassigned or trailing 
-	// struct variables from breaking cross-platform parity over network wires!
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(tx.ID + "-")
-	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
-		b.Index,
-		b.Timestamp,
-		b.PrevHash,
-		txHashStr,
-		b.Difficulty,
-		b.GuardMatrix,
-		b.Nonce,
-	)
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
+var txSummaryBuilder strings.Builder
+for _, tx := range b.Transactions {
+txSummaryBuilder.WriteString(tx.ID + "-")
+}
+txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
+b.Index,
+b.Timestamp,
+b.PrevHash,
+txHashStr,
+b.Difficulty,
+b.GuardMatrix,
+b.Nonce,
+)
+h := sha256.New()
+h.Write([]byte(inputStr))
+return fmt.Sprintf("%x", h.Sum(nil))
 }
 func ForceBackgroundSyncPass() {}
 func GetAddressBalance(address string) float64 {
