@@ -44,7 +44,7 @@ To ensure the network files run securely on your computer, we must create a dedi
 
 
 
-1\. Open your internet browser and visit the official repository release page: `https://github.com/kalashnikovski/cvn\_node`
+1\. Open your internet browser and visit the official repository release page: `https://github.com/kalashnikovski/cvn_node`
 
 2\. Click the green \*\*Code\*\* button near the top right of the file grid, then click \*\*Download ZIP\*\*.
 
@@ -52,9 +52,9 @@ To ensure the network files run securely on your computer, we must create a dedi
 
 4\. Click on \*\*This PC\*\* in the left sidebar, then double-click your primary hard drive (usually labeled \*\*Local Disk (C:)\*\*).
 
-5\. Right-click inside any empty white space, hover over \*\*New\*\*, select \*\*Folder\*\*, and name it exactly: `cvn\_node`
+5\. Right-click inside any empty white space, hover over \*\*New\*\*, select \*\*Folder\*\*, and name it exactly: `cvn_node`
 
-6\. Go to your Downloads folder, double-click the `cvn\_node-main.zip` file you just grabbed from GitHub, and drag all the contents directly out of the zip file and drop them straight inside your newly created `C:\\cvn\_node` directory folder.
+6\. Go to your Downloads folder, double-click the `cvn\_node-main.zip` file you just grabbed from GitHub, and drag all the contents directly out of the zip file and drop them straight inside your newly created `C:\\cvn_node` directory folder.
 
 
 
@@ -68,7 +68,7 @@ The network requires a foundational, open-source programming runtime environment
 
 
 
-1. 1\. Open your internet browser and visit the official download page: https://go.dev/dl/
+1\. Open your internet browser and visit the official download page: https://go.dev/dl/
 
 
 
@@ -90,9 +90,9 @@ The network requires a foundational, open-source programming runtime environment
 
 
 
-1\. Open your `C:\\cvn\_node` folder.
+1\. Open your `C:\\cvn_node` folder.
 
-2\. Locate the file named \*\*`AutoOnboard\_And\_Mine.ps1`\*\*.
+2\. Locate the file named \*\*`AutoOnboard_And_Mine.ps1`\*\*.
 
 3\. Right-click the file and choose \*\*"Run with PowerShell"\*\* (or run inside an Administrator PowerShell terminal window).
 
