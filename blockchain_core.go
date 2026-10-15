@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 
 	"go.etcd.io/bbolt"
 )
+
+// Prevent unused variable issues for embedded front-end assets if referenced across files
+var _ embed.FS
 
 type Block struct {
 	Index        int64         `json:"current_height"`
@@ -90,11 +94,7 @@ func CalculateBlockReward(blockIndex int64) float64 {
 	} else if blockIndex <= 21024000 { 
 		return 6.25 
 	}
-	return CalculateDynamicJubileeVaultReward(blockIndex)
-}
-
-func CalculateDynamicJubileeVaultReward(blockIndex int64) float64 {
-	return 5.00 
+	return 5.00
 }
 
 func GetGlobalMeshMaxHeight(seedURL string) int64 {
@@ -159,12 +159,7 @@ func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (
 func TriggerActiveReSyncPass() {
 	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) { return }
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
-	fmt.Println("⏳ [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
-	
-	StateMutex.Lock()
-	localTip := GetLatestBlockInternal()
-	scanHeight := localTip.Index
-	StateMutex.Unlock()
+	fmt.Println(" -> [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
 
 	activeGlobalRecoveryGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	client := &http.Client{Timeout: 4 * time.Second}
@@ -181,18 +176,21 @@ func TriggerActiveReSyncPass() {
 	}
 	if chosenTargetSeedURL == "" { return }
 
-	var localHashesSnapshot = make(map[int64]string)
 	StateMutex.Lock()
+	localTip := GetLatestBlockInternal()
+	localHashesSnapshot := make(map[int64]string)
+
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
-		if bBlocks != nil {
-			for h := scanHeight; h >= 0; h-- {
-				paddedKey := fmt.Sprintf("%016d", h)
-				if data := bBlocks.Get([]byte(paddedKey)); data != nil {
-					var blk Block
-					if json.Unmarshal(data, &blk) == nil {
-						localHashesSnapshot[h] = blk.Hash
-					}
+		if bBlocks == nil {
+			return nil
+		}
+		for h := localTip.Index; h >= 0; h-- {
+			paddedKey := []byte(fmt.Sprintf("%016d", h))
+			if data := bBlocks.Get(paddedKey); data != nil {
+				var blk Block
+				if json.Unmarshal(data, &blk) == nil {
+					localHashesSnapshot[h] = blk.Hash
 				}
 			}
 		}
@@ -200,16 +198,17 @@ func TriggerActiveReSyncPass() {
 	})
 	StateMutex.Unlock()
 
+	scanHeight := localTip.Index
 	var commonAncestorHeight int64 = -1
-	for h := scanHeight; h >= 0; h-- {
-		localHash, safeExists := localHashesSnapshot[h]
-		if !safeExists { continue }
 
-		remoteHash, remoteErr := fetchRemoteBlockHeader(client, chosenTargetSeedURL, h)
-		if remoteErr == nil && localHash == remoteHash {
-			commonAncestorHeight = h
+	for scanHeight >= 0 {
+		localHash := localHashesSnapshot[scanHeight]
+		remoteHash, remoteErr := fetchRemoteBlockHeader(client, chosenTargetSeedURL, scanHeight)
+		if remoteErr == nil && localHash != "" && localHash == remoteHash {
+			commonAncestorHeight = scanHeight
 			break
 		}
+		scanHeight--
 	}
 
 	if commonAncestorHeight == -1 { return }
@@ -217,15 +216,15 @@ func TriggerActiveReSyncPass() {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 
-	if commonAncestorHeight < GetLatestBlockInternal().Index {
+	localTip = GetLatestBlockInternal()
+	if commonAncestorHeight < localTip.Index {
 		_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 			bBlocks := tx.Bucket(blocksBucket)
 			bMeta := tx.Bucket(metaBucket)
 			bUTXO := tx.Bucket(utxoBucket)
 			if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
 
-			currentHeight := GetLatestBlockInternal().Index
-			for h := currentHeight; h > commonAncestorHeight; h-- {
+			for h := localTip.Index; h > commonAncestorHeight; h-- {
 				paddedKey := []byte(fmt.Sprintf("%016d", h))
 				if data := bBlocks.Get(paddedKey); data != nil {
 					var block Block
@@ -253,6 +252,7 @@ func TriggerActiveReSyncPass() {
 			break
 		}
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
+		
 		StateMutex.Unlock()
 		resp, err := client.Get(requestURL)
 		if err != nil {
@@ -273,21 +273,22 @@ func TriggerActiveReSyncPass() {
 			StateMutex.Lock()
 			break
 		}
+
 		StateMutex.Lock()
 		for _, block := range incomingBatch {
 			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
 				if ValidateBlockSignatures(block) {
 					SaveBlockToStorageInternal(block)
-					fmt.Printf("📥 [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
+					fmt.Printf(" -> [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
 				} else {
-					fmt.Printf("🚨 [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
+					fmt.Printf(" -> [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
 					break
 				}
 			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	fmt.Println("✨ [🔓 SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
+	fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
 
 func ValidateBlockSignatures(b Block) bool {
@@ -311,9 +312,8 @@ func ValidateBlockSignatures(b Block) bool {
 				return nil
 			}
 			for txIdx, tx := range b.Transactions {
-				// 👑 COINBASE BYPASS GATE: Index 0 represents dynamic block reward emission with zero parental inputs
 				if txIdx == 0 {
-					continue
+					continue // Coinbase has no parent references on disk, safely bypass check
 				}
 				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 					isBlockValid = false
@@ -333,9 +333,9 @@ func ValidateBlockSignatures(b Block) bool {
 	}
 	var totalCoinbasePayout float64 = 0.0
 	for _, out := range coinbaseTx.Outputs {
-totalCoinbasePayout += out.Amount
-}
-allowedEmission := CalculateBlockReward(b.Index)
+		totalCoinbasePayout += out.Amount
+	}
+	allowedEmission := CalculateBlockReward(b.Index)
 if b.Index > 21024000 {
 allowedEmission += 5.0
 }
