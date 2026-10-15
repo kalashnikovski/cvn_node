@@ -46,7 +46,7 @@ func initWindowsAnsi() {}
 func main() {
 	initWindowsAnsi()
 
-	// 🟩 CRITERIA 1 & 2: Refactor --generate-wallet route to execute un-guessable CSPRNG factory generation
+	// Refactor --generate-wallet route to execute un-guessable CSPRNG factory generation
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
@@ -66,20 +66,20 @@ func main() {
 			_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
 
 			configMap := map[string]string{"miner_address": walletAddress}
-			configBytes, _ := json.MarshalIndent(configMap, "", "  ")
-			_ = os.WriteFile("miner_config.json", configBytes, 0644)
+			configMapBytes, _ := json.MarshalIndent(configMap, "", "  ")
+			_ = os.WriteFile("miner_config.json", configMapBytes, 0644)
 			os.Exit(0)
 		}
 	}
 
-	// 🟩 CRITERIA 3: Validate and intercept unconfigured user bootstraps using true cryptographic keys
+	// Validate and intercept unconfigured user bootstraps using true cryptographic keys
 	if _, err := os.Stat("miner_config.json"); os.IsNotExist(err) {
 		fmt.Println("👤 [USER STATUS] Pristine installation path detected. Initializing secure configuration parameters...")
 		privHex, pubHex, walletAddress, err := GenerateKeyPair()
 		if err == nil {
 			configMap := map[string]string{"miner_address": walletAddress}
-			configBytes, _ := json.MarshalIndent(configMap, "", "  ")
-			_ = os.WriteFile("miner_config.json", configBytes, 0644)
+			configMapBytes, _ := json.MarshalIndent(configMap, "", "  ")
+			_ = os.WriteFile("miner_config.json", configMapBytes, 0644)
 
 			backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPublic Key: %s\nPrivate Key: %s\n", walletAddress, pubHex, privHex)
 			_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
@@ -372,7 +372,7 @@ time.Sleep(100 * time.Millisecond)
 continue
 }
 blockMiningStartTime := time.Now().Unix()
-// 🟩 CRITERIA 4: Intact Task 5 Read-fencing synchronization bounds
+// Intact Task 5 Read-fencing synchronization bounds
 StateMutex.RLock()
 currentBlock := GetLatestBlockInternal()
 var targetDifficulty int
@@ -390,18 +390,20 @@ targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
 simulatedTime := time.Now().Unix()
 var guardMatrixPlaceholder = ""
+// Dynamically adapt reward parameter inside candidate transaction generations
+allowedEmission := CalculateBlockRewardDualChannel(nextIndex, nonce)
 candidateTransactions := []Transaction{
 {
 ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
 Witness:   "COVENANT_STEWARD_ASSEMBLY",
 PublicKey: "GENESIS_VOID_REWARD_POOL",
 Outputs: []UTXOOutput{
-{Recipient: CustomMinerAddress, Amount: CalculateBlockReward(nextIndex)},
+{Recipient: CustomMinerAddress, Amount: allowedEmission},
 },
 Timestamp: simulatedTime,
 },
 }
-// 🟩 CRITERIA 4: Intact Task 1 complete state commitment preimages
+// Intact Task 1 complete state commitment preimages
 txBytes, _ := json.Marshal(candidateTransactions)
 hTx := sha256.Sum256(txBytes)
 txHashStr := fmt.Sprintf("%x", hTx[:])
@@ -468,7 +470,9 @@ StateMutex.RLock()
 liveBlock := GetLatestBlockInternal()
 StateMutex.RUnlock()
 actualBlocksHeight := liveBlock.Index
-actualCvnBalance := liveBlock.Index * 50
+StateMutex.RLock()
+actualCvnBalance := GetAddressBalance(CustomMinerAddress)
+StateMutex.RUnlock()
 hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
 currentLiveHashrateTrack = realHashrateMH
@@ -500,7 +504,7 @@ fmt.Println("===================================================================
 fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 fmt.Println("================================================================================")
 fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
-fmt.Printf("💰 WALLET BALANCE: %-16d CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
+fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
 fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
 fmt.Println("================================================================================")
 fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
@@ -522,7 +526,7 @@ os.Stdout.Sync()
 }
 }
 func osCheckArgs() []string { return os.Args }
-// 🟩 CRITERIA 4: Intact responsive 45-second difficulty calibration ticker loop logic
+// Intact responsive 45-second difficulty calibration ticker loop logic
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 currentDiff := int(lastBlock.Difficulty)
 expectedTargetWindow := int64(45)
