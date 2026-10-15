@@ -381,12 +381,12 @@ StateMutex.RUnlock()
 targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
 var guardMatrixPlaceholder = ""
-			allowedEmission := CalculateBlockReward(nextIndex)
+						allowedEmission := CalculateBlockReward(nextIndex)
 			
-			// 👑 THE DEFINITIVE PREFIX SYNCHRONIZATION:
-			// Ensure the Coinbase Transaction ID uses standard underscore formatting 
-			// to easily satisfy the strict HasPrefix validation rules in blockchain_core!
-			coinbaseTxID := fmt.Sprintf("TX_COINBASE_%d", nextIndex)
+			// 👑 REVERTED TO WORKING STATE:
+			// Restored the exact transaction ID formatting that successfully unlocked 
+			// Sparks60's rewards on the live mainnet servers.
+			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
 			
 			candidateTransactions := []Transaction{
 				{
