@@ -184,7 +184,7 @@ func RunWalletGUI() {
 			txID := fmt.Sprintf("TX_OUTBOUND_%d", time.Now().UnixNano())
 			
 			// 👑 PREIMAGE ALIGNMENT: Match template with structural security_harness.go rules exactly
-			txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, offering)
+			txMessage := fmt.Sprintf("%s-%s-%.8f", txID, CustomMinerAddress, offering)
 
 			rStr, sStr, err := SignTransactionPayload(privKey, txMessage)
 			if err != nil {

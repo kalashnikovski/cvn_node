@@ -25,7 +25,7 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 	}
 
 	// 2. CRYPTOGRAPHIC SIGNATURE PASS: Validates ECDSA key-pair coordinates over message payload strings
-	txMessage := fmt.Sprintf("%s-%s-%f", tx.ID, tx.Witness, tx.FreeWillOffering)
+	txMessage := fmt.Sprintf("%s-%s-%.8f", tx.ID, tx.Witness, tx.FreeWillOffering)
 	sigSegments := strings.Split(tx.Signature, "|")
 	if len(sigSegments) < 2 {
 		fmt.Println("🚨 SIGNATURE FAULT: Transaction formatting dropped or corrupted segment blocks.")

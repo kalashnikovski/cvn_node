@@ -167,7 +167,7 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr strin
 	}
 
 	// Enforce uniform preimage template formatting matching security_harness.go rules exactly
-	txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
+	txMessage := fmt.Sprintf("%s-%s-%.8f", txID, CustomMinerAddress, fee)
 
 	rStr, sStr, err := SignTransactionPayload(localPrivateKeySecret, txMessage)
 	if err != nil {

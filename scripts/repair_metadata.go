@@ -65,7 +65,7 @@ func main() {
 
 		// Convert height numerical index integer to explicit byte strings matching consensus specs
 		heightKey := []byte("height")
-		heightVal := []byte(fmt.Sprintf("%d", calculatedTip))
+		heightVal := []byte(fmt.Sprintf("%016d", calculatedTip))
 
 		err = meta.Put(heightKey, heightVal)
 		if err != nil {
