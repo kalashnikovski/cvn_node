@@ -54,7 +54,7 @@ To ensure the network files run securely on your computer, we must create a dedi
 
 5\. Right-click inside any empty white space, hover over \*\*New\*\*, select \*\*Folder\*\*, and name it exactly: `cvn_node`
 
-6\. Go to your Downloads folder, double-click the `cvn\_node-main.zip` file you just grabbed from GitHub, and drag all the contents directly out of the zip file and drop them straight inside your newly created `C:\\cvn_node` directory folder.
+6\. Go to your Downloads folder, double-click the `cvn_node-main.zip` file you just grabbed from GitHub, and drag all the contents directly out of the zip file and drop them straight inside your newly created `C:\\cvn_node` directory folder.
 
 
 
