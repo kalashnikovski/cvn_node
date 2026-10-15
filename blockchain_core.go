@@ -156,8 +156,6 @@ func TriggerActiveReSyncPass() {
 	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) { return }
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 	fmt.Println("⏳ [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
-	StateMutex.Lock()
-	defer StateMutex.Unlock()
 
 	activeGlobalRecoveryGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	client := &http.Client{Timeout: 4 * time.Second}
@@ -174,30 +172,51 @@ func TriggerActiveReSyncPass() {
 	}
 	if chosenTargetSeedURL == "" { return }
 
+	// 1. Snapshot local block hashes in an atomic block read phase to avoid race conditions.
+	StateMutex.Lock()
 	localTip := GetLatestBlockInternal()
+	localHashesSnapshot := make(map[int64]string)
+
+	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+		bBlocks := tx.Bucket(blocksBucket)
+		if bBlocks == nil {
+			return nil
+		}
+		for h := localTip.Index; h >= 0; h-- {
+			paddedKey := []byte(fmt.Sprintf("%016d", h))
+			if data := bBlocks.Get(paddedKey); data != nil {
+				var blk Block
+				if json.Unmarshal(data, &blk) == nil {
+					localHashesSnapshot[h] = blk.Hash
+				}
+			}
+		}
+		return nil
+	})
+	StateMutex.Unlock()
+
+	// 2. Perform long-running, non-blocking network calls without holding StateMutex write locks.
 	scanHeight := localTip.Index
 	var commonAncestorHeight int64 = -1
 
 	for scanHeight >= 0 {
-		var localHash string
-		_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-			bBlocks := tx.Bucket(blocksBucket)
-			if bBlocks != nil {
-				if data := bBlocks.Get([]byte(fmt.Sprintf("%016d", scanHeight))); data != nil {
-					var blk Block
-					if json.Unmarshal(data, &blk) == nil { localHash = blk.Hash }
-				}
-			}
-			return nil
-		})
-		StateMutex.Unlock()
+		localHash := localHashesSnapshot[scanHeight]
 		remoteHash, remoteErr := fetchRemoteBlockHeader(client, chosenTargetSeedURL, scanHeight)
-		StateMutex.Lock()
-		if remoteErr == nil && localHash == remoteHash { commonAncestorHeight = scanHeight; break }
+		if remoteErr == nil && localHash != "" && localHash == remoteHash {
+			commonAncestorHeight = scanHeight
+			break
+		}
 		scanHeight--
 	}
+
 	if commonAncestorHeight == -1 { return }
 
+	// 3. Re-acquire the write lock to safely perform structural rollbacks, pruning, and linear downloads.
+	StateMutex.Lock()
+	defer StateMutex.Unlock()
+
+	// Re-verify that local state hasn't moved backward past common ancestor before starting mutations
+	localTip = GetLatestBlockInternal()
 	if commonAncestorHeight < localTip.Index {
 		_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 			bBlocks := tx.Bucket(blocksBucket)
@@ -225,6 +244,8 @@ func TriggerActiveReSyncPass() {
 		atomic.StoreInt64(&localHeightState, commonAncestorHeight)
 		RebuildStateBalanceCacheInternal()
 	}
+
+	// Fetch forward missing blocks sequentially under explicit write lock protection
 	for {
 		currentLocalTip := GetLatestBlockInternal()
 		nextNeededBlock := currentLocalTip.Index + 1
@@ -232,6 +253,8 @@ func TriggerActiveReSyncPass() {
 			break
 		}
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
+		
+		// Temporarily drop lock solely for network transit frame, then re-acquire instantly
 		StateMutex.Unlock()
 		resp, err := client.Get(requestURL)
 		if err != nil {
@@ -252,6 +275,7 @@ func TriggerActiveReSyncPass() {
 			StateMutex.Lock()
 			break
 		}
+
 		StateMutex.Lock()
 		for _, block := range incomingBatch {
 			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
@@ -298,40 +322,38 @@ func ValidateBlockSignatures(b Block) bool {
 			return nil
 		})
 	}
-	if !isBlockValid {
-		return false
-	}
-	
-	coinbaseTx := b.Transactions[0]
-	if !strings.HasPrefix(coinbaseTx.ID, "TX_COINBASE_") {
-		return false
-	}
-	var totalCoinbasePayout float64 = 0.0
-	for _, out := range coinbaseTx.Outputs {
-		totalCoinbasePayout += out.Amount
-	}
-	allowedEmission := CalculateBlockReward(b.Index)
-	if b.Index > 21024000 {
-		allowedEmission += 5.0
-	}
-	if totalCoinbasePayout > allowedEmission {
-		return false
-	}
-	return true
+if !isBlockValid {
+return false
 }
-
+coinbaseTx := b.Transactions[0]
+if !strings.HasPrefix(coinbaseTx.ID, "TX_COINBASE_") {
+return false
+}
+var totalCoinbasePayout float64 = 0.0
+for _, out := range coinbaseTx.Outputs {
+totalCoinbasePayout += out.Amount
+}
+allowedEmission := CalculateBlockReward(b.Index)
+if b.Index > 21024000 {
+allowedEmission += 5.0
+}
+if totalCoinbasePayout > allowedEmission {
+return false
+}
+return true
+}
 func CalculateHash(b Block) string {
-	txBytes, err := json.Marshal(b.Transactions)
-	var txHashStr string
-	if err != nil {
-		hTx := sha256.Sum256([]byte("[]"))
-		txHashStr = fmt.Sprintf("%x", hTx[:])
-	} else {
-		hTx := sha256.Sum256(txBytes)
-		txHashStr = fmt.Sprintf("%x", hTx[:])
-	}
-	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
-		b.Index,
+txBytes, err := json.Marshal(b.Transactions)
+var txHashStr string
+if err != nil {
+hTx := sha256.Sum256([]byte("[]"))
+txHashStr = fmt.Sprintf("%x", hTx[:])
+} else {
+hTx := sha256.Sum256(txBytes)
+txHashStr = fmt.Sprintf("%x", hTx[:])
+}
+inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
+b.Index,
 b.Timestamp,
 b.PrevHash,
 txHashStr,
