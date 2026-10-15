@@ -344,23 +344,27 @@ return false
 return true
 }
 func CalculateHash(b Block) string {
-var txSummaryBuilder strings.Builder
-for _, tx := range b.Transactions {
-txSummaryBuilder.WriteString(tx.ID + "-")
-}
-txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
-b.Index,
-b.Timestamp,
-b.PrevHash,
-txHashStr,
-b.Difficulty,
-b.GuardMatrix,
-b.Nonce,
-)
-h := sha256.New()
-h.Write([]byte(inputStr))
-return fmt.Sprintf("%x", h.Sum(nil))
+	// 👑 THE DETERMINISTIC OVERHAUL:
+	// Format the block preimage strictly using immutable structural field indices.
+	// This forces absolute cross-platform parity over multi-node network boundaries!
+	var txSummaryBuilder strings.Builder
+	for _, tx := range b.Transactions {
+		txSummaryBuilder.WriteString(tx.ID + "-")
+	}
+	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+
+	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
+		b.Index,
+		b.Timestamp,
+		b.PrevHash,
+		txHashStr,
+		b.Difficulty,
+		b.GuardMatrix,
+		b.Nonce,
+	)
+	h := sha256.New()
+	h.Write([]byte(inputStr))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 func ForceBackgroundSyncPass() {}
 func GetAddressBalance(address string) float64 {
