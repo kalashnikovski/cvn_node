@@ -445,17 +445,22 @@ atomic.AddUint64(&globalHashCount, 1)
 nonce++
 }
 if blockSolved {
-blockMiningEndTime := time.Now().Unix()
-actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-if actualTimeElapsed < TargetBlockTimeWindow {
-requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-}
-} else {
-chunkCeiling = nonce + 1000000
-time.Sleep(100 * time.Millisecond)
-runtime.Gosched()
-}
+				blockMiningEndTime := time.Now().Unix()
+				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+				if actualTimeElapsed < TargetBlockTimeWindow {
+					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+				}
+			} else {
+				// 👑 THE METRIC FIX:
+				// Reset nonce to 0 alongside adjusting your chunkCeiling target boundaries.
+				// This guarantees the inner loop runs a full 1,000,000 hashes every single pass!
+				nonce = 0
+				chunkCeiling = 1000000
+				
+				time.Sleep(100 * time.Millisecond)
+				runtime.Gosched()
+			}
 }
 }()
 ticker := time.NewTicker(3 * time.Second)
