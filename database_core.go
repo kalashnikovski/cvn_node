@@ -43,33 +43,16 @@ func InitBoltEngine() {
 	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 		_, _ = tx.CreateBucketIfNotExists(blocksBucket)
 		meta, _ := tx.CreateBucketIfNotExists(metaBucket)
-		bUTXO, _ := tx.CreateBucketIfNotExists(utxoBucket)
+		_, _ = tx.CreateBucketIfNotExists(utxoBucket)
 		_, _ = tx.CreateBucketIfNotExists(jubileeVaultBucket)
 
 		if meta.Get([]byte("height")) == nil {
 			genesisBlock := Block{
 				Index:        0,
 				Timestamp:    1790640000,
-				Transactions: []Transaction{
-					{
-						ID:        "TX_GENESIS_INITIAL_POOL",
-						Inputs:    []UTXOInput{},
-						Outputs: []UTXOOutput{
-							{
-								Recipient: "COVENANT_STEWARD_ASSEMBLY",
-								Amount:    2100000000.0,
-							},
-						},
-						Signature:        "GENESIS_IMMUTABLE_SACRED_COVENANT_SIGNATURE",
-						PublicKey:        "GENESIS_VOID_REWARD_POOL",
-						Timestamp:        1790640000,
-						FreeWillOffering: 0.0,
-						DataSizeKB:       1.0,
-						Witness:          "COVENANT_STEWARD_ASSEMBLY",
-					},
-				}, 
+				Transactions: []Transaction{}, 
 				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
-				Hash:         "00000c43b46f2506955b920b5981bf0a6375fc0bc033744921209dd653726be",
+				Hash:         "00000c43b46f2506955b920b5981bf0a6375fc0bc0337",
 				Difficulty:   4,
 				Nonce:        0,
 				GuardMatrix:  "",
@@ -80,17 +63,9 @@ func InitBoltEngine() {
 			
 			_ = tx.Bucket(blocksBucket).Put([]byte(paddedKey), genesisData)
 			_ = meta.Put([]byte("height"), []byte(paddedKey))
-
-			// Write Genesis Output to Ledger State directly on disk to clear empty lockout validations
-			genesisUTXORecord := UTXORecord{
-				Amount:    2100000000.0,
-				Recipient: "COVENANT_STEWARD_ASSEMBLY",
-			}
-			genesisUTXOData, _ := json.Marshal(genesisUTXORecord)
-			_ = bUTXO.Put([]byte("TX_GENESIS_INITIAL_POOL_0"), genesisUTXOData)
 			
 			fmt.Println("🌱 [GENESIS MATRIX SECURELY SEEDED] Physical Block #0 written directly to disk.")
-			fmt.Println("🪙 [LEDGER PARAMETERS INSTANTIATED] Initial Master Parent Pool unspent record safely committed.")
+			fmt.Println("🪙 [FAIR LAUNCH MANDATE ENFORCED] Zero token pre-mine established. UTXO database is pristine.")
 		}
 		return nil
 	})
@@ -111,7 +86,7 @@ func GetLatestBlockInternal() Block {
 	latestBlock.Index = 0
 	latestBlock.Difficulty = 4
 	latestBlock.Timestamp = 1790640000
-	latestBlock.Hash = "85632def04401fccf7cbccd78b9ceb4d64c87a9195996921209dd653726b5ebd"
+	latestBlock.Hash = "00000c43b46f2506955b920b5981bf0a6375fc0bc0337"
 
 	if GlobalBoltEngine == nil {
 		return latestBlock
@@ -173,7 +148,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		// 👑 HARD-LOCKED COMMITMENT GATE: Deep validation pass before mutating disk records
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx == 0 {
-				continue // Skip the primary coinbase reward transaction
+				continue // Skip the primary coinbase reward transaction since it mints coins
 			}
 			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
 				fmt.Printf("🚨 SECURITY WARNING: Fraudulent transaction '%s' detected inside candidate block #%d at index %d! Forcefully aborting disk commitment.\n", txPayload.ID, block.Index, txIdx)
@@ -191,7 +166,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
 		for _, txPayload := range block.Transactions {
-			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") && txPayload.ID != "TX_GENESIS_INITIAL_POOL" {
+			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") {
 				for _, input := range txPayload.Inputs {
 					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
 					_ = bUTXO.Delete([]byte(compoundInputKey))
