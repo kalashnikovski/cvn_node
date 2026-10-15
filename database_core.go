@@ -52,7 +52,7 @@ func InitBoltEngine() {
 				Timestamp:    1790640000,
 				Transactions: []Transaction{}, 
 				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
-				Hash:         "000000c43b46f2506955b920b5981bf0a6375fc0bc033744921209dd653726be",
+				Hash:         "00000c43b46f2506955b920b5981bf0a6375fc0bc033744921209dd653726be",
 				Difficulty:   4,
 				Nonce:        0,
 				GuardMatrix:  "",
@@ -74,7 +74,6 @@ func InitBoltEngine() {
 
 // GetLatestBlock exposes an RLock synchronized gateway path for external tracking modules.
 func GetLatestBlock() Block {
-	// 🟩 CRITERIA 3: Force thread coordination using Read-locking mechanics
 	StateMutex.RLock()
 	defer StateMutex.RUnlock()
 	return GetLatestBlockInternal()
@@ -143,6 +142,17 @@ func SaveBlockToStorageInternal(block Block) bool {
 		bUTXO := tx.Bucket(utxoBucket)
 		if bBlocks == nil || bMeta == nil || bUTXO == nil {
 			return fmt.Errorf("required consensus partitions are missing")
+		}
+
+		// 👑 HARD-LOCKED COMMITMENT GATE: Deep validation pass before mutating disk records
+		for txIdx, txPayload := range block.Transactions {
+			if txIdx == 0 {
+				continue // Skip the primary coinbase reward transaction
+			}
+			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
+				fmt.Printf("🚨 SECURITY WARNING: Fraudulent transaction '%s' detected inside candidate block #%d at index %d! Forcefully aborting disk commitment.\n", txPayload.ID, block.Index, txIdx)
+				return fmt.Errorf("transaction verification failed for txID: %s", txPayload.ID)
+			}
 		}
 
 		data, err := json.Marshal(block)
