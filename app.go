@@ -188,7 +188,7 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr strin
 		finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
 	}
 
-	tx := Transaction{
+		tx := Transaction{
 		ID:               txID,
 		Inputs:           selectedInputs,
 		Outputs:          finalOutputs,
@@ -200,6 +200,12 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr strin
 		Witness:          CustomMinerAddress,
 	}
 
+	// 👑 THE ABSOLUTE SYMMETRY FIX: Run the full cryptographic wire firewall pass BEFORE local mempool ingestion!
+	if !VerifyIncomingWireTransaction(tx) {
+		return "REJECTED: Transaction payload failed complete cryptographic and UTXO ledger validation gates."
+	}
+
+	// Once fully cross-verified against live disk storage partitions, commit safely to memory lines
 	if MempoolMatrix.PushTransaction(tx) {
 		go BroadcastTransactionToMesh(tx)
 		return "SUCCESS: Payload securely committed to local mempool propagation queue!"
