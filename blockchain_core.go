@@ -133,6 +133,11 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	if incomingBlock.Index == currentTip.Index+1 {
 		if incomingBlock.PrevHash != currentTip.Hash { StateMutex.Unlock(); go TriggerActiveReSyncPass(); return }
 		if SaveBlockToStorageInternal(incomingBlock) {
+			// 👑 THE CRITICAL STATE ALIGNMENT FIX:
+			// Instantly update the local memory height tracker to interrupt stale local 
+			// miners the very millisecond a peer block is written down to disk ledger files.
+			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+			
 			StateMutex.Unlock()
 			time.Sleep(50 * time.Millisecond)
 			go BroadcastNewBlock(incomingBlock)
@@ -327,15 +332,15 @@ func ValidateBlockSignatures(b Block) bool {
 		return false
 	}
 	
-	coinbaseTx := b.Transactions[0]
-	if !strings.HasPrefix(coinbaseTx.ID, "TX_COINBASE_") {
-		return false
-	}
-	var totalCoinbasePayout float64 = 0.0
-	for _, out := range coinbaseTx.Outputs {
-		totalCoinbasePayout += out.Amount
-	}
-	allowedEmission := CalculateBlockReward(b.Index)
+coinbaseTx := b.Transactions[0]
+if !strings.HasPrefix(coinbaseTx.ID, "TX_COINBASE_") {
+return false
+}
+var totalCoinbasePayout float64 = 0.0
+for _, out := range coinbaseTx.Outputs {
+totalCoinbasePayout += out.Amount
+}
+allowedEmission := CalculateBlockReward(b.Index)
 if b.Index > 21024000 {
 allowedEmission += 5.0
 }
