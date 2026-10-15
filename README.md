@@ -1,41 +1,52 @@
-# 💎 Covenant Standard (CVN) Protocol 📡
 [![Discord Invite](https://shields.io/badge/Discord-Join%20Server-7289da?logo=discord&logoColor=white)](https://discord.gg/xE2egYbumx)
 
-🚨 TECHNICAL ANNOUNCEMENT / REPOSITORY HOTFIX (v1.0.1)
-A critical configuration patch addresses a hardcoded developer address in `CustomMinerAddress`.
+# 💎 Covenant Standard (CVN) Protocol 📡
 
-Covenant Standard (CVN) is a decentralized Layer-1 blockchain built in Go, utilizing a BoltDB backend (`cvn_mainnet.db`) to provide an immutable ledger optimized for consumer hardware.
-
----
+Covenant Standard (CVN) is a production-grade, built-from-scratch Layer-1 blockchain protocol engineered in Go. Utilizing an embedded key-value BoltDB engine (`cvn_mainnet.db`), the network is mathematically structured to enforce honest, non-dilutable accounting and decentralized consensus optimized for consumer-grade household hardware.
 
 ## 🌐 1. Executive Summary
 
-CVN levels the economic playing field by utilizing an adaptive CPU-optimized cryptographic difficulty loop, allowing home users to run nodes without expensive ASIC hardware.
+CVN preserves public access to token distribution by utilizing an adaptive CPU-optimized computational difficulty loop. This prevents centralized ASIC mining warehouses or massive capital pools from monopolizing the ledger, keeping validation accessible to ordinary household processors forever. The protocol operates under an immutable Fair Launch mandate with absolute zero pre-mine or venture capital token allocations.
 
 ---
 
-## 🚀 2. Quick-Start One-Click Onboarding
+## 🚀 2. Quick-Start Onboarding Framework
 
-* **OS / Setup:** Windows 11 (Run as Administrator), open ports `8080` (P2P) and `8081` (Web Explorer). Clone the repository and execute `.\AutoOnboard_And_Mine.bat` via Administrator PowerShell.
-* **Fast-Boot Routine:** Download the pre-verified ledger snapshot (`cvn_mainnet.db`) to bypass initial syncing.
+To protect local data layers from timeline drift, the protocol enforces absolute validation symmetry. Full block synchronization must conclude prior to thread engagement.
+
+*   **OS / Setup Environment:** Windows 11 (Run terminal as Administrator). Open port **8080** for P2P gossip mesh traffic and port **8081** for the web explorer dashboard.
+*   **One-Click Autopilot Launch:** Open an Administrator PowerShell window inside your root directory and execute the native automation framework script:
+    ```powershell
+    .\AutoOnboard_And_Mine.ps1
+    ```
+*   ⚠️ **DEPRECATION NOTICE:** The legacy `AutoOnboard_And_Mine.bat` configuration engine has been permanently deprecated and removed from the active core files. Do not attempt to run old batch scripts, as they do not support the unified binary execution tracks and will fail to mount asymmetric cryptographic key parameters.
 
 ---
 
 ## 📡 3. Live Mainnet Telemetry & Seed Node Gateway
 
-Includes distributed anchor nodes (Atlanta, Singapore, Melbourne) on ports `8080`/`8081`. Refer to the source repository for full addresses and the developer workspace at https://github.com/kalashnikovski/cvn_node
+The network initializes natively from Genesis Block #0 (containing an initial parent allocation of 2.1 billion CVN to seed the keyspace). Nodes dynamically construct a self-healing network web by routing data through our active cross-continental bootstrap anchor cluster:
+
+*   **Melbourne Master Rig:** `202.137.175.220` (Ports 8080/8081)
+*   **Singapore Cloud VPS:** `207.148.67.11` (Ports 8080/8081)
+*   **Atlanta Cloud VPS:** `64.177.45.153` (Ports 8080/8081)
 
 ---
 
 ## 🤖 4. Deep-Tech Protocol Specifications
 
-This section outlines low-level concurrency and cryptographic constraints. For the complete, unabridged technical specifications and deep-tech parameters, please refer to the referenced source document.
+### ⚙️ Consensus Mechanism & Storage Primitives
+*   **Proof-of-Diligence (PoD):** An adaptive computational leading-zero target ceiling that recalibrates block-by-block using a responsive 45-second calibration window ticker loop to smooth difficulty charts under changing global hashrates.
+*   **BoltDB Binary Buckets:** Low-latency, ACID-compliant key-value disk storage indexing block structures under a uniform zero-padded keyspace layout (`%016d`). The storage commitment gate (`SaveBlockToStorageInternal`) loops through and deeply audits every transaction signature and input reference under an active database transaction before disk mutation can occur.
 
-### ⚙️ Consensus Mechanism & Storage
-* **Proof-of-Diligence (PoD):** An adaptive computational difficulty ceiling targeting 4 to 6 hexadecimal zero prefixes optimized for consumer hardware while resisting ASIC/GPU centralization.
-* **BoltDB Binary Buckets:** Utilizes a low-latency, transactional key-value binary database store for serialized, ACID-compliant ledger transactions.
+### 🔄 Concurrency, Serialization & P2P Topography
+*   **Bidirectional Mempool Firewall:** Employs explicit `sync.RWMutex` synchronization tracking arrays. To ensure absolute data consistency, the exact same `VerifyIncomingWireTransaction` firewall intercepts payloads across both external network socket arrivals and local desktop application submissions *before* any data can enter the mempool queue.
+*   **Serialized Wire Protocol:** To eliminate floating-point drift across multi-platform daemons, all transaction preimage template strings are hard-locked to an explicit 8-decimal precision length (`%.8f`).
+*   **Autonomous Peer Exchange (PEX):** Sockets on Port 8080 handle continuous data propagation. When a peer connects, nodes organically exchange active directories (`PEER_LIST:`), spawning asynchronous background workers to dial unrecognized targets and self-expand the network topography completely on autopilot.
 
-### 🔄 Concurrency, Economics & P2P Topography
-* **Concurrency & Mempool:** Employs `sync.RWMutex` synchronization arrays and a dual-chamber 80/20 mempool layout (fee density vs. FIFO zero-fee allocation).
-* **Macroeconomic Laws:** Integrates a 49-Year Sabbatical Jubilee velocity decay mechanism to prevent dead-wallet data bloat.
-* **P2P Gossip Mesh:** Operates via a decentralized TCP Port 8080 mesh with semaphore connection gateways capping concurrent peer sockets.
+---
+
+## 🏛️ 5. Long-Horizon Economic Policy (Roadmap Design Goals)
+
+*   **ASIC-Neutral PoD Optimization (Q2 2027 Upgrade):** A future consensus soft-fork will introduce a verified memory-hard hashing layer to segment block production based on work verification. Memory-hard CPU solutions will claim an 80% channel reward (40.0 CVN), while SHA-256 ASIC solutions will be capped by consensus law to a 20% reward pool (10.0 CVN).
+*   **The Macroeconomic Sabbatical Jubilee Loops:** Balances remaining completely stationary for extended scriptural horizons (7-year Sabbatical and 49-year Jubilee scales) are subjected to automated consensus-level decay parameters. The protocol reclaims 20% of stagnant wealth, routing it to the `jubilee_vault` bucket to dynamically fund block rewards for future generations of full node operators without diluting the fixed supply ceiling.
