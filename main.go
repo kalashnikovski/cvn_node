@@ -383,19 +383,23 @@ targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
 simulatedTime := time.Now().Unix()
 var guardMatrixPlaceholder = ""
-allowedEmission := CalculateBlockReward(nextIndex)
-coinbaseTxID := fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano())
-candidateTransactions := []Transaction{
-{
-ID:        coinbaseTxID,
-Witness:   "COVENANT_STEWARD_ASSEMBLY",
-PublicKey: "GENESIS_VOID_REWARD_POOL",
-Outputs: []UTXOOutput{
-{Recipient: CustomMinerAddress, Amount: allowedEmission},
-},
-Timestamp: simulatedTime,
-},
-}
+			allowedEmission := CalculateBlockReward(nextIndex)
+			coinbaseTxID := fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano())
+			
+			candidateTransactions := []Transaction{
+				{
+					ID:        coinbaseTxID,
+					Witness:   "COVENANT_STEWARD_ASSEMBLY",
+					PublicKey: "GENESIS_VOID_REWARD_POOL",
+					Outputs: []UTXOOutput{
+						{Recipient: CustomMinerAddress, Amount: allowedEmission},
+					},
+					// 👑 THE MASTER TIMESTAMP LOCK:
+					// Force the inner transaction payload to match your block's 
+					// simulatedTime EXACTLY, eliminating system clock variation forks!
+					Timestamp: simulatedTime, 
+				},
+			}
 // 👑 THE CRITICAL SYMMETRY UPGRADE:
 // Construct the exact internal transaction preimage text string natively inside the miner thread!
 var txSummaryBuilder strings.Builder
