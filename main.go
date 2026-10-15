@@ -458,6 +458,10 @@ time.Sleep(time.Duration(requiredStallDelay) * time.Second)
 }
 } else {
 chunkCeiling = nonce + 1000000
+// 👑 THE PACING OVERHAUL:
+	// Replace runtime.Gosched() with an explicit 100ms network buffer stall
+	// to allow the P2P Gossip Mesh to seamlessly sync new headers!
+    time.Sleep(100 * time.Millisecond)
 runtime.Gosched()
 }
 }
