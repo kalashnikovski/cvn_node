@@ -390,8 +390,8 @@ targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
 simulatedTime := time.Now().Unix()
 var guardMatrixPlaceholder = ""
-// Dynamically adapt reward parameter inside candidate transaction generations
-allowedEmission := CalculateBlockRewardDualChannel(nextIndex, nonce)
+// Natively invoke our flat, single-channel reward function CalculateBlockReward
+allowedEmission := CalculateBlockReward(nextIndex)
 candidateTransactions := []Transaction{
 {
 ID:        fmt.Sprintf("TX_COINBASE_%d", time.Now().UnixNano()),
@@ -415,6 +415,7 @@ txHashStr,
 targetDifficulty,
 guardMatrixPlaceholder,
 )
+// Standard SHA-256 non-destructive nonce space iteration loop
 for nonce < chunkCeiling {
 inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
 hashBytes := sha256.Sum256([]byte(inputStr))

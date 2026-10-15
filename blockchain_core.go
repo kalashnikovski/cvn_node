@@ -77,12 +77,20 @@ var StateBalanceCache = make(map[string]float64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
-func CalculateBlockRewardDualChannel(blockIndex int64, nonce int64) float64 {
-	if blockIndex < 0 { return 0.0 }
-	var baseReward float64
-	if blockIndex <= 5256000 { baseReward = 50.0 } else if blockIndex <= 10512000 { baseReward = 25.0 } else if blockIndex <= 15768000 { baseReward = 12.5 } else if blockIndex <= 21024000 { baseReward = 6.25 } else { return 0.0 }
-	if nonce%2 == 0 { return baseReward * 0.8 }
-	return baseReward * 0.2
+func CalculateBlockReward(blockIndex int64) float64 {
+	if blockIndex < 0 { 
+		return 0.0 
+	}
+	if blockIndex <= 5256000 { 
+		return 50.0 
+	} else if blockIndex <= 10512000 { 
+		return 25.0 
+	} else if blockIndex <= 15768000 { 
+		return 12.5 
+	} else if blockIndex <= 21024000 { 
+		return 6.25 
+	}
+	return 0.0
 }
 
 func GetGlobalMeshMaxHeight(seedURL string) int64 {
@@ -273,7 +281,6 @@ func ValidateBlockSignatures(b Block) bool {
 		return false
 	}
 	
-	// Active on-chain transaction integrity validation pass leveraging BoltDB view fences
 	isBlockValid := true
 	if GlobalBoltEngine != nil {
 		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
@@ -295,7 +302,6 @@ func ValidateBlockSignatures(b Block) bool {
 		return false
 	}
 	
-	// Extract primary coinbase reward transaction output mapping safely via explicit element index
 	coinbaseTx := b.Transactions[0]
 	if !strings.HasPrefix(coinbaseTx.ID, "TX_COINBASE_") {
 		return false
@@ -304,7 +310,7 @@ func ValidateBlockSignatures(b Block) bool {
 	for _, out := range coinbaseTx.Outputs {
 		totalCoinbasePayout += out.Amount
 	}
-	allowedEmission := CalculateBlockRewardDualChannel(b.Index, b.Nonce)
+	allowedEmission := CalculateBlockReward(b.Index)
 	if b.Index > 21024000 {
 		allowedEmission += 5.0
 	}
@@ -326,68 +332,64 @@ func CalculateHash(b Block) string {
 	}
 	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
 		b.Index,
-		b.Timestamp,
-		b.PrevHash,
-		txHashStr,
-		b.Difficulty,
-		b.GuardMatrix,
-		b.Nonce,
-	)
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
+b.Timestamp,
+b.PrevHash,
+txHashStr,
+b.Difficulty,
+b.GuardMatrix,
+b.Nonce,
+)
+h := sha256.New()
+h.Write([]byte(inputStr))
+return fmt.Sprintf("%x", h.Sum(nil))
 }
-
 func ForceBackgroundSyncPass() {}
-
 func GetAddressBalance(address string) float64 {
-	BalanceCacheMutex.RLock()
-	defer BalanceCacheMutex.RUnlock()
-	if val, exists := StateBalanceCache[address]; exists {
-		return val
-	}
-	return 0.0
+BalanceCacheMutex.RLock()
+defer BalanceCacheMutex.RUnlock()
+if val, exists := StateBalanceCache[address]; exists {
+return val
 }
-
+return 0.0
+}
 const MaxTotalSupplyCap = 2100000000.0
-
 func GetCurrentCirculatingSupply() float64 {
-	StateMutex.RLock()
-	latestBlock := GetLatestBlockInternal()
-	StateMutex.RUnlock()
-	height := latestBlock.Index
-	var calculatedSupply float64 = 0.0
-	var processedBlocks int64 = 0
-	if height > 5256000 {
-		calculatedSupply += 5256000 * 50.0
-		processedBlocks = 5256000
-	} else {
-		calculatedSupply += float64(height) * 50.0
-		return calculatedSupply
-	}
-	if height > 10512000 {
-		calculatedSupply += (10512000 - 5256000) * 25.0
-		processedBlocks = 10512000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 25.0
-		return calculatedSupply
-	}
-	if height > 15768000 {
-		calculatedSupply += (15768000 - 10512000) * 12.5
-		processedBlocks = 15768000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 12.5
-		return calculatedSupply
-	}
-	if height > 21024000 {
-		calculatedSupply += (21024000 - 15768000) * 6.25
-		processedBlocks = 21024000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 6.25
-		return calculatedSupply
-	}
-	if calculatedSupply > MaxTotalSupplyCap {
-		return MaxTotalSupplyCap
-	}
-	return calculatedSupply
+StateMutex.RLock()
+latestBlock := GetLatestBlockInternal()
+StateMutex.RUnlock()
+height := latestBlock.Index
+var calculatedSupply float64 = 0.0
+var processedBlocks int64 = 0
+if height > 5256000 {
+calculatedSupply += 5256000 * 50.0
+processedBlocks = 5256000
+} else {
+calculatedSupply += float64(height) * 50.0
+return calculatedSupply
+}
+if height > 10512000 {
+calculatedSupply += (10512000 - 5256000) * 25.0
+processedBlocks = 10512000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 25.0
+return calculatedSupply
+}
+if height > 15768000 {
+calculatedSupply += (15768000 - 10512000) * 12.5
+processedBlocks = 15768000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 12.5
+return calculatedSupply
+}
+if height > 21024000 {
+calculatedSupply += (21024000 - 15768000) * 6.25
+processedBlocks = 21024000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 6.25
+return calculatedSupply
+}
+if calculatedSupply > MaxTotalSupplyCap {
+return MaxTotalSupplyCap
+}
+return calculatedSupply
 }

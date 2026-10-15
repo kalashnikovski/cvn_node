@@ -5,14 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"os" // <--- ADD THIS LINE HERE
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"go.etcd.io/bbolt" // Make sure this line is exactly here
+	"go.etcd.io/bbolt"
 )
-
 
 // App struct
 type App struct {
