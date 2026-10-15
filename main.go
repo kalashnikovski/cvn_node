@@ -381,22 +381,27 @@ StateMutex.RUnlock()
 targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
 var guardMatrixPlaceholder = ""
-allowedEmission := CalculateBlockReward(nextIndex)
-coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
-candidateTransactions := []Transaction{
-{
-ID:               coinbaseTxID,
-Witness:          "COVENANT_STEWARD_ASSEMBLY",
-PublicKey:        "GENESIS_VOID_REWARD_POOL",
-Outputs: []UTXOOutput{
-{Recipient: CustomMinerAddress, Amount: allowedEmission},
-},
-Timestamp:        simulatedTime,
-FreeWillOffering: 0.0,
-DataSizeKB:       0.1,
-Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-},
-}
+			allowedEmission := CalculateBlockReward(nextIndex)
+			
+			// 👑 THE DEFINITIVE PREFIX SYNCHRONIZATION:
+			// Ensure the Coinbase Transaction ID uses standard underscore formatting 
+			// to easily satisfy the strict HasPrefix validation rules in blockchain_core!
+			coinbaseTxID := fmt.Sprintf("TX_COINBASE_%d", nextIndex)
+			
+			candidateTransactions := []Transaction{
+				{
+					ID:               coinbaseTxID,
+					Witness:          "COVENANT_STEWARD_ASSEMBLY",
+					PublicKey:        "GENESIS_VOID_REWARD_POOL",
+					Outputs: []UTXOOutput{
+						{Recipient: CustomMinerAddress, Amount: allowedEmission},
+					},
+					Timestamp:        simulatedTime, 
+					FreeWillOffering: 0.0,
+					DataSizeKB:       0.1,
+					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+				},
+			}
 var txSummaryBuilder strings.Builder
 for _, tx := range candidateTransactions {
 txSummaryBuilder.WriteString(tx.ID + "-")
