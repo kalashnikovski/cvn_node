@@ -350,27 +350,30 @@ return false
 return true
 }
 func CalculateHash(b Block) string {
-txBytes, err := json.Marshal(b.Transactions)
-var txHashStr string
-if err != nil {
-hTx := sha256.Sum256([]byte("[]"))
-txHashStr = fmt.Sprintf("%x", hTx[:])
-} else {
-hTx := sha256.Sum256(txBytes)
-txHashStr = fmt.Sprintf("%x", hTx[:])
-}
-inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
-b.Index,
-b.Timestamp,
-b.PrevHash,
-txHashStr,
-b.Difficulty,
-b.GuardMatrix,
-b.Nonce,
-)
-h := sha256.New()
-h.Write([]byte(inputStr))
-return fmt.Sprintf("%x", h.Sum(nil))
+	// 👑 THE DETERMINISTIC SERIALIZATION OVERHAUL:
+	// Completely abandon volatile JSON marshaling which shifts across architectures.
+	// Build a flat, deterministic text string loop using exact explicit transaction keys!
+	var txSummaryBuilder strings.Builder
+	for _, tx := range b.Transactions {
+		txSummaryBuilder.WriteString(fmt.Sprintf("%s-%s-%s-%.8f-", tx.ID, tx.Witness, tx.PublicKey, tx.FreeWillOffering))
+		for _, out := range tx.Outputs {
+			txSummaryBuilder.WriteString(fmt.Sprintf("%s-%.8f-", out.Recipient, out.Amount))
+		}
+	}
+	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+
+	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
+		b.Index,
+		b.Timestamp,
+		b.PrevHash,
+		txHashStr,
+		b.Difficulty,
+		b.GuardMatrix,
+		b.Nonce,
+	)
+	h := sha256.New()
+	h.Write([]byte(inputStr))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 func ForceBackgroundSyncPass() {}
 func GetAddressBalance(address string) float64 {
