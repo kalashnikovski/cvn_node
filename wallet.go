@@ -43,8 +43,8 @@ func RunWalletGUI() {
 			fmt.Printf("📋 YOUR CVN PUBLIC ADDRESS:   %s\n", walletAddress)
 			fmt.Printf("🔑 YOUR PUBLIC KEY (HEX):     %s\n", pubHex)
 			fmt.Printf("🔐 YOUR PRIVATE KEY (SECRET):   %s\n", privHex)
-	fmt.Println("--------------------------------------------------------------------")
-	fmt.Println("⚠️  WARNING: Copy and save your Private Key safely! It is never stored on disk.")
+			fmt.Println("--------------------------------------------------------------------")
+			fmt.Println("⚠️  WARNING: Copy and save your Private Key safely! It is never stored on disk.")
 			fmt.Println("====================================================================")
 
 			backupContent := fmt.Sprintf(
@@ -182,6 +182,8 @@ func RunWalletGUI() {
 			}
 
 			txID := fmt.Sprintf("TX_OUTBOUND_%d", time.Now().UnixNano())
+			
+			// 👑 PREIMAGE ALIGNMENT: Match template with structural security_harness.go rules exactly
 			txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, offering)
 
 			rStr, sStr, err := SignTransactionPayload(privKey, txMessage)
@@ -221,7 +223,8 @@ func RunWalletGUI() {
 				continue
 			}
 
-			targetURL := "http://207.148.67" 
+			// ✅ FIXED TARGET GATEWAY ENDPOINT IP LOCATION
+			targetURL := "http://207.148.67.11:8081/transaction" 
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Post(targetURL, "application/json", bytes.NewBuffer(payloadBytes))
 
