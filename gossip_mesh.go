@@ -157,7 +157,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 			}
 
 			for _, potentialPeer := range receivedAddresses {
-				cleanedPeer := strings.TrimSpace(potentialPeer)
+				cleanedPeer := strings.TrimSpace(strings.ReplaceAll(potentialPeer, "\r", ""))
 				if cleanedPeer == "" {
 					continue
 				}
@@ -176,7 +176,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 						if err == nil {
 							for _, interfaceAddr := range localInterfaces {
 								if ipnet, ok := interfaceAddr.(*net.IPNet); ok {
-									if strings.Split(targetIP, ":")[0] == ipnet.IP.String() {
+									if strings.Contains(targetIP, ipnet.IP.String()) {
 										return
 									}
 								}
@@ -262,11 +262,12 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 							var receivedAddresses []string
 							if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
 								for _, ip := range receivedAddresses {
-									if ip == "" || strings.HasPrefix(ip, "127.0.0.1") {
+									cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
+									if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
 										continue
 									}
 									PeerMapMutex.RLock()
-									_, exists := ActivePeerMap[ip]
+									_, exists := ActivePeerMap[cleanedIP]
 									PeerMapMutex.RUnlock()
 									
 									if !exists {
@@ -276,7 +277,7 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 												_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_REQUEST\n")
 												dConn.Close()
 											}
-										}(ip)
+										}(cleanedIP)
 									}
 								}
 							}
