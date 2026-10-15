@@ -325,8 +325,8 @@ func main() {
 				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
 					for _, incomingBlock := range incomingBatch {
 						StateMutex.RLock()
-currentHeightCheck := GetLatestBlockInternal().Index
-StateMutex.RUnlock()
+						currentHeightCheck := GetLatestBlockInternal().Index
+						StateMutex.RUnlock()
 if incomingBlock.Index == int64(currentHeightCheck)+1 {
 SaveBlockToStorage(incomingBlock)
 currentLocalHeight = incomingBlock.Index
@@ -370,27 +370,18 @@ StateMutex.RLock()
 currentBlock := GetLatestBlockInternal()
 nextIndex := currentBlock.Index + 1
 parentBlockTipHash := currentBlock.Hash
-// 👑 ABSOLUTE TIME-DETERMINISM:
-// Unify candidate timestamps directly into a single consensus evaluation window
 simulatedTime := time.Now().Unix()
 if simulatedTime <= currentBlock.Timestamp {
 simulatedTime = currentBlock.Timestamp + 1
 }
-var targetDifficulty int
-if currentBlock.Index == 0 {
-targetDifficulty = 2
-} else {
-targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-}
-if targetDifficulty < 1 { targetDifficulty = 1 }
-if targetDifficulty > 8 { targetDifficulty = 8 }
+// 👑 HARD-LOCKED DIFFICULTY PARITY:
+// Lock system to difficulty 4 natively during initial epochs to eradicate cross-VP timing forks.
+targetDifficulty := 4
 StateMutex.RUnlock()
 targetPrefix := strings.Repeat("0", targetDifficulty)
 blockSolved := false
 var guardMatrixPlaceholder = ""
 allowedEmission := CalculateBlockReward(nextIndex)
-// 👑 DETERMINISTIC COINBASE TRANS-ID LOCK:
-// Lock the transaction identifier to the unique height index to prevent nano clock drift forks!
 coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
 candidateTransactions := []Transaction{
 {
@@ -406,8 +397,6 @@ DataSizeKB:       0.1,
 Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
 },
 }
-// 👑 STRIPPED PREIMAGE SERIALIZATION PARITY:
-// Formulate the exact structural hash string matching blockchain_core specs
 var txSummaryBuilder strings.Builder
 for _, tx := range candidateTransactions {
 txSummaryBuilder.WriteString(tx.ID + "-")
@@ -482,7 +471,6 @@ StateMutex.RUnlock()
 hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
 currentLiveHashrateTrack = realHashrateMH
-hashrateMutex.Lock()
 hashRateHistory15m = append(hashRateHistory15m, realHashrateMH)
 if len(hashRateHistory15m) > 300 { hashRateHistory15m = hashRateHistory15m[1:] }
 decayed1hVal := realHashrateMH * (1.0 - (0.02 * (1.0 / float64(actualBlocksHeight+1))))
@@ -498,7 +486,6 @@ for _, v := range hashRateHistory24h { sum24h += v }
 avg15m := sum15m / float64(len(hashRateHistory15m))
 avg1h  := sum1h / float64(len(hashRateHistory1h))
 avg24h := sum24h / float64(len(hashRateHistory24h))
-hashrateMutex.Unlock()
 if loopCounter%10 == 0 {
 logMutex.Lock()
 heartbeatLine := fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
