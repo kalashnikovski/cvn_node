@@ -25,7 +25,7 @@ To protect local data layers from timeline drift, the protocol enforces absolute
 
 ## 📡 3. Live Mainnet Telemetry & Seed Node Gateway
 
-The network initializes natively from Genesis Block #0 (containing an initial parent allocation of 2.1 billion CVN to seed the keyspace). Nodes dynamically construct a self-healing network web by routing data through our active cross-continental bootstrap anchor cluster:
+The network initializes natively from an absolute zero-state Genesis Block #0 containing 0.00 CVN tokens and empty transaction arrays. New tokens only enter existence when an honest CPU processor solves a valid block reward. Nodes dynamically construct a self-healing network web by routing data through our active cross-continental bootstrap anchor cluster:
 
 *   **Melbourne Master Rig:** `202.137.175.220` (Ports 8080/8081)
 *   **Singapore Cloud VPS:** `207.148.67.11` (Ports 8080/8081)
