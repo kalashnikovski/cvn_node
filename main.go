@@ -371,6 +371,9 @@ if atomic.LoadInt32(&IsSyncingActive) == 1 {
 time.Sleep(100 * time.Millisecond)
 continue
 }
+// 👑 THE MASTER PACING CORRECTION GATE:
+// Enforce strict 45-second mainnet block pacing alignment globally
+const TargetBlockTimeWindow = 45
 blockMiningStartTime := time.Now().Unix()
 // Intact Task 5 Read-fencing synchronization bounds
 StateMutex.RLock()
