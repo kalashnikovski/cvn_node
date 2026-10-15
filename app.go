@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os" // <--- ADD THIS LINE HERE
 	"strconv"
 	"strings"
 	"time"
@@ -140,6 +141,46 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr strin
 	tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
 	txID := fmt.Sprintf("TX_DESKTOP_%x", sha256.Sum256([]byte(tSeed)))
 
+	// Dynamic Cryptographic Key Acquisition Phase
+	var localPrivateKeySecret string
+	var localPublicKeyHex string
+
+	keyBackupBytes, err := os.ReadFile("cvn_secret_backup.txt")
+	if err == nil {
+		lines := strings.Split(string(keyBackupBytes), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(line, "Public Key: ") {
+				localPublicKeyHex = strings.TrimSpace(strings.TrimPrefix(line, "Public Key: "))
+			}
+			if strings.HasPrefix(line, "Private Key: ") {
+				localPrivateKeySecret = strings.TrimSpace(strings.TrimPrefix(line, "Private Key: "))
+			}
+		}
+	}
+
+	// Fallback to fresh local pair generation if the local configuration matrix is pristine but unwritten
+	if localPrivateKeySecret == "" || localPublicKeyHex == "" {
+		var genErr error
+		localPrivateKeySecret, localPublicKeyHex, _, genErr = GenerateKeyPair()
+		if genErr != nil {
+			return "REJECTED: Critical systemic error generating localized cryptographic key contexts."
+		}
+	}
+
+	// Enforce uniform preimage template formatting matching security_harness.go rules exactly
+	txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
+
+	rStr, sStr, err := SignTransactionPayload(localPrivateKeySecret, txMessage)
+	if err != nil {
+		return fmt.Sprintf("REJECTED: Asymmetric signature cryptographic compilation breakdown: %v", err)
+	}
+	combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
+
+	// Explicit structural distribution down onto individual transaction input objects
+	for i := range selectedInputs {
+		selectedInputs[i].Signature = combinedSignature
+	}
+
 	var finalOutputs []UTXOOutput
 	finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
 
@@ -152,7 +193,11 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr strin
 		ID:               txID,
 		Inputs:           selectedInputs,
 		Outputs:          finalOutputs,
+		Signature:        combinedSignature,
+		PublicKey:        localPublicKeyHex,
+		Timestamp:        time.Now().Unix(),
 		FreeWillOffering: fee,
+		DataSizeKB:       1.2,
 		Witness:          CustomMinerAddress,
 	}
 

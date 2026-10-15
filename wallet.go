@@ -43,8 +43,8 @@ func RunWalletGUI() {
 			fmt.Printf("📋 YOUR CVN PUBLIC ADDRESS:   %s\n", walletAddress)
 			fmt.Printf("🔑 YOUR PUBLIC KEY (HEX):     %s\n", pubHex)
 			fmt.Printf("🔐 YOUR PRIVATE KEY (SECRET):   %s\n", privHex)
-			fmt.Println("--------------------------------------------------------------------")
-			fmt.Println("⚠️  WARNING: Copy and save your Private Key safely! It is never stored on disk.")
+	fmt.Println("--------------------------------------------------------------------")
+	fmt.Println("⚠️  WARNING: Copy and save your Private Key safely! It is never stored on disk.")
 			fmt.Println("====================================================================")
 
 			backupContent := fmt.Sprintf(

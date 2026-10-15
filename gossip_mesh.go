@@ -127,7 +127,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 			return
 		}
 
-		// 👑 THE REPAIR 1: Serialized PEX Exchange response down the active TCP channel handle
 		if strings.HasPrefix(msg, "PEER_PING:") {
 			PeerMapMutex.Lock()
 			peerMeshKey := fmt.Sprintf("%s:8080", remoteIP)
@@ -136,14 +135,12 @@ func handleIncomingPeerStream(conn net.Conn) {
 			}
 			ActivePeerMap[peerMeshKey] = time.Now()
 			
-			// Build list snapshot safely inside lock boundary
 			var activePeersList []string
 			for currentPeer := range ActivePeerMap {
 				activePeersList = append(activePeersList, currentPeer)
 			}
 			PeerMapMutex.Unlock()
 
-			// Marshal and push peer snapshot arrays back down open interfaces
 			jsonPeers, err := json.Marshal(activePeersList)
 			if err == nil {
 				payloadResponse := fmt.Sprintf("PEER_LIST:%s\n", string(jsonPeers))
@@ -152,7 +149,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 			return
 		}
 
-		// 👑 THE REPAIR 2: Dynamic Parsing and Background Handshake Ingestion for Discovery Lists
 		if strings.HasPrefix(msg, "PEER_LIST:") {
 			rawPayload := strings.TrimPrefix(msg, "PEER_LIST:")
 			var receivedAddresses []string
@@ -166,7 +162,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 					continue
 				}
 
-				// Safe check for loopback boundaries
 				if strings.HasPrefix(cleanedPeer, "127.0.0.1") || strings.HasPrefix(cleanedPeer, "localhost") {
 					continue
 				}
@@ -175,10 +170,8 @@ func handleIncomingPeerStream(conn net.Conn) {
 				_, alreadyConnected := ActivePeerMap[cleanedPeer]
 				PeerMapMutex.RUnlock()
 
-				// Non-blocking worker routines for zero latency on message execution tracks
 				if !alreadyConnected {
 					go func(targetIP string) {
-						// Isolate local address parameters to avoid self-dialing loops
 						localInterfaces, err := net.InterfaceAddrs()
 						if err == nil {
 							for _, interfaceAddr := range localInterfaces {
@@ -196,8 +189,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 						}
 						defer dialerConnection.Close()
 
-						// Synchronize identities immediately
-						_, _ = fmt.Fprintf(dialerConnection, "PEER_PING:PEX_AUTO_DISCOVERY\n")
+						_, _ = fmt.Fprintf(dialerConnection, "PEER_PING:DISCOVERY_REQUEST\n")
 					}(cleanedPeer)
 				}
 			}
@@ -261,7 +253,6 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 				if err == nil {
 					_, _ = fmt.Fprintf(conn, "PEER_PING:DISCOVERY_REQUEST\n")
 					
-					// Read PEX payload down seed channels to rapidly build topological graphs
 					reader := bufio.NewReader(conn)
 					responseString, readErr := reader.ReadString('\n')
 					if readErr == nil {
@@ -275,14 +266,14 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 										continue
 									}
 									PeerMapMutex.RLock()
-									_, exits := ActivePeerMap[ip]
+									_, exists := ActivePeerMap[ip]
 									PeerMapMutex.RUnlock()
 									
-									if !exits {
+									if !exists {
 										go func(targetIP string) {
 											dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
 											if dErr == nil {
-												_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_AUTO_JOIN\n")
+												_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_REQUEST\n")
 												dConn.Close()
 											}
 										}(ip)
