@@ -420,7 +420,19 @@ func main() {
 				guardMatrixPlaceholder,
 			)
 
+			// ⚡ Only ONE loop wrapper allowed here!
 			for nonce < chunkCeiling {
+				// 👑 THE STALE MINING KILL SWITCH:
+				// Fetch the absolute latest disk height inside the loop. If a peer block 
+				// arrived over port 8080 mid-flight, abort immediately to update headers!
+				StateMutex.RLock()
+				latestDiskTip := GetLatestBlockInternal()
+				StateMutex.RUnlock()
+				if nextIndex != latestDiskTip.Index+1 {
+					blockSolved = false
+					break // Snap off old nonces instantly!
+				}
+
 				inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
 				hashBytes := sha256.Sum256([]byte(inputStr))
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
