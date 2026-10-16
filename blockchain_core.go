@@ -289,7 +289,6 @@ func TriggerActiveReSyncPass() {
 	StateMutex.Unlock()
 	fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
-
 func ValidateBlockSignatures(b Block) bool {
 	targetPrefix := strings.Repeat("0", b.Difficulty)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
@@ -336,13 +335,14 @@ func ValidateBlockSignatures(b Block) bool {
 	}
 	allowedEmission := CalculateBlockReward(b.Index)
 	if b.Index > 21024000 {
-allowedEmission += 5.0
+		allowedEmission += 5.0
+	}
+	if totalCoinbasePayout > allowedEmission {
+		return false
+	}
+	return true
 }
-if totalCoinbasePayout > allowedEmission {
-return false
-}
-return true
-}
+
 func CalculateHash(b Block) string {
 	// 👑 THE DETERMINISTIC OVERHAUL:
 	// Format the block preimage strictly using immutable structural field indices.
@@ -366,53 +366,57 @@ func CalculateHash(b Block) string {
 	h.Write([]byte(inputStr))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
+
 func ForceBackgroundSyncPass() {}
+
 func GetAddressBalance(address string) float64 {
-BalanceCacheMutex.RLock()
-defer BalanceCacheMutex.RUnlock()
-if val, exists := StateBalanceCache[address]; exists {
-return val
+	BalanceCacheMutex.RLock()
+	defer BalanceCacheMutex.RUnlock()
+	if val, exists := StateBalanceCache[address]; exists {
+		return val
+	}
+	return 0.0
 }
-return 0.0
-}
+
 const MaxTotalSupplyCap = 2100000000.0
+
 func GetCurrentCirculatingSupply() float64 {
-StateMutex.RLock()
-latestBlock := GetLatestBlockInternal()
-StateMutex.RUnlock()
-height := latestBlock.Index
-var calculatedSupply float64 = 0.0
-var processedBlocks int64 = 0
-if height > 5256000 {
-calculatedSupply += 5256000 * 50.0
-processedBlocks = 5256000
-} else {
-calculatedSupply += float64(height) * 50.0
-return calculatedSupply
-}
-if height > 10512000 {
-calculatedSupply += (10512000 - 5256000) * 25.0
-processedBlocks = 10512000
-} else {
-calculatedSupply += float64(height-processedBlocks) * 25.0
-return calculatedSupply
-}
-if height > 15768000 {
-calculatedSupply += (15768000 - 10512000) * 12.5
-processedBlocks = 15768000
-} else {
-calculatedSupply += float64(height-processedBlocks) * 12.5
-return calculatedSupply
-}
-if height > 21024000 {
-calculatedSupply += (21024000 - 15768000) * 6.25
-processedBlocks = 21024000
-} else {
-calculatedSupply += float64(height-processedBlocks) * 6.25
-return calculatedSupply
-}
-if calculatedSupply > MaxTotalSupplyCap {
-return MaxTotalSupplyCap
-}
-return calculatedSupply
+	StateMutex.RLock()
+	latestBlock := GetLatestBlockInternal()
+	StateMutex.RUnlock()
+	height := latestBlock.Index
+	var calculatedSupply float64 = 0.0
+	var processedBlocks int64 = 0
+	if height > 5256000 {
+		calculatedSupply += 5256000 * 50.0
+		processedBlocks = 5256000
+	} else {
+		calculatedSupply += float64(height) * 50.0
+		return calculatedSupply
+	}
+	if height > 10512000 {
+		calculatedSupply += (10512000 - 5256000) * 25.0
+		processedBlocks = 10512000
+	} else {
+		calculatedSupply += float64(height-processedBlocks) * 25.0
+		return calculatedSupply
+	}
+	if height > 15768000 {
+		calculatedSupply += (15768000 - 10512000) * 12.5
+		processedBlocks = 15768000
+	} else {
+		calculatedSupply += float64(height-processedBlocks) * 12.5
+		return calculatedSupply
+	}
+	if height > 21024000 {
+		calculatedSupply += (21024000 - 15768000) * 6.25
+		processedBlocks = 21024000
+	} else {
+		calculatedSupply += float64(height-processedBlocks) * 6.25
+		return calculatedSupply
+	}
+	if calculatedSupply > MaxTotalSupplyCap {
+		return MaxTotalSupplyCap
+	}
+	return calculatedSupply
 }
