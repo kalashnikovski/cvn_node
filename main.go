@@ -368,18 +368,20 @@ func main() {
 			const TargetBlockTimeWindow = 45
 			blockMiningStartTime := time.Now().Unix()
 
-			StateMutex.RLock()
+						StateMutex.RLock()
 			currentBlock := GetLatestBlockInternal()
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			simulatedTime := time.Now().Unix()
-			if simulatedTime <= currentBlock.Timestamp {
-				simulatedTime = currentBlock.Timestamp + 1
+			// 👑 THE CHRONOLOGICAL PARITY OVERHAUL:
+			// Allow timestamps to track true local system clocks natively. 
+			// If his system matches the parent block second, force a 10-millisecond 
+			// clock stall to let the OS clock tick forward naturally!
+			for time.Now().Unix() <= currentBlock.Timestamp {
+				time.Sleep(10 * time.Millisecond)
 			}
+			simulatedTime := time.Now().Unix()
 
-			// 👑 HARD-LOCKED DIFFICULTY PARITY:
-			// Lock system to difficulty 4 natively during initial epochs to eradicate cross-VP timing forks.
 			targetDifficulty := 4
 			StateMutex.RUnlock()
 
