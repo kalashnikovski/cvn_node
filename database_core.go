@@ -152,6 +152,7 @@ func SaveBlockToStorage(block Block) bool {
 }
 
 // SaveBlockToStorageInternal implements direct atomic modifications (Internal use under StateMutex wrapper).
+// SaveBlockToStorageInternal implements direct atomic modifications (Internal use under StateMutex wrapper).
 func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil {
 		return false
@@ -167,8 +168,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 
 		// 👑 HARD-LOCKED COMMITMENT GATE: Deep validation pass before mutating disk records
 		for txIdx, txPayload := range block.Transactions {
+			// Skip validation for Coinbase on index 0 to allow minting parameters to execute safely
 			if txIdx == 0 {
-				continue // Skip the primary coinbase reward transaction since it mints coins
+				continue 
 			}
 			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
 				fmt.Printf("🚨 SECURITY WARNING: Fraudulent transaction '%s' detected inside candidate block #%d at index %d! Forcefully aborting disk commitment.\n", txPayload.ID, block.Index, txIdx)
@@ -185,14 +187,19 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
+		// 👑 THE UNIFIED UTXO BALANCE MATRICES RECUPERATOR:
+		// Process EVERY transaction inside the block (including Coinbase at index 0)
+		// to ensure live database balance sheet updates are recorded for all nodes network-wide!
 		for _, txPayload := range block.Transactions {
-			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") {
+			// Only spend inputs for regular user transactions (Coinbase has no input parents)
+			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
 				for _, input := range txPayload.Inputs {
 					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
 					_ = bUTXO.Delete([]byte(compoundInputKey))
 				}
 			}
 
+			// Generate and store the unspent output records cleanly onto the ledger partitions
 			for outIdx, output := range txPayload.Outputs {
 				compoundOutputKey := fmt.Sprintf("%s_%d", txPayload.ID, outIdx)
 				
@@ -218,9 +225,8 @@ func SaveBlockToStorageInternal(block Block) bool {
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
 	
-	// 👑 THE CACHE FORCE-ALIGNMENT WORKER:
 	// Forcefully trigger a synchronized read-and-write state caching update pass 
-	// to ensure his local terminal screen instantly updates without requiring a client restart!
+	// to ensure your local terminal screen and explorer endpoints instantly reflect live metrics!
 	RebuildStateBalanceCacheInternal()
 	return true
 }
