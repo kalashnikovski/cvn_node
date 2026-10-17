@@ -373,7 +373,6 @@ func main() {
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			// 👑 THE CHRONOLOGICAL PARITY OVERHAUL:
 			// Allow timestamps to track true local system clocks natively. 
 			// Placed safely OUTSIDE the nonce calculation loop to protect thread speeds!
 			for time.Now().Unix() <= currentBlock.Timestamp {
@@ -421,17 +420,19 @@ func main() {
 				guardMatrixPlaceholder,
 			)
 
-			// ⚡ Only ONE loop wrapper allowed here!
+			// 👑 HIGH-PERFORMANCE SEQUENTIAL MINING CORE:
 			for nonce < chunkCeiling {
-				// 👑 THE STALE MINING KILL SWITCH:
-				// Fetch the absolute latest disk height inside the loop. If a peer block 
-				// arrived over port 8080 mid-flight, abort immediately to update headers!
-				StateMutex.RLock()
-				latestDiskTip := GetLatestBlockInternal()
-				StateMutex.RUnlock()
-				if nextIndex != latestDiskTip.Index+1 {
-					blockSolved = false
-					break // Snap off old nonces instantly!
+				// ⏱️ THE STRATIFIED INTERRUPT CHECK:
+				// Only execute heavy database reads once every 5,000 nonces to eliminate 
+				// thread starvation and preserve your full MH/s performance parameters!
+				if nonce%5000 == 0 {
+					StateMutex.RLock()
+					latestDiskTip := GetLatestBlockInternal()
+					StateMutex.RUnlock()
+					if nextIndex != latestDiskTip.Index+1 {
+						blockSolved = false
+						break 
+					}
 				}
 
 				inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
@@ -474,10 +475,6 @@ func main() {
 					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
 				}
 			} else {
-				// 👑 THE THROUGHPUT UNLEASH UPGRADE:
-				// Forcefully reset nonce back to 0 alongside adjusting your chunkCeiling target boundaries.
-				// This guarantees the inner loop runs a full 1,000,000 hashes every single pass, 
-				// instantly restoring your full 2-4 MH/s bare-metal dashboard display metrics!
 				nonce = 0
 				chunkCeiling = 1000000
 				runtime.Gosched()
