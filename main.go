@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
@@ -31,7 +32,6 @@ var hashrateMutex      sync.Mutex
 var currentLiveHashrateTrack float64
 
 // 👑 THE METRIC TRACKER ANCHORS:
-// Allocating atomic execution timers to isolate active hashing intervals from sleep blocks.
 var activeMiningDurationNs uint64
 
 func clearTerminalNatively() {
@@ -184,83 +184,150 @@ func main() {
 				w.WriteHeader(http.StatusMethodNotAllowed)
 				return
 			}
-			var tx Transaction
-			if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+
+			// Read incoming wire bytes to safely detect incoming payload profiles
+			var rawBody bytes.Buffer
+			if _, err := rawBody.ReadFrom(r.Body); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+
+			var tx Transaction
+			// Mode A: Attempt to decode standard production Transaction structure object first
+			if err := json.Unmarshal(rawBody.Bytes(), &tx); err == nil && tx.ID != "" && len(tx.Outputs) > 0 {
+				if MempoolMatrix.PushTransaction(tx) {
+					w.WriteHeader(http.StatusCreated)
+					return
+				}
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			// Mode B: Automatically intercept and digest flat desktop GUI text transfers!
+			var guiPayload map[string]string
+			if err := json.Unmarshal(rawBody.Bytes(), &guiPayload); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			recipient := guiPayload["recipient"]
+			amountStr := guiPayload["amount"]
+			feeStr := guiPayload["fee"]
+
+			amount, _ := strconv.ParseFloat(amountStr, 64)
+			fee, _ := strconv.ParseFloat(feeStr, 64)
+
+			if amount <= 0 || strings.TrimSpace(recipient) == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			// Assemble unspent coins directly from your verified ledger state caches
+			requiredTotal := amount + fee
+			var spendableInputs []UTXOInput
+			var currentAccumulator float64
+
+			BalanceCacheMutex.RLock()
+			localBalanceTrack := StateBalanceCache[CustomMinerAddress]
+			BalanceCacheMutex.RUnlock()
+
+			if localBalanceTrack < requiredTotal {
+				w.WriteHeader(http.StatusPaymentRequired)
+				return
+			}
+
+			// Construct input references from available UTXO keys
+			StateMutex.RLock()
+			currentHeightIndex := GetLatestBlockInternal().Index
+			StateMutex.RUnlock()
+
+			for h := int64(0); h <= currentHeightIndex; h++ {
+				historicalBlock := GetBlockByHeightFromDB(h)
+				for _, historicalTx := range historicalBlock.Transactions {
+					for outIdx, out := range historicalTx.Outputs {
+						if out.Recipient == CustomMinerAddress {
+							spendableInputs = append(spendableInputs, UTXOInput{
+								SourceTxID: historicalTx.ID,
+								Index:      outIdx,
+								Signature:  "",
+							})
+							currentAccumulator += out.Amount
+							if currentAccumulator >= requiredTotal {
+								break
+							}
+						}
+					}
+					if currentAccumulator >= requiredTotal { break }
+				}
+				if currentAccumulator >= requiredTotal { break }
+			}
+
+			tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
+			txID := fmt.Sprintf("TX_SYSTEM_%x", sha256.Sum256([]byte(tSeed)))
+
+			var localPrivateKey string
+			var localPublicKey string
+			keyBackupBytes, err := os.ReadFile("cvn_secret_backup.txt")
+			if err == nil {
+				lines := strings.Split(string(keyBackupBytes), "\n")
+				for _, line := range lines {
+					if strings.HasPrefix(line, "Public Key: ") {
+						localPublicKey = strings.TrimSpace(strings.TrimPrefix(line, "Public Key: "))
+					}
+					if strings.HasPrefix(line, "Private Key: ") {
+						localPrivateKey = strings.TrimSpace(strings.TrimPrefix(line, "Private Key: "))
+					}
+				}
+			}
+
+			if localPrivateKey == "" || localPublicKey == "" {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			// Preimage formatting block matched flawlessly to security check harnesses
+			txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
+			rStr, sStr, err := SignTransactionPayload(localPrivateKey, txMessage)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
+
+			for i := range spendableInputs {
+				spendableInputs[i].Signature = combinedSignature
+			}
+
+			var finalOutputs []UTXOOutput
+			finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
+
+			if currentAccumulator > requiredTotal {
+				changeAmount := currentAccumulator - requiredTotal
+				finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
+			}
+
+			tx = Transaction{
+				ID:               txID,
+				Inputs:           spendableInputs,
+				Outputs:          finalOutputs,
+				Signature:        combinedSignature,
+				PublicKey:        localPublicKey,
+				Timestamp:        time.Now().Unix(),
+				FreeWillOffering: fee,
+				DataSizeKB:       1.0,
+				Witness:          CustomMinerAddress,
+			}
+
 			if MempoolMatrix.PushTransaction(tx) {
 				w.WriteHeader(http.StatusCreated)
+				go BroadcastLocalTransactionToPeers(tx) // Gossip to network wire instantly
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
-		winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			
-			targetAddress := r.URL.Query().Get("address")
-			if targetAddress == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Missing address parameter"})
-				return
-			}
-
-			BalanceCacheMutex.RLock()
-			balance, exists := StateBalanceCache[targetAddress]
-			BalanceCacheMutex.RUnlock()
-
-			payload := map[string]interface{}{
-				"address":        targetAddress,
-				"balance":        balance,
-				"exists":         exists,
-				"account_status": "VALIDATED_ON_CHAIN",
-			}
-			json.NewEncoder(w).Encode(payload)
-		})
-
-		winMux.HandleFunc("/addresses", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-
-			BalanceCacheMutex.RLock()
-			activeWallets := make(map[string]float64)
-			for addr, bal := range StateBalanceCache {
-				if bal > 0 {
-					activeWallets[addr] = bal
-				}
-			}
-			BalanceCacheMutex.RUnlock()
-
-			json.NewEncoder(w).Encode(activeWallets)
-		})
-
-		winMux.HandleFunc("/peers", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-
-			PeerMapMutex.RLock()
-			peerList := make([]string, 0)
-			for peerIP := range ActivePeerMap {
-				peerList = append(peerList, peerIP)
-			}
-			PeerMapMutex.RUnlock()
-
-			if len(peerList) == 0 {
-				peerList = []string{"202.137.175.220:8080 (Melbourne Master)"}
-			}
-
-			json.NewEncoder(w).Encode(peerList)
-		})
-
-		// 👑 FAIL-SAFE BULK SYNC PORT ASSIGNMENT:
-		// Attempt to bind port 8081 first (for full miners). If your miner is already running,
-		// automatically fall back to port 9091 so the GUI wallet loads flawlessly without port clashes!
-		fmt.Println("📡 [PORT 8081] Initializing HTTP Bulk Sync api channels...")
+		fmt.Println("📡 [PORT 8081/9091] Initializing HTTP Bulk Sync api channels...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
-			// 👑 THE OPERATING SYSTEM PRIVILEGE GATE:
-			// Only allow fallback port shifting on local Windows machines running the GUI wrapper!
 			if runtime.GOOS == "windows" {
 				fmt.Println("🔄 Port 8081 claimed by miner. Shifting GUI wallet network hooks to port 9091...")
 				if err2 := http.ListenAndServe(":9091", winMux); err2 != nil {
@@ -282,11 +349,8 @@ func main() {
 			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", h)
 		})
 		
-		// 👑 FAIL-SAFE ANALYTICS PORT ASSIGNMENT:
-		// Attempt to bind port 8082 first. If claimed, fall back cleanly to 9092.
-fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
+		fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
 		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
-			// 👑 THE OPERATING SYSTEM PRIVILEGE GATE:
 			if runtime.GOOS == "windows" {
 				fmt.Println("🔄 Port 8082 claimed by miner. Shifting GUI wallet analytics to port 9092...")
 				if err2 := http.ListenAndServe(":9092", mirrorMux); err2 != nil {
@@ -353,31 +417,31 @@ fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
 						currentHeightCheck := GetLatestBlockInternal().Index
 						StateMutex.RUnlock()
 						if incomingBlock.Index == int64(currentHeightCheck)+1 {
-							SaveBlockToStorage(incomingBlock)
-							currentLocalHeight = incomingBlock.Index
-						}
-					}
-				}
-			}
-			resp.Body.Close()
-		}
-		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
-			lastRenderTime = time.Now()
-			var syncPercentage float64 = 0.00
-			if targetGlobalTip > 0 {
-				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
-			}
-			barWidth := 20
-			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
-			progressBar := ""
-			for i := 0; i < barWidth; i++ {
-				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
-			}
-			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
-			os.Stdout.Sync()
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+SaveBlockToStorage(incomingBlock)
+currentLocalHeight = incomingBlock.Index
+}
+}
+}
+}
+resp.Body.Close()
+}
+if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
+lastRenderTime = time.Now()
+var syncPercentage float64 = 0.00
+if targetGlobalTip > 0 {
+syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
+}
+barWidth := 20
+filledChars := int((syncPercentage / 100.0) * float64(barWidth))
+progressBar := ""
+for i := 0; i < barWidth; i++ {
+if i < filledChars { progressBar += "█" } else { progressBar += "░" }
+}
+fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+os.Stdout.Sync()
+}
+time.Sleep(10 * time.Millisecond)
+}
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
@@ -436,6 +500,16 @@ fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
 				},
 			}
 
+			// Ingest any transactions pending inside your local live mempool context!
+			MempoolMatrix.MempoolMutex.RLock()
+			var count int
+			for _, txPayload := range MempoolMatrix.PendingTransactionsPool {
+				if count >= 25 { break }
+				candidateTransactions = append(candidateTransactions, txPayload)
+				count++
+			}
+			MempoolMatrix.MempoolMutex.RUnlock()
+
 			var txSummaryBuilder strings.Builder
 			for _, tx := range candidateTransactions {
 				txSummaryBuilder.WriteString(tx.ID + "-")
@@ -481,6 +555,16 @@ fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
 						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
 						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 						logMutex.Unlock()
+						
+						// Wipe matching transactions from your memory pool upon block completion
+						MempoolMatrix.MempoolMutex.Lock()
+						for _, committedTx := range candidateTransactions {
+							if !strings.HasPrefix(committedTx.ID, "TX_COINBASE") {
+								delete(MempoolMatrix.PendingTransactionsPool, committedTx.ID)
+							}
+						}
+						MempoolMatrix.MempoolMutex.Unlock()
+						
 						go BroadcastNewBlock(newBlock)
 					}
 					blockSolved = true
@@ -490,9 +574,9 @@ fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
 				nonce++
 			}
 
-			// Add the precise execution delta to our isolated global timer accumulation register
 			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
 			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
+
 			if blockSolved {
 				nonce = 0
 				chunkCeiling = 1000000
@@ -528,7 +612,6 @@ fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
 			actualCvnBalance := GetAddressBalance(CustomMinerAddress)
 			StateMutex.RUnlock()
 			
-			// 👑 CLOCK-ISOLATED MATHEMATICAL PROFILING REGISTER:
 			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 			activeDurationNs := atomic.SwapUint64(&activeMiningDurationNs, 0)
 			
