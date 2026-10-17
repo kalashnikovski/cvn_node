@@ -30,6 +30,10 @@ var hashrateMutex      sync.Mutex
 
 var currentLiveHashrateTrack float64
 
+// 👑 THE METRIC TRACKER ANCHORS:
+// Allocating atomic execution timers to isolate active hashing intervals from sleep blocks.
+var activeMiningDurationNs uint64
+
 func clearTerminalNatively() {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -373,15 +377,11 @@ func main() {
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			// Placed safely OUTSIDE the nonce loop to prevent thread freezes!
 			for time.Now().Unix() <= currentBlock.Timestamp {
 				time.Sleep(10 * time.Millisecond)
 			}
 			simulatedTime := time.Now().Unix()
 
-			// 👑 DYNAMIC DIFFICULTY RETRIEVAL ACTIVATED:
-			// Completely detached the static floor block tracking limits. 
-			// Automatically scales on-chain requirements natively down-line!
 			var targetDifficulty int
 			if currentBlock.Index == 0 {
 				targetDifficulty = 2
@@ -429,9 +429,11 @@ func main() {
 				guardMatrixPlaceholder,
 			)
 
-			// 👑 LIGHTNING-SPEED ATOMIC MINING CORE:
+			// 👑 HIGH-PRECISION MEASURED MINING CORE:
+			// Capture exact timestamps at the boundaries of active hardware iteration.
+			activeMiningStartTimeNs := time.Now().UnixNano()
+
 			for nonce < chunkCeiling {
-				// ⚡ THE ATOMIC INT-FENCE:
 				if atomic.LoadInt64(&localHeightState) >= nextIndex {
 					blockSolved = false
 					break 
@@ -466,6 +468,10 @@ func main() {
 				atomic.AddUint64(&globalHashCount, 1)
 				nonce++
 			}
+
+			// Add the precise execution delta to our isolated global timer accumulation register
+			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
+			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
 
 			if blockSolved {
 				nonce = 0
@@ -502,8 +508,16 @@ func main() {
 			actualCvnBalance := GetAddressBalance(CustomMinerAddress)
 			StateMutex.RUnlock()
 			
+			// 👑 CLOCK-ISOLATED MATHEMATICAL PROFILING REGISTER:
+			// Calculate hashrate by dividing computed nonces by ONLY active thread execution seconds!
 			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
-			realHashrateMH := (float64(hashesComputed) / 3.0) / 1000000.0
+			activeDurationNs := atomic.SwapUint64(&activeMiningDurationNs, 0)
+			
+			var realHashrateMH float64 = 0.0
+			if activeDurationNs > 0 {
+				activeSeconds := float64(activeDurationNs) / 1000000000.0
+				realHashrateMH = (float64(hashesComputed) / activeSeconds) / 1000000.0
+			}
 			currentLiveHashrateTrack = realHashrateMH
 			
 			hashrateMutex.Lock()
