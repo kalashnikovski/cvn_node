@@ -99,15 +99,15 @@ rm -f cvn_mainnet.db miner_config.json cvn_secret_backup.txt
 go run . --generate-wallet
 
 3. Compile your high-performance, un-throttled proof-of-work consensus hashing core executable block target:bash
-go build -o cvn_miner .
+go build -o cvn_miner main.go app.go blockchain_core.go gossip_mesh.go database_core.go crypto_auth.go security_harness.go backup_vault.go
 
 ⚡ Step 4: Core Execution & Multi-Threaded Resource Fencing
 
 1. Launch your compiled validator binary core on autopilot and hook directly into the primary mainnet sync gateways:bash
-./cvn_miner --connect 202.137.175.220:8081
+./cvn_miner --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
 
 2. Hardware Micro-Throttling (Optional): By default, the mining thread will process nonces over all available CPU execution frames. To restrict your hardware footprint to a specific thread frame ceiling so your machine stays quiet and cool, prefix your launch sequence with the native resource gate variable (e.g., limiting execution to exactly 4 cores):bash
-GOMAXPROCS=4 ./cvn_miner --connect 202.137.175.220:8081
+GOMAXPROCS=4 ./cvn_miner --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
 
 🪪 Finding Your Public Address & Backups
 • Inside your ~/cvn_node folder, locate the file named cvn_secret_backup.txt. Run cat cvn_secret_backup.txt to display your public WALLET ADDRESS and secret PRIVATE KEY passphrase.
