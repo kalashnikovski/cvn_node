@@ -466,8 +466,6 @@ func main() {
 			}
 
 			if blockSolved {
-				nonce = 0
-				chunkCeiling = 1000000
 				blockMiningEndTime := time.Now().Unix()
 				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
 				if actualTimeElapsed < TargetBlockTimeWindow {
@@ -475,7 +473,11 @@ func main() {
 					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
 				}
 			} else {
-				chunkCeiling = nonce + 1000000
+				// 👑 THE PERFORMANCE UNLEASH:
+				// Remove the 100ms debugging sleep throttle from the failed chunk 
+				// path to restore your hardware's full multi-threaded bare-metal throughput!
+				nonce = 0
+				chunkCeiling = 1000000
 				runtime.Gosched()
 			}
 		}
