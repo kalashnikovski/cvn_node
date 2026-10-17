@@ -379,7 +379,17 @@ func main() {
 			}
 			simulatedTime := time.Now().Unix()
 
-			targetDifficulty := 4
+			// 👑 DYNAMIC DIFFICULTY RETRIEVAL ACTIVATED:
+			// Completely detached the static floor block tracking limits. 
+			// Automatically scales on-chain requirements natively down-line!
+			var targetDifficulty int
+			if currentBlock.Index == 0 {
+				targetDifficulty = 2
+			} else {
+				targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+			}
+			if targetDifficulty < 1 { targetDifficulty = 1 }
+			if targetDifficulty > 8 { targetDifficulty = 8 }
 			StateMutex.RUnlock()
 
 			targetPrefix := strings.Repeat("0", targetDifficulty)
@@ -422,8 +432,6 @@ func main() {
 			// 👑 LIGHTNING-SPEED ATOMIC MINING CORE:
 			for nonce < chunkCeiling {
 				// ⚡ THE ATOMIC INT-FENCE:
-				// Avoid all physical hard drive reads inside the loop lines! 
-				// Reading an in-memory variable takes 0 nanoseconds, unleashing full processor capacity!
 				if atomic.LoadInt64(&localHeightState) >= nextIndex {
 					blockSolved = false
 					break 
@@ -518,7 +526,7 @@ func main() {
 			avg15m := sum15m / float64(len(hashRateHistory15m))
 			avg1h  := sum1h / float64(len(hashRateHistory1h))
 			avg24h := sum24h / float64(len(hashRateHistory24h))
-			hashrateMutex.Unlock() // 👑 FIXED AND BALANCED: Perfect mutex protection barrier!
+			hashrateMutex.Unlock()
 
 			if loopCounter%10 == 0 {
 				logMutex.Lock()
