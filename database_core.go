@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,23 +22,42 @@ var jubileeVaultBucket = []byte("jubilee_vault")
 var localHeightState int64 = 0
 
 func InitBoltEngine() {
+	StateMutex.Lock()
+	defer StateMutex.Unlock()
+
+	// 👑 THE DESKTOP CO-MINING OVERHAUL:
+	// Detect if the runtime context is being invoked inside the Wails GUI layout layer.
+	// If it is running as a visual application wrapper, forcefully route its tracker 
+	// onto a sandbox database filename so it never steals file-locks from your active miner!
+	targetDatabaseName := "cvn_mainnet.db"
+	
+	// Check if running inside Wails (checking standard os arguments or tags)
+	for _, arg := range os.Args {
+		if strings.Contains(arg, "wails") || os.Getenv("BlockchainFile") == "cvn_binding_temp.db" {
+			targetDatabaseName = "cvn_binding_temp.db"
+			break
+		}
+	}
+
+	// Use environment override fallback if explicitly provided
+	if envPath := os.Getenv("BlockchainFile"); envPath != "" {
+		targetDatabaseName = envPath
+	}
+
+	dbPath := filepath.Join(".", targetDatabaseName)
 	fmt.Println("====================================================================")
 	fmt.Println("📂 HARDWARE FILE EXPLORER AUDIT INITIALIZED")
 	fmt.Println("====================================================================")
+	
+	absPath, _ := filepath.Abs(dbPath)
+	fmt.Printf("🎯 TARGET DATABASE FILE LOCATION:  %s\n\n", absPath)
 
-	if BlockchainFile == "" {
-		BlockchainFile = "cvn_mainnet.db"
-	}
-
-	absPath, _ := filepath.Abs(BlockchainFile)
-	fmt.Printf("🎯 TARGET DATABASE FILE LOCATION:  %s\n", absPath)
-
-	options := &bbolt.Options{Timeout: 2 * time.Second}
+	options := &bbolt.Options{Timeout: 1 * time.Second}
 
 	var openErr error
-	GlobalBoltEngine, openErr = bbolt.Open(BlockchainFile, 0600, options)
+	GlobalBoltEngine, openErr = bbolt.Open(dbPath, 0600, options)
 	if openErr != nil {
-		log.Fatalf("🚨 DATABASE MOUNT FAILURE: %v", openErr)
+		log.Fatalf("🚨 DATABASE MOUNT FAILURE: %v\n", openErr)
 	}
 
 	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
@@ -70,7 +90,7 @@ func InitBoltEngine() {
 		return nil
 	})
 
-	RebuildStateBalanceCache()
+	RebuildStateBalanceCacheInternal()
 }
 
 // GetLatestBlock exposes an RLock synchronized gateway path for external tracking modules.
@@ -165,7 +185,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-				for _, txPayload := range block.Transactions {
+		for _, txPayload := range block.Transactions {
 			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") {
 				for _, input := range txPayload.Inputs {
 					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
