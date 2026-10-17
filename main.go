@@ -484,7 +484,6 @@ func main() {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
@@ -640,7 +639,7 @@ func main() {
 			actualCvnBalance := GetAddressBalance(CustomMinerAddress)
 			StateMutex.RUnlock()
 			
-						// 👑 HARD-ALIGNED DASHBOARD RENDERING TICKER:
+			// 👑 HARD-ALIGNED DASHBOARD RENDERING TICKER:
 			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 			activeDurationNs := atomic.SwapUint64(&activeMiningDurationNs, 0)
 			
@@ -669,7 +668,6 @@ func main() {
 			for _, v := range hashRateHistory24h { sum24h += v }
 			
 			// 👑 THE ARITHMETIC RECOVERY DEFENSE:
-			// Ensure we never divide by zero if the slice arrays are empty during initial boot passes!
 			var avg15m, avg1h, avg24h float64
 			if len(hashRateHistory15m) > 0 { avg15m = sum15m / float64(len(hashRateHistory15m)) }
 			if len(hashRateHistory1h) > 0  { avg1h  = sum1h  / float64(len(hashRateHistory1h)) }
@@ -733,4 +731,40 @@ func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 		return 1
 	}
 	return currentDiff
+}
+
+// 👑 THE MASTER CONVERGENCE BROADCASTER:
+// Forces your node to asynchronously gossip newly solved blocks or transactions 
+// to all active peer servers over port 8080 to ensure instant mainnet synchronization!
+func BroadcastNewBlock(newBlock Block) {
+	PeerMapMutex.RLock()
+	activePeers := make([]string, 0)
+	for peerIP := range ActivePeerMap {
+		activePeers = append(activePeers, peerIP)
+	}
+	PeerMapMutex.RUnlock()
+
+	// Default fallback to your core network seeds if the active peer map is initializing
+	if len(activePeers) == 0 {
+		activePeers = []string{"207.148.67.11:8080", "64.177.45.153:8080"}
+	}
+
+	payloadBytes, err := json.Marshal(newBlock)
+	if err != nil {
+		return
+	}
+
+	// Stream the raw block data across the international node grid simultaneously
+	for _, peer := range activePeers {
+		go func(targetPeer string) {
+			cleanTarget := strings.TrimPrefix(targetPeer, "http://")
+			targetURL := fmt.Sprintf("http://%s/transaction", cleanTarget)
+			
+			client := &http.Client{Timeout: 2 * time.Second}
+			resp, err := client.Post(targetURL, "application/json", bytes.NewBuffer(payloadBytes))
+			if err == nil {
+				resp.Body.Close()
+			}
+		}(peer)
+	}
 }
