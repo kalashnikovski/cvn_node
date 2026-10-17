@@ -1,16 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"os"
-	"strconv"
+	"net/http"
 	"strings"
 	"time"
-
-	"go.etcd.io/bbolt"
 )
 
 // App struct
@@ -29,186 +26,103 @@ func (a *App) startup(ctx context.Context) {
 	fmt.Println("🛰️ [WAILS LIFECYCLE] Core context securely mounted into application interface framework.")
 }
 
-// GetLocalNodeTelemetry marshals real-time L1 telemetry straight to your Svelte frontend with absolute zero mutex deadlocks
+// GetLocalNodeTelemetry fetches telemetry straight from your active mining terminal's local API ports
 func (a *App) GetLocalNodeTelemetry() string {
-	latest := GetLatestBlock()
-	
-	syncStatusIndicator := true
-	if latest.Index == 0 {
-		syncStatusIndicator = false
+	// 👑 THE CORE HTTP LINK UPGRADE:
+	// Bypass sandbox disk files completely and query your active miner's local port!
+	resp, err := http.Get("http://localhost:8081/block")
+	if err != nil {
+		// Fallback to the port-shifted channel if applicable
+		resp, err = http.Get("http://localhost:9091/block")
+		if err != nil {
+			// Fail-safe graceful offline state placeholder if the miner is initializing
+			telemetry := map[string]interface{}{
+				"current_height": 0,
+				"block_hash":     "0000000000000000000000000000000000000000000000000000000000000000",
+				"miner_address":  "CVN_NODE_CONNECTING...",
+				"difficulty":     4,
+				"is_synced":      false,
+			}
+			data, _ := json.Marshal(telemetry)
+			return string(data)
+		}
 	}
-	
+	defer resp.Body.Close()
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "{}"
+	}
+
+	// Capture network variables from our terminal miner's live response payload
+	heightVal, _ := data["current_height"].(float64)
+	hashVal, _ := data["block_hash"].(string)
+
 	telemetry := map[string]interface{}{
-		"current_height": latest.Index,
-		"block_hash":     latest.Hash,
+		"current_height": int64(heightVal),
+		"block_hash":     hashVal,
 		"miner_address":  CustomMinerAddress,
-		"difficulty":     latest.Difficulty,
-		"is_synced":      syncStatusIndicator, 
+		"difficulty":     4,
+		"is_synced":      heightVal > 0,
 	}
-	
-	data, _ := json.Marshal(telemetry)
-	return string(data)
+
+	finalBytes, _ := json.Marshal(telemetry)
+	return string(finalBytes)
 }
 
-// FetchWalletBalanceQuery pulls verified balances straight out of your BoltDB memory matrix cache
+// FetchWalletBalanceQuery pulls verified account metrics directly out of the terminal miner's active ledger cache
 func (a *App) FetchWalletBalanceQuery(address string) float64 {
-	BalanceCacheMutex.RLock()
-	defer BalanceCacheMutex.RUnlock()
-	
-	if val, exists := StateBalanceCache[address]; exists {
-		return val
+	// Query the local live /audit endpoint inside your miner's active network server
+	resp, err := http.Get(fmt.Sprintf("http://localhost:8081/audit?address=%s", address))
+	if err != nil {
+		resp, err = http.Get(fmt.Sprintf("http://localhost:9091/audit?address=%s", address))
+		if err != nil {
+			return 0.0
+		}
+	}
+	defer resp.Body.Close()
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0.0
+	}
+
+	if balanceVal, exists := data["balance"]; exists {
+		return balanceVal.(float64)
 	}
 	return 0.0
 }
 
-// BroadcastLocalTransactionSubmit safely injects user payloads straight into your active mempool tracks
+// BroadcastLocalTransactionSubmit injects payloads straight over local HTTP ports into your miner's active wire validation lanes
 func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr string) string {
-	amount, _ := strconv.ParseFloat(amountStr, 64)
-	fee, _ := strconv.ParseFloat(feeStr, 64)
-
-	if amount <= 0 || strings.TrimSpace(recipient) == "" || recipient == "1" {
-		return "ALERT: Transaction rejected by Phase 3 address validation firewall filters."
+	// Create a lightweight temporary data structural packet to bridge front-end fields to your local network server
+	payload := map[string]string{
+		"recipient":  recipient,
+		"amount":     amountStr,
+		"fee":        feeStr,
+		"timestamp":  fmt.Sprintf("%d", time.Now().Unix()),
 	}
-
-	requiredTotal := amount + fee
-	var gatheredUTXOs []struct {
-		txID  string
-		index int
-		value float64
-	}
-	var totalAvailable float64
-
-	err := GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte("utxo"))
-		if b == nil {
-			return fmt.Errorf("utxo bucket partition missing from engine disk")
-		}
-
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var record UTXORecord
-			if err := json.Unmarshal(v, &record); err != nil {
-				continue
-			}
-
-			if record.Recipient == CustomMinerAddress {
-				keyStr := string(k)
-				parts := strings.Split(keyStr, "_")
-				if len(parts) < 2 {
-					continue
-				}
-				parsedIdx, err := strconv.Atoi(parts[len(parts)-1])
-				if err != nil {
-					continue
-				}
-				sourceTxID := strings.Join(parts[:len(parts)-1], "_")
-
-				totalAvailable += record.Amount
-				gatheredUTXOs = append(gatheredUTXOs, struct {
-					txID  string
-					index int
-					value float64
-				}{txID: sourceTxID, index: parsedIdx, value: record.Amount})
-			}
-		}
-		return nil
-	})
-
+	
+	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Sprintf("REJECTED: Internal storage engine error scanning inputs: %v", err)
+		return "REJECTED: Failed to serialize transaction parameters."
 	}
 
-	if totalAvailable < requiredTotal {
-		return fmt.Sprintf("REJECTED: Insufficient unspent cryptographic utility reserves. Required: %f, Available: %f", requiredTotal, totalAvailable)
-	}
-
-	var selectedInputs []UTXOInput
-	var inputsValueSum float64
-
-	for _, utxo := range gatheredUTXOs {
-		selectedInputs = append(selectedInputs, UTXOInput{
-			SourceTxID: utxo.txID,
-			Index:      utxo.index,
-			Signature:  "",
-		})
-		inputsValueSum += utxo.value
-		if inputsValueSum >= requiredTotal {
-			break
-		}
-	}
-
-	tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
-	txID := fmt.Sprintf("TX_DESKTOP_%x", sha256.Sum256([]byte(tSeed)))
-
-	// Dynamic Cryptographic Key Acquisition Phase
-	var localPrivateKeySecret string
-	var localPublicKeyHex string
-
-	keyBackupBytes, err := os.ReadFile("cvn_secret_backup.txt")
-	if err == nil {
-		lines := strings.Split(string(keyBackupBytes), "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(line, "Public Key: ") {
-				localPublicKeyHex = strings.TrimSpace(strings.TrimPrefix(line, "Public Key: "))
-			}
-			if strings.HasPrefix(line, "Private Key: ") {
-				localPrivateKeySecret = strings.TrimSpace(strings.TrimPrefix(line, "Private Key: "))
-			}
-		}
-	}
-
-	// Fallback to fresh local pair generation if the local configuration matrix is pristine but unwritten
-	if localPrivateKeySecret == "" || localPublicKeyHex == "" {
-		var genErr error
-		localPrivateKeySecret, localPublicKeyHex, _, genErr = GenerateKeyPair()
-		if genErr != nil {
-			return "REJECTED: Critical systemic error generating localized cryptographic key contexts."
-		}
-	}
-
-	// Enforce uniform preimage template formatting matching security_harness.go rules exactly
-	txMessage := fmt.Sprintf("%s-%s-%.8f", txID, CustomMinerAddress, fee)
-
-	rStr, sStr, err := SignTransactionPayload(localPrivateKeySecret, txMessage)
+	// Post the user's transaction choice directly to your running terminal miner's API route
+	targetURL := "http://localhost:8081/transaction"
+	resp, err := http.Post(targetURL, "application/json", bytes.NewBuffer(jsonBytes))
 	if err != nil {
-		return fmt.Sprintf("REJECTED: Asymmetric signature cryptographic compilation breakdown: %v", err)
+		targetURL = "http://localhost:9091/transaction"
+		resp, err = http.Post(targetURL, "application/json", bytes.NewBuffer(jsonBytes))
+		if err != nil {
+			return "REJECTED: Unable to communicate with your local mining terminal network ports."
+		}
 	}
-	combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
+	defer resp.Body.Close()
 
-	// Explicit structural distribution down onto individual transaction input objects
-	for i := range selectedInputs {
-		selectedInputs[i].Signature = combinedSignature
-	}
-
-	var finalOutputs []UTXOOutput
-	finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
-
-	if inputsValueSum > requiredTotal {
-		changeAmount := inputsValueSum - requiredTotal
-		finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
+	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+		return "SUCCESS: Transaction payload securely routed straight to your running miner's active mempool!"
 	}
 
-		tx := Transaction{
-		ID:               txID,
-		Inputs:           selectedInputs,
-		Outputs:          finalOutputs,
-		Signature:        combinedSignature,
-		PublicKey:        localPublicKeyHex,
-		Timestamp:        time.Now().Unix(),
-		FreeWillOffering: fee,
-		DataSizeKB:       1.2,
-		Witness:          CustomMinerAddress,
-	}
-
-	// 👑 THE ABSOLUTE SYMMETRY FIX: Run the full cryptographic wire firewall pass BEFORE local mempool ingestion!
-	if !VerifyIncomingWireTransaction(tx) {
-		return "REJECTED: Transaction payload failed complete cryptographic and UTXO ledger validation gates."
-	}
-
-	// Once fully cross-verified against live disk storage partitions, commit safely to memory lines
-	if MempoolMatrix.PushTransaction(tx) {
-		go BroadcastTransactionToMesh(tx)
-		return "SUCCESS: Payload securely committed to local mempool propagation queue!"
-	}
-	return "REJECTED: Active mempool spam threshold ceiling saturated."
+	return fmt.Sprintf("REJECTED: Local network validation gates returned error code: %d", resp.StatusCode)
 }
