@@ -11,9 +11,7 @@ import (
 // VerifyTransactionIntegrity validates signatures, balance sheet metrics, and coinbase constraints.
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
 	// 1. HARDENED COINBASE CHECK: Defends against illegal minting parameters
-	// 👑 THE ANCHOR FIXED: Check for "TX_COINBASE" as a uniform structural prefix string 
-	// to cleanly catch his "TX_COINBASE_HEIGHT_" templates and pass validation gates flawlessly!
-	if strings.HasPrefix(tx.ID, "TX_COINBASE") {
+	if strings.HasPrefix(tx.ID, "TX_COINBASE_") {
 		if txIndex != 0 {
 			fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
 			return false
@@ -91,7 +89,6 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 		if bUTXO == nil {
 			return nil
 		}
-		// Evaluate transaction rules directly against the live database state view
 		if VerifyTransactionIntegrity(tx, -1, -1, bUTXO) {
 			isValid = true
 		}
@@ -101,7 +98,7 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 	return isValid
 }
 
-// 🟩 FIXED: VerifyIncomingWireBlock now passes the absolute correct transaction index position
+// VerifyIncomingWireBlock now passes the absolute correct transaction index position
 func VerifyIncomingWireBlock(b Block) bool {
 	targetPrefix := strings.Repeat("0", b.Difficulty)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
@@ -126,7 +123,6 @@ func VerifyIncomingWireBlock(b Block) bool {
 			return nil
 		}
 
-		// 👑 THE REPAIR: Pass the true loop iteration index (txIdx) instead of hardcoded -1 markers!
 		for txIdx, tx := range b.Transactions {
 			if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 				isBlockValid = false
