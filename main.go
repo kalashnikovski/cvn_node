@@ -257,10 +257,17 @@ func main() {
 		// 👑 FAIL-SAFE BULK SYNC PORT ASSIGNMENT:
 		// Attempt to bind port 8081 first (for full miners). If your miner is already running,
 		// automatically fall back to port 9091 so the GUI wallet loads flawlessly without port clashes!
-		fmt.Println("📡 [PORT 8081/9091] Initializing HTTP Bulk Sync api channels...")
+		fmt.Println("📡 [PORT 8081] Initializing HTTP Bulk Sync api channels...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
-			if err2 := http.ListenAndServe(":9091", winMux); err2 != nil {
-				fmt.Printf("Critical: Bulk Sync port allocation failed: %v\n", err2)
+			// 👑 THE OPERATING SYSTEM PRIVILEGE GATE:
+			// Only allow fallback port shifting on local Windows machines running the GUI wrapper!
+			if runtime.GOOS == "windows" {
+				fmt.Println("🔄 Port 8081 claimed by miner. Shifting GUI wallet network hooks to port 9091...")
+				if err2 := http.ListenAndServe(":9091", winMux); err2 != nil {
+					fmt.Printf("Critical: Bulk Sync port allocation failed: %v\n", err2)
+				}
+			} else {
+				fmt.Printf("Critical: Linux Bulk Sync port allocation failed: %v\n", err)
 			}
 		}
 	}()
@@ -277,10 +284,16 @@ func main() {
 		
 		// 👑 FAIL-SAFE ANALYTICS PORT ASSIGNMENT:
 		// Attempt to bind port 8082 first. If claimed, fall back cleanly to 9092.
-		fmt.Println("📡 [PORT 8082/9092] Initializing dedicated analytics channels...")
+fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
 		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
-			if err2 := http.ListenAndServe(":9092", mirrorMux); err2 != nil {
-				fmt.Printf("Critical: Analytics port allocation failed: %v\n", err2)
+			// 👑 THE OPERATING SYSTEM PRIVILEGE GATE:
+			if runtime.GOOS == "windows" {
+				fmt.Println("🔄 Port 8082 claimed by miner. Shifting GUI wallet analytics to port 9092...")
+				if err2 := http.ListenAndServe(":9092", mirrorMux); err2 != nil {
+					fmt.Printf("Critical: Analytics port allocation failed: %v\n", err2)
+				}
+			} else {
+				fmt.Printf("Critical: Linux Analytics port allocation failed: %v\n", err)
 			}
 		}
 	}()
