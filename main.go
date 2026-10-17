@@ -543,22 +543,21 @@ func main() {
 			}
 
 			// 👑 THE BARE-METAL MEMPOOL INGESTION REALIGNMENT:
-			// Directly read unspent wire operations out of your explicit 
-			// shared mempool struct pool matrices using its native map field keys!
-			MempoolMatrix.MempoolMutex.RLock()
-			var count int
-			for _, txPayload := range MempoolMatrix.PendingTransactionsPool {
-				if count >= 25 {
-					break
+			// Safely read transaction operations dynamically using your exact native pool structure helper methods!
+			if txList := MempoolMatrix.GetPendingTransactions(); len(txList) > 0 {
+				var count int
+				for _, txPayload := range txList {
+					if count >= 25 {
+						break
+					}
+					candidateTransactions = append(candidateTransactions, txPayload)
+					count++
 				}
-				candidateTransactions = append(candidateTransactions, txPayload)
-				count++
 			}
-			MempoolMatrix.MempoolMutex.RUnlock()
 
 			// 👑 THE CRYPTOGRAPHIC PREIMAGE TRANSACTIONS HASH FACTORY:
 			// Loop over the newly collected candidate transactions array to compile 
-			// an accurate, un-tamperable Merkel root hash for the incoming block block header!
+			// an accurate, un-tamperable Merkel root hash for the incoming block header!
 			var txSummaryBuilder strings.Builder
 			for _, tx := range candidateTransactions {
 				txSummaryBuilder.WriteString(tx.ID + "-")
