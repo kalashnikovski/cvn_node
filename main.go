@@ -185,7 +185,6 @@ func main() {
 				return
 			}
 
-			// Read incoming wire bytes to safely detect incoming payload profiles
 			var rawBody bytes.Buffer
 			if _, err := rawBody.ReadFrom(r.Body); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -193,7 +192,7 @@ func main() {
 			}
 
 			var tx Transaction
-			// Mode A: Attempt to decode standard production Transaction structure object first
+			// Mode A: Handle incoming structured peer-to-peer wire blocks
 			if err := json.Unmarshal(rawBody.Bytes(), &tx); err == nil && tx.ID != "" && len(tx.Outputs) > 0 {
 				if MempoolMatrix.PushTransaction(tx) {
 					w.WriteHeader(http.StatusCreated)
@@ -203,7 +202,7 @@ func main() {
 				return
 			}
 
-			// Mode B: Automatically intercept and digest flat desktop GUI text transfers!
+			// Mode B: Automatically intercept and digest flat desktop GUI text transfers
 			var guiPayload map[string]string
 			if err := json.Unmarshal(rawBody.Bytes(), &guiPayload); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -222,7 +221,6 @@ func main() {
 				return
 			}
 
-			// Assemble unspent coins directly from your verified ledger state caches
 			requiredTotal := amount + fee
 			var spendableInputs []UTXOInput
 			var currentAccumulator float64
@@ -236,7 +234,6 @@ func main() {
 				return
 			}
 
-			// Construct input references from available UTXO keys
 			StateMutex.RLock()
 			currentHeightIndex := GetLatestBlockInternal().Index
 			StateMutex.RUnlock()
@@ -285,7 +282,6 @@ func main() {
 				return
 			}
 
-			// Preimage formatting block matched flawlessly to security check harnesses
 			txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
 			rStr, sStr, err := SignTransactionPayload(localPrivateKey, txMessage)
 			if err != nil {
@@ -320,7 +316,7 @@ func main() {
 
 			if MempoolMatrix.PushTransaction(tx) {
 				w.WriteHeader(http.StatusCreated)
-				go BroadcastLocalTransactionToPeers(tx) // Gossip to network wire instantly
+				go BroadcastTransaction(tx) // 👑 FIXED MAPPING: Triggers your native wire gossip pipeline!
 				return
 			}
 			w.WriteHeader(http.StatusInternalServerError)
@@ -417,17 +413,17 @@ func main() {
 						currentHeightCheck := GetLatestBlockInternal().Index
 						StateMutex.RUnlock()
 						if incomingBlock.Index == int64(currentHeightCheck)+1 {
-SaveBlockToStorage(incomingBlock)
-currentLocalHeight = incomingBlock.Index
-}
-}
-}
-}
-resp.Body.Close()
-}
-if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
-lastRenderTime = time.Now()
-var syncPercentage float64 = 0.00
+							SaveBlockToStorage(incomingBlock)
+							currentLocalHeight = incomingBlock.Index
+						}
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
+			lastRenderTime = time.Now()
+			var syncPercentage float64 = 0.00
 if targetGlobalTip > 0 {
 syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
 }
@@ -500,15 +496,15 @@ time.Sleep(10 * time.Millisecond)
 				},
 			}
 
-			// Ingest any transactions pending inside your local live mempool context!
-			MempoolMatrix.MempoolMutex.RLock()
+			// 👑 HARD-ALIGNED MEMPOOL INGESTION TRACK:
+			// Safely fetch current verified in-flight memory transactions via your native core getters!
+			pendingPoolList := MempoolMatrix.GetPendingTransactions()
 			var count int
-			for _, txPayload := range MempoolMatrix.PendingTransactionsPool {
+			for _, txPayload := range pendingPoolList {
 				if count >= 25 { break }
 				candidateTransactions = append(candidateTransactions, txPayload)
 				count++
 			}
-			MempoolMatrix.MempoolMutex.RUnlock()
 
 			var txSummaryBuilder strings.Builder
 			for _, tx := range candidateTransactions {
@@ -556,14 +552,13 @@ time.Sleep(10 * time.Millisecond)
 						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 						logMutex.Unlock()
 						
-						// Wipe matching transactions from your memory pool upon block completion
-						MempoolMatrix.MempoolMutex.Lock()
+						// 👑 UNIFIED MEMPOOL CLEANUP OVERLAY:
+						// Clean out successfully written transactions using your verified core clear mechanics
 						for _, committedTx := range candidateTransactions {
 							if !strings.HasPrefix(committedTx.ID, "TX_COINBASE") {
-								delete(MempoolMatrix.PendingTransactionsPool, committedTx.ID)
+								MempoolMatrix.RemoveTransaction(committedTx.ID)
 							}
 						}
-						MempoolMatrix.MempoolMutex.Unlock()
 						
 						go BroadcastNewBlock(newBlock)
 					}
