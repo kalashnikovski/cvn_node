@@ -542,10 +542,23 @@ func main() {
 				},
 			}
 
-			// 👑 ZERO-METHOD CONVERGENCE SAFE GUARD:
-			// Read memory transactions dynamically without depending on custom object methods.
-			// This prevents compilation breakdown across localized environments.
+			// 👑 THE BARE-METAL MEMPOOL INGESTION REALIGNMENT:
+			// Directly read unspent wire operations out of your explicit 
+			// shared mempool struct pool matrices using its native map field keys!
+			MempoolMatrix.MempoolMutex.RLock()
+			var count int
+			for _, txPayload := range MempoolMatrix.PendingTransactionsPool {
+				if count >= 25 {
+					break
+				}
+				candidateTransactions = append(candidateTransactions, txPayload)
+				count++
+			}
+			MempoolMatrix.MempoolMutex.RUnlock()
 
+			// 👑 THE CRYPTOGRAPHIC PREIMAGE TRANSACTIONS HASH FACTORY:
+			// Loop over the newly collected candidate transactions array to compile 
+			// an accurate, un-tamperable Merkel root hash for the incoming block block header!
 			var txSummaryBuilder strings.Builder
 			for _, tx := range candidateTransactions {
 				txSummaryBuilder.WriteString(tx.ID + "-")
