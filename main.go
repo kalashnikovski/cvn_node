@@ -496,6 +496,23 @@ func main() {
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
+
+			// 👑 THE CORE CONSENSUS STABILIZER:
+			// Introduce a localized cryptographic jitter delay based on the unique Rig Identity string
+			// to scatter node mining start paths and eliminate high-speed wire collisions!
+			StateMutex.RLock()
+			currentBlockForJitter := GetLatestBlockInternal()
+			nextIndexCheck := currentBlockForJitter.Index + 1
+			StateMutex.RUnlock()
+
+			if nextIndexCheck > 1 {
+				var seedInt int64 = 0
+				for _, char := range CustomMinerAddress { 
+					seedInt += int64(char) 
+				}
+				jitterDelayMs := (seedInt % 8) * 250 // Generates a safe 0 to 1.75s staggered window
+				time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
+			}
 			
 			const TargetBlockTimeWindow = 45
 			blockMiningStartTime := time.Now().Unix()
@@ -578,7 +595,7 @@ func main() {
 				hashBytes := sha256.Sum256([]byte(inputStr))
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
 				
-				if strings.HasPrefix(computedHashHex, targetPrefix) {
+								if strings.HasPrefix(computedHashHex, targetPrefix) {
 					newBlock := Block{
 						Index:        nextIndex,
 						Timestamp:    simulatedTime,
@@ -590,16 +607,23 @@ func main() {
 						GuardMatrix:  guardMatrixPlaceholder,
 					}
 					
+					// 👑 THE CONVERGENCE ASSURANCE FILTER:
+					// Only print a success log to the terminal dashboard AFTER the block 
+					// has successfully cleared global validation rules and been written to disk!
 					if SaveBlockToStorage(newBlock) {
 						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
+						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
 						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 						logMutex.Unlock()
 						
 						go BroadcastNewBlock(newBlock)
+						blockSolved = true
+						break
+					} else {
+						// The block was beaten by another node; gracefully drop it silently and sync up
+						blockSolved = false
+						break
 					}
-					blockSolved = true
-					break
 				}
 				atomic.AddUint64(&globalHashCount, 1)
 				nonce++
@@ -608,7 +632,7 @@ func main() {
 			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
 			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
 
-			if blockSolved {
+						if blockSolved {
 				nonce = 0
 				chunkCeiling = 1000000
 				blockMiningEndTime := time.Now().Unix()
@@ -624,6 +648,7 @@ func main() {
 			}
 		}
 	}()
+
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	clearTerminalNatively()
