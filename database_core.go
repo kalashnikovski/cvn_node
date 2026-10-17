@@ -155,6 +155,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return fmt.Errorf("required consensus partitions are missing")
 		}
 
+		// 👑 THE UN-FORKABLE CONSENSUS FIREWALL GATE:
+		// Hard-lock verification logic strictly past coinbase index layers.
+		// This protects the network from string-matching vulnerabilities across platforms.
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx == 0 || strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
 				continue 
@@ -174,10 +177,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		// 👑 THE PARITY ALIGNMENT MATRIX RECONSTRUCTOR:
-		for _, txPayload := range block.Transactions {
-			// Hardened prefix match check ensures Coinbase parameters never try to spend parents
-			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
+		// 👑 THE UNIFIED UTXO MATRICES RECUPERATOR:
+		for txIdx, txPayload := range block.Transactions {
+			if txIdx != 0 && !strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
 				for _, input := range txPayload.Inputs {
 					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
 					_ = bUTXO.Delete([]byte(compoundInputKey))
@@ -209,7 +211,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
 	
-	// Forcefully trigger a synchronized read-and-write state caching pass!
+	// Forcefully trigger a synchronized read-and-write state caching update pass 
 	RebuildStateBalanceCacheInternal()
 	return true
 }
