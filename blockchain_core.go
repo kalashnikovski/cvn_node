@@ -132,9 +132,13 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	if incomingBlock.Index == currentTip.Index+1 {
 		if incomingBlock.PrevHash != currentTip.Hash { StateMutex.Unlock(); go TriggerActiveReSyncPass(); return }
 		if SaveBlockToStorageInternal(incomingBlock) {
+			// 👑 THE THROUGHPUT UNCLOG:
+			// Instantly commit the atomic local height state shift so your main.go 
+			// kill switch breaks the nonce loop immediately without zero microsecond lag!
 			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
 			StateMutex.Unlock()
-			time.Sleep(50 * time.Millisecond)
+			
+			// Fire the network mesh propagation asynchronously without delaying the thread
 			go BroadcastNewBlock(incomingBlock)
 			return
 		}
