@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.etcd.io/bbolt" // 👑 THE STRUCTURAL COMPILATION LOCK ANCHOR
 )
 
 //go:embed all:frontend/dist
@@ -665,28 +664,12 @@ func main() {
 			StateMutex.RUnlock()
 			actualBlocksHeight := liveBlock.Index
 			
-			// 👑 THE CRITICAL DISK-COMMITTED LEDGER OVERLAY:
-			// Completely ignore un-validated thread memory maps and loose cache states!
-			// Dynamically parse the physical, un-forkable UTXO disk buckets on every ticker 
-			// refresh pass to guarantee the terminal dashboard matches your web explorer 100%.
-			var actualCvnBalance float64
-			if GlobalBoltEngine != nil {
-				_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-					bUTXO := tx.Bucket([]byte("utxo"))
-					if bUTXO != nil {
-						c := bUTXO.Cursor()
-						for k, v := c.First(); k != nil; k, v = c.Next() {
-							var record UTXORecord
-							if json.Unmarshal(v, &record) == nil {
-								if record.Recipient == CustomMinerAddress {
-									actualCvnBalance += record.Amount
-								}
-							}
-						}
-					}
-					return nil
-				})
-			}
+			// 👑 THE MASTER TELEMETRY REALIGNMENT:
+			// Read your true balance directly out of your verified on-chain UTXO state cache
+			// map to protect database file handles from starvation lockouts!
+			BalanceCacheMutex.RLock()
+			actualCvnBalance := StateBalanceCache[CustomMinerAddress]
+			BalanceCacheMutex.RUnlock()
 			
 			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 			activeDurationNs := atomic.SwapUint64(&activeMiningDurationNs, 0)
