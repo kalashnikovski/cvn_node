@@ -25,13 +25,8 @@ func InitBoltEngine() {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 
-	// 👑 THE DESKTOP CO-MINING OVERHAUL:
-	// Detect if the runtime context is being invoked inside the Wails GUI layout layer.
-	// If it is running as a visual application wrapper, forcefully route its tracker 
-	// onto a sandbox database filename so it never steals file-locks from your active miner!
 	targetDatabaseName := "cvn_mainnet.db"
 	
-	// Check if running inside Wails (checking standard os arguments or tags)
 	for _, arg := range os.Args {
 		if strings.Contains(arg, "wails") || os.Getenv("BlockchainFile") == "cvn_binding_temp.db" {
 			targetDatabaseName = "cvn_binding_temp.db"
@@ -39,7 +34,6 @@ func InitBoltEngine() {
 		}
 	}
 
-	// Use environment override fallback if explicitly provided
 	if envPath := os.Getenv("BlockchainFile"); envPath != "" {
 		targetDatabaseName = envPath
 	}
@@ -93,14 +87,12 @@ func InitBoltEngine() {
 	RebuildStateBalanceCacheInternal()
 }
 
-// GetLatestBlock exposes an RLock synchronized gateway path for external tracking modules.
 func GetLatestBlock() Block {
 	StateMutex.RLock()
 	defer StateMutex.RUnlock()
 	return GetLatestBlockInternal()
 }
 
-// GetLatestBlockInternal retrieves data straight from disk assumptions (Internal use under StateMutex wrapper).
 func GetLatestBlockInternal() Block {
 	var latestBlock Block
 	latestBlock.Index = 0
@@ -144,15 +136,12 @@ func GetLatestBlockInternal() Block {
 	return latestBlock
 }
 
-// SaveBlockToStorage exposes an architecture-conforming synchronized wrapper layer.
 func SaveBlockToStorage(block Block) bool {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 	return SaveBlockToStorageInternal(block)
 }
 
-// SaveBlockToStorageInternal implements direct atomic modifications (Internal use under StateMutex wrapper).
-// SaveBlockToStorageInternal implements direct atomic modifications (Internal use under StateMutex wrapper).
 func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil {
 		return false
@@ -166,12 +155,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return fmt.Errorf("required consensus partitions are missing")
 		}
 
-				// 👑 THE COINBASE CONSENSUS GATE:
-		// Process every transaction inside the block, but ensure validation filters 
-		// only evaluate standard peer-to-peer user transactions, allowing external 
-		// mining block reward headers from separate rigs to pass cleanly!
 		for txIdx, txPayload := range block.Transactions {
-			// Explicitly bypass index 0 so Sparks' block rewards pass your firewall smoothly!
 			if txIdx == 0 || strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
 				continue 
 			}
@@ -190,11 +174,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		// 👑 THE UNIFIED UTXO BALANCE MATRICES RECUPERATOR:
-		// Process EVERY transaction inside the block (including Coinbase at index 0)
-		// to ensure live database balance sheet updates are recorded for all nodes network-wide!
+		// 👑 THE PARITY ALIGNMENT MATRIX RECONSTRUCTOR:
 		for _, txPayload := range block.Transactions {
-			// Only spend inputs for regular user transactions (Coinbase has no input parents)
+			// Hardened prefix match check ensures Coinbase parameters never try to spend parents
 			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
 				for _, input := range txPayload.Inputs {
 					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
@@ -202,7 +184,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 				}
 			}
 
-			// Generate and store the unspent output records cleanly onto the ledger partitions
 			for outIdx, output := range txPayload.Outputs {
 				compoundOutputKey := fmt.Sprintf("%s_%d", txPayload.ID, outIdx)
 				
@@ -228,8 +209,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
 	
-	// Forcefully trigger a synchronized read-and-write state caching update pass 
-	// to ensure your local terminal screen and explorer endpoints instantly reflect live metrics!
+	// Forcefully trigger a synchronized read-and-write state caching pass!
 	RebuildStateBalanceCacheInternal()
 	return true
 }
@@ -256,14 +236,12 @@ func GetBlockByHeightFromDB(height int64) Block {
 	return block
 }
 
-// RebuildStateBalanceCache wraps in-memory mapping reconstructions under a thread-safe fence.
 func RebuildStateBalanceCache() {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 	RebuildStateBalanceCacheInternal()
 }
 
-// RebuildStateBalanceCacheInternal implements state compilation (Internal use under StateMutex wrapper).
 func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
