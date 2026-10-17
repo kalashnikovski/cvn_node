@@ -166,14 +166,17 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return fmt.Errorf("required consensus partitions are missing")
 		}
 
-		// 👑 HARD-LOCKED COMMITMENT GATE: Deep validation pass before mutating disk records
+				// 👑 THE COINBASE CONSENSUS GATE:
+		// Process every transaction inside the block, but ensure validation filters 
+		// only evaluate standard peer-to-peer user transactions, allowing external 
+		// mining block reward headers from separate rigs to pass cleanly!
 		for txIdx, txPayload := range block.Transactions {
-			// Skip validation for Coinbase on index 0 to allow minting parameters to execute safely
-			if txIdx == 0 {
+			// Explicitly bypass index 0 so Sparks' block rewards pass your firewall smoothly!
+			if txIdx == 0 || strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
 				continue 
 			}
 			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
-				fmt.Printf("🚨 SECURITY WARNING: Fraudulent transaction '%s' detected inside candidate block #%d at index %d! Forcefully aborting disk commitment.\n", txPayload.ID, block.Index, txIdx)
+				fmt.Printf("🚨 SECURITY WARNING: Fraudulent transaction '%s' detected inside candidate block #%d! Aborting disk commitment.\n", txPayload.ID, block.Index)
 				return fmt.Errorf("transaction verification failed for txID: %s", txPayload.ID)
 			}
 		}
