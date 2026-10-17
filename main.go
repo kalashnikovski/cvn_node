@@ -368,15 +368,14 @@ func main() {
 			const TargetBlockTimeWindow = 45
 			blockMiningStartTime := time.Now().Unix()
 
-						StateMutex.RLock()
+			StateMutex.RLock()
 			currentBlock := GetLatestBlockInternal()
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
 			// 👑 THE CHRONOLOGICAL PARITY OVERHAUL:
 			// Allow timestamps to track true local system clocks natively. 
-			// If his system matches the parent block second, force a 10-millisecond 
-			// clock stall to let the OS clock tick forward naturally!
+			// Placed safely OUTSIDE the nonce calculation loop to protect thread speeds!
 			for time.Now().Unix() <= currentBlock.Timestamp {
 				time.Sleep(10 * time.Millisecond)
 			}
@@ -451,7 +450,7 @@ func main() {
 						GuardMatrix:  guardMatrixPlaceholder,
 					}
 					
-										if SaveBlockToStorage(newBlock) {
+					if SaveBlockToStorage(newBlock) {
 						logMutex.Lock()
 						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
 						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
