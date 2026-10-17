@@ -165,7 +165,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		for _, txPayload := range block.Transactions {
+				for _, txPayload := range block.Transactions {
 			if !strings.HasPrefix(txPayload.ID, "TX_COINBASE_") {
 				for _, input := range txPayload.Inputs {
 					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
@@ -197,6 +197,10 @@ func SaveBlockToStorageInternal(block Block) bool {
 	}
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
+	
+	// 👑 THE CACHE FORCE-ALIGNMENT WORKER:
+	// Forcefully trigger a synchronized read-and-write state caching update pass 
+	// to ensure his local terminal screen instantly updates without requiring a client restart!
 	RebuildStateBalanceCacheInternal()
 	return true
 }
