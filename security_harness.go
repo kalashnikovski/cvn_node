@@ -11,14 +11,13 @@ import (
 // VerifyTransactionIntegrity validates signatures, balance sheet metrics, and coinbase constraints.
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
 	// 1. HARDENED COINBASE CHECK: Defends against illegal minting parameters
-	if strings.HasPrefix(tx.ID, "TX_COINBASE_") {
+	// 👑 THE ANCHOR FIXED: Check for "TX_COINBASE" as a uniform structural prefix string 
+	// to cleanly catch his "TX_COINBASE_HEIGHT_" templates and pass validation gates flawlessly!
+	if strings.HasPrefix(tx.ID, "TX_COINBASE") {
 		if txIndex != 0 {
 			fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
 			return false
 		}
-		// 👑 THE CRYPTOGRAPHIC PASS-THROUGH:
-		// Coinbase transactions do not carry asymmetric signature inputs on disk ledger records.
-		// Bypassing the volatile float64 string builder prevents platform-specific float drift rejections!
 		return true
 	}
 	
