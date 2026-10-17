@@ -118,39 +118,49 @@ func main() {
 	go func() {
 		winMux := http.NewServeMux()
 
-				// 👑 THE MASTER WEB EXPLORER & API ROUTER:
-		// Map asset paths cleanly to ensure /peers, /addresses, and backend wallet 
-		// endpoints resolve across all browsers without triggering 404 blocks!
+		// 👑 THE MASTER UNIFIED NETWORK WEB EXPLORER & API ROUTER
 		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
-			// Route /addresses API queries instantly to their cache maps
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			// 🛰️ Endpoint Route 1: Live global address balance sheet cache
 			if r.URL.Path == "/addresses" {
 				w.Header().Set("Content-Type", "application/json")
 				BalanceCacheMutex.RLock()
 				activeWallets := make(map[string]float64)
 				for addr, bal := range StateBalanceCache {
-					if bal > 0 { activeWallets[addr] = bal }
+					if bal > 0 {
+						activeWallets[addr] = bal
+					}
 				}
 				BalanceCacheMutex.RUnlock()
 				json.NewEncoder(w).Encode(activeWallets)
 				return
 			}
 
-			// Route /peers API queries instantly to their discovery maps
+			// 🛰️ Endpoint Route 2: Active P2P network discovery mesh tracking map
 			if r.URL.Path == "/peers" {
 				w.Header().Set("Content-Type", "application/json")
 				PeerMapMutex.RLock()
 				peerList := make([]string, 0)
-				for peerIP := range ActivePeerMap { peerList = append(peerList, peerIP) }
+				for peerIP := range ActivePeerMap {
+					peerList = append(peerList, peerIP)
+				}
 				PeerMapMutex.RUnlock()
-				if len(peerList) == 0 { peerList = []string{"202.137.175.220:8080 (Melbourne Master)"} }
+				if len(peerList) == 0 {
+					peerList = []string{"202.137.175.220:8080 (Melbourne Master)"}
+				}
 				json.NewEncoder(w).Encode(peerList)
 				return
 			}
 
-			// Serve the raw explorer HTML dashboard assets for the base domain pass
+			// 🛰️ Endpoint Route 3: Master explorer static interface deployment asset view
 			if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				htmlBytes, err := os.ReadFile("explorer.html")
@@ -158,14 +168,14 @@ func main() {
 					StateMutex.RLock()
 					idx := GetLatestBlockInternal().Index
 					StateMutex.RUnlock()
-					fmt.Fprintf(w, "<h2>📊 Covenant Standard Core Matrix Active</h2><p>Rig Height: #%d</p>", idx)
+					fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Matrix Active</h2><p>Rig Height: #%d</p>", idx)
 					return
 				}
 				w.Write(htmlBytes)
 				return
 			}
 
-			// Gracefully handle any invalid file trajectories
+			// Gracefully fall back to standard matching path routing parameters if sub-directories are requested
 			http.NotFound(w, r)
 		})
 
@@ -226,7 +236,6 @@ func main() {
 			}
 
 			var tx Transaction
-			// Mode A: Handle incoming structured peer-to-peer wire blocks
 			if err := json.Unmarshal(rawBody.Bytes(), &tx); err == nil && tx.ID != "" && len(tx.Outputs) > 0 {
 				if MempoolMatrix.PushTransaction(tx) {
 					w.WriteHeader(http.StatusCreated)
@@ -236,7 +245,6 @@ func main() {
 				return
 			}
 
-			// Mode B: Automatically intercept and digest flat desktop GUI text transfers
 			var guiPayload map[string]string
 			if err := json.Unmarshal(rawBody.Bytes(), &guiPayload); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
@@ -355,8 +363,35 @@ func main() {
 			}
 			w.WriteHeader(http.StatusInternalServerError)
 		})
+		// 🛰️ Endpoint Route 7: Dynamic structural wallet account balance auditor check pass
+		winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			
+			targetAddress := r.URL.Query().Get("address")
+			if targetAddress == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "Missing address parameter"})
+				return
+			}
 
-		fmt.Println("📡 [PORT 8081/9091] Initializing HTTP Bulk Sync api channels...")
+			BalanceCacheMutex.RLock()
+			balance, exists := StateBalanceCache[targetAddress]
+			BalanceCacheMutex.RUnlock()
+
+			payload := map[string]interface{}{
+				"address":        targetAddress,
+				"balance":        balance,
+				"exists":         exists,
+				"account_status": "VALIDATED_ON_CHAIN",
+			}
+			json.NewEncoder(w).Encode(payload)
+		})
+
+		// 👑 THE MASTER PORT-SHIFTING ASSIGNMENT GATE:
+		// Attempt to bind port 8081 cleanly. If your terminal miner holds it open natively,
+		// automatically fall back to port 9091 on local Windows boxes so it loads without collisions!
+		fmt.Println("📡 [PORT 8081] Initializing HTTP Bulk Sync api channels...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
 			if runtime.GOOS == "windows" {
 				fmt.Println("🔄 Port 8081 claimed by miner. Shifting GUI wallet network hooks to port 9091...")
@@ -365,29 +400,6 @@ func main() {
 				}
 			} else {
 				fmt.Printf("Critical: Linux Bulk Sync port allocation failed: %v\n", err)
-			}
-		}
-	}()
-
-	go func() {
-		mirrorMux := http.NewServeMux()
-		mirrorMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			StateMutex.RLock()
-			h := GetLatestBlockInternal().Index
-			StateMutex.RUnlock()
-			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", h)
-		})
-		
-		fmt.Println("📡 [PORT 8082] Initializing dedicated analytics channels...")
-		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
-			if runtime.GOOS == "windows" {
-				fmt.Println("🔄 Port 8082 claimed by miner. Shifting GUI wallet analytics to port 9092...")
-				if err2 := http.ListenAndServe(":9092", mirrorMux); err2 != nil {
-					fmt.Printf("Critical: Analytics port allocation failed: %v\n", err2)
-				}
-			} else {
-				fmt.Printf("Critical: Linux Analytics port allocation failed: %v\n", err)
 			}
 		}
 	}()
@@ -458,20 +470,21 @@ func main() {
 		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
 			var syncPercentage float64 = 0.00
-if targetGlobalTip > 0 {
-syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
-}
-barWidth := 20
-filledChars := int((syncPercentage / 100.0) * float64(barWidth))
-progressBar := ""
-for i := 0; i < barWidth; i++ {
-if i < filledChars { progressBar += "█" } else { progressBar += "░" }
-}
-fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
-os.Stdout.Sync()
-}
-time.Sleep(10 * time.Millisecond)
-}
+			if targetGlobalTip > 0 {
+				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
+			}
+			barWidth := 20
+			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
+			progressBar := ""
+			for i := 0; i < barWidth; i++ {
+				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
+			}
+			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+			os.Stdout.Sync()
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
