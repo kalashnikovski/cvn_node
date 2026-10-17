@@ -254,9 +254,14 @@ func main() {
 			json.NewEncoder(w).Encode(peerList)
 		})
 
-		fmt.Println("📡 [PORT 8081] Exposing un-throttled HTTP Bulk Sync channels globally...")
+		// 👑 FAIL-SAFE BULK SYNC PORT ASSIGNMENT:
+		// Attempt to bind port 8081 first (for full miners). If your miner is already running,
+		// automatically fall back to port 9091 so the GUI wallet loads flawlessly without port clashes!
+		fmt.Println("📡 [PORT 8081/9091] Initializing HTTP Bulk Sync api channels...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
-			fmt.Printf("Port 8081 bind alert: %v\n", err)
+			if err2 := http.ListenAndServe(":9091", winMux); err2 != nil {
+				fmt.Printf("Critical: Bulk Sync port allocation failed: %v\n", err2)
+			}
 		}
 	}()
 
@@ -270,9 +275,13 @@ func main() {
 			fmt.Fprintf(w, "<h2>💎 Covenant Standard Core Active Matrix</h2><p>Rig Height: #%d</p>", h)
 		})
 		
-		fmt.Println("📡 [PORT 8082] Exposing dedicated analytics data matrix globally...")
+		// 👑 FAIL-SAFE ANALYTICS PORT ASSIGNMENT:
+		// Attempt to bind port 8082 first. If claimed, fall back cleanly to 9092.
+		fmt.Println("📡 [PORT 8082/9092] Initializing dedicated analytics channels...")
 		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
-			fmt.Printf("Port 8082 bind alert: %v\n", err)
+			if err2 := http.ListenAndServe(":9092", mirrorMux); err2 != nil {
+				fmt.Printf("Critical: Analytics port allocation failed: %v\n", err2)
+			}
 		}
 	}()
 
@@ -430,7 +439,6 @@ func main() {
 			)
 
 			// 👑 HIGH-PRECISION MEASURED MINING CORE:
-			// Capture exact timestamps at the boundaries of active hardware iteration.
 			activeMiningStartTimeNs := time.Now().UnixNano()
 
 			for nonce < chunkCeiling {
@@ -472,7 +480,6 @@ func main() {
 			// Add the precise execution delta to our isolated global timer accumulation register
 			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
 			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
-
 			if blockSolved {
 				nonce = 0
 				chunkCeiling = 1000000
@@ -509,7 +516,6 @@ func main() {
 			StateMutex.RUnlock()
 			
 			// 👑 CLOCK-ISOLATED MATHEMATICAL PROFILING REGISTER:
-			// Calculate hashrate by dividing computed nonces by ONLY active thread execution seconds!
 			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
 			activeDurationNs := atomic.SwapUint64(&activeMiningDurationNs, 0)
 			
