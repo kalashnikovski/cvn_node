@@ -732,39 +732,3 @@ func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 	}
 	return currentDiff
 }
-
-// 👑 THE MASTER CONVERGENCE BROADCASTER:
-// Forces your node to asynchronously gossip newly solved blocks or transactions 
-// to all active peer servers over port 8080 to ensure instant mainnet synchronization!
-func BroadcastNewBlock(newBlock Block) {
-	PeerMapMutex.RLock()
-	activePeers := make([]string, 0)
-	for peerIP := range ActivePeerMap {
-		activePeers = append(activePeers, peerIP)
-	}
-	PeerMapMutex.RUnlock()
-
-	// Default fallback to your core network seeds if the active peer map is initializing
-	if len(activePeers) == 0 {
-		activePeers = []string{"207.148.67.11:8080", "64.177.45.153:8080"}
-	}
-
-	payloadBytes, err := json.Marshal(newBlock)
-	if err != nil {
-		return
-	}
-
-	// Stream the raw block data across the international node grid simultaneously
-	for _, peer := range activePeers {
-		go func(targetPeer string) {
-			cleanTarget := strings.TrimPrefix(targetPeer, "http://")
-			targetURL := fmt.Sprintf("http://%s/transaction", cleanTarget)
-			
-			client := &http.Client{Timeout: 2 * time.Second}
-			resp, err := client.Post(targetURL, "application/json", bytes.NewBuffer(payloadBytes))
-			if err == nil {
-				resp.Body.Close()
-			}
-		}(peer)
-	}
-}
