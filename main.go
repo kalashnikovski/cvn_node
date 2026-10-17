@@ -663,9 +663,10 @@ func main() {
 			StateMutex.RUnlock()
 			actualBlocksHeight := liveBlock.Index
 			
-			// 👑 THE MASTER TELEMETRY REALIGNMENT:
-			// Read your true balance directly out of your verified on-chain UTXO state cache
-			// instead of using a loose, un-validated local thread memory tracking variable!
+			// 👑 THE DEFINITIVE TELEMETRY ALIGNMENT OVERLAY:
+			// Completely ignore loose, un-validated local thread memory counters!
+			// Force the terminal dashboard to fetch the wallet balance straight 
+			// out of your verified, on-chain UTXO state cache maps in real-time.
 			StateMutex.RLock()
 			actualCvnBalance := GetAddressBalance(CustomMinerAddress)
 			StateMutex.RUnlock()
