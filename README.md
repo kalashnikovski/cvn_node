@@ -23,6 +23,27 @@ To protect local data layers from timeline drift, the protocol enforces absolute
 
 ---
 
+🐧 Linux Setup (Ubuntu / Debian Baseline Path)
+
+• OS / Setup Environment: Xubuntu / Ubuntu / Debian Linux distribution layouts. Ensure your home gateway or server security policies allow ingress/egress traffic on port 8080 for the P2P gossip mesh and port 8081 for the HTTP API bulk sync pipeline.
+• Core Dependencies: Ensure Go (v1.21+) is installed natively on your path (sudo apt install golang or from official repositories).
+• Headless Terminal Onboarding Pass: Open your terminal inside your root /cvn_node directory workspace, clean out legacy state files, compile your custom binary engine, and ignite your validation threads:bash
+# 1. Clean the execution cache space out-of-the-box
+rm -f cvn_mainnet.db miner_config.json cvn_secret_backup.txt
+
+# 2. Derive your secure cryptographic key-pair coordinates over CSPRNG
+go run . --generate-wallet
+
+# 3. Compile your production-ready, bare-metal ledger core target
+go build -o cvn_miner .
+
+# 4. Launch on autopilot and connect directly to the Melbourne Master truth anchor
+./cvn_miner --connect 202.137.175.220:8081
+
+• Hardware Resource Control: By default, the mining loop will execute on all available system processor threads. To limit the hardware mining footprint to a specific thread frame allocation (e.g., exactly 4 CPU cores), prepend your launch command with the native environment routing variable gate:bash
+
+GOMAXPROCS=4 ./cvn_miner --connect 202.137.175.220:8081
+
 ## 📡 3. Live Mainnet Telemetry & Seed Node Gateway
 
 The network initializes natively from an absolute zero-state Genesis Block #0 containing 0.00 CVN tokens and empty transaction arrays. New tokens only enter existence when an honest CPU processor solves a valid block reward. Nodes dynamically construct a self-healing network web by routing data through our active cross-continental bootstrap anchor cluster:
