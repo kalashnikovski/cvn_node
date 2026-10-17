@@ -73,40 +73,40 @@ Once your wallet profile is securely aligned, the onboarding script automaticall
 
 To ensure the network files run securely on your Linux environment, we must provision a clean repository directory.
 1. Open your terminal application window.
-2. Clone the official repository branches directly into your local home space using git, or download the archived tree layout using curl:bash
+2. Clone the official repository branches directly into your local home space using git, or download the archived tree layout using curl: bash
 cd ~
 git clone https://github.com/kalashnikovski/cvn_node
 
-cd cvn_node
+	cd cvn_node
 
 
 📦 Step 2: Install the Framework Runtime Engine
 
 The compilation mechanics require an active, open-source Go compiler framework on your environment's binary path.
-1. Update your localized package managers and install the foundational runtime utilities:bash
+1. Update your localized package managers and install the foundational runtime utilities: bash
 sudo apt update
 sudo apt install golang-go git build-essential -y
 
-2. Verify that your runtime profile meets the platform specifications by checking the tool version (should register v1.21 or higher):bash
+2. Verify that your runtime profile meets the platform specifications by checking the tool version (should register v1.21 or higher): bash
 go version
 
 🚀 Step 3: Initialize Keys and Build Targets
 
-1. Clean out any legacy developer database artifacts or configurations from your directory workspace to prepare for a clean mainnet launch:bash
+1. Clean out any legacy developer database artifacts or configurations from your directory workspace to prepare for a clean mainnet launch: bash
 rm -f cvn_mainnet.db miner_config.json cvn_secret_backup.txt
 
-2. Fire your secure, clock-isolated CSPRNG Elliptic Curve Factory Module to derive your unique asymmetric cryptography signature parameters natively on your storage card:bash
+2. Fire your secure, clock-isolated CSPRNG Elliptic Curve Factory Module to derive your unique asymmetric cryptography signature parameters natively on your storage card: bash
 go run . --generate-wallet
 
-3. Compile your high-performance, un-throttled proof-of-work consensus hashing core executable block target:bash
+3. Compile your high-performance, un-throttled proof-of-work consensus hashing core executable block target: bash
 go build -o cvn_miner main.go app.go blockchain_core.go gossip_mesh.go database_core.go crypto_auth.go security_harness.go backup_vault.go
 
 ⚡ Step 4: Core Execution & Multi-Threaded Resource Fencing
 
-1. Launch your compiled validator binary core on autopilot and hook directly into the primary mainnet sync gateways:bash
+1. Launch your compiled validator binary core on autopilot and hook directly into the primary mainnet sync gateways: bash
 ./cvn_miner --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
 
-2. Hardware Micro-Throttling (Optional): By default, the mining thread will process nonces over all available CPU execution frames. To restrict your hardware footprint to a specific thread frame ceiling so your machine stays quiet and cool, prefix your launch sequence with the native resource gate variable (e.g., limiting execution to exactly 4 cores):bash
+2. Hardware Micro-Throttling (Optional): By default, the mining thread will process nonces over all available CPU execution frames. To restrict your hardware footprint to a specific thread frame ceiling so your machine stays quiet and cool, prefix your launch sequence with the native resource gate variable (e.g., limiting execution to exactly 4 cores): bash
 GOMAXPROCS=4 ./cvn_miner --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
 
 🪪 Finding Your Public Address & Backups
