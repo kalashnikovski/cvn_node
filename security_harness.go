@@ -16,6 +16,9 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 			fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
 			return false
 		}
+		// 👑 THE CRYPTOGRAPHIC PASS-THROUGH:
+		// Coinbase transactions do not carry asymmetric signature inputs on disk ledger records.
+		// Bypassing the volatile float64 string builder prevents platform-specific float drift rejections!
 		return true
 	}
 	
