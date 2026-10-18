@@ -665,8 +665,8 @@ func main() {
 			StateMutex.RUnlock()
 			actualBlocksHeight := liveBlock.Index
 			
-			// 👑 THE MASTER UTXO DISK VERIFIER:
-			// Completely ignore un-validated thread memory counters and cache states!
+			// 👑 THE DEFINITIVE LEDGER-GROUNDED OVERLAY:
+			// Completely ignore un-validated thread memory maps and loose cache states!
 			// Dynamically parse the physical, un-forkable UTXO disk buckets on every ticker 
 			// refresh pass to guarantee the terminal dashboard matches your web explorer 100%.
 			var actualCvnBalance float64
