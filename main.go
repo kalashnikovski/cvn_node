@@ -15,8 +15,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"go.etcd.io/bbolt" // 👑 THE STRUCTURAL COMPILATION LOCK ANCHOR
 )
 
 //go:embed all:frontend/dist
@@ -658,34 +656,52 @@ func main() {
 	
 	for {
 		select {
-		case <-ticker.C:
+			case <-ticker.C:
 			loopCounter++
 			StateMutex.RLock()
 			liveBlock := GetLatestBlockInternal()
 			StateMutex.RUnlock()
 			actualBlocksHeight := liveBlock.Index
 			
-			// 👑 THE CRITICAL DISK-COMMITTED LEDGER OVERLAY:
-			// Completely ignore un-validated thread memory maps and loose cache states!
-			// Dynamically parse the physical, un-forkable UTXO disk buckets on every ticker 
-			// refresh pass to guarantee the terminal dashboard matches your web explorer 100%.
-			var actualCvnBalance float64
-			if GlobalBoltEngine != nil {
-				_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-					bUTXO := tx.Bucket([]byte("utxo"))
-					if bUTXO != nil {
-						c := bUTXO.Cursor()
-						for k, v := c.First(); k != nil; k, v = c.Next() {
-							var record UTXORecord
-							if json.Unmarshal(v, &record) == nil {
-								if record.Recipient == CustomMinerAddress {
-									actualCvnBalance += record.Amount
+			// 👑 THE MASTER LEDGER AUDIT ANCHOR:
+			// Read the local memory state cache by default for lightning-fast printing performance.
+			BalanceCacheMutex.RLock()
+			actualCvnBalance := StateBalanceCache[CustomMinerAddress]
+			BalanceCacheMutex.RUnlock()
+
+			// 🛰️ THE 60-SECOND REORG SNAP SENTINEL:
+			// Every 60 seconds (20 ticker loops of 3s), cross-examine the local cache against 
+			// the true mainnet ledger API to wipe out orphan blocks and enforce 100% global parity!
+			if loopCounter % 20 == 0 {
+				go func(targetAddress string) {
+					// 🛰️ DYNAMIC TARGET COORDINATION SWITCH:
+					// Use localhost for your local Melbourne rig, and your public IP gateway
+					// for Singapore, Atlanta, and Sparks to ensure 100% uptime parity across nodes!
+					targetHost := "202.137.175.220:8081"
+					if runtime.GOOS == "windows" {
+						targetHost = "localhost:8081"
+					}
+
+					masterSeedURL := fmt.Sprintf("http://%s/audit?address=%s", targetHost, targetAddress)
+					client := &http.Client{Timeout: 3 * time.Second}
+					
+					resp, err := client.Get(masterSeedURL)
+					if err == nil && resp.StatusCode == http.StatusOK {
+						var ledgerPayload map[string]interface{}
+						if err := json.NewDecoder(resp.Body).Decode(&ledgerPayload); err == nil {
+							if verifiedBalanceVal, exists := ledgerPayload["balance"]; exists {
+								if trueOnChainCoins, ok := verifiedBalanceVal.(float64); ok {
+									// Lock the global map and forcefully snap your local node's metrics
+									// back to the absolute global truth, dropping any ghost orphan tokens!
+									BalanceCacheMutex.Lock()
+									StateBalanceCache[targetAddress] = trueOnChainCoins
+									BalanceCacheMutex.Unlock()
 								}
 							}
 						}
+						resp.Body.Close()
 					}
-					return nil
-				})
+				}(CustomMinerAddress)
 			}
 			
 			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
