@@ -128,9 +128,9 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	defer StateMutex.Unlock()
 
 	currentTip := GetLatestBlockInternal()
-	
+
 	// Temporary diagnostic log
-	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n", 
+	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
 		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
 	// Same height, different hash → competing tip
@@ -139,6 +139,9 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		if incomingBlock.Timestamp < currentTip.Timestamp {
 			preferIncoming = true
 		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
+			preferIncoming = true
+		} else if incomingBlock.Hash < currentTip.Hash {
+			// More aggressive: prefer lower hash even if timestamp is slightly later
 			preferIncoming = true
 		}
 
