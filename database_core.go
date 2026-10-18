@@ -181,6 +181,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		// Encapsulate balance memory mapping changes within strict mutex blocks to prevent
 		// multi-threaded database cursor writes from corrupting the display outputs.
 		BalanceCacheMutex.Lock()
+				// 👑 THE MASTER UNIFIED UTXO MATRICES RECUPERATOR:
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx != 0 {
 				for _, input := range txPayload.Inputs {
@@ -207,6 +208,20 @@ func SaveBlockToStorageInternal(block Block) bool {
 		}
 		BalanceCacheMutex.Unlock()
 
+		// 👑 THE CORE ASYNCHRONOUS P2P MESH DISPATCHER:
+		// Automatically broadcast the block bytes over the wire mesh the exact millisecond 
+		// the physical database disk transaction commits successfully, bypassing terminal queues!
+		if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
+			go func(b Block) {
+				// Prevent loop-back broadcast feedback to safe seeds
+				jsonBytes, err := json.Marshal(b)
+				if err == nil {
+					payload := fmt.Sprintf("BLOCK_BROADCAST:%s\n", string(jsonBytes))
+					transmitPayloadToNetworkBoundary(payload)
+				}
+			}(block)
+		}
+
 		return nil
 	})
 
@@ -220,6 +235,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 	RebuildStateBalanceCacheInternal()
 	return true
 }
+
 
 func GetBlockByHeightFromDB(height int64) Block {
 	StateMutex.RLock()

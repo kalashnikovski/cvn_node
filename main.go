@@ -612,22 +612,21 @@ func main() {
 						GuardMatrix:  guardMatrixPlaceholder,
 					}
 					
+					// 👑 THE CONVERGENCE ASSURANCE FILTER:
+					// Only print a success log to the terminal dashboard AFTER the block 
+					// has successfully cleared global validation rules and been written to disk!
 					if SaveBlockToStorage(newBlock) {
 						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🟩 [LOCAL SOLVE] Block #%-3d found locally | Evaluating Mainnet Race...", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16])
+						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
 						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 						logMutex.Unlock()
 						
-						go BroadcastNewBlock(newBlock)
+						// ✅ FIXED: Legacy broadcast function removed from here because 
+						// database_core.go now fires it automatically at the disk commit layer!
 						blockSolved = true
-						
-						// 👑 THE REAL-TIME COLLISION SHIELD:
-						// Force the mining thread to pause updating the visual counter 
-						// until the 60-second background sentinel verifies the win on the mainnet ledger!
-						// (Remove the legacy local memory map increment line from here)
-						
 						break
 					} else {
+
 						// The block was beaten by another node; gracefully drop it silently and sync up
 						blockSolved = false
 						break
