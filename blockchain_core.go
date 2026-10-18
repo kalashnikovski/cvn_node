@@ -133,54 +133,42 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
 		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
-	// Same height, different hash → competing tip
+	// Same height, different hash → always switch to the incoming block
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		preferIncoming := false
-		if incomingBlock.Timestamp < currentTip.Timestamp {
-			preferIncoming = true
-		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
-			preferIncoming = true
-		} else if incomingBlock.Hash < currentTip.Hash {
-			// More aggressive: prefer lower hash even if timestamp is slightly later
-			preferIncoming = true
-		}
+		fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d\n", incomingBlock.Index)
 
-		if preferIncoming {
-			fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d\n", incomingBlock.Index)
-
-			// Roll back local tip
-			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-				bBlocks := tx.Bucket(blocksBucket)
-				bMeta := tx.Bucket(metaBucket)
-				bUTXO := tx.Bucket(utxoBucket)
-				if bBlocks == nil || bMeta == nil || bUTXO == nil {
-					return nil
-				}
-				paddedKey := []byte(fmt.Sprintf("%016d", currentTip.Index))
-				if data := bBlocks.Get(paddedKey); data != nil {
-					var localBlock Block
-					if json.Unmarshal(data, &localBlock) == nil {
-						for _, txPayload := range localBlock.Transactions {
-							for outIdx := range txPayload.Outputs {
-								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
-							}
+		// Roll back local tip
+		_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+			bBlocks := tx.Bucket(blocksBucket)
+			bMeta := tx.Bucket(metaBucket)
+			bUTXO := tx.Bucket(utxoBucket)
+			if bBlocks == nil || bMeta == nil || bUTXO == nil {
+				return nil
+			}
+			paddedKey := []byte(fmt.Sprintf("%016d", currentTip.Index))
+			if data := bBlocks.Get(paddedKey); data != nil {
+				var localBlock Block
+				if json.Unmarshal(data, &localBlock) == nil {
+					for _, txPayload := range localBlock.Transactions {
+						for outIdx := range txPayload.Outputs {
+							_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 						}
 					}
 				}
-				_ = bBlocks.Delete(paddedKey)
-				_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%016d", currentTip.Index-1)))
-				return nil
-			})
+			}
+			_ = bBlocks.Delete(paddedKey)
+			_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%016d", currentTip.Index-1)))
+			return nil
+		})
 
-			atomic.StoreInt64(&localHeightState, currentTip.Index-1)
-			RebuildStateBalanceCacheInternal()
+		atomic.StoreInt64(&localHeightState, currentTip.Index-1)
+		RebuildStateBalanceCacheInternal()
 
-			// Adopt the incoming block if it validates
-			if ValidateBlockSignatures(incomingBlock) && incomingBlock.PrevHash == GetLatestBlockInternal().Hash {
-				if SaveBlockToStorageInternal(incomingBlock) {
-					atomic.StoreInt64(&localHeightState, incomingBlock.Index)
-					go BroadcastNewBlock(incomingBlock)
-				}
+		// Adopt the incoming block if it validates
+		if ValidateBlockSignatures(incomingBlock) && incomingBlock.PrevHash == GetLatestBlockInternal().Hash {
+			if SaveBlockToStorageInternal(incomingBlock) {
+				atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+				go BroadcastNewBlock(incomingBlock)
 			}
 		}
 		return
