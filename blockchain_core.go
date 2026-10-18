@@ -359,7 +359,7 @@ func ValidateBlockSignatures(b Block) bool {
 
 func CalculateHash(b Block) string {
 	// 👑 THE ABSOLUTE DETERMINISTIC PERSISTENCE OVERLAY:
-	// Marshall the inner transaction tracking array into a uniform, raw JSON byte stream.
+	// Marshal the inner transaction tracking array into a uniform, raw JSON byte stream.
 	// This strips out all platform-specific slice/map padding variances across Windows and Linux!
 	txBytes, err := json.Marshal(b.Transactions)
 	if err != nil || len(b.Transactions) == 0 {
@@ -381,7 +381,7 @@ func CalculateHash(b Block) string {
 	
 	h := sha256.New()
 	h.Write([]byte(inputStr))
-	return hex.EncodeToString(h.Sum(nil))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func ForceBackgroundSyncPass() {}
