@@ -595,7 +595,7 @@ func main() {
 				hashBytes := sha256.Sum256([]byte(inputStr))
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
 				
-								if strings.HasPrefix(computedHashHex, targetPrefix) {
+				if strings.HasPrefix(computedHashHex, targetPrefix) {
 					newBlock := Block{
 						Index:        nextIndex,
 						Timestamp:    simulatedTime,
@@ -607,17 +607,20 @@ func main() {
 						GuardMatrix:  guardMatrixPlaceholder,
 					}
 					
-					// 👑 THE CONVERGENCE ASSURANCE FILTER:
-					// Only print a success log to the terminal dashboard AFTER the block 
-					// has successfully cleared global validation rules and been written to disk!
 					if SaveBlockToStorage(newBlock) {
 						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
+						logLine := fmt.Sprintf("[%s] 🟩 [LOCAL SOLVE] Block #%-3d found locally | Evaluating Mainnet Race...", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16])
 						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 						logMutex.Unlock()
 						
 						go BroadcastNewBlock(newBlock)
 						blockSolved = true
+						
+						// 👑 THE REAL-TIME COLLISION SHIELD:
+						// Force the mining thread to pause updating the visual counter 
+						// until the 60-second background sentinel verifies the win on the mainnet ledger!
+						// (Remove the legacy local memory map increment line from here)
+						
 						break
 					} else {
 						// The block was beaten by another node; gracefully drop it silently and sync up
