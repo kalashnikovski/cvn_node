@@ -596,7 +596,7 @@ func main() {
 			activeMiningStartTimeNs := time.Now().UnixNano()
 
 			for nonce < chunkCeiling {
-				if atomic.LoadInt64(&localHeightState) >= nextIndex {
+				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
 					blockSolved = false
 					break 
 				}
