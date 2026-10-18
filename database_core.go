@@ -156,10 +156,10 @@ func SaveBlockToStorageInternal(block Block) bool {
 		}
 
 		// 👑 THE UN-FORKABLE CONSENSUS FIREWALL GATE:
-		// Hard-lock verification logic strictly past coinbase index layers.
-		// This protects the network from string-matching vulnerabilities across platforms.
+		// Lock validation evaluation strictly past loop index slot 0. This strips out 
+		// brittle string prefix checks and securely handles incoming Linux mining headers!
 		for txIdx, txPayload := range block.Transactions {
-			if txIdx == 0 || strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
+			if txIdx == 0 {
 				continue 
 			}
 			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
@@ -177,9 +177,12 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		// 👑 THE UNIFIED UTXO MATRICES RECUPERATOR:
+		// 👑 THE MASTER CONCURRENT MUTATION LOCK:
+		// Encapsulate balance memory mapping changes within strict mutex blocks to prevent
+		// multi-threaded database cursor writes from corrupting the display outputs.
+		BalanceCacheMutex.Lock()
 		for txIdx, txPayload := range block.Transactions {
-			if txIdx != 0 && !strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
+			if txIdx != 0 {
 				for _, input := range txPayload.Inputs {
 					compoundInputKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
 					_ = bUTXO.Delete([]byte(compoundInputKey))
@@ -196,11 +199,13 @@ func SaveBlockToStorageInternal(block Block) bool {
 				
 				utxoData, err := json.Marshal(utxoRecord)
 				if err != nil {
+					BalanceCacheMutex.Unlock()
 					return err
 				}
 				_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
 			}
 		}
+		BalanceCacheMutex.Unlock()
 
 		return nil
 	})
