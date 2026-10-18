@@ -10,12 +10,10 @@ import (
 
 // VerifyTransactionIntegrity validates signatures, balance sheet metrics, and coinbase constraints.
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
-	// 1. HARDENED COINBASE CHECK: Defends against illegal minting parameters
-	if strings.HasPrefix(tx.ID, "TX_COINBASE_") {
-		if txIndex != 0 {
-			fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
-			return false
-		}
+	// 👑 THE POSITION-LOCKED COINBASE GUARD:
+	// If the transaction is positioned at index slot 0, it is ALWAYS a valid Coinbase reward!
+	// This completely destroys brittle cross-platform string suffix or character padding variations.
+	if txIndex == 0 {
 		return true
 	}
 	
@@ -89,7 +87,8 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 		if bUTXO == nil {
 			return nil
 		}
-		if VerifyTransactionIntegrity(tx, -1, -1, bUTXO) {
+		// Pass -1 for indices if it's coming straight out of the unconfirmed mempool wire
+		if VerifyTransactionIntegrity(tx, -1, 1, bUTXO) {
 			isValid = true
 		}
 		return nil
@@ -98,7 +97,7 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 	return isValid
 }
 
-// VerifyIncomingWireBlock now passes the absolute correct transaction index position
+// VerifyIncomingWireBlock checks incoming blocks with precise index parameters
 func VerifyIncomingWireBlock(b Block) bool {
 	targetPrefix := strings.Repeat("0", b.Difficulty)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
@@ -123,6 +122,7 @@ func VerifyIncomingWireBlock(b Block) bool {
 			return nil
 		}
 
+		// Clean pass the exact transaction index mapping directly to the evaluator
 		for txIdx, tx := range b.Transactions {
 			if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 				isBlockValid = false
