@@ -69,6 +69,12 @@ func handleIncomingPeerStream(conn net.Conn) {
 		if msg == "" {
 			continue
 		}
+		// Temporary diagnostic
+    preview := msg
+    if len(preview) > 120 {
+        preview = preview[:120]
+    }
+    fmt.Printf("📡 [GOSSIP] Received: %s\n", preview)
 
 		if strings.HasPrefix(msg, "GET_BATCH:") {
 			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")

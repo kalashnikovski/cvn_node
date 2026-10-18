@@ -616,7 +616,7 @@ func main() {
 						Nonce:        nonce,
 						GuardMatrix:  guardMatrixPlaceholder,
 					}
-					
+					fmt.Printf("📡 [LOCAL] About to broadcast block #%d | Hash: %s\n", newBlock.Index, newBlock.Hash[:16])
 					// 👑 THE CONVERGENCE ASSURANCE FILTER:
 					// Only print a success log to the terminal dashboard AFTER the block 
 					// has successfully cleared global validation rules and been written to disk!
