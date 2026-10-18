@@ -665,8 +665,8 @@ func main() {
 			StateMutex.RUnlock()
 			actualBlocksHeight := liveBlock.Index
 			
-			// 👑 THE DEFINITIVE LEDGER-GROUNDED OVERLAY:
-			// Completely ignore thread-unsafe memory maps and un-validated cache states!
+			// 👑 THE CRITICAL DISK-COMMITTED LEDGER OVERLAY:
+			// Completely ignore un-validated thread memory maps and loose cache states!
 			// Dynamically parse the physical, un-forkable UTXO disk buckets on every ticker 
 			// refresh pass to guarantee the terminal dashboard matches your web explorer 100%.
 			var actualCvnBalance float64
