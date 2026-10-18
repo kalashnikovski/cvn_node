@@ -128,6 +128,10 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	defer StateMutex.Unlock()
 
 	currentTip := GetLatestBlockInternal()
+	
+	// Temporary diagnostic log
+	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n", 
+		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
 	// Same height, different hash → competing tip
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
