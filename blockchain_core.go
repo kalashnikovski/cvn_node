@@ -23,9 +23,9 @@ type Block struct {
 	Transactions []Transaction `json:"transactions"`
 	PrevHash     string        `json:"prev_hash"`
 	Hash         string        `json:"block_hash"`
-	Difficulty   int           `json:"difficulty"` 
+	Difficulty   int           `json:"difficulty"`
 	Nonce        int64         `json:"nonce"`
-	GuardMatrix  string        `json:"guard_matrix"` 
+	GuardMatrix  string        `json:"guard_matrix"`
 }
 
 type Transaction struct {
@@ -68,7 +68,7 @@ func (m *MempoolType) PushTransaction(tx Transaction) bool {
 		m.Transactions = make(map[string]Transaction)
 	}
 	m.Transactions[tx.ID] = tx
-	return true 
+	return true
 }
 
 var BlockchainFile = "cvn_mainnet.db"
@@ -81,17 +81,17 @@ var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
 func CalculateBlockReward(blockIndex int64) float64 {
-	if blockIndex < 0 { 
-		return 0.0 
+	if blockIndex < 0 {
+		return 0.0
 	}
-	if blockIndex <= 5256000 { 
-		return 50.0 
-	} else if blockIndex <= 10512000 { 
-		return 25.0 
-	} else if blockIndex <= 15768000 { 
-		return 12.5 
-	} else if blockIndex <= 21024000 { 
-		return 6.25 
+	if blockIndex <= 5256000 {
+		return 50.0
+	} else if blockIndex <= 10512000 {
+		return 25.0
+	} else if blockIndex <= 15768000 {
+		return 12.5
+	} else if blockIndex <= 21024000 {
+		return 6.25
 	}
 	return 5.00
 }
@@ -100,68 +100,136 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	cleanURL := strings.TrimSuffix(seedURL, "/") + "/block"
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(cleanURL)
-	if err != nil { return 0 }
+	if err != nil {
+		return 0
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK { return 0 }
+	if resp.StatusCode != http.StatusOK {
+		return 0
+	}
 	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil { return 0 }
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0
+	}
 	if heightVal, exists := data["current_height"]; exists {
-		if h, ok := heightVal.(float64); ok { return int64(h) }
+		if h, ok := heightVal.(float64); ok {
+			return int64(h)
+		}
 	}
 	return 0
 }
 
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
-	if atomic.LoadInt32(&IsSyncingActive) == 1 { return }
-	StateMutex.Lock()
-	currentTip := GetLatestBlockInternal()
-	if incomingBlock.Index == currentTip.Index {
-		if incomingBlock.Hash != currentTip.Hash {
-			if incomingBlock.Timestamp < currentTip.Timestamp || runtime.GOOS == "linux" {
-				StateMutex.Unlock()
-				go TriggerActiveReSyncPass()
-				return
-			}
-		}
-		StateMutex.Unlock()
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
 	}
-	if incomingBlock.Index < currentTip.Index { StateMutex.Unlock(); return }
-	if !ValidateBlockSignatures(incomingBlock) { StateMutex.Unlock(); return }
-	if incomingBlock.Index > currentTip.Index+1 { StateMutex.Unlock(); go TriggerActiveReSyncPass(); return }
+
+	StateMutex.Lock()
+	defer StateMutex.Unlock()
+
+	currentTip := GetLatestBlockInternal()
+
+	// Same height, different hash → competing tip
+	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
+		preferIncoming := false
+		if incomingBlock.Timestamp < currentTip.Timestamp {
+			preferIncoming = true
+		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
+			preferIncoming = true
+		}
+
+		if preferIncoming {
+			fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d\n", incomingBlock.Index)
+
+			// Roll back local tip
+			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+				bBlocks := tx.Bucket(blocksBucket)
+				bMeta := tx.Bucket(metaBucket)
+				bUTXO := tx.Bucket(utxoBucket)
+				if bBlocks == nil || bMeta == nil || bUTXO == nil {
+					return nil
+				}
+				paddedKey := []byte(fmt.Sprintf("%016d", currentTip.Index))
+				if data := bBlocks.Get(paddedKey); data != nil {
+					var localBlock Block
+					if json.Unmarshal(data, &localBlock) == nil {
+						for _, txPayload := range localBlock.Transactions {
+							for outIdx := range txPayload.Outputs {
+								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
+							}
+						}
+					}
+				}
+				_ = bBlocks.Delete(paddedKey)
+				_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%016d", currentTip.Index-1)))
+				return nil
+			})
+
+			atomic.StoreInt64(&localHeightState, currentTip.Index-1)
+			RebuildStateBalanceCacheInternal()
+
+			// Adopt the incoming block if it validates
+			if ValidateBlockSignatures(incomingBlock) && incomingBlock.PrevHash == GetLatestBlockInternal().Hash {
+				if SaveBlockToStorageInternal(incomingBlock) {
+					atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+					go BroadcastNewBlock(incomingBlock)
+				}
+			}
+		}
+		return
+	}
+
+	if incomingBlock.Index < currentTip.Index {
+		return
+	}
+
+	if !ValidateBlockSignatures(incomingBlock) {
+		return
+	}
+
+	if incomingBlock.Index > currentTip.Index+1 {
+		go TriggerActiveReSyncPass()
+		return
+	}
+
 	if incomingBlock.Index == currentTip.Index+1 {
-		if incomingBlock.PrevHash != currentTip.Hash { StateMutex.Unlock(); go TriggerActiveReSyncPass(); return }
-		if SaveBlockToStorageInternal(incomingBlock) {
-			// 👑 THE THROUGHPUT UNCLOG:
-			// Instantly commit the atomic local height state shift so your main.go 
-			// kill switch breaks the nonce loop immediately without zero microsecond lag!
-			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
-			StateMutex.Unlock()
-			
-			// Fire the network mesh propagation asynchronously without delaying the thread
-			go BroadcastNewBlock(incomingBlock)
+		if incomingBlock.PrevHash != currentTip.Hash {
+			go TriggerActiveReSyncPass()
 			return
 		}
+		if SaveBlockToStorageInternal(incomingBlock) {
+			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+			go BroadcastNewBlock(incomingBlock)
+		}
 	}
-	StateMutex.Unlock()
 }
 
 func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
 	requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(seedURL, "/"), height)
 	resp, err := client.Get(requestURL)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK { return "", fmt.Errorf("invalid response code: %d", resp.StatusCode) }
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid response code: %d", resp.StatusCode)
+	}
 	var batch []Block
-	if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil { return "", err }
+	if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
+		return "", err
+	}
 	for _, block := range batch {
-		if block.Index == height { return block.Hash, nil }
+		if block.Index == height {
+			return block.Hash, nil
+		}
 	}
 	return "", fmt.Errorf("block missing")
 }
 
 func TriggerActiveReSyncPass() {
-	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) { return }
+	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
+		return
+	}
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 	fmt.Println(" -> [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
 
@@ -171,14 +239,18 @@ func TriggerActiveReSyncPass() {
 	var selectedHighestTargetTip int64
 
 	for _, endpoint := range activeGlobalRecoveryGateways {
-		if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" { continue }
+		if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
+			continue
+		}
 		remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
 		if remotePeerHeight > selectedHighestTargetTip {
 			selectedHighestTargetTip = remotePeerHeight
 			chosenTargetSeedURL = endpoint
 		}
 	}
-	if chosenTargetSeedURL == "" { return }
+	if chosenTargetSeedURL == "" {
+		return
+	}
 
 	StateMutex.Lock()
 	localTip := GetLatestBlockInternal()
@@ -215,7 +287,9 @@ func TriggerActiveReSyncPass() {
 		scanHeight--
 	}
 
-	if commonAncestorHeight == -1 { return }
+	if commonAncestorHeight == -1 {
+		return
+	}
 
 	StateMutex.Lock()
 	shadowTip := GetLatestBlockInternal()
@@ -224,7 +298,9 @@ func TriggerActiveReSyncPass() {
 			bBlocks := tx.Bucket(blocksBucket)
 			bMeta := tx.Bucket(metaBucket)
 			bUTXO := tx.Bucket(utxoBucket)
-			if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
+			if bBlocks == nil || bMeta == nil || bUTXO == nil {
+				return nil
+			}
 
 			for h := shadowTip.Index; h > commonAncestorHeight; h-- {
 				paddedKey := []byte(fmt.Sprintf("%016d", h))
@@ -254,7 +330,7 @@ func TriggerActiveReSyncPass() {
 			break
 		}
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
-		
+
 		StateMutex.Unlock()
 		resp, err := client.Get(requestURL)
 		if err != nil {
@@ -293,6 +369,7 @@ func TriggerActiveReSyncPass() {
 	StateMutex.Unlock()
 	fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
+
 func ValidateBlockSignatures(b Block) bool {
 	targetPrefix := strings.Repeat("0", b.Difficulty)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
@@ -304,7 +381,7 @@ func ValidateBlockSignatures(b Block) bool {
 	if len(b.Transactions) == 0 {
 		return false
 	}
-	
+
 	isBlockValid := true
 	if GlobalBoltEngine != nil {
 		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
@@ -315,7 +392,7 @@ func ValidateBlockSignatures(b Block) bool {
 			}
 			for txIdx, tx := range b.Transactions {
 				if txIdx == 0 {
-					continue 
+					continue
 				}
 				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 					isBlockValid = false
@@ -328,28 +405,21 @@ func ValidateBlockSignatures(b Block) bool {
 	if !isBlockValid {
 		return false
 	}
-	
+
 	coinbaseTx := b.Transactions[0]
-	
-	// 👑 POSITION-LOCKED COINBASE VALIDATOR GATE:
-	// Force the engine to evaluate the reward based strictly on loop slot 0 index positioning,
-	// completely bypassing all brittle string-prefix checks over transaction IDs across platforms!
+
 	var totalCoinbasePayout float64 = 0.0
 	for _, out := range coinbaseTx.Outputs {
 		totalCoinbasePayout += out.Amount
 	}
 
-	// 👑 THE ABSOLUTE FLOATING-POINT CLAMP OVERLAY:
-	// Explicitly target the accurate int64 index block height value to guarantee 
-	// that CalculateBlockReward returns the perfect, un-corrupted 50.00 emission metrics!
 	targetBlockHeight := int64(b.Index)
 	allowedEmission := CalculateBlockReward(targetBlockHeight)
-	
+
 	if targetBlockHeight > 21024000 {
 		allowedEmission += 5.0
 	}
-	
-	// Enforce a tight epsilon safety margin (0.00001) to protect floating point precision loss across Windows/Linux!
+
 	if (totalCoinbasePayout - allowedEmission) > 0.00001 {
 		fmt.Printf("🚨 EMISSION BLOCKED: Submitter attempted to claim over-allocated reward block payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedEmission)
 		return false
@@ -358,18 +428,12 @@ func ValidateBlockSignatures(b Block) bool {
 }
 
 func CalculateHash(b Block) string {
-	// 👑 THE UNIVERSAL DETACHED HASH FACTORY:
-	// Iterate through transaction IDs sequentially. This avoids raw JSON marshaling 
-	// which generates conflicting text representations ([] vs null) across Windows and Linux!
 	var txSummaryBuilder strings.Builder
 	for _, tx := range b.Transactions {
 		txSummaryBuilder.WriteString(tx.ID + "-")
 	}
 	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 
-	// 👑 THE CROSS-PLATFORM SYSTEM ENGINE ANCHOR:
-	// Explicitly cast b.Difficulty into an int64 token parameter before string formatting.
-	// This maintains perfect 64-bit string alignment across all Windows and Linux builds!
 	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
 		b.Index,
 		b.Timestamp,
@@ -379,7 +443,7 @@ func CalculateHash(b Block) string {
 		b.GuardMatrix,
 		b.Nonce,
 	)
-	
+
 	h := sha256.New()
 	h.Write([]byte(inputStr))
 	return fmt.Sprintf("%x", h.Sum(nil))
