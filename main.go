@@ -549,11 +549,16 @@ func main() {
 			allowedEmission := CalculateBlockReward(nextIndex)
 			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
 			
+						// 👑 THE BULLETPROOF CROSS-PLATFORM REWARD TEMPLATE:
+			// Explicitly allocate the Inputs slice as an empty structure rather than leaving it nil!
+			// This ensures that when the block is gossiped over the wire mesh, the JSON marshaler
+			// generates identical, un-corrupted transaction arrays across Windows and Linux.
 			candidateTransactions := []Transaction{
 				{
 					ID:               coinbaseTxID,
 					Witness:          "COVENANT_STEWARD_ASSEMBLY",
 					PublicKey:        "GENESIS_VOID_REWARD_POOL",
+					Inputs:           []UTXOInput{}, // 👑 THE INSTANT CROSS-PLATFORM INTEGRITY LOCK
 					Outputs: []UTXOOutput{
 						{Recipient: CustomMinerAddress, Amount: allowedEmission},
 					},
