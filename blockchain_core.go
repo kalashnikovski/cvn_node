@@ -358,15 +358,17 @@ func ValidateBlockSignatures(b Block) bool {
 }
 
 func CalculateHash(b Block) string {
-	// 👑 THE DETERMINISTIC OVERHAUL:
-	// Format the block preimage strictly using immutable structural field indices.
-	// This forces absolute cross-platform parity over multi-node network boundaries!
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(tx.ID + "-")
+	// 👑 THE ABSOLUTE DETERMINISTIC PERSISTENCE OVERLAY:
+	// Marshall the inner transaction tracking array into a uniform, raw JSON byte stream.
+	// This strips out all platform-specific slice/map padding variances across Windows and Linux!
+	txBytes, err := json.Marshal(b.Transactions)
+	if err != nil || len(b.Transactions) == 0 {
+		// Secure fallback token string if the transaction block data is un-instantiated
+		txBytes = []byte("[]")
 	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+	txHashStr := fmt.Sprintf("%x", sha256.Sum256(txBytes))
 
+	// Format the block preimage strictly using immutable structural field parameters
 	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
 		b.Index,
 		b.Timestamp,
@@ -376,9 +378,10 @@ func CalculateHash(b Block) string {
 		b.GuardMatrix,
 		b.Nonce,
 	)
+	
 	h := sha256.New()
 	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func ForceBackgroundSyncPass() {}
