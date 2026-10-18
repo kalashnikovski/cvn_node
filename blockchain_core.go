@@ -358,23 +358,24 @@ func ValidateBlockSignatures(b Block) bool {
 }
 
 func CalculateHash(b Block) string {
-	// 👑 THE ABSOLUTE DETERMINISTIC PERSISTENCE OVERLAY:
+	// 👑 THE DETERMINISTIC PERSISTENCE OVERLAY:
 	// Marshal the inner transaction tracking array into a uniform, raw JSON byte stream.
 	// This strips out all platform-specific slice/map padding variances across Windows and Linux!
 	txBytes, err := json.Marshal(b.Transactions)
 	if err != nil || len(b.Transactions) == 0 {
-		// Secure fallback token string if the transaction block data is un-instantiated
 		txBytes = []byte("[]")
 	}
 	txHashStr := fmt.Sprintf("%x", sha256.Sum256(txBytes))
 
-	// Format the block preimage strictly using immutable structural field parameters
+	// 👑 THE CROSS-PLATFORM SYSTEM ENGINE ANCHOR:
+	// Explicitly cast b.Difficulty into an int64 token parameter before string formatting.
+	// This destroys all primitive type formatting differences between Windows and Linux systems!
 	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
 		b.Index,
 		b.Timestamp,
 		b.PrevHash,
 		txHashStr,
-		b.Difficulty,
+		int64(b.Difficulty),
 		b.GuardMatrix,
 		b.Nonce,
 	)
