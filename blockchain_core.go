@@ -80,6 +80,10 @@ var StateBalanceCache = make(map[string]float64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
+// First-seen tracking for tip preference (test version)
+var firstSeenAtHeight = make(map[int64]string)
+var firstSeenMutex sync.Mutex
+
 func CalculateBlockReward(blockIndex int64) float64 {
 	if blockIndex < 0 {
 		return 0.0
@@ -129,23 +133,24 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 
 	currentTip := GetLatestBlockInternal()
 
-	// Temporary diagnostic log
 	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
 		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
-	// Same height, different hash → competing tip (deterministic rule)
+	// Record first-seen hash at this height
+	firstSeenMutex.Lock()
+	if _, exists := firstSeenAtHeight[incomingBlock.Index]; !exists {
+		firstSeenAtHeight[incomingBlock.Index] = incomingBlock.Hash
+	}
+	firstSeenHash := firstSeenAtHeight[incomingBlock.Index]
+	firstSeenMutex.Unlock()
+
+	// Same height, different hash → prefer the first block we saw
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		preferIncoming := false
-		if incomingBlock.Timestamp < currentTip.Timestamp {
-			preferIncoming = true
-		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
-			preferIncoming = true
-		}
+		preferIncoming := (incomingBlock.Hash == firstSeenHash)
 
 		if preferIncoming {
-			fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d\n", incomingBlock.Index)
+			fmt.Printf("🔄 [TIP SWITCH] Adopting first-seen block at height %d\n", incomingBlock.Index)
 
-			// Roll back local tip
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
 				bMeta := tx.Bucket(metaBucket)
@@ -172,7 +177,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 			atomic.StoreInt64(&localHeightState, currentTip.Index-1)
 			RebuildStateBalanceCacheInternal()
 
-			// Adopt the incoming block if it validates
 			if ValidateBlockSignatures(incomingBlock) && incomingBlock.PrevHash == GetLatestBlockInternal().Hash {
 				if SaveBlockToStorageInternal(incomingBlock) {
 					atomic.StoreInt64(&localHeightState, incomingBlock.Index)
