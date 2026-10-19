@@ -144,7 +144,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 			preferIncoming = true
 		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
 			preferIncoming = true
-		} else if timeDiff <= 1 && incomingBlock.Hash < currentTip.Hash {
+		} else if timeDiff <= 3 && incomingBlock.Hash < currentTip.Hash {
 			// Within ~1 second and lower hash → adopt (grace window)
 			preferIncoming = true
 		}
