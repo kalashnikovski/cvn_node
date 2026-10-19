@@ -20,7 +20,6 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
     }
 
     // ... keep the rest of the function exactly as it is
-}
 	
 	if len(tx.Inputs) == 0 {
 		fmt.Println("🚨 TRANSACTION EXPLOIT REJECTED: Input-less transactions require valid Coinbase.")
