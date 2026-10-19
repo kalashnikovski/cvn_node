@@ -8,14 +8,19 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-// VerifyTransactionIntegrity validates signatures, balance sheet metrics, and coinbase constraints.
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
-	// 👑 THE POSITION-LOCKED COINBASE GUARD:
-	// If the transaction is positioned at index slot 0, it is ALWAYS a valid Coinbase reward!
-	// This completely destroys brittle cross-platform string suffix or character padding variations.
-	if txIndex == 0 {
-		return true
-	}
+    // Pre-reset coinbase bypass (prefix-based)
+    if strings.HasPrefix(tx.ID, "TX_COINBASE") {
+        if txIndex != 0 {
+            fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
+            return false
+        }
+        // Bypass float64 signature checks for coinbase
+        return true
+    }
+
+    // ... keep the rest of the function exactly as it is
+}
 	
 	if len(tx.Inputs) == 0 {
 		fmt.Println("🚨 TRANSACTION EXPLOIT REJECTED: Input-less transactions require valid Coinbase.")
