@@ -136,20 +136,28 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
 		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
-	// Record first-seen hash at this height
-	firstSeenMutex.Lock()
-	if _, exists := firstSeenAtHeight[incomingBlock.Index]; !exists {
-		firstSeenAtHeight[incomingBlock.Index] = incomingBlock.Hash
-	}
-	firstSeenHash := firstSeenAtHeight[incomingBlock.Index]
-	firstSeenMutex.Unlock()
-
-	// Same height, different hash → prefer the first block we saw
+	// Same height, different hash → competing tip with short grace window
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		preferIncoming := (incomingBlock.Hash == firstSeenHash)
+		// Grace window: if the incoming block arrived close in time, prefer it
+		// if it has an earlier timestamp or equal timestamp + lower hash.
+		// Also accept it if it is within 400ms of the current tip's timestamp.
+		timeDiff := incomingBlock.Timestamp - currentTip.Timestamp
+		if timeDiff < 0 {
+			timeDiff = -timeDiff
+		}
+
+		preferIncoming := false
+		if incomingBlock.Timestamp < currentTip.Timestamp {
+			preferIncoming = true
+		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
+			preferIncoming = true
+		} else if timeDiff <= 1 && incomingBlock.Hash < currentTip.Hash {
+			// Within ~1 second and lower hash → adopt (grace window)
+			preferIncoming = true
+		}
 
 		if preferIncoming {
-			fmt.Printf("🔄 [TIP SWITCH] Adopting first-seen block at height %d\n", incomingBlock.Index)
+			fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d (grace window)\n", incomingBlock.Index)
 
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
@@ -184,6 +192,33 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 				}
 			}
 		}
+		return
+	}
+
+	if incomingBlock.Index < currentTip.Index {
+		return
+	}
+
+	if !ValidateBlockSignatures(incomingBlock) {
+		return
+	}
+
+	if incomingBlock.Index > currentTip.Index+1 {
+		go TriggerActiveReSyncPass()
+		return
+	}
+
+	if incomingBlock.Index == currentTip.Index+1 {
+		if incomingBlock.PrevHash != currentTip.Hash {
+			go TriggerActiveReSyncPass()
+			return
+		}
+		if SaveBlockToStorageInternal(incomingBlock) {
+			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+			go BroadcastNewBlock(incomingBlock)
+		}
+	}
+}
 		return
 	}
 
