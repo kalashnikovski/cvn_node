@@ -525,7 +525,8 @@ func main() {
 			// 👑 THE DETERMINISTIC TIME LOCK ENFORCEMENT:
 			// Force the block timestamp to increment sequentially by exactly +1 second past
 			// the parent block's tip, eliminating all cross-platform wall clock drifting!
-			for time.Now().Unix() <= currentBlock.Timestamp {
+			// Clock stall to avoid same-second or future-block issues
+for time.Now().Unix() <= currentBlock.Timestamp {
     time.Sleep(10 * time.Millisecond)
 }
 simulatedTime := time.Now().Unix()
