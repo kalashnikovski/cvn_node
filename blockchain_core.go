@@ -132,7 +132,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
 		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
-	// Same height, different hash → competing tip with short grace window
+	// Same height, different hash → competing tip with 5-second grace window
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
 		timeDiff := incomingBlock.Timestamp - currentTip.Timestamp
 		if timeDiff < 0 {
@@ -144,13 +144,13 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 			preferIncoming = true
 		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
 			preferIncoming = true
-		} else if timeDiff <= 3 && incomingBlock.Hash < currentTip.Hash {
-			// Within ~1 second and lower hash → adopt (grace window)
+		} else if timeDiff <= 5 && incomingBlock.Hash < currentTip.Hash {
+			// Within 5 seconds and lower hash → adopt (longer grace window)
 			preferIncoming = true
 		}
 
 		if preferIncoming {
-			fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d (grace window)\n", incomingBlock.Index)
+			fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d (5s grace)\n", incomingBlock.Index)
 
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
