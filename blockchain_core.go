@@ -80,10 +80,6 @@ var StateBalanceCache = make(map[string]float64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
-// First-seen tracking for tip preference (test version)
-var firstSeenAtHeight = make(map[int64]string)
-var firstSeenMutex sync.Mutex
-
 func CalculateBlockReward(blockIndex int64) float64 {
 	if blockIndex < 0 {
 		return 0.0
@@ -138,9 +134,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 
 	// Same height, different hash → competing tip with short grace window
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		// Grace window: if the incoming block arrived close in time, prefer it
-		// if it has an earlier timestamp or equal timestamp + lower hash.
-		// Also accept it if it is within 400ms of the current tip's timestamp.
 		timeDiff := incomingBlock.Timestamp - currentTip.Timestamp
 		if timeDiff < 0 {
 			timeDiff = -timeDiff
@@ -192,33 +185,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 				}
 			}
 		}
-		return
-	}
-
-	if incomingBlock.Index < currentTip.Index {
-		return
-	}
-
-	if !ValidateBlockSignatures(incomingBlock) {
-		return
-	}
-
-	if incomingBlock.Index > currentTip.Index+1 {
-		go TriggerActiveReSyncPass()
-		return
-	}
-
-	if incomingBlock.Index == currentTip.Index+1 {
-		if incomingBlock.PrevHash != currentTip.Hash {
-			go TriggerActiveReSyncPass()
-			return
-		}
-		if SaveBlockToStorageInternal(incomingBlock) {
-			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
-			go BroadcastNewBlock(incomingBlock)
-		}
-	}
-}
 		return
 	}
 
