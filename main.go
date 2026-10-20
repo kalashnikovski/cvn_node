@@ -110,11 +110,12 @@ func main() {
 				CustomMinerAddress = parsedConfig["miner_address"]
 			}
 		}
+	}
+
 	relayOnly := false
 	for _, arg := range os.Args {
 		if arg == "--relay-only" {
 			relayOnly = true
-			}
 		}
 	}
 
@@ -493,7 +494,7 @@ func main() {
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
-	if !relayOnly {
+if !relayOnly {
 	go func() {
 		var nonce int64 = 0
 		var chunkCeiling int64 = 1000000
@@ -667,7 +668,7 @@ simulatedTime := time.Now().Unix()
 		}
 	}()
 	} else {
-		fmt.Println("🔄 [RELAY ONLY] Mining disabled. Node will only sync and relay.")
+	 	fmt.Println("🔄 [RELAY ONLY] Mining disabled. Node will only sync and relay.")
 	}
 
 	ticker := time.NewTicker(3 * time.Second)
