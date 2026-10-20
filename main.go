@@ -49,14 +49,8 @@ func initWindowsAnsi() {}
 func main() {
 	initWindowsAnsi()
 
-	// Check for --relay-only early using os.Args (avoids flag redefinition with Wails)
-	relayOnly := false
-	for _, arg := range os.Args {
-		if arg == "--relay-only" {
-			relayOnly = true
-			break
-		}
-	}
+	// Relay-only mode via environment variable (avoids flag conflicts with Wails)
+	relayOnly := os.Getenv("CVN_RELAY_ONLY") == "1"
 
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
