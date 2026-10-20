@@ -650,10 +650,6 @@ func main() {
 			}
 		}
 	}()
-	} else {
-		fmt.Println("🔄 [RELAY ONLY] Mining disabled. Node will only sync and relay.")
-	}
-
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	clearTerminalNatively()
