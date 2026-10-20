@@ -135,7 +135,6 @@ func GetLatestBlockInternal() Block {
 	})
 	return latestBlock
 }
-
 func SaveBlockToStorage(block Block) bool {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
@@ -178,10 +177,11 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
 		// 👑 THE MASTER CONCURRENT MUTATION LOCK:
-		// Encapsulate balance memory mapping changes within strict mutex blocks to prevent
+		// Encapsulate balance memory mapping changes within strict mtx blocks to prevent
 		// multi-threaded database cursor writes from corrupting the display outputs.
 		BalanceCacheMutex.Lock()
-				// 👑 THE MASTER UNIFIED UTXO MATRICES RECUPERATOR:
+		
+		// 👑 THE MASTER UNIFIED UTXO MATRICES RECUPERATOR:
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx != 0 {
 				for _, input := range txPayload.Inputs {
@@ -207,7 +207,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 		}
 		BalanceCacheMutex.Unlock()
-
 		// 👑 THE CORE ASYNCHRONOUS P2P MESH DISPATCHER:
 		// Automatically broadcast the block bytes over the wire mesh the exact millisecond 
 		// the physical database disk transaction commits successfully, bypassing terminal queues!
@@ -235,7 +234,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 	RebuildStateBalanceCacheInternal()
 	return true
 }
-
 
 func GetBlockByHeightFromDB(height int64) Block {
 	StateMutex.RLock()
@@ -302,3 +300,4 @@ func GetAddressBlockCountFromLedger(address string) int64 {
 	defer StateMutex.RUnlock()
 	return GetLatestBlockInternal().Index
 }
+

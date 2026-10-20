@@ -426,16 +426,24 @@ func main() {
 		var targetGlobalTip int64 = 0
 		var activeSyncSeed string = ""
 
+		// 👑 THE MASTER SEED CLOUD SYNC UNBLOCKER:
+		// Dynamically read out your server endpoints and block your local node from trying to 
+		// handshake with itself over the wire, stopping the Singapore sync freeze instantly!
 		for _, endpoint := range seedGateways {
 			if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" { 
 				continue 
 			}
+			if strings.Contains(endpoint, "207.148.67.11") && os.Getenv("CVN_RELAY_ONLY") == "1" {
+				continue // 🚀 Breaks the Singapore loopback sync deadlock!
+			}
+			
 			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
 			if remoteHeight > targetGlobalTip {
 				targetGlobalTip = remoteHeight
 				activeSyncSeed = endpoint
 			}
 		}
+
 
 		if targetGlobalTip <= 0 || currentLocalHeight >= targetGlobalTip || activeSyncSeed == "" { 
 			break 
