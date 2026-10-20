@@ -129,6 +129,18 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 
 	currentTip := GetLatestBlockInternal()
 
+	currentTip := GetLatestBlockInternal()
+
+	// Diagnostic logging
+	arrivalTime := time.Now().UnixMilli()
+	fmt.Printf("📥 [DIAG] Height: %d | Hash: %s | Tip: %d | ArrivalMs: %d | TipTS: %d | InTS: %d\n",
+		incomingBlock.Index,
+		incomingBlock.Hash[:16],
+		currentTip.Index,
+		arrivalTime,
+		currentTip.Timestamp,
+		incomingBlock.Timestamp)
+
 	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
 		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
