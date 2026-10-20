@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -50,29 +51,36 @@ func initWindowsAnsi() {}
 func main() {
 	initWindowsAnsi()
 
-	for _, arg := range os.Args {
-		if arg == "--generate-wallet" {
-			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
-			privHex, pubHex, walletAddress, err := GenerateKeyPair()
-			if err != nil {
-				fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Key allocation path rejected: %v\n", err)
-				os.Exit(1)
-			}
+	// Proper flag parsing
+	relayOnlyFlag := flag.Bool("relay-only", false, "Run node in relay-only mode (no mining)")
+	minerAddressFlag := flag.String("miner-address", "", "Target mining output CVN address")
+	connectFlag := flag.String("connect", "", "Bootstrap network HTTP sync gateway endpoint")
+	generateWallet := flag.Bool("generate-wallet", false, "Generate a new wallet and exit")
+	flag.Parse()
 
-			fmt.Println("\n====================================================================")
-			fmt.Printf("🪪 NEW WALLET ADDRESS:     %s\n", walletAddress)
-			fmt.Printf("📋 UNTRUNCATED PUBLIC KEY: %s\n", pubHex)
-			fmt.Printf("🔐 PRIVATE KEY HEX:        %s\n", privHex)
-			fmt.Println("====================================================================")
+	relayOnly := *relayOnlyFlag
 
-			backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPublic Key: %s\nPrivate Key: %s\n", walletAddress, pubHex, privHex)
-			_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
-
-			configMap := map[string]string{"miner_address": walletAddress}
-			configMapBytes, _ := json.MarshalIndent(configMap, "", "  ")
-			_ = os.WriteFile("miner_config.json", configMapBytes, 0644)
-			os.Exit(0)
+	if *generateWallet {
+		fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
+		privHex, pubHex, walletAddress, err := GenerateKeyPair()
+		if err != nil {
+			fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Key allocation path rejected: %v\n", err)
+			os.Exit(1)
 		}
+
+		fmt.Println("\n====================================================================")
+		fmt.Printf("🪪 NEW WALLET ADDRESS:     %s\n", walletAddress)
+		fmt.Printf("📋 UNTRUNCATED PUBLIC KEY: %s\n", pubHex)
+		fmt.Printf("🔐 PRIVATE KEY HEX:        %s\n", privHex)
+		fmt.Println("====================================================================")
+
+		backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPublic Key: %s\nPrivate Key: %s\n", walletAddress, pubHex, privHex)
+		_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
+
+		configMap := map[string]string{"miner_address": walletAddress}
+		configMapBytes, _ := json.MarshalIndent(configMap, "", "  ")
+		_ = os.WriteFile("miner_config.json", configMapBytes, 0644)
+		os.Exit(0)
 	}
 
 	if _, err := os.Stat("miner_config.json"); os.IsNotExist(err) {
@@ -96,10 +104,8 @@ func main() {
 	hashRateHistory1h    = make([]float64, 0)
 	hashRateHistory24h   = make([]float64, 0)
 
-	for i, arg := range os.Args {
-		if arg == "--miner-address" && i+1 < len(os.Args) {
-			CustomMinerAddress = os.Args[i+1]
-		}
+	if *minerAddressFlag != "" {
+		CustomMinerAddress = *minerAddressFlag
 	}
 
 	if CustomMinerAddress == "" {
@@ -112,20 +118,13 @@ func main() {
 		}
 	}
 
-	relayOnly := false
-	for _, arg := range os.Args {
-		if arg == "--relay-only" {
-			relayOnly = true
-		}
-	}
-
 	if CustomMinerAddress == "" {
 		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
 	}
+
 	go func() {
 		winMux := http.NewServeMux()
 
-		// 👑 THE MASTER UNIFIED NETWORK WEB EXPLORER & API ROUTER
 		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -136,7 +135,6 @@ func main() {
 				return
 			}
 
-			// 🛰️ Endpoint Route 1: Live global address balance sheet cache
 			if r.URL.Path == "/addresses" {
 				w.Header().Set("Content-Type", "application/json")
 				BalanceCacheMutex.RLock()
@@ -151,7 +149,6 @@ func main() {
 				return
 			}
 
-			// 🛰️ Endpoint Route 2: Active P2P network discovery mesh tracking map
 			if r.URL.Path == "/peers" {
 				w.Header().Set("Content-Type", "application/json")
 				PeerMapMutex.RLock()
@@ -167,7 +164,6 @@ func main() {
 				return
 			}
 
-			// 🛰️ Endpoint Route 3: Master explorer static interface deployment asset view
 			if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				htmlBytes, err := os.ReadFile("explorer.html")
@@ -182,7 +178,6 @@ func main() {
 				return
 			}
 
-			// Gracefully fall back to standard matching path routing parameters if sub-directories are requested
 			http.NotFound(w, r)
 		})
 
@@ -370,7 +365,7 @@ func main() {
 			}
 			w.WriteHeader(http.StatusInternalServerError)
 		})
-		// 🛰️ Endpoint Route 7: Dynamic structural wallet account balance auditor check pass
+
 		winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -395,9 +390,6 @@ func main() {
 			json.NewEncoder(w).Encode(payload)
 		})
 
-		// 👑 THE MASTER PORT-SHIFTING ASSIGNMENT GATE:
-		// Attempt to bind port 8081 cleanly. If your terminal miner holds it open natively,
-		// automatically fall back to port 9091 on local Windows boxes so it loads without collisions!
 		fmt.Println("📡 [PORT 8081] Initializing HTTP Bulk Sync api channels...")
 		if err := http.ListenAndServe(":8081", winMux); err != nil {
 			if runtime.GOOS == "windows" {
@@ -417,14 +409,12 @@ func main() {
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
 	seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	
-	for i, arg := range os.Args {
-		if arg == "--connect" && i+1 < len(os.Args) {
-			customTargetIP := os.Args[i+1]
-			if !strings.HasPrefix(customTargetIP, "http://") { 
-				customTargetIP = "http://" + customTargetIP 
-			}
-			seedGateways = []string{customTargetIP}
+	if *connectFlag != "" {
+		customTargetIP := *connectFlag
+		if !strings.HasPrefix(customTargetIP, "http://") { 
+			customTargetIP = "http://" + customTargetIP 
 		}
+		seedGateways = []string{customTargetIP}
 	}
 
 	lastRenderTime := time.Now()
@@ -491,184 +481,160 @@ func main() {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
-if !relayOnly {
-	go func() {
-		var nonce int64 = 0
-		var chunkCeiling int64 = 1000000
-		
-		for {
-			if atomic.LoadInt32(&IsSyncingActive) == 1 {
-				time.Sleep(100 * time.Millisecond)
-				continue
-			}
-
-			// 👑 THE CORE CONSENSUS STABILIZER:
-			// Introduce a localized cryptographic jitter delay based on the unique Rig Identity string
-			// to scatter node mining start paths and eliminate high-speed wire collisions!
-			StateMutex.RLock()
-			currentBlockForJitter := GetLatestBlockInternal()
-			nextIndexCheck := currentBlockForJitter.Index + 1
-			StateMutex.RUnlock()
-
-			if nextIndexCheck > 1 {
-				var seedInt int64 = 0
-				for _, char := range CustomMinerAddress { 
-					seedInt += int64(char) 
-				}
-				jitterDelayMs := (seedInt % 8) * 250 // Generates a safe 0 to 1.75s staggered window
-				time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
-			}
+	if !relayOnly {
+		go func() {
+			var nonce int64 = 0
+			var chunkCeiling int64 = 1000000
 			
-			const TargetBlockTimeWindow = 45
-			blockMiningStartTime := time.Now().Unix()
-
-			StateMutex.RLock()
-			currentBlock := GetLatestBlockInternal()
-			nextIndex := currentBlock.Index + 1
-			parentBlockTipHash := currentBlock.Hash
-			
-			// 👑 THE DETERMINISTIC TIME LOCK ENFORCEMENT:
-			// Force the block timestamp to increment sequentially by exactly +1 second past
-			// the parent block's tip, eliminating all cross-platform wall clock drifting!
-			// Clock stall to avoid same-second or future-block issues
-for time.Now().Unix() <= currentBlock.Timestamp {
-    time.Sleep(10 * time.Millisecond)
-}
-simulatedTime := time.Now().Unix()
-
-			var targetDifficulty int
-			if currentBlock.Index == 0 {
-				targetDifficulty = 2
-			} else {
-				targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-			}
-			if targetDifficulty < 1 { targetDifficulty = 1 }
-			if targetDifficulty > 8 { targetDifficulty = 8 }
-			StateMutex.RUnlock()
-
-			targetPrefix := strings.Repeat("0", targetDifficulty)
-			blockSolved := false
-			var guardMatrixPlaceholder = ""
-			
-			allowedEmission := CalculateBlockReward(nextIndex)
-			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
-			
-						// 👑 THE BULLETPROOF CROSS-PLATFORM REWARD TEMPLATE:
-			// Explicitly allocate the Inputs slice as an empty structure rather than leaving it nil!
-			// This ensures that when the block is gossiped over the wire mesh, the JSON marshaler
-			// generates identical, un-corrupted transaction arrays across Windows and Linux.
-			candidateTransactions := []Transaction{
-				{
-					ID:               coinbaseTxID,
-					Witness:          "COVENANT_STEWARD_ASSEMBLY",
-					PublicKey:        "GENESIS_VOID_REWARD_POOL",
-					Inputs:           []UTXOInput{}, // 👑 THE INSTANT CROSS-PLATFORM INTEGRITY LOCK
-					Outputs: []UTXOOutput{
-						{Recipient: CustomMinerAddress, Amount: allowedEmission},
-					},
-					Timestamp:        simulatedTime, 
-					FreeWillOffering: 0.0,
-					DataSizeKB:       0.1,
-					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-				},
-			}
-
-			// 👑 THE ZERO-METHOD CRYPTOGRAPHIC CONVERGENCE ASSIGNMENT:
-			// Bypass all structural method dependencies to ensure 100% native stability 
-			// across platforms, preventing execution thread stalls on Linux hosts!
-			_ = MempoolMatrix 
-
-			// 👑 THE CRYPTOGRAPHIC PREIMAGE TRANSACTIONS HASH FACTORY:
-			// Loop over the candidate transactions array to compile an accurate,
-			// un-tamperable root hash for the block headers!
-			var txSummaryBuilder strings.Builder
-			for _, tx := range candidateTransactions {
-				txSummaryBuilder.WriteString(tx.ID + "-")
-			}
-			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-			immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
-				nextIndex,
-				simulatedTime,
-				parentBlockTipHash,
-				txHashStr,
-				targetDifficulty,
-				guardMatrixPlaceholder,
-			)
-
-			// 👑 HIGH-PRECISION MEASURED MINING CORE:
-			activeMiningStartTimeNs := time.Now().UnixNano()
-
-			for nonce < chunkCeiling {
-				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
-					blockSolved = false
-					break 
+			for {
+				if atomic.LoadInt32(&IsSyncingActive) == 1 {
+					time.Sleep(100 * time.Millisecond)
+					continue
 				}
 
-				inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
-				hashBytes := sha256.Sum256([]byte(inputStr))
-				computedHashHex := fmt.Sprintf("%x", hashBytes)
+				StateMutex.RLock()
+				currentBlockForJitter := GetLatestBlockInternal()
+				nextIndexCheck := currentBlockForJitter.Index + 1
+				StateMutex.RUnlock()
+
+				if nextIndexCheck > 1 {
+					var seedInt int64 = 0
+					for _, char := range CustomMinerAddress { 
+						seedInt += int64(char) 
+					}
+					jitterDelayMs := (seedInt % 8) * 250
+					time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
+				}
 				
-				if strings.HasPrefix(computedHashHex, targetPrefix) {
-					newBlock := Block{
-						Index:        nextIndex,
-						Timestamp:    simulatedTime,
-						Transactions: candidateTransactions,
-						PrevHash:     parentBlockTipHash,
-						Hash:         computedHashHex,
-						Difficulty:   targetDifficulty,
-						Nonce:        nonce,
-						GuardMatrix:  guardMatrixPlaceholder,
-					}
-					fmt.Printf("📡 [LOCAL] About to broadcast block #%d | Hash: %s\n", newBlock.Index, newBlock.Hash[:16])
-					// 👑 THE CONVERGENCE ASSURANCE FILTER:
-					// Only print a success log to the terminal dashboard AFTER the block 
-					// has successfully cleared global validation rules and been written to disk!
-					if SaveBlockToStorage(newBlock) {
-						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
-						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-						logMutex.Unlock()
-						
-						// ✅ FIXED: Legacy broadcast function removed from here because 
-						// database_core.go now fires it automatically at the disk commit layer!
-						blockSolved = true
-						break
-					} else {
+				const TargetBlockTimeWindow = 45
+				blockMiningStartTime := time.Now().Unix()
 
-						// The block was beaten by another node; gracefully drop it silently and sync up
+				StateMutex.RLock()
+				currentBlock := GetLatestBlockInternal()
+				nextIndex := currentBlock.Index + 1
+				parentBlockTipHash := currentBlock.Hash
+				
+				for time.Now().Unix() <= currentBlock.Timestamp {
+					time.Sleep(10 * time.Millisecond)
+				}
+				simulatedTime := time.Now().Unix()
+
+				var targetDifficulty int
+				if currentBlock.Index == 0 {
+					targetDifficulty = 2
+				} else {
+					targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+				}
+				if targetDifficulty < 1 { targetDifficulty = 1 }
+				if targetDifficulty > 8 { targetDifficulty = 8 }
+				StateMutex.RUnlock()
+
+				targetPrefix := strings.Repeat("0", targetDifficulty)
+				blockSolved := false
+				var guardMatrixPlaceholder = ""
+				
+				allowedEmission := CalculateBlockReward(nextIndex)
+				coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
+				
+				candidateTransactions := []Transaction{
+					{
+						ID:               coinbaseTxID,
+						Witness:          "COVENANT_STEWARD_ASSEMBLY",
+						PublicKey:        "GENESIS_VOID_REWARD_POOL",
+						Inputs:           []UTXOInput{},
+						Outputs: []UTXOOutput{
+							{Recipient: CustomMinerAddress, Amount: allowedEmission},
+						},
+						Timestamp:        simulatedTime, 
+						FreeWillOffering: 0.0,
+						DataSizeKB:       0.1,
+						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+					},
+				}
+
+				_ = MempoolMatrix 
+
+				var txSummaryBuilder strings.Builder
+				for _, tx := range candidateTransactions {
+					txSummaryBuilder.WriteString(tx.ID + "-")
+				}
+				txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+
+				immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
+					nextIndex,
+					simulatedTime,
+					parentBlockTipHash,
+					txHashStr,
+					targetDifficulty,
+					guardMatrixPlaceholder,
+				)
+
+				activeMiningStartTimeNs := time.Now().UnixNano()
+
+				for nonce < chunkCeiling {
+					if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
 						blockSolved = false
-						break
+						break 
 					}
-				}
-				atomic.AddUint64(&globalHashCount, 1)
-				nonce++
-			}
 
-			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
-			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
-
-						if blockSolved {
-				nonce = 0
-				chunkCeiling = 1000000
-				blockMiningEndTime := time.Now().Unix()
-				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-				if actualTimeElapsed < TargetBlockTimeWindow {
-					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+					inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
+					hashBytes := sha256.Sum256([]byte(inputStr))
+					computedHashHex := fmt.Sprintf("%x", hashBytes)
+					
+					if strings.HasPrefix(computedHashHex, targetPrefix) {
+						newBlock := Block{
+							Index:        nextIndex,
+							Timestamp:    simulatedTime,
+							Transactions: candidateTransactions,
+							PrevHash:     parentBlockTipHash,
+							Hash:         computedHashHex,
+							Difficulty:   targetDifficulty,
+							Nonce:        nonce,
+							GuardMatrix:  guardMatrixPlaceholder,
+						}
+						fmt.Printf("📡 [LOCAL] About to broadcast block #%d | Hash: %s\n", newBlock.Index, newBlock.Hash[:16])
+						if SaveBlockToStorage(newBlock) {
+							logMutex.Lock()
+							logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
+							liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+							logMutex.Unlock()
+							
+							blockSolved = true
+							break
+						} else {
+							blockSolved = false
+							break
+						}
+					}
+					atomic.AddUint64(&globalHashCount, 1)
+					nonce++
 				}
-			} else {
-				nonce = 0
-				chunkCeiling = 1000000
-				runtime.Gosched()
+
+				activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
+				atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
+
+				if blockSolved {
+					nonce = 0
+					chunkCeiling = 1000000
+					blockMiningEndTime := time.Now().Unix()
+					actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+					if actualTimeElapsed < TargetBlockTimeWindow {
+						requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+						time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+					}
+				} else {
+					nonce = 0
+					chunkCeiling = 1000000
+					runtime.Gosched()
+				}
 			}
-		}
-	}()
+		}()
 	} else {
-	 	fmt.Println("🔄 [RELAY ONLY] Mining disabled. Node will only sync and relay.")
+		fmt.Println("🔄 [RELAY ONLY] Mining disabled. Node will only sync and relay.")
 	}
 
 	ticker := time.NewTicker(3 * time.Second)
@@ -685,20 +651,12 @@ simulatedTime := time.Now().Unix()
 			StateMutex.RUnlock()
 			actualBlocksHeight := liveBlock.Index
 			
-			// 👑 THE MASTER LEDGER AUDIT ANCHOR:
-			// Read the local memory state cache by default for lightning-fast printing performance.
 			BalanceCacheMutex.RLock()
 			actualCvnBalance := StateBalanceCache[CustomMinerAddress]
 			BalanceCacheMutex.RUnlock()
 
-			// 🛰️ THE 60-SECOND REORG SNAP SENTINEL:
-			// Every 60 seconds (20 ticker loops of 3s), cross-examine the local cache against 
-			// the true mainnet ledger API to wipe out orphan blocks and enforce 100% global parity!
 			if loopCounter % 20 == 0 {
 				go func(targetAddress string) {
-					// 🛰️ DYNAMIC TARGET COORDINATION SWITCH:
-					// Use localhost for your local Melbourne rig, and your public IP gateway
-					// for Singapore, Atlanta, and Sparks to ensure 100% uptime parity across nodes!
 					targetHost := "202.137.175.220:8081"
 					if runtime.GOOS == "windows" {
 						targetHost = "localhost:8081"
@@ -713,8 +671,6 @@ simulatedTime := time.Now().Unix()
 						if err := json.NewDecoder(resp.Body).Decode(&ledgerPayload); err == nil {
 							if verifiedBalanceVal, exists := ledgerPayload["balance"]; exists {
 								if trueOnChainCoins, ok := verifiedBalanceVal.(float64); ok {
-									// Lock the global map and forcefully snap your local node's metrics
-									// back to the absolute global truth, dropping any ghost orphan tokens!
 									BalanceCacheMutex.Lock()
 									StateBalanceCache[targetAddress] = trueOnChainCoins
 									BalanceCacheMutex.Unlock()
@@ -753,8 +709,6 @@ simulatedTime := time.Now().Unix()
 			for _, v := range hashRateHistory1h  { sum1h += v }
 			for _, v := range hashRateHistory24h { sum24h += v }
 			
-			// 👑 THE ARITHMETIC RECOVERY DEFENSE:
-			// Ensure we never divide by zero if the slice arrays are empty during initial boot passes!
 			var avg15m, avg1h, avg24h float64
 			if len(hashRateHistory15m) > 0 { avg15m = sum15m / float64(len(hashRateHistory15m)) }
 			if len(hashRateHistory1h) > 0  { avg1h  = sum1h  / float64(len(hashRateHistory1h)) }
