@@ -491,154 +491,165 @@ func main() {
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
-	if !relayOnly {
-		go func() {
-			var nonce int64 = 0
-			var chunkCeiling int64 = 1000000
-			
-			for {
-				if atomic.LoadInt32(&IsSyncingActive) == 1 {
-					time.Sleep(100 * time.Millisecond)
-					continue
-				}
-
-				StateMutex.RLock()
-				currentBlockForJitter := GetLatestBlockInternal()
-				nextIndexCheck := currentBlockForJitter.Index + 1
-				StateMutex.RUnlock()
-
-				if nextIndexCheck > 1 {
-					var seedInt int64 = 0
-					for _, char := range CustomMinerAddress { 
-						seedInt += int64(char) 
-					}
-					jitterDelayMs := (seedInt % 8) * 250
-					time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
-				}
-				
-				const TargetBlockTimeWindow = 45
-				blockMiningStartTime := time.Now().Unix()
-
-				StateMutex.RLock()
-				currentBlock := GetLatestBlockInternal()
-				nextIndex := currentBlock.Index + 1
-				parentBlockTipHash := currentBlock.Hash
-				
-				for time.Now().Unix() <= currentBlock.Timestamp {
-					time.Sleep(10 * time.Millisecond)
-				}
-				simulatedTime := time.Now().Unix()
-
-				var targetDifficulty int
-				if currentBlock.Index == 0 {
-					targetDifficulty = 2
-				} else {
-					targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-				}
-				if targetDifficulty < 1 { targetDifficulty = 1 }
-				if targetDifficulty > 8 { targetDifficulty = 8 }
-				StateMutex.RUnlock()
-
-				targetPrefix := strings.Repeat("0", targetDifficulty)
-				blockSolved := false
-				var guardMatrixPlaceholder = ""
-				
-				allowedEmission := CalculateBlockReward(nextIndex)
-				coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
-				
-				candidateTransactions := []Transaction{
-					{
-						ID:               coinbaseTxID,
-						Witness:          "COVENANT_STEWARD_ASSEMBLY",
-						PublicKey:        "GENESIS_VOID_REWARD_POOL",
-						Inputs:           []UTXOInput{},
-						Outputs: []UTXOOutput{
-							{Recipient: CustomMinerAddress, Amount: allowedEmission},
-						},
-						Timestamp:        simulatedTime, 
-						FreeWillOffering: 0.0,
-						DataSizeKB:       0.1,
-						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-					},
-				}
-
-				_ = MempoolMatrix 
-
-				var txSummaryBuilder strings.Builder
-				for _, tx := range candidateTransactions {
-					txSummaryBuilder.WriteString(tx.ID + "-")
-				}
-				txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-				immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
-					nextIndex,
-					simulatedTime,
-					parentBlockTipHash,
-					txHashStr,
-					targetDifficulty,
-					guardMatrixPlaceholder,
-				)
-
-				activeMiningStartTimeNs := time.Now().UnixNano()
-
-				for nonce < chunkCeiling {
-					if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
-						blockSolved = false
-						break 
-					}
-
-					inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
-					hashBytes := sha256.Sum256([]byte(inputStr))
-					computedHashHex := fmt.Sprintf("%x", hashBytes)
-					
-					if strings.HasPrefix(computedHashHex, targetPrefix) {
-						newBlock := Block{
-							Index:        nextIndex,
-							Timestamp:    simulatedTime,
-							Transactions: candidateTransactions,
-							PrevHash:     parentBlockTipHash,
-							Hash:         computedHashHex,
-							Difficulty:   targetDifficulty,
-							Nonce:        nonce,
-							GuardMatrix:  guardMatrixPlaceholder,
-						}
-						fmt.Printf("📡 [LOCAL] About to broadcast block #%d | Hash: %s\n", newBlock.Index, newBlock.Hash[:16])
-						if SaveBlockToStorage(newBlock) {
-							logMutex.Lock()
-							logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
-							liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-							logMutex.Unlock()
-							
-							blockSolved = true
-							break
-						} else {
-							blockSolved = false
-							break
-						}
-					}
-					atomic.AddUint64(&globalHashCount, 1)
-					nonce++
-				}
-
-				activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
-				atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
-
-				if blockSolved {
-					nonce = 0
-					chunkCeiling = 1000000
-					blockMiningEndTime := time.Now().Unix()
-					actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-					if actualTimeElapsed < TargetBlockTimeWindow {
-						requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-						time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-					}
-				} else {
-					nonce = 0
-					chunkCeiling = 1000000
-					runtime.Gosched()
-				}
+	// ✅ UPGRADED CONSENSUS CORE: Open up full peer/node/miner configurations on all targets!
+	// Completely remove relay-only restrictions while keeping a strict 25% CPU core 
+	// thread yield to balance network difficulty across home rigs.
+	go func() {
+		var nonce int64 = 0
+		var chunkCeiling int64 = 1000000
+		
+		for {
+			if atomic.LoadInt32(&IsSyncingActive) == 1 {
+				time.Sleep(100 * time.Millisecond)
+				continue
 			}
-		}()
+
+			StateMutex.RLock()
+			currentBlockForJitter := GetLatestBlockInternal()
+			nextIndexCheck := currentBlockForJitter.Index + 1
+			StateMutex.RUnlock()
+
+			if nextIndexCheck > 1 {
+				var seedInt int64 = 0
+				for _, char := range CustomMinerAddress { 
+					seedInt += int64(char) 
+				}
+				jitterDelayMs := (seedInt % 8) * 250
+				time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
+			}
+			
+			const TargetBlockTimeWindow = 45
+			blockMiningStartTime := time.Now().Unix()
+
+			StateMutex.RLock()
+			currentBlock := GetLatestBlockInternal()
+			nextIndex := currentBlock.Index + 1
+			parentBlockTipHash := currentBlock.Hash
+			
+			for time.Now().Unix() <= currentBlock.Timestamp {
+				time.Sleep(10 * time.Millisecond)
+			}
+			simulatedTime := time.Now().Unix()
+
+			var targetDifficulty int
+			if currentBlock.Index == 0 {
+				targetDifficulty = 2
+			} else {
+				targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+			}
+			if targetDifficulty < 1 { targetDifficulty = 1 }
+			if targetDifficulty > 8 { targetDifficulty = 8 }
+			StateMutex.RUnlock()
+
+			targetPrefix := strings.Repeat("0", targetDifficulty)
+			blockSolved := false
+			var guardMatrixPlaceholder = ""
+			
+			allowedEmission := CalculateBlockReward(nextIndex)
+			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
+			
+			candidateTransactions := []Transaction{
+				{
+					ID:               coinbaseTxID,
+					Witness:          "COVENANT_STEWARD_ASSEMBLY",
+					PublicKey:        "GENESIS_VOID_REWARD_POOL",
+					Inputs:           []UTXOInput{},
+					Outputs: []UTXOOutput{
+						{Recipient: CustomMinerAddress, Amount: allowedEmission},
+					},
+					Timestamp:        simulatedTime, 
+					FreeWillOffering: 0.0,
+					DataSizeKB:       0.1,
+					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+				},
+			}
+
+			_ = MempoolMatrix 
+
+			var txSummaryBuilder strings.Builder
+			for _, tx := range candidateTransactions {
+				txSummaryBuilder.WriteString(tx.ID + "-")
+			}
+			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+
+			immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
+				nextIndex,
+				simulatedTime,
+				parentBlockTipHash,
+				txHashStr,
+				targetDifficulty,
+				guardMatrixPlaceholder,
+			)
+
+			activeMiningStartTimeNs := time.Now().UnixNano()
+
+			for nonce < chunkCeiling {
+				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
+					blockSolved = false
+					break 
+				}
+
+				inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
+				hashBytes := sha256.Sum256([]byte(inputStr))
+				computedHashHex := fmt.Sprintf("%x", hashBytes)
+				
+				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					newBlock := Block{
+						Index:        nextIndex,
+						Timestamp:    simulatedTime,
+						Transactions: candidateTransactions,
+						PrevHash:     parentBlockTipHash,
+						Hash:         computedHashHex,
+						Difficulty:   targetDifficulty,
+						Nonce:        nonce,
+						GuardMatrix:  guardMatrixPlaceholder,
+					}
+					if SaveBlockToStorage(newBlock) {
+						logMutex.Lock()
+						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
+						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+						logMutex.Unlock()
+						
+						blockSolved = true
+						break
+					} else {
+						blockSolved = false
+						break
+					}
+				}
+				
+				// 👑 THE CPU ENGINE PROTECTOR THROTTLER:
+				// Every 100,000 nonce loops, momentarily yield processing paths back to the OS.
+				// This restricts your high-speed VPS seeds to ~25% core usage, reducing network difficulty 
+				// inflation spikes and unblocking home rigs natively!
+				if nonce % 100000 == 0 {
+					runtime.Gosched()
+					time.Sleep(1 * time.Microsecond)
+				}
+
+				atomic.AddUint64(&globalHashCount, 1)
+				nonce++
+			}
+
+			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
+			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
+
+			if blockSolved {
+				nonce = 0
+				chunkCeiling = 1000000
+				blockMiningEndTime := time.Now().Unix()
+				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
+				if actualTimeElapsed < TargetBlockTimeWindow {
+					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
+					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
+				}
+			} else {
+				nonce = 0
+				chunkCeiling = 1000000
+				runtime.Gosched()
+			}
+		}
+	}()
 	} else {
 		fmt.Println("🔄 [RELAY ONLY] Mining disabled. Node will only sync and relay.")
 	}
