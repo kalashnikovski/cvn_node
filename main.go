@@ -49,9 +49,6 @@ func initWindowsAnsi() {}
 func main() {
 	initWindowsAnsi()
 
-	// Relay-only mode via environment variable (avoids flag conflicts with Wails)
-	relayOnly := os.Getenv("CVN_RELAY_ONLY") == "1"
-
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
