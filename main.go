@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -32,7 +31,6 @@ var hashrateMutex      sync.Mutex
 
 var currentLiveHashrateTrack float64
 
-// 👑 THE METRIC TRACKER ANCHORS:
 var activeMiningDurationNs uint64
 
 func clearTerminalNatively() {
@@ -51,36 +49,38 @@ func initWindowsAnsi() {}
 func main() {
 	initWindowsAnsi()
 
-	// Proper flag parsing
-	relayOnlyFlag := flag.Bool("relay-only", false, "Run node in relay-only mode (no mining)")
-	minerAddressFlag := flag.String("miner-address", "", "Target mining output CVN address")
-	connectFlag := flag.String("connect", "", "Bootstrap network HTTP sync gateway endpoint")
-	generateWallet := flag.Bool("generate-wallet", false, "Generate a new wallet and exit")
-	flag.Parse()
-
-	relayOnly := *relayOnlyFlag
-
-	if *generateWallet {
-		fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
-		privHex, pubHex, walletAddress, err := GenerateKeyPair()
-		if err != nil {
-			fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Key allocation path rejected: %v\n", err)
-			os.Exit(1)
+	// Check for --relay-only early using os.Args (avoids flag redefinition with Wails)
+	relayOnly := false
+	for _, arg := range os.Args {
+		if arg == "--relay-only" {
+			relayOnly = true
+			break
 		}
+	}
 
-		fmt.Println("\n====================================================================")
-		fmt.Printf("🪪 NEW WALLET ADDRESS:     %s\n", walletAddress)
-		fmt.Printf("📋 UNTRUNCATED PUBLIC KEY: %s\n", pubHex)
-		fmt.Printf("🔐 PRIVATE KEY HEX:        %s\n", privHex)
-		fmt.Println("====================================================================")
+	for _, arg := range os.Args {
+		if arg == "--generate-wallet" {
+			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
+			privHex, pubHex, walletAddress, err := GenerateKeyPair()
+			if err != nil {
+				fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Key allocation path rejected: %v\n", err)
+				os.Exit(1)
+			}
 
-		backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPublic Key: %s\nPrivate Key: %s\n", walletAddress, pubHex, privHex)
-		_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
+			fmt.Println("\n====================================================================")
+			fmt.Printf("🪪 NEW WALLET ADDRESS:     %s\n", walletAddress)
+			fmt.Printf("📋 UNTRUNCATED PUBLIC KEY: %s\n", pubHex)
+			fmt.Printf("🔐 PRIVATE KEY HEX:        %s\n", privHex)
+			fmt.Println("====================================================================")
 
-		configMap := map[string]string{"miner_address": walletAddress}
-		configMapBytes, _ := json.MarshalIndent(configMap, "", "  ")
-		_ = os.WriteFile("miner_config.json", configMapBytes, 0644)
-		os.Exit(0)
+			backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPublic Key: %s\nPrivate Key: %s\n", walletAddress, pubHex, privHex)
+			_ = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
+
+			configMap := map[string]string{"miner_address": walletAddress}
+			configMapBytes, _ := json.MarshalIndent(configMap, "", "  ")
+			_ = os.WriteFile("miner_config.json", configMapBytes, 0644)
+			os.Exit(0)
+		}
 	}
 
 	if _, err := os.Stat("miner_config.json"); os.IsNotExist(err) {
@@ -104,8 +104,10 @@ func main() {
 	hashRateHistory1h    = make([]float64, 0)
 	hashRateHistory24h   = make([]float64, 0)
 
-	if *minerAddressFlag != "" {
-		CustomMinerAddress = *minerAddressFlag
+	for i, arg := range os.Args {
+		if arg == "--miner-address" && i+1 < len(os.Args) {
+			CustomMinerAddress = os.Args[i+1]
+		}
 	}
 
 	if CustomMinerAddress == "" {
@@ -409,12 +411,14 @@ func main() {
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
 	seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	
-	if *connectFlag != "" {
-		customTargetIP := *connectFlag
-		if !strings.HasPrefix(customTargetIP, "http://") { 
-			customTargetIP = "http://" + customTargetIP 
+	for i, arg := range os.Args {
+		if arg == "--connect" && i+1 < len(os.Args) {
+			customTargetIP := os.Args[i+1]
+			if !strings.HasPrefix(customTargetIP, "http://") { 
+				customTargetIP = "http://" + customTargetIP 
+			}
+			seedGateways = []string{customTargetIP}
 		}
-		seedGateways = []string{customTargetIP}
 	}
 
 	lastRenderTime := time.Now()
