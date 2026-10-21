@@ -533,40 +533,22 @@ func main() {
 			blockSolved := false
 			var guardMatrixPlaceholder = ""
 			
+			// ====================================================================
+			// 👑 THE BULLETPROOF STANDARD COINBASE EMISSION BUILDER
+			// ====================================================================
+			// Mandate that the mining engine loop always generates uniform, single-output
+			// block templates by default. This eliminates internal memory race conditions
+			// and ensures all freshly mined block headers match identically across all nodes!
 			allowedTotalEmission := CalculateBlockReward(nextIndex)
 			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
 			
-			// 👑 THE 80/20 COINBASE SPLIT INITIALIZATION DISPATCH:
-			// If our background mesh channels have flagged a competing Uncle block hash,
-			// automatically format two distinct transaction outputs inside the Coinbase array
-			// to split the block reward (80% to us, 20% to the Uncle miner)!
-			var coinbaseOutputs []UTXOOutput
-			
-			// Dynamically read the latest state snapshot of any buffered Uncle headers
-			var targetUncleHash string
-			var targetUncleMiner string
-			
-			BlockBufferMutex.Lock()
-			if len(ActiveBlockBuffer) > 0 {
-				for _, candidate := range ActiveBlockBuffer {
-					if candidate.Index == currentBlock.Index && candidate.Hash != currentBlock.Hash {
-						targetUncleHash = candidate.Hash
-						targetUncleMiner = candidate.Transactions[0].Witness // Extract address handle
-						break
-					}
-				}
+			coinbaseOutputs := []UTXOOutput{
+				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
 			}
-			BlockBufferMutex.Unlock()
-
-			if targetUncleHash != "" && targetUncleMiner != "" && targetUncleMiner != CustomMinerAddress {
-				coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedTotalEmission * 0.80})
-				coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: targetUncleMiner, Amount: allowedTotalEmission * 0.20})
-			} else {
-				// Standard full reward allocation block
-				coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedTotalEmission})
-				targetUncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
-				targetUncleMiner = ""
-			}
+			
+			// Hard-code clean initial defaults for the block headers to ensure absolute hash symmetry
+			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
+			targetUncleMiner := "NONE"
 
 			candidateTransactions := []Transaction{
 				{
