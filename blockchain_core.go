@@ -409,11 +409,14 @@ return nil
 if !isBlockValid {
 return false
 }
-coinbaseTx := b.Transactions[0]
-var totalCoinbasePayout float64 = 0.0
-for _, out := range coinbaseTx.Outputs {
-totalCoinbasePayout += out.Amount
-}
+	// Isolate the primary Coinbase transaction structure cleanly from the first slice index
+	coinbaseTx := b.Transactions[0]
+
+	var totalCoinbasePayout float64 = 0.0
+	for _, out := range coinbaseTx.Outputs {
+		totalCoinbasePayout += out.Amount
+	}
+
 targetBlockHeight := int64(b.Index)
 allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
 if targetBlockHeight > 21024000 {

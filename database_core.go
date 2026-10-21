@@ -61,15 +61,33 @@ func InitBoltEngine() {
 		_, _ = tx.CreateBucketIfNotExists(jubileeVaultBucket)
 
 		if meta.Get([]byte("height")) == nil {
+			// 👑 THE CRYPTOGRAPHIC GENESIS ANCHOR:
+			// Explicitly populate the genesis transaction array with an immutable baseline record.
+			// This forces all platform string builders to compute identical parent preimage digests,
+			// permanently stopping the instant cross-platform fork split on Block #1!
 			genesisBlock := Block{
 				Index:        0,
 				Timestamp:    1790640000,
-				Transactions: []Transaction{}, 
 				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
 				Hash:         "00000c43b46f2506955b920b5981bf0a6375fc0bc0337",
 				Difficulty:   4,
 				Nonce:        0,
 				GuardMatrix:  "",
+				UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
+				UncleMiner:   "NONE",
+				Transactions: []Transaction{
+					{
+						ID:               "TX_COINBASE_GENESIS_CORE_PROVISION_PRISTINE_ANCHOR",
+						Witness:          "COVENANT_STEWARD_ASSEMBLY",
+						PublicKey:        "GENESIS_VOID_REWARD_POOL",
+						Inputs:           []UTXOInput{},
+						Outputs:          []UTXOOutput{{Recipient: "CVN_GENESIS_VOID_REWARD_POOL", Amount: 0.0}},
+						Timestamp:        1790640000,
+						FreeWillOffering: 0.0,
+						DataSizeKB:       0.1,
+						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+					},
+				},
 			}
 
 			genesisData, _ := json.Marshal(genesisBlock)
