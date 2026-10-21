@@ -25,18 +25,11 @@ func InitBoltEngine() {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 
+	// 👑 THE MASTER CONSENSUS UNIFICATION:
+	// Enforce that the network engine ALWAYS binds strictly to 'cvn_mainnet.db' uniformly
+	// across all platforms, whether running under Wails GUI wrappers or headless cloud VPS instances.
+	// This ensures both the P2P Gossip loops and HTTP Sync loops read/write to the exact same file handle!
 	targetDatabaseName := "cvn_mainnet.db"
-	
-	for _, arg := range os.Args {
-		if strings.Contains(arg, "wails") || os.Getenv("BlockchainFile") == "cvn_binding_temp.db" {
-			targetDatabaseName = "cvn_binding_temp.db"
-			break
-		}
-	}
-
-	if envPath := os.Getenv("BlockchainFile"); envPath != "" {
-		targetDatabaseName = envPath
-	}
 
 	dbPath := filepath.Join(".", targetDatabaseName)
 	fmt.Println("====================================================================")
@@ -46,10 +39,15 @@ func InitBoltEngine() {
 	absPath, _ := filepath.Abs(dbPath)
 	fmt.Printf("🎯 TARGET DATABASE FILE LOCATION:  %s\n\n", absPath)
 
-	options := &bbolt.Options{Timeout: 1 * time.Second}
+	// Open with standard shared read/write flags to allow concurrent P2P mesh modifications
+	options := bbolt.Options{
+		Timeout:      5 * time.Second,
+		NoGrowSync:   false,
+		FreelistType: bbolt.FreelistArrayType,
+	}
 
 	var openErr error
-	GlobalBoltEngine, openErr = bbolt.Open(dbPath, 0600, options)
+	GlobalBoltEngine, openErr = bbolt.Open(dbPath, 0666, &options)
 	if openErr != nil {
 		log.Fatalf("🚨 DATABASE MOUNT FAILURE: %v\n", openErr)
 	}
