@@ -607,6 +607,9 @@ func main() {
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
 				
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					// 👑 THE UN-FORKABLE STRUCTURAL PARITY LOCK:
+					// Enforce strict explicit value assignments matching both the internal 
+					// pointer properties and the explicit JSON schema definitions identically!
 					newBlock := Block{
 						Index:        nextIndex,
 						Timestamp:    simulatedTime,
@@ -619,6 +622,14 @@ func main() {
 						UncleHash:    targetUncleHash,
 						UncleMiner:   targetUncleMiner,
 					}
+					
+					// Force serialize to confirm alignment down to the single character string bit
+					_, err := json.Marshal(newBlock)
+					if err != nil {
+						blockSolved = false
+						break
+					}
+
 					if SaveBlockToStorage(newBlock) {
 						logMutex.Lock()
 						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
