@@ -457,25 +457,39 @@ return false
 return true
 }
 func CalculateHash(b Block) string {
-var txSummaryBuilder strings.Builder
-for _, tx := range b.Transactions {
-txSummaryBuilder.WriteString(tx.ID + "-")
-}
-txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
-b.Index,
-b.Timestamp,
-b.PrevHash,
-txHashStr,
-int64(b.Difficulty),
-b.GuardMatrix,
-b.Nonce,
-b.UncleHash,  // 👑 INJECT UNCLE SPEC INTO PREIMAGE
-b.UncleMiner, // 👑 INJECT MINER SPEC INTO PREIMAGE
-)
-h := sha256.New()
-h.Write([]byte(inputStr))
-return fmt.Sprintf("%x", h.Sum(nil))
+	var txSummaryBuilder strings.Builder
+	for _, tx := range b.Transactions {
+		txSummaryBuilder.WriteString(tx.ID + "-")
+	}
+	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+
+	// 👑 THE ABSOLUTE SYMMETRY ENFORCEMENT:
+	// Force empty or un-instantiated Uncle parameters to fall back to hard-coded strings.
+	// This guarantees that the string preimage formats identically across all nodes!
+	uHash := b.UncleHash
+	if uHash == "" {
+		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
+	}
+	uMiner := b.UncleMiner
+	if uMiner == "" {
+		uMiner = "NONE"
+	}
+
+	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+		b.Index,
+		b.Timestamp,
+		b.PrevHash,
+		txHashStr,
+		int64(b.Difficulty),
+		b.GuardMatrix,
+		b.Nonce,
+		uHash,
+		uMiner,
+	)
+
+	h := sha256.New()
+	h.Write([]byte(inputStr))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 func ForceBackgroundSyncPass() {}
 func GetAddressBalance(address string) float64 {
