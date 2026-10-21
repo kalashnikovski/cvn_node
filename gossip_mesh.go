@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic" // 👑 THE INSTANT IMPORT REPAIR ANCHOR
 	"time"
+
+	"go.etcd.io/bbolt"
 )
 
 var (
