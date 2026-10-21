@@ -533,9 +533,7 @@ func main() {
 			blockSolved := false
 			var guardMatrixPlaceholder = ""
 			
-			// ====================================================================
 			// 👑 THE BULLETPROOF STANDARD COINBASE EMISSION BUILDER
-			// ====================================================================
 			// Mandate that the mining engine loop always generates uniform, single-output
 			// block templates by default. This eliminates internal memory race conditions
 			// and ensures all freshly mined block headers match identically across all nodes!
@@ -546,34 +544,29 @@ func main() {
 				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
 			}
 			
-			// 👑 THE ABSOLUTE SYMMETRY PREIMAGE ENGINE:
-			// Explicitly append the default uHash ("00000...") and uMiner ("NONE") fields 
-			// straight into your mining loop's string formatter. This ensures that the preimage 
-			// string matches your blockchain_core.go validator down to the single character bit!
+			// Hard-code clean initial defaults for the block headers to ensure absolute hash symmetry
 			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 			targetUncleMiner := "NONE"
 
-			immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
-				nextIndex,
-				simulatedTime,
-				parentBlockTipHash,
-				txHashStr,
-				int64(targetDifficulty),
-				guardMatrixPlaceholder,
-				nonce, // Handled cleanly via index positioning if needed, or structured chunk filters
-				targetUncleHash,
-				targetUncleMiner,
-			)
+			candidateTransactions := []Transaction{
+				{
+					ID:               coinbaseTxID,
+					Witness:          CustomMinerAddress,
+					PublicKey:        "GENESIS_VOID_REWARD_POOL",
+					Inputs:           []UTXOInput{},
+					Outputs:          coinbaseOutputs,
+					Timestamp:        simulatedTime, 
+					FreeWillOffering: 0.0,
+					DataSizeKB:       0.1,
+					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+				},
+			}
 
-			// Clean format pass for your active internal nonce string matching loop
-			immutablePreimageChunk = fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
-				nextIndex,
-				simulatedTime,
-				parentBlockTipHash,
-				txHashStr,
-				int64(targetDifficulty),
-				guardMatrixPlaceholder,
-			)
+			var txSummaryBuilder strings.Builder
+			for _, tx := range candidateTransactions {
+				txSummaryBuilder.WriteString(tx.ID + "-")
+			}
+			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 
 			activeMiningStartTimeNs := time.Now().UnixNano()
 
@@ -584,7 +577,9 @@ func main() {
 				}
 
 				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
-				// Reconstruct the exact string format expected by your blockchain_core.go file
+				// Reconstruct the exact string format expected by your blockchain_core.go file.
+				// This includes the implicit uHash and uMiner fields right inside the active 
+				// hashing loop to achieve perfect, un-forkable cross-node validation parity!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
@@ -613,6 +608,19 @@ func main() {
 						UncleHash:    targetUncleHash,
 						UncleMiner:   targetUncleMiner,
 					}
+					if SaveBlockToStorage(newBlock) {
+						logMutex.Lock()
+						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
+						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+						logMutex.Unlock()
+						
+						blockSolved = true
+						break
+					} else {
+						blockSolved = false
+						break
+					}
+				}
 				
 				// 👑 THE CORE CPU THROTTLER:
 				// Momentarily yield core tracks every 100,000 steps to protect home mining parity bounds.
@@ -732,11 +740,11 @@ func main() {
 			fmt.Println("================================================================================")
 			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 			fmt.Println("================================================================================")
-fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
-fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
-fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
-fmt.Println("================================================================================")
-fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
+			fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
+			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
+			fmt.Println("================================================================================")
+			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Println("--------------------------------------------------------------------------------")
 logMutex.Lock()
 fmt.Print("\033[J")
