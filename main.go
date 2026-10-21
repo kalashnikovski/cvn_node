@@ -576,16 +576,15 @@ func main() {
 					break 
 				}
 
-				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
-				// Reconstruct the exact string format expected by your blockchain_core.go file.
-				// This includes the implicit uHash and uMiner fields right inside the active 
-				// hashing loop to achieve perfect, un-forkable cross-node validation parity!
+				// 👑 THE CRITICAL CROSS-PLATFORM SYSTEM ENGINE ANCHOR:
+				// Force int64(targetDifficulty) explicit type-casting inside the main mining string loop.
+				// This completely destroys the final structural formatting differences between Windows and Linux builds!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,
 					txHashStr,
-					int64(targetDifficulty),
+					int64(targetDifficulty), // 👑 THE INSTANT CROSS-PLATFORM CONVERGENCE FILTER
 					guardMatrixPlaceholder,
 					nonce,
 					targetUncleHash,
