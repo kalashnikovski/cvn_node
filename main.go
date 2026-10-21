@@ -546,36 +546,32 @@ func main() {
 				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
 			}
 			
-			// Hard-code clean initial defaults for the block headers to ensure absolute hash symmetry
+			// 👑 THE ABSOLUTE SYMMETRY PREIMAGE ENGINE:
+			// Explicitly append the default uHash ("00000...") and uMiner ("NONE") fields 
+			// straight into your mining loop's string formatter. This ensures that the preimage 
+			// string matches your blockchain_core.go validator down to the single character bit!
 			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 			targetUncleMiner := "NONE"
 
-			candidateTransactions := []Transaction{
-				{
-					ID:               coinbaseTxID,
-					Witness:          CustomMinerAddress,
-					PublicKey:        "GENESIS_VOID_REWARD_POOL",
-					Inputs:           []UTXOInput{},
-					Outputs:          coinbaseOutputs,
-					Timestamp:        simulatedTime, 
-					FreeWillOffering: 0.0,
-					DataSizeKB:       0.1,
-					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-				},
-			}
-
-			var txSummaryBuilder strings.Builder
-			for _, tx := range candidateTransactions {
-				txSummaryBuilder.WriteString(tx.ID + "-")
-			}
-			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-			immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
+			immutablePreimageChunk := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 				nextIndex,
 				simulatedTime,
 				parentBlockTipHash,
 				txHashStr,
-				targetDifficulty,
+				int64(targetDifficulty),
+				guardMatrixPlaceholder,
+				nonce, // Handled cleanly via index positioning if needed, or structured chunk filters
+				targetUncleHash,
+				targetUncleMiner,
+			)
+
+			// Clean format pass for your active internal nonce string matching loop
+			immutablePreimageChunk = fmt.Sprintf("%d-%d-%s-%s-%d-%s-",
+				nextIndex,
+				simulatedTime,
+				parentBlockTipHash,
+				txHashStr,
+				int64(targetDifficulty),
 				guardMatrixPlaceholder,
 			)
 
@@ -587,7 +583,20 @@ func main() {
 					break 
 				}
 
-				inputStr := immutablePreimageChunk + strconv.FormatInt(nonce, 10)
+				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
+				// Reconstruct the exact string format expected by your blockchain_core.go file
+				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+					nextIndex,
+					simulatedTime,
+					parentBlockTipHash,
+					txHashStr,
+					int64(targetDifficulty),
+					guardMatrixPlaceholder,
+					nonce,
+					targetUncleHash,
+					targetUncleMiner,
+				)
+
 				hashBytes := sha256.Sum256([]byte(inputStr))
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
 				
@@ -604,19 +613,6 @@ func main() {
 						UncleHash:    targetUncleHash,
 						UncleMiner:   targetUncleMiner,
 					}
-					if SaveBlockToStorage(newBlock) {
-						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
-						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-						logMutex.Unlock()
-						
-						blockSolved = true
-						break
-					} else {
-						blockSolved = false
-						break
-					}
-				}
 				
 				// 👑 THE CORE CPU THROTTLER:
 				// Momentarily yield core tracks every 100,000 steps to protect home mining parity bounds.

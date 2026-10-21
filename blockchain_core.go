@@ -463,9 +463,6 @@ func CalculateHash(b Block) string {
 	}
 	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 
-	// 👑 THE ABSOLUTE SYMMETRY ENFORCEMENT:
-	// Force empty or un-instantiated Uncle parameters to fall back to hard-coded strings.
-	// This guarantees that the string preimage formats identically across all nodes!
 	uHash := b.UncleHash
 	if uHash == "" {
 		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
