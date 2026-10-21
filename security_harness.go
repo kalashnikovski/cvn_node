@@ -9,17 +9,17 @@ import (
 )
 
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
-    // Pre-reset coinbase bypass (prefix-based)
-    if strings.HasPrefix(tx.ID, "TX_COINBASE") {
-        if txIndex != 0 {
-            fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
-            return false
-        }
-        // Bypass float64 signature checks for coinbase
-        return true
-    }
-
-    // ... keep the rest of the function exactly as it is
+	// 👑 THE BULLETPROOF COINBASE SIGNATURE BYPASS:
+	// Inspect the block transaction array identity prefix at the absolute front gate.
+	// This guarantees that valid block reward payouts bypass empty inputs and floating-point 
+	// signature constraints uniformly across both Windows and Linux network validations!
+	if strings.HasPrefix(tx.ID, "TX_COINBASE") {
+		if txIndex != 0 {
+			fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
+			return false
+		}
+		return true
+	}
 	
 	if len(tx.Inputs) == 0 {
 		fmt.Println("🚨 TRANSACTION EXPLOIT REJECTED: Input-less transactions require valid Coinbase.")
@@ -91,7 +91,6 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 		if bUTXO == nil {
 			return nil
 		}
-		// Pass -1 for indices if it's coming straight out of the unconfirmed mempool wire
 		if VerifyTransactionIntegrity(tx, -1, 1, bUTXO) {
 			isValid = true
 		}
@@ -126,7 +125,6 @@ func VerifyIncomingWireBlock(b Block) bool {
 			return nil
 		}
 
-		// Clean pass the exact transaction index mapping directly to the evaluator
 		for txIdx, tx := range b.Transactions {
 			if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 				isBlockValid = false
