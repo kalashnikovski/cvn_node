@@ -439,6 +439,11 @@ func main() {
 			break 
 		}
 
+		// 👑 THE STATIC BULK SYNC SAFETY STATE LOCK:
+		// Explicitly flag the sync state tracker to hold open file transaction parameters.
+		// This pauses all mining background solvers entirely, stopping race conditions!
+		atomic.StoreInt32(&IsSyncingActive, 1)
+
 		nextBlockNeed := currentLocalHeight + 1
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed)
 		client := &http.Client{Timeout: 3 * time.Second}
@@ -477,6 +482,9 @@ func main() {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+
+	// Release the sync active lockout handle now that the batch catch-up pass is complete
+	atomic.StoreInt32(&IsSyncingActive, 0)
 	// ====================================================================
 	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
 	// ====================================================================
@@ -515,11 +523,9 @@ func main() {
 			parentBlockTipHash := currentBlock.Hash
 			
 			// 👑 THE DETERMINISTIC TIME LOCK ENFORCEMENT:
-			// Force the block timestamp to increment sequentially by exactly +1 second past
-			// the parent block's tip, eliminating all cross-platform wall clock drifting!
+			// Force the block timestamp to increment sequentially past the parent tip, 
+			// eliminating cross-platform wall clock drifting and timestamp racing!
 			simulatedTime := currentBlock.Timestamp + 1
-			
-			// If real-world time moves past our sequence, safely align it to prevent block clock stalling
 			if time.Now().Unix() > simulatedTime {
 				simulatedTime = time.Now().Unix()
 			}
@@ -581,15 +587,16 @@ func main() {
 					break 
 				}
 
-				// 👑 THE CRITICAL CROSS-PLATFORM SYSTEM ENGINE ANCHOR:
-				// Force int64(targetDifficulty) explicit type-casting inside the main mining string loop.
-				// This completely destroys the final structural formatting differences between Windows and Linux builds!
+				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
+				// Reconstruct the exact string format expected by your blockchain_core.go file.
+				// This includes the explicit type-cast int64(targetDifficulty) alongside default 
+				// uHash and uMiner fields inside the active hashing loop for perfect cross-platform parity!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,
 					txHashStr,
-					int64(targetDifficulty), // 👑 THE INSTANT CROSS-PLATFORM CONVERGENCE FILTER
+					int64(targetDifficulty),
 					guardMatrixPlaceholder,
 					nonce,
 					targetUncleHash,
@@ -747,8 +754,8 @@ func main() {
 			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
 			fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
 			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
-			fmt.Println("================================================================================")
-			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+fmt.Println("================================================================================")
+fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Println("--------------------------------------------------------------------------------")
 logMutex.Lock()
 fmt.Print("\033[J")

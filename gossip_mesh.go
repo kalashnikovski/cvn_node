@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic" // 👑 THE INSTANT IMPORT REPAIR ANCHOR
+	"sync/atomic"
 	"time"
 
 	"go.etcd.io/bbolt"
@@ -20,11 +20,6 @@ var (
 	ActivePeerMap         = make(map[string]time.Time)
 	PeerMapMutex          sync.RWMutex
 	MaxMeshConnectionPool = make(chan struct{}, 100)
-
-	// 👑 THE GHOST PROTOCOL SELECTION BUFFER MATRICES:
-	BlockBufferMutex     sync.Mutex
-	ActiveBlockBuffer    []Block
-	IsBufferTimerRunning bool
 )
 
 func StartMeshNetwork() {
@@ -133,7 +128,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 			var incomingBlock Block
 			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err == nil {
 				if VerifyIncomingWireBlock(incomingBlock) {
-					// 👑 REDIRECTED GATEWAY TRACK: Pass block straight to the 250ms selection queue
 					go ProcessIncomingWireBlockWithDelay(incomingBlock)
 				} else {
 					log.Printf("🚨 [GATE FIREWALL] Block #%d failed deep front-gate audit! Discarding.\n", incomingBlock.Index)
@@ -213,8 +207,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 	}
 }
 
-// ProcessIncomingWireBlockWithDelay handles incoming block packets deterministically 
-// the microsecond they arrive, completely eliminating the asynchronous timer race condition!
+// ProcessIncomingWireBlockWithDelay handles block integration deterministically without async race conditions!
 func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
@@ -224,17 +217,13 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	currentTip := GetLatestBlockInternal()
 	StateMutex.Unlock()
 
-	// 👑 THE DETERMINISTIC SELECTION ENGINE:
-	// If the incoming block matches our current height tip exactly, we are in a block race!
-	if incomingBlock.Index == currentTip.Index + 1 {
-		// Evaluate the structural wire hash parameters natively
+	// 👑 THE UN-FORKABLE SEQUENTIAL GATEWAY:
+	if incomingBlock.Index == currentTip.Index+1 {
 		if incomingBlock.PrevHash != currentTip.Hash {
-			// Out of sync chain link packet; trigger standard recovery catch-up rules
 			go TriggerActiveReSyncPass()
 			return
 		}
 
-		// Save the block cleanly to our storage partition lanes
 		if SaveBlockToStorage(incomingBlock) {
 			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
 			go BroadcastNewBlock(incomingBlock)
@@ -242,23 +231,27 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		return
 	}
 
-	// 👑 THE UNCLE BLOCK ACCUMULATION GATEWAY:
-	// If we receive a competing block for the exact SAME height we already committed to disk,
-	// do not fork! Instead, analyze if it qualifies as a valid alternate Uncle block.
+	// 👑 THE GHOST UNCLE INTEGRATION GATEWAY:
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		// Verify that the competing block shares the same historical parent lineage
 		if incomingBlock.PrevHash == currentTip.PrevHash {
 			fmt.Printf("🛰️  [UNCLE RECOGNIZED] Capturing late competing block hash %s for height %d\n", incomingBlock.Hash[:16], incomingBlock.Index)
 			
-			// Open up a read/write transaction block to safely append Uncle parameters to our current tip
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
-				if bBlocks == nil { return nil }
+				if bBlocks == nil {
+					return nil
+				}
 				
 				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
 				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
 					currentTip.UncleHash = incomingBlock.Hash
-					currentTip.UncleMiner = incomingBlock.Transactions[0].Witness
+					
+					// ✅ FIX: Securely check length boundaries and target index slot 0 (Coinbase Witness)
+					if len(incomingBlock.Transactions) > 0 {
+						currentTip.UncleMiner = incomingBlock.Transactions[0].Witness
+					} else {
+						currentTip.UncleMiner = "NONE"
+					}
 					
 					updatedData, err := json.Marshal(currentTip)
 					if err == nil {
@@ -272,7 +265,6 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		return
 	}
 
-	// Fallback pass: Route all other generic block parameters to the core processor
 	ProcessIncomingNetworkBlock(incomingBlock)
 }
 
@@ -366,12 +358,13 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 			}(seedAddr)
 		}
 
-time.Sleep(20 * time.Second)
-PeerMapMutex.Lock()
-for peer, lastSeen := range ActivePeerMap {
+		time.Sleep(20 * time.Second)
+
+		PeerMapMutex.Lock()
+		for peer, lastSeen := range ActivePeerMap {
 if time.Since(lastSeen) > (2 * time.Minute) {
 delete(ActivePeerMap, peer)
-fmt.Printf("❌ [GOSSIP MESH] Severed inactive channel: %s\n", peer)
+log.Printf("❌ [GOSSIP MESH] Severed inactive channel: %s\n", peer)
 }
 }
 PeerMapMutex.Unlock()

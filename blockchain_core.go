@@ -26,8 +26,8 @@ type Block struct {
 	Difficulty   int           `json:"difficulty"`
 	Nonce        int64         `json:"nonce"`
 	GuardMatrix  string        `json:"guard_matrix"`
-	UncleHash    string        `json:"uncle_hash"`  // 👑 GHOST UNCLE HASH TRACKER
-	UncleMiner   string        `json:"uncle_miner"` // 👑 UNCLE MINER REWARD DESTINATION
+	UncleHash    string        `json:"uncle_hash"`  
+	UncleMiner   string        `json:"uncle_miner"` 
 }
 
 type Transaction struct {
@@ -131,20 +131,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 
 	currentTip := GetLatestBlockInternal()
 
-	// Diagnostic logging
-	arrivalTime := time.Now().UnixMilli()
-	fmt.Printf("📥 [DIAG] Height: %d | Hash: %s | Tip: %d | ArrivalMs: %d | TipTS: %d | InTS: %d\n",
-		incomingBlock.Index,
-		incomingBlock.Hash[:16],
-		currentTip.Index,
-		arrivalTime,
-		currentTip.Timestamp,
-		incomingBlock.Timestamp)
-
-	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
-		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
-
-	// Same height, different hash → competing tip handled by the 250ms selection loop
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
 		timeDiff := incomingBlock.Timestamp - currentTip.Timestamp
 		if timeDiff < 0 {
@@ -253,13 +239,13 @@ func TriggerActiveReSyncPass() {
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 	fmt.Println(" -> [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
 
-	activeGlobalRecoveryGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
+	activeGlobalRecoveryGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081", "http://202.137.175.220:9091"}
 	client := &http.Client{Timeout: 4 * time.Second}
 	var chosenTargetSeedURL string
 	var selectedHighestTargetTip int64
 
 	for _, endpoint := range activeGlobalRecoveryGateways {
-		if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
+		if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" {
 			continue
 		}
 		remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
@@ -355,27 +341,28 @@ func TriggerActiveReSyncPass() {
 		resp, err := client.Get(requestURL)
 		if err != nil {
 			StateMutex.Lock()
-time.Sleep(100 * time.Millisecond)
-continue
-}
-if resp.StatusCode != http.StatusOK {
-resp.Body.Close()
-StateMutex.Lock()
-time.Sleep(100 * time.Millisecond)
-continue
-}
-var incomingBatch []Block
-err = json.NewDecoder(resp.Body).Decode(&incomingBatch)
-resp.Body.Close()
-if err != nil || len(incomingBatch) == 0 {
-StateMutex.Lock()
-break
-}
-StateMutex.Lock()
-for _, block := range incomingBatch {
-if block.Index == int64(GetLatestBlockInternal().Index)+1 {
-if ValidateBlockSignatures(block) {
-SaveBlockToStorageInternal(block)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			StateMutex.Lock()
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		var incomingBatch []Block
+		err = json.NewDecoder(resp.Body).Decode(&incomingBatch)
+		resp.Body.Close()
+		if err != nil || len(incomingBatch) == 0 {
+			StateMutex.Lock()
+			break
+		}
+
+		StateMutex.Lock()
+		for _, block := range incomingBatch {
+			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
+				if ValidateBlockSignatures(block) {
+					SaveBlockToStorageInternal(block)
 fmt.Printf(" -> [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
 } else {
 fmt.Printf(" -> [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
@@ -432,61 +419,54 @@ allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
 if targetBlockHeight > 21024000 {
 allowedTotalEmission += 5.0
 }
-// 👑 THE REWARD-SPLITTING CONSENSUS GATEWAY:
-// Verify that the total coinbase output values never exceed our network emission cap.
 if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
-fmt.Printf("🚨 EMISSION BLOCKED: Submitter attempted to claim over-allocated reward block payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
+fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
 return false
 }
-// 👑 UNCLE REWARD STRUCTURE AUDITING PASS:
-// If an Uncle Block has been included, verify the 70/30 reward split rule strictly!
 if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" {
 if len(coinbaseTx.Outputs) < 2 {
-fmt.Println("🚨 CONSENSUS REJECTION: Included Uncle hash requires a two-output split Coinbase transaction.")
+fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash requires two coinbase outputs.")
 return false
 }
 mainMinerPayout := coinbaseTx.Outputs[0].Amount
 uncleMinerPayout := coinbaseTx.Outputs[1].Amount
-expectedMainSplit := allowedTotalEmission * 0.70
-expectedUncleSplit := allowedTotalEmission * 0.30
+expectedMainSplit := allowedTotalEmission * 0.80
+expectedUncleSplit := allowedTotalEmission * 0.20
 if (mainMinerPayout - expectedMainSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) > 0.00001 {
-fmt.Printf("🚨 REJECTION: Invalid GHOST Split parameters. Main Miner received: %f (Expected: %f), Uncle Miner received: %f (Expected: %f)\n", mainMinerPayout, expectedMainSplit, uncleMinerPayout, expectedUncleSplit)
+fmt.Printf("🚨 REJECTION: Invalid Split. Main: %f, Uncle: %f\n", mainMinerPayout, uncleMinerPayout)
 return false
 }
 }
 return true
 }
 func CalculateHash(b Block) string {
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(tx.ID + "-")
-	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-	uHash := b.UncleHash
-	if uHash == "" {
-		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
-	}
-	uMiner := b.UncleMiner
-	if uMiner == "" {
-		uMiner = "NONE"
-	}
-
-	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
-		b.Index,
-		b.Timestamp,
-		b.PrevHash,
-		txHashStr,
-		int64(b.Difficulty),
-		b.GuardMatrix,
-		b.Nonce,
-		uHash,
-		uMiner,
-	)
-
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
+var txSummaryBuilder strings.Builder
+for _, tx := range b.Transactions {
+txSummaryBuilder.WriteString(tx.ID + "-")
+}
+txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+uHash := b.UncleHash
+if uHash == "" {
+uHash = "0000000000000000000000000000000000000000000000000000000000000000"
+}
+uMiner := b.UncleMiner
+if uMiner == "" {
+uMiner = "NONE"
+}
+inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+b.Index,
+b.Timestamp,
+b.PrevHash,
+txHashStr,
+int64(b.Difficulty),
+b.GuardMatrix,
+b.Nonce,
+uHash,
+uMiner,
+)
+h := sha256.New()
+h.Write([]byte(inputStr))
+return fmt.Sprintf("%x", h.Sum(nil))
 }
 func ForceBackgroundSyncPass() {}
 func GetAddressBalance(address string) float64 {
