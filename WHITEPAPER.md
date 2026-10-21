@@ -1,98 +1,49 @@
-# 💎 Covenant Standard (CVN) Protocol
-## Layer-1 Ledger Specification
-**Version 0.9 – Design Specification**  
-*October 2026*
+# Covenant Standard (CVN) Protocol
+## Layer-1 Ledger Specification & Monetary Constitution
+Version 1.0 - Production Launch Specification (October 15, 2026)
 
----
+1. Purpose and Scope
+Covenant Standard (CVN) is a decentralized Layer-1 blockchain operating on a three-node bootstrap cluster (Melbourne, Singapore, Atlanta) with these core pillars:
+- Absolute Zero Pre-Mine: The Genesis Block contains 0.00 CVN circulating supply with no developer or VC allocations.
+- Equal Rule Enforcement: Consensus rules apply uniformly without administrative exceptions.
+- Democratized Hardware: Validation remains accessible to standard consumer desktop CPUs.
+- Anti-Capture Architecture: Prevents permanent concentration of validation power.
 
-### 1. Purpose and Scope
-Covenant Standard (CVN) is a Layer-1 blockchain protocol designed to provide a transparent, deterministic, and publicly verifiable ledger of ownership and transfer. Its primary objectives are:
+2. Monetary Rules & Emission
+2.1 Fixed Supply Ceiling
+The maximum supply is permanently capped at 2,100,000,000.00 CVN.
 
-*   **Honest, Non-Dilutable Accounting:** Enforcing a mathematically fixed supply ceiling that can never be modified or expanded by operator intervention.
-*   **Equal Rule Enforcement:** Algorithmic execution of consensus rules applied uniformly across every node in the network without exception.
-*   **Accessible Hardware Validation:** Maintaining a lightweight, un-throttled core validation model that remains completely practical for standard household consumer hardware (CPUs) to operate.
-*   **Anti-Capture Architecture:** Preventing the permanent concentration of validation power or the long-term economic lock-out of later network participants.
+2.2 Organic Distribution & Year-30 Recycling
+Tokens are earned via Proof-of-Diligence. The initial block reward is 50.00 CVN, halving every 7.5 years across four epochs over 30 years. At Year 30 (Block 21,024,000), the network transitions to an algorithmic 7-year recycling model that reclaims 20% from stagnant accounts to sustain ongoing validation incentives.
 
-This document describes the intended core rules of the network. Features that are not yet fully specified or implemented in the active production codebase are explicitly marked as design or research goals.
+2.3 Strict UTXO Accounting Core
+Uses a disk-enforced UTXO model with 8-decimal precision (%.8f) to ensure exact value conservation and prevent cross-platform serialization drift.
+3. Consensus & Bidirectional Validation Firewalls
+3.1 Block Hash Commitment
+Every block hash is computed over all consensus-critical fields. Any block whose contents do not perfectly match its SHA-256 hash is instantly dropped by the network.
 
----
+3.2 Dynamic Target Calibration
+Blocks are produced via a Proof-of-Diligence leading-zero computational puzzle. The difficulty target dynamically adjusts block-by-block based on an active 45-second calibration window ticker loop to defend against hashrate spikes.
 
-### 2. Monetary Rules
+3.3 Bidirectional Validation Symmetry
+To prevent local database drift, the exact same VerifyIncomingWireTransaction firewall intercepts transactions on both external network streams and local desktop application submissions before any data can enter the mempool queue. The database gate (SaveBlockToStorageInternal) deeply audits every transaction signature and input reference under an atomic ACID database transaction before disk mutation occurs.
 
-#### 2.1 Supply Ceiling
-The maximum circulating supply is permanently fixed at **2,100,000,000 CVN**. No consensus rule, network split, or manual operator action can increase this ceiling.
+3.4 Race-Proof Non-Destructive Recovery
+During fork resolutions, the engine pauses mining and takes a snapshot of local tip index heights. It executes a backward chronological scan across remote endpoints to find the highest common ancestor hash. The engine then executes a targeted rollback transaction, deleting only the blocks mined on the minority fork above that ancestor point, re-instantiating any valid spent inputs back into the live UTXO set before fast-forwarding along the canonical timeline.
 
-#### 2.2 Emission
-New CVN enters circulation exclusively through the coinbase transaction generation of valid, solved blocks. The initial coinbase reward is **50 CVN per block**. Any future modifications to the reward schedule or halving parameters must be enacted through an explicit, publicly verifiable consensus software upgrade.
+4. Decentralized Network Participation
+4.1 Open Validation
+Any participant may operate a full full node via our zero-configuration PowerShell onboarding script (AutoOnboard_And_Mine.ps1), validate the entire history natively via BoltDB (%016d zero-padded key-value indexing), and mine block rewards using consumer hardware.
 
-#### 2.3 Accounting Model
-The ledger maintains a strict unspent-output (UTXO) tracking set. Every transaction explicitly consumes specific prior outputs and creates fresh outputs. Value is rigorously conserved: the sum of transaction inputs must equal or exceed the sum of transaction outputs plus any explicit free-will offering network fee. Double-spending of any previously consumed output is rejected on the hot path by every honest node.
+4.2 Autonomous Peer Exchange (PEX)
+Nodes maintain a dynamic mesh network over raw TCP sockets on Port 8080. When a peer connects, nodes organically exchange active directories (PEER_LIST:), spawning asynchronous background workers to dial unrecognized targets and self-expand the network topography on complete autopilot.
 
----
+5. Future Evolutionary Roadmap & Upgrade Paths (Design Goals)
+5.1 The Q2 2027 ASIC-Neutral 80/20 Soft-Fork Upgrade
+To preserve consumer-hardware accessibility, the protocol is architected to undergo a formal consensus soft-fork in Phase 4 (Q2 2027). Once a mathematically proven memory-hard Proof-of-Work algorithm is finalized, it will introduce a dual-channel reward split based on the actual class of work performed. Rigs providing memory-hard CPU solutions will claim an 80% channel reward (40.0 CVN), while specialized industrial hardware running SHA-256 solutions will be clamped to a maximum 20% channel reward (10.0 CVN).
 
-### 3. Consensus and Block Validation
+5.2 The Macroeconomic Sabbatical & Jubilee State Loops
+The database reserves bucket partitions and naming for future multi-decade balance recycling features. Balances remaining completely stationary for 7-year Sabbatical and 49-year Jubilee scales will be subjected to automated consensus-level decay parameters. The protocol reclaims stagnant wealth, routing it to the jubilee_vault bucket to dynamically fund block rewards for future generations of node operators without diluting the fixed supply ceiling.
 
-#### 3.1 Block Commitment
-Every block hash is computed over the complete set of consensus-critical fields, including the previous block hash pointer, a cryptographic commitment to the full transaction set, the Unix timestamp, the current network difficulty target, and the nonce. A block whose contents or ledger payloads do not perfectly match its claimed hash is instantly invalid.
-
-#### 3.2 Proof-of-Diligence
-Blocks are produced by solving a targeted computational puzzle whose difficulty is dynamically adjusted so that the expected interval between blocks remains stable under changing total network work. The adjustment rule is entirely deterministic and identical for every node. The target interval and adjustment parameters are carefully chosen to keep mining participation practical on consumer-class hardware under normal conditions.
-
-#### 3.3 Transaction and Block Acceptance
-Before accepting, storing, or relaying any transaction or block data over network boundaries, a node strictly verifies:
-1. Asymmetric cryptographic signatures.
-2. The existence and unspent status of every consumed input within the ledger pool.
-3. Perfect value conservation (Inputs $\ge$ Outputs + Fees).
-4. Coinbase validation rules and the active emission schedule.
-5. Strict size, character padding, and structural data limits.
-
-Any invalid or malformed data is discarded immediately. There are no administrative exceptions.
-
-#### 3.4 Finality
-A block is considered final for practical settlement purposes once it is buried under a sufficient number of subsequent valid blocks. Exact confirmation depths and any optional multi-party attestation mechanisms remain under active design and are not yet part of the mandatory consensus validation rules.
-
----
-
-### 4. Network Participation
-
-#### 4.1 Open Validation
-Any participant may operate a full node, validate the entire blockchain history natively, and attempt to produce valid blocks. No capital stake, central permission, or prior wealth is required to independently verify the absolute truth of the ledger.
-
-#### 4.2 Peer Discovery and Connectivity
-Nodes maintain a dynamic, self-healing set of active network peers over P2P sockets. The protocol does not permanently rely on a privileged, centralized set of seed operators for continued operation, bootstrap onboarding, or crash recovery. Exact peer-exchange discovery and anti-eclipse mechanisms are under active development.
-
-#### 4.3 Hardware Accessibility
-Difficulty targets and block parameters are dynamically selected so that meaningful verification and mining remain feasible for ordinary desktop and server hardware under typical network conditions. Specialized hardware is not prohibited, but the design purposefully avoids structural rules that permanently exclude consumer-class operators.
-
----
-
-### 5. Economic Policy and Long-Term Utility (Design Goals)
-*The following mechanisms are design goals intended to maintain circulating utility and limit the permanent lock-up of network capacity. They are not yet fully specified or activated in the active consensus layer.*
-
-#### 5.1 Inactivity Weight Adjustment
-Balances that remain completely unused and stagnant for an extended, publicly defined period may have their effective weight in certain secondary network functions gradually reduced. The purpose of this mechanic is to discourage indefinite dormancy that could degrade long-term liquidity and public participation. Exact thresholds, decay functions, and network effects will be fully published and subjected to peer review before activation. Absolute ownership of the underlying core units is never erased.
-
-#### 5.2 Large-Scale Participation Bonds (Research)
-Optional collateral requirements for entities that suddenly introduce or withdraw very large fractions of network computational work are under study. Any such rule would include clear, automated entry, exit, and grace procedures so that ordinary home operators are never penalized for normal connectivity interruptions or power cycles.
-
-These economic features, if adopted, will be introduced exclusively through explicit consensus upgrades and will never override the core foundational requirements of honest accounting and equal rule enforcement.
-
----
-
-### 6. Security Properties and Limitations
-
-The protocol significantly raises the economic cost of double-spends, history revision, and malicious transaction exclusion by requiring computational work, full ledger validation by every independent node, and completely open participation. 
-
-No distributed system can reduce the probability of all possible attacks to absolute zero. Residual risks include long-range fork attacks, eclipse attempts, implementation bugs, and economic incentive failures. Users and operators are required to evaluate these architectural risks independently.
-
----
-
-### 7. Upgrade and Governance Discipline
-
-Changes to consensus rules require clear public specification, broad community node adoption, and explicit activation thresholds. The core validation and asset accounting rules are intentionally kept minimal, un-bloated, and stable. Secondary economic-policy features may evolve more frequently over time, but they remain strictly subject to the same transparency requirements.
-
----
-
-### 8. Conclusion
-
-Covenant Standard aims to provide a sovereign ledger whose rules are transparent, deterministic, and equally enforced across the globe, while keeping validation open to ordinary participants and limiting the permanent concentration of power. The design prioritizes honest accounting and a verifiable state over complexity or absolute guarantees. All claims in this document are limited strictly to what the protocol can actually enforce or is explicitly designing toward.
+6. Upgrade and Governance Discipline
+Changes to consensus rules require transparent public specification, broad community node adoption, and explicit activation thresholds. Covenant Standard prioritizes an un-bloated, stable core ledger state over unnecessary software complexity. All upgrades remain strictly subject to transparency and equal rule enforcement across the globe, ensuring the network remains owned entirely by the community from block number one.

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic" // 👑 THE INSTANT IMPORT REPAIR ANCHOR
 	"time"
 )
 
@@ -17,6 +18,11 @@ var (
 	ActivePeerMap         = make(map[string]time.Time)
 	PeerMapMutex          sync.RWMutex
 	MaxMeshConnectionPool = make(chan struct{}, 100)
+
+	// 👑 THE GHOST PROTOCOL SELECTION BUFFER MATRICES:
+	BlockBufferMutex     sync.Mutex
+	ActiveBlockBuffer    []Block
+	IsBufferTimerRunning bool
 )
 
 func StartMeshNetwork() {
@@ -69,12 +75,12 @@ func handleIncomingPeerStream(conn net.Conn) {
 		if msg == "" {
 			continue
 		}
-		// Temporary diagnostic
-    preview := msg
-    if len(preview) > 120 {
-        preview = preview[:120]
-    }
-    fmt.Printf("📡 [GOSSIP] Received: %s\n", preview)
+
+		preview := msg
+		if len(preview) > 120 {
+			preview = preview[:120]
+		}
+		fmt.Printf("📡 [GOSSIP] Received: %s\n", preview)
 
 		if strings.HasPrefix(msg, "GET_BATCH:") {
 			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")
@@ -125,7 +131,8 @@ func handleIncomingPeerStream(conn net.Conn) {
 			var incomingBlock Block
 			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err == nil {
 				if VerifyIncomingWireBlock(incomingBlock) {
-					go ProcessIncomingNetworkBlock(incomingBlock)
+					// 👑 REDIRECTED GATEWAY TRACK: Pass block straight to the 250ms selection queue
+					go ProcessIncomingWireBlockWithDelay(incomingBlock)
 				} else {
 					log.Printf("🚨 [GATE FIREWALL] Block #%d failed deep front-gate audit! Discarding.\n", incomingBlock.Index)
 				}
@@ -204,6 +211,64 @@ func handleIncomingPeerStream(conn net.Conn) {
 	}
 }
 
+// ProcessIncomingWireBlockWithDelay coordinates the 250ms GHOST lock-in selection buffer path natively
+func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		return
+	}
+
+	BlockBufferMutex.Lock()
+	ActiveBlockBuffer = append(ActiveBlockBuffer, incomingBlock)
+	
+	if IsBufferTimerRunning {
+		BlockBufferMutex.Unlock()
+		return
+	}
+	
+	IsBufferTimerRunning = true
+	BlockBufferMutex.Unlock()
+
+	// 🛰️ THE 250ms MEMPOOL LOCK-IN SELECTION WINDOW:
+	// Yield the processing pipeline briefly to allow slower cross-ocean residential packets to arrive!
+	time.Sleep(250 * time.Millisecond)
+
+	BlockBufferMutex.Lock()
+	defer func() {
+		ActiveBlockBuffer = []Block{}
+		IsBufferTimerRunning = false
+		BlockBufferMutex.Unlock()
+	}()
+	
+	if len(ActiveBlockBuffer) == 0 {
+		return
+	}
+
+	// Group and select candidate streams matching current network heights
+	winningBlock := ActiveBlockBuffer[0]
+	for _, candidate := range ActiveBlockBuffer {
+		if candidate.Index == winningBlock.Index {
+			// 👑 GAME-THEORY EQUILIBRIUM: Force the winning block selection to lock strictly onto
+			// the lowest cryptographic hash string value, completely neutralizing physical fiber advantage!
+			if candidate.Hash < winningBlock.Hash {
+				winningBlock = candidate
+			}
+		}
+	}
+
+	// Chronologically look for secondary valid blocks solved for that same height to attach as an Uncle block
+	for _, candidate := range ActiveBlockBuffer {
+		if candidate.Index == winningBlock.Index && candidate.Hash != winningBlock.Hash {
+			// Extract and preserve the secondary home miner's identity signature context hash
+			winningBlock.UncleHash = candidate.Hash
+			winningBlock.UncleMiner = candidate.Transactions[0].Outputs[0].Recipient
+			break
+		}
+	}
+
+	// Route the finalized, unified block parameter package directly to your main verification core
+	ProcessIncomingNetworkBlock(winningBlock)
+}
+
 func BroadcastNewBlock(block Block) {
 	jsonBytes, err := json.Marshal(block)
 	if err != nil {
@@ -230,16 +295,12 @@ func transmitPayloadToNetworkBoundary(payload string) {
 	}
 	PeerMapMutex.RUnlock()
 
-	// 👑 THE OPEN-MESH WIRE DISPATCHER:
-	// Route block and transaction data packets to ALL verified active mining peers
-	// in the mesh dynamically, completely unblocking residential nodes like Sparks!
 	for _, address := range targets {
 		if strings.Contains(address, "202.137.175.220") && runtime.GOOS == "windows" {
 			continue
 		}
 
 		go func(addr string) {
-			// Enforce a tight 3-second network dial timeout to prevent slow connections from dragging down thread speeds
 			conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 			if err == nil {
 				_, _ = fmt.Fprint(conn, payload)
@@ -298,15 +359,14 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 			}(seedAddr)
 		}
 
-		time.Sleep(20 * time.Second)
-
-		PeerMapMutex.Lock()
-		for peer, lastSeen := range ActivePeerMap {
-			if time.Since(lastSeen) > (2 * time.Minute) {
-				delete(ActivePeerMap, peer)
-				fmt.Printf("❌ [GOSSIP MESH] Severed inactive channel: %s\n", peer)
-			}
-		}
-		PeerMapMutex.Unlock()
-	}
+time.Sleep(20 * time.Second)
+PeerMapMutex.Lock()
+for peer, lastSeen := range ActivePeerMap {
+if time.Since(lastSeen) > (2 * time.Minute) {
+delete(ActivePeerMap, peer)
+fmt.Printf("❌ [GOSSIP MESH] Severed inactive channel: %s\n", peer)
+}
+}
+PeerMapMutex.Unlock()
+}
 }

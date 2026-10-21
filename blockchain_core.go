@@ -26,6 +26,8 @@ type Block struct {
 	Difficulty   int           `json:"difficulty"`
 	Nonce        int64         `json:"nonce"`
 	GuardMatrix  string        `json:"guard_matrix"`
+	UncleHash    string        `json:"uncle_hash"`  // 👑 GHOST UNCLE HASH TRACKER
+	UncleMiner   string        `json:"uncle_miner"` // 👑 UNCLE MINER REWARD DESTINATION
 }
 
 type Transaction struct {
@@ -142,7 +144,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	fmt.Printf("📥 [INCOMING] Height: %d | Hash: %s | From tip: %d\n",
 		incomingBlock.Index, incomingBlock.Hash[:16], currentTip.Index)
 
-	// Same height, different hash → competing tip with 7-second grace window
+	// Same height, different hash → competing tip handled by the 250ms selection loop
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
 		timeDiff := incomingBlock.Timestamp - currentTip.Timestamp
 		if timeDiff < 0 {
@@ -155,7 +157,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		} else if incomingBlock.Timestamp == currentTip.Timestamp && incomingBlock.Hash < currentTip.Hash {
 			preferIncoming = true
 		} else if timeDiff <= 7 && incomingBlock.Hash < currentTip.Hash {
-			// Within 7 seconds and lower hash → adopt (longer grace window)
 			preferIncoming = true
 		}
 
@@ -354,170 +355,175 @@ func TriggerActiveReSyncPass() {
 		resp, err := client.Get(requestURL)
 		if err != nil {
 			StateMutex.Lock()
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			StateMutex.Lock()
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		var incomingBatch []Block
-		err = json.NewDecoder(resp.Body).Decode(&incomingBatch)
-		resp.Body.Close()
-		if err != nil || len(incomingBatch) == 0 {
-			StateMutex.Lock()
-			break
-		}
-
-		StateMutex.Lock()
-		for _, block := range incomingBatch {
-			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
-				if ValidateBlockSignatures(block) {
-					SaveBlockToStorageInternal(block)
-					fmt.Printf(" -> [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
-				} else {
-					fmt.Printf(" -> [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
-					break
-				}
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	StateMutex.Unlock()
-	fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
+time.Sleep(100 * time.Millisecond)
+continue
 }
-
+if resp.StatusCode != http.StatusOK {
+resp.Body.Close()
+StateMutex.Lock()
+time.Sleep(100 * time.Millisecond)
+continue
+}
+var incomingBatch []Block
+err = json.NewDecoder(resp.Body).Decode(&incomingBatch)
+resp.Body.Close()
+if err != nil || len(incomingBatch) == 0 {
+StateMutex.Lock()
+break
+}
+StateMutex.Lock()
+for _, block := range incomingBatch {
+if block.Index == int64(GetLatestBlockInternal().Index)+1 {
+if ValidateBlockSignatures(block) {
+SaveBlockToStorageInternal(block)
+fmt.Printf(" -> [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
+} else {
+fmt.Printf(" -> [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
+break
+}
+}
+}
+time.Sleep(10 * time.Millisecond)
+}
+StateMutex.Unlock()
+fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
+}
 func ValidateBlockSignatures(b Block) bool {
-	targetPrefix := strings.Repeat("0", b.Difficulty)
-	if !strings.HasPrefix(b.Hash, targetPrefix) {
-		return false
-	}
-	if b.Hash != CalculateHash(b) {
-		return false
-	}
-	if len(b.Transactions) == 0 {
-		return false
-	}
-
-	isBlockValid := true
-	if GlobalBoltEngine != nil {
-		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			bUTXO := dbTx.Bucket([]byte("utxo"))
-			if bUTXO == nil {
-				isBlockValid = false
-				return nil
-			}
-			for txIdx, tx := range b.Transactions {
-				if txIdx == 0 {
-					continue
-				}
-				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
-					isBlockValid = false
-					return nil
-				}
-			}
-			return nil
-		})
-	}
-	if !isBlockValid {
-		return false
-	}
-
-	coinbaseTx := b.Transactions[0]
-
-	var totalCoinbasePayout float64 = 0.0
-	for _, out := range coinbaseTx.Outputs {
-		totalCoinbasePayout += out.Amount
-	}
-
-	targetBlockHeight := int64(b.Index)
-	allowedEmission := CalculateBlockReward(targetBlockHeight)
-
-	if targetBlockHeight > 21024000 {
-		allowedEmission += 5.0
-	}
-
-	if (totalCoinbasePayout - allowedEmission) > 0.00001 {
-		fmt.Printf("🚨 EMISSION BLOCKED: Submitter attempted to claim over-allocated reward block payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedEmission)
-		return false
-	}
-	return true
+targetPrefix := strings.Repeat("0", b.Difficulty)
+if !strings.HasPrefix(b.Hash, targetPrefix) {
+return false
 }
-
+if b.Hash != CalculateHash(b) {
+return false
+}
+if len(b.Transactions) == 0 {
+return false
+}
+isBlockValid := true
+if GlobalBoltEngine != nil {
+_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+bUTXO := dbTx.Bucket([]byte("utxo"))
+if bUTXO == nil {
+isBlockValid = false
+return nil
+}
+for txIdx, tx := range b.Transactions {
+if txIdx == 0 {
+continue
+}
+if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
+isBlockValid = false
+return nil
+}
+}
+return nil
+})
+}
+if !isBlockValid {
+return false
+}
+coinbaseTx := b.Transactions[0]
+var totalCoinbasePayout float64 = 0.0
+for _, out := range coinbaseTx.Outputs {
+totalCoinbasePayout += out.Amount
+}
+targetBlockHeight := int64(b.Index)
+allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
+if targetBlockHeight > 21024000 {
+allowedTotalEmission += 5.0
+}
+// 👑 THE REWARD-SPLITTING CONSENSUS GATEWAY:
+// Verify that the total coinbase output values never exceed our network emission cap.
+if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
+fmt.Printf("🚨 EMISSION BLOCKED: Submitter attempted to claim over-allocated reward block payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
+return false
+}
+// 👑 UNCLE REWARD STRUCTURE AUDITING PASS:
+// If an Uncle Block has been included, verify the 70/30 reward split rule strictly!
+if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" {
+if len(coinbaseTx.Outputs) < 2 {
+fmt.Println("🚨 CONSENSUS REJECTION: Included Uncle hash requires a two-output split Coinbase transaction.")
+return false
+}
+mainMinerPayout := coinbaseTx.Outputs[0].Amount
+uncleMinerPayout := coinbaseTx.Outputs[1].Amount
+expectedMainSplit := allowedTotalEmission * 0.70
+expectedUncleSplit := allowedTotalEmission * 0.30
+if (mainMinerPayout - expectedMainSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) > 0.00001 {
+fmt.Printf("🚨 REJECTION: Invalid GHOST Split parameters. Main Miner received: %f (Expected: %f), Uncle Miner received: %f (Expected: %f)\n", mainMinerPayout, expectedMainSplit, uncleMinerPayout, expectedUncleSplit)
+return false
+}
+}
+return true
+}
 func CalculateHash(b Block) string {
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(tx.ID + "-")
-	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d",
-		b.Index,
-		b.Timestamp,
-		b.PrevHash,
-		txHashStr,
-		int64(b.Difficulty),
-		b.GuardMatrix,
-		b.Nonce,
-	)
-
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
+var txSummaryBuilder strings.Builder
+for _, tx := range b.Transactions {
+txSummaryBuilder.WriteString(tx.ID + "-")
 }
-
+txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+b.Index,
+b.Timestamp,
+b.PrevHash,
+txHashStr,
+int64(b.Difficulty),
+b.GuardMatrix,
+b.Nonce,
+b.UncleHash,  // 👑 INJECT UNCLE SPEC INTO PREIMAGE
+b.UncleMiner, // 👑 INJECT MINER SPEC INTO PREIMAGE
+)
+h := sha256.New()
+h.Write([]byte(inputStr))
+return fmt.Sprintf("%x", h.Sum(nil))
+}
 func ForceBackgroundSyncPass() {}
-
 func GetAddressBalance(address string) float64 {
-	BalanceCacheMutex.RLock()
-	defer BalanceCacheMutex.RUnlock()
-	if val, exists := StateBalanceCache[address]; exists {
-		return val
-	}
-	return 0.0
+BalanceCacheMutex.RLock()
+defer BalanceCacheMutex.RUnlock()
+if val, exists := StateBalanceCache[address]; exists {
+return val
 }
-
+return 0.0
+}
 const MaxTotalSupplyCap = 2100000000.0
-
 func GetCurrentCirculatingSupply() float64 {
-	StateMutex.RLock()
-	latestBlock := GetLatestBlockInternal()
-	StateMutex.RUnlock()
-	height := latestBlock.Index
-	var calculatedSupply float64 = 0.0
-	var processedBlocks int64 = 0
-	if height > 5256000 {
-		calculatedSupply += 5256000 * 50.0
-		processedBlocks = 5256000
-	} else {
-		calculatedSupply += float64(height) * 50.0
-		return calculatedSupply
-	}
-	if height > 10512000 {
-		calculatedSupply += (10512000 - 5256000) * 25.0
-		processedBlocks = 10512000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 25.0
-		return calculatedSupply
-	}
-	if height > 15768000 {
-		calculatedSupply += (15768000 - 10512000) * 12.5
-		processedBlocks = 15768000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 12.5
-		return calculatedSupply
-	}
-	if height > 21024000 {
-		calculatedSupply += (21024000 - 15768000) * 6.25
-		processedBlocks = 21024000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 6.25
-		return calculatedSupply
-	}
-	if calculatedSupply > MaxTotalSupplyCap {
-		return MaxTotalSupplyCap
-	}
-	return calculatedSupply
+StateMutex.RLock()
+latestBlock := GetLatestBlockInternal()
+StateMutex.RUnlock()
+height := latestBlock.Index
+var calculatedSupply float64 = 0.0
+var processedBlocks int64 = 0
+if height > 5256000 {
+calculatedSupply += 5256000 * 50.0
+processedBlocks = 5256000
+} else {
+calculatedSupply += float64(height) * 50.0
+return calculatedSupply
+}
+if height > 10512000 {
+calculatedSupply += (10512000 - 5256000) * 25.0
+processedBlocks = 10512000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 25.0
+return calculatedSupply
+}
+if height > 15768000 {
+calculatedSupply += (15768000 - 10512000) * 12.5
+processedBlocks = 15768000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 12.5
+return calculatedSupply
+}
+if height > 21024000 {
+calculatedSupply += (21024000 - 15768000) * 6.25
+processedBlocks = 21024000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 6.25
+return calculatedSupply
+}
+if calculatedSupply > MaxTotalSupplyCap {
+return MaxTotalSupplyCap
+}
+return calculatedSupply
 }

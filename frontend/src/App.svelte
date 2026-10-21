@@ -2,21 +2,21 @@
 	import { onMount } from 'svelte';
 	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit } from '../wailsjs/wailsjs/go/main/App.js';
 
-	let localHeight = \$state(0);
-	let globalTip = \$state(0); 
-	let blockHash = \$state("FETCHING_MAINNET_EPOCH_SIGNATURE_MATRIX...");
-	let activeWallet = \$state("SECURE_IDENTITY_PROFILE_UNTETHERED");
-	let walletBalance = \$state(0.00);
+	let localHeight = $state(0);
+	let globalTip = $state(0); 
+	let blockHash = $state("FETCHING_MAINNET_EPOCH_SIGNATURE_MATRIX...");
+	let activeWallet = $state("SECURE_IDENTITY_PROFILE_UNTETHERED");
+	let walletBalance = $state(0.00);
 
-	let txRecipient = \$state("");
-	let txAmount = \$state("");
-	let txFee = \$state("0.01");
-	let txStatusMessage = \$state("");
+	let txRecipient = $state("");
+	let txAmount = $state("");
+	let txFee = $state("0.01");
+	let txStatusMessage = $state("");
 
-	let syncPercentage = \$derived(
+	let syncPercentage = $derived(
 		globalTip > 0 ? Math.min(100, Math.floor((localHeight / globalTip) * 100)) : 0
 	);
-	let isSynced = \$derived(globalTip > 0 && localHeight >= globalTip);
+	let isSynced = $derived(globalTip > 0 && localHeight >= globalTip);
 
 	async function updateNodeTelemetry() {
 		try {
