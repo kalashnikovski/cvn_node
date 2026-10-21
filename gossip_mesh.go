@@ -211,62 +211,67 @@ func handleIncomingPeerStream(conn net.Conn) {
 	}
 }
 
-// ProcessIncomingWireBlockWithDelay coordinates the 250ms GHOST lock-in selection buffer path natively
+// ProcessIncomingWireBlockWithDelay handles incoming block packets deterministically 
+// the microsecond they arrive, completely eliminating the asynchronous timer race condition!
 func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
 	}
 
-	BlockBufferMutex.Lock()
-	ActiveBlockBuffer = append(ActiveBlockBuffer, incomingBlock)
-	
-	if IsBufferTimerRunning {
-		BlockBufferMutex.Unlock()
-		return
-	}
-	
-	IsBufferTimerRunning = true
-	BlockBufferMutex.Unlock()
+	StateMutex.Lock()
+	currentTip := GetLatestBlockInternal()
+	StateMutex.Unlock()
 
-	// 🛰️ THE 250ms MEMPOOL LOCK-IN SELECTION WINDOW:
-	// Yield the processing pipeline briefly to allow slower cross-ocean residential packets to arrive!
-	time.Sleep(250 * time.Millisecond)
+	// 👑 THE DETERMINISTIC SELECTION ENGINE:
+	// If the incoming block matches our current height tip exactly, we are in a block race!
+	if incomingBlock.Index == currentTip.Index + 1 {
+		// Evaluate the structural wire hash parameters natively
+		if incomingBlock.PrevHash != currentTip.Hash {
+			// Out of sync chain link packet; trigger standard recovery catch-up rules
+			go TriggerActiveReSyncPass()
+			return
+		}
 
-	BlockBufferMutex.Lock()
-	defer func() {
-		ActiveBlockBuffer = []Block{}
-		IsBufferTimerRunning = false
-		BlockBufferMutex.Unlock()
-	}()
-	
-	if len(ActiveBlockBuffer) == 0 {
+		// Save the block cleanly to our storage partition lanes
+		if SaveBlockToStorage(incomingBlock) {
+			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+			go BroadcastNewBlock(incomingBlock)
+		}
 		return
 	}
 
-	// Group and select candidate streams matching current network heights
-	winningBlock := ActiveBlockBuffer[0]
-	for _, candidate := range ActiveBlockBuffer {
-		if candidate.Index == winningBlock.Index {
-			// 👑 GAME-THEORY EQUILIBRIUM: Force the winning block selection to lock strictly onto
-			// the lowest cryptographic hash string value, completely neutralizing physical fiber advantage!
-			if candidate.Hash < winningBlock.Hash {
-				winningBlock = candidate
-			}
+	// 👑 THE UNCLE BLOCK ACCUMULATION GATEWAY:
+	// If we receive a competing block for the exact SAME height we already committed to disk,
+	// do not fork! Instead, analyze if it qualifies as a valid alternate Uncle block.
+	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
+		// Verify that the competing block shares the same historical parent lineage
+		if incomingBlock.PrevHash == currentTip.PrevHash {
+			fmt.Printf("🛰️  [UNCLE RECOGNIZED] Capturing late competing block hash %s for height %d\n", incomingBlock.Hash[:16], incomingBlock.Index)
+			
+			// Open up a read/write transaction block to safely append Uncle parameters to our current tip
+			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+				bBlocks := tx.Bucket(blocksBucket)
+				if bBlocks == nil { return nil }
+				
+				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
+				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
+					currentTip.UncleHash = incomingBlock.Hash
+					currentTip.UncleMiner = incomingBlock.Transactions[0].Witness
+					
+					updatedData, err := json.Marshal(currentTip)
+					if err == nil {
+						_ = bBlocks.Put([]byte(paddedKey), updatedData)
+						fmt.Println("👑 [GHOST CONSENSUS SECURED] Uncle block metrics permanently written to disk bucket!")
+					}
+				}
+				return nil
+			})
 		}
+		return
 	}
 
-	// Chronologically look for secondary valid blocks solved for that same height to attach as an Uncle block
-	for _, candidate := range ActiveBlockBuffer {
-		if candidate.Index == winningBlock.Index && candidate.Hash != winningBlock.Hash {
-			// Extract and preserve the secondary home miner's identity signature context hash
-			winningBlock.UncleHash = candidate.Hash
-			winningBlock.UncleMiner = candidate.Transactions[0].Outputs[0].Recipient
-			break
-		}
-	}
-
-	// Route the finalized, unified block parameter package directly to your main verification core
-	ProcessIncomingNetworkBlock(winningBlock)
+	// Fallback pass: Route all other generic block parameters to the core processor
+	ProcessIncomingNetworkBlock(incomingBlock)
 }
 
 func BroadcastNewBlock(block Block) {
