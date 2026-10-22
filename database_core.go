@@ -23,12 +23,7 @@ func InitBoltEngine() {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 
-	// 👑 THE MASTER CONSENSUS UNIFICATION:
-	// Enforce that the network engine ALWAYS binds strictly to 'cvn_mainnet.db' uniformly
-	// across all platforms, whether running under Wails GUI wrappers or headless cloud VPS instances.
-	// This ensures both the P2P Gossip loops and HTTP Sync loops read/write to the exact same file handle!
 	targetDatabaseName := "cvn_mainnet.db"
-
 	dbPath := filepath.Join(".", targetDatabaseName)
 	fmt.Println("====================================================================")
 	fmt.Println("📂 HARDWARE FILE EXPLORER AUDIT INITIALIZED")
@@ -37,7 +32,6 @@ func InitBoltEngine() {
 	absPath, _ := filepath.Abs(dbPath)
 	fmt.Printf("🎯 TARGET DATABASE FILE LOCATION:  %s\n\n", absPath)
 
-	// Open with standard shared read/write flags to allow concurrent P2P mesh modifications
 	options := bbolt.Options{
 		Timeout:      5 * time.Second,
 		NoGrowSync:   false,
@@ -57,10 +51,6 @@ func InitBoltEngine() {
 		_, _ = tx.CreateBucketIfNotExists(jubileeVaultBucket)
 
 		if meta.Get([]byte("height")) == nil {
-			// 👑 THE CRYPTOGRAPHIC GENESIS ANCHOR:
-			// Explicitly populate the genesis transaction array with an immutable baseline record.
-			// This forces all platform string builders to compute identical parent preimage digests,
-			// permanently stopping the instant cross-platform fork split on Block #1!
 			genesisBlock := Block{
 				Index:        0,
 				Timestamp:    1790640000,
@@ -93,7 +83,6 @@ func InitBoltEngine() {
 			_ = meta.Put([]byte("height"), []byte(paddedKey))
 			
 			fmt.Println("🌱 [GENESIS MATRIX SECURELY SEEDED] Physical Block #0 written directly to disk.")
-			fmt.Println("🪙 [FAIR LAUNCH MANDATE ENFORCED] Zero token pre-mine established. UTXO database is pristine.")
 		}
 		return nil
 	})
@@ -149,6 +138,7 @@ func GetLatestBlockInternal() Block {
 	})
 	return latestBlock
 }
+
 func SaveBlockToStorage(block Block) bool {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
@@ -168,15 +158,11 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return fmt.Errorf("required consensus partitions are missing")
 		}
 
-		// 👑 THE UN-FORKABLE CONSENSUS FIREWALL GATE:
-		// Lock validation evaluation strictly past loop index slot 0. This strips out 
-		// brittle string prefix checks and securely handles incoming Linux mining headers!
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx == 0 {
 				continue 
 			}
 			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
-				fmt.Printf("🚨 SECURITY WARNING: Fraudulent transaction '%s' detected inside candidate block #%d! Aborting disk commitment.\n", txPayload.ID, block.Index)
 				return fmt.Errorf("transaction verification failed for txID: %s", txPayload.ID)
 			}
 		}
@@ -190,12 +176,11 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		// 👑 THE MASTER CONCURRENT MUTATION LOCK:
-		// Encapsulate balance memory mapping changes within strict mtx blocks to prevent
-		// multi-threaded database cursor writes from corrupting the display outputs.
 		BalanceCacheMutex.Lock()
+		defer BalanceCacheMutex.Unlock()
 		
-		// 👑 THE MASTER UNIFIED UTXO MATRICES RECUPERATOR:
+		// 👑 OPTIMIZED TRANS-LATENCY LEDGER TRACKER:
+		// Cleanly processes spends and rewards past position zero without duplicating array entries!
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx != 0 {
 				for _, input := range txPayload.Inputs {
@@ -206,27 +191,18 @@ func SaveBlockToStorageInternal(block Block) bool {
 
 			for outIdx, output := range txPayload.Outputs {
 				compoundOutputKey := fmt.Sprintf("%s_%d", txPayload.ID, outIdx)
-				
 				utxoRecord := UTXORecord{
 					Amount:    output.Amount,
 					Recipient: output.Recipient,
 				}
 				
-				utxoData, err := json.Marshal(utxoRecord)
-				if err != nil {
-					BalanceCacheMutex.Unlock()
-					return err
-				}
+				utxoData, _ := json.Marshal(utxoRecord)
 				_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
 			}
 		}
-		BalanceCacheMutex.Unlock()
-		// 👑 THE CORE ASYNCHRONOUS P2P MESH DISPATCHER:
-		// Automatically broadcast the block bytes over the wire mesh the exact millisecond 
-		// the physical database disk transaction commits successfully, bypassing terminal queues!
+
 		if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
 			go func(b Block) {
-				// Prevent loop-back broadcast feedback to safe seeds
 				jsonBytes, err := json.Marshal(b)
 				if err == nil {
 					payload := fmt.Sprintf("BLOCK_BROADCAST:%s\n", string(jsonBytes))
@@ -243,8 +219,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 	}
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
-	
-	// Forcefully trigger a synchronized read-and-write state caching update pass 
 	RebuildStateBalanceCacheInternal()
 	return true
 }
@@ -314,4 +288,3 @@ func GetAddressBlockCountFromLedger(address string) int64 {
 	defer StateMutex.RUnlock()
 	return GetLatestBlockInternal().Index
 }
-

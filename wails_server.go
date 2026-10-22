@@ -11,7 +11,6 @@ func RunDesktopUIFrameworkIfApplicable() {
 	fmt.Println("📡 COVENANT STANDARD (CVN) NATIVE HEADLESS SERVER CORE ENGAGED     ")
 	fmt.Println("====================================================================")
 
-	// Aggressively parse and bind command-line arguments on platform ingress
 	minerAddrFlag := flag.String("miner-address", "", "Target mining output CVN address")
 	connectFlag := flag.String("connect", "", "Bootstrap network HTTP sync gateway endpoint")
 	flag.Parse()
@@ -25,9 +24,11 @@ func RunDesktopUIFrameworkIfApplicable() {
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
 	}
 
-	// 👑 THE CORE REPAIR: Ignite the P2P Gossip mesh engine asynchronously (go)!
-	// This ensures the thread never freezes, allowing the execution track to fall
-	// straight down into your native main.go logging dashboard loop automatically!
+	// 👑 THE CRITICAL DATA MOUNT:
+	// Force the headless execution path to initialize the BoltDB ledger core right on boot!
+	// This populates your database bucket contexts and connects the global pointer hooks cleanly.
+	InitBoltEngine()
+
 	go StartMeshNetwork()
 
 	fmt.Println("⚙️  [IGNITION] Streaming core parameters down into main dashboard metrics...")
