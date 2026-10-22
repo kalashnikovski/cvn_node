@@ -548,10 +548,6 @@ func main() {
 				time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
 			}
 			
-			const TargetBlockTimeWindow = 45
-			blockMiningStartTime := time.Now().Unix()
-
-			StateMutex.RLock()
 			// ====================================================================
 			// 👑 THE PRODUCTION-GRADE BUILT-FROM-SCRATCH ASYNC MINING CORE
 			// ====================================================================
@@ -579,7 +575,6 @@ func main() {
 			StateMutex.RUnlock()
 
 			targetPrefix := strings.Repeat("0", targetDifficulty)
-			blockSolved := false
 			var guardMatrixPlaceholder = ""
 			
 			allowedTotalEmission := CalculateBlockReward(nextIndex)
@@ -616,10 +611,10 @@ func main() {
 
 			for nonce < chunkCeiling {
 				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
-					blockSolved = false
 					break 
 				}
 
+				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
@@ -651,7 +646,6 @@ func main() {
 					
 					_, err := json.Marshal(newBlock)
 					if err != nil {
-						blockSolved = false
 						break
 					}
 
@@ -660,11 +654,8 @@ func main() {
 						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
 						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 						logMutex.Unlock()
-						
-						blockSolved = true
 						break
 					} else {
-						blockSolved = false
 						break
 					}
 				}
@@ -778,45 +769,47 @@ func main() {
 			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
 			fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
 			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
-fmt.Println("================================================================================")
-fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
-fmt.Println("--------------------------------------------------------------------------------")
-logMutex.Lock()
-fmt.Print("\033[J")
-if len(liveTerminalEventLogs) > 0 {
-for _, event := range liveTerminalEventLogs {
-fmt.Println(event)
-}
-if len(liveTerminalEventLogs) > 12 {
-liveTerminalEventLogs = liveTerminalEventLogs[1:]
-}
-} else {
-fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
-}
-logMutex.Unlock()
-os.Stdout.Sync()
-}
-}
-}
-func osCheckArgs() []string { return os.Args }
-func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	currentDiff := int(lastBlock.Difficulty)
-	if lastBlock.Index < 1000 {
-		return 4
-	}
-	expectedTargetWindow := int64(45)
-	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed <= 0 {
-		return currentDiff
-	}
-	if actualTimeElapsed < expectedTargetWindow {
-		return currentDiff + 1
-	}
-	if actualTimeElapsed > expectedTargetWindow {
-		if currentDiff > 1 {
-			return currentDiff - 1
+			fmt.Println("================================================================================")
+			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+			fmt.Println("--------------------------------------------------------------------------------")
+			logMutex.Lock()
+			fmt.Print("\033[J")
+			if len(liveTerminalEventLogs) > 0 {
+				for _, event := range liveTerminalEventLogs {
+					fmt.Println(event)
+				}
+				if len(liveTerminalEventLogs) > 12 {
+					liveTerminalEventLogs = liveTerminalEventLogs[1:]
+				}
+			} else {
+				fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+			}
+			logMutex.Unlock()
+			os.Stdout.Sync()
 		}
-		return 1
 	}
-	return currentDiff
+}
+
+func osCheckArgs() []string { return os.Args }
+
+func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
+currentDiff := int(lastBlock.Difficulty)
+if lastBlock.Index < 1000 {
+return 4
+}
+expectedTargetWindow := int64(45)
+actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+if actualTimeElapsed <= 0 {
+return currentDiff
+}
+if actualTimeElapsed < expectedTargetWindow {
+return currentDiff + 1
+}
+if actualTimeElapsed > expectedTargetWindow {
+if currentDiff > 1 {
+return currentDiff - 1
+}
+return 1
+}
+return currentDiff
 }
