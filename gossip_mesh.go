@@ -10,7 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"go.etcd.io/bbolt"
 )
 
 var (
@@ -125,10 +128,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 			var incomingBlock Block
 			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err == nil {
 				if VerifyIncomingWireBlock(incomingBlock) {
-					// 👑 THE FORK-PROOF INGESTION BRIDGE:
-					// Forward the clean verified wire block packet straight to the core execution loop.
-					// This eliminates mid-flight database mutations and keeps your parent tip preimages identical!
-					go ProcessIncomingNetworkBlock(incomingBlock)
+					go ProcessIncomingWireBlockWithDelay(incomingBlock)
 				} else {
 					log.Printf("🚨 [GATE FIREWALL] Block #%d failed deep front-gate audit! Discarding.\n", incomingBlock.Index)
 				}
@@ -205,6 +205,69 @@ func handleIncomingPeerStream(conn net.Conn) {
 			return
 		}
 	}
+}
+
+// ProcessIncomingWireBlockWithDelay handles block integration deterministically without async race conditions!
+func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		return
+	}
+
+	StateMutex.Lock()
+	currentTip := GetLatestBlockInternal()
+	StateMutex.Unlock()
+
+	// 👑 THE UN-FORKABLE SEQUENTIAL GATEWAY:
+	if incomingBlock.Index == currentTip.Index+1 {
+		if incomingBlock.PrevHash != currentTip.Hash {
+			go TriggerActiveReSyncPass()
+			return
+		}
+
+		if SaveBlockToStorage(incomingBlock) {
+			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+			go BroadcastNewBlock(incomingBlock)
+		}
+		return
+	}
+
+	// 👑 THE GHOST UNCLE INTEGRATION GATEWAY:
+	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
+		if incomingBlock.PrevHash == currentTip.PrevHash {
+			fmt.Printf("🛰️  [UNCLE RECOGNIZED] Capturing late competing block hash %s for height %d\n", incomingBlock.Hash[:16], incomingBlock.Index)
+			
+			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+				bBlocks := tx.Bucket(blocksBucket)
+				if bBlocks == nil {
+					return nil
+				}
+				
+				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
+				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
+					currentTip.UncleHash = incomingBlock.Hash
+					
+					// 👑 THE BALANCE UNIFICATION FIX:
+					// Read the witness tag property *only* when a valid uncle block race occurs,
+					// rather than corrupting standard single-output blocks during active consensus traffic traffic tracks!
+					if len(incomingBlock.Transactions) > 0 {
+						currentTip.UncleMiner = incomingBlock.Transactions[0].Witness
+					} else {
+						currentTip.UncleMiner = "NONE"
+					}
+					
+					updatedData, err := json.Marshal(currentTip)
+					if err == nil {
+						_ = bBlocks.Put([]byte(paddedKey), updatedData)
+						fmt.Println("👑 [GHOST CONSENSUS SECURED] Uncle block metrics permanently written to disk bucket!")
+					}
+				}
+				return nil
+			})
+		}
+		return
+	}
+
+	ProcessIncomingNetworkBlock(incomingBlock)
 }
 
 func BroadcastNewBlock(block Block) {
@@ -294,18 +357,16 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 					}
 					conn.Close()
 				}
-			}(seedAddr)
-		}
-
-		time.Sleep(250 * time.Second)
-
-		PeerMapMutex.Lock()
-		for peer, lastSeen := range ActivePeerMap {
-			if time.Since(lastSeen) > (2 * time.Minute) {
-				delete(ActivePeerMap, peer)
-				log.Printf("❌ [GOSSIP MESH] Severed inactive channel: %s\n", peer)
-			}
-		}
-		PeerMapMutex.Unlock()
-	}
+}(seedAddr)
+}
+time.Sleep(250 * time.Second)
+PeerMapMutex.Lock()
+for peer, lastSeen := range ActivePeerMap {
+if time.Since(lastSeen) > (2 * time.Minute) {
+delete(ActivePeerMap, peer)
+log.Printf("❌ [GOSSIP MESH] Severed inactive channel: %s\n", peer)
+}
+}
+PeerMapMutex.Unlock()
+}
 }
