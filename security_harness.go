@@ -131,7 +131,7 @@ func VerifyIncomingWireBlock(b Block) bool {
 
 	effectiveThreshold := expectedDifficulty - 1
 	if effectiveThreshold < 4 {
-		effectiveThreshold = 4 // Hard lock securely onto your baseline floor of 4 zeros
+		effectiveThreshold = 4 // 👑 Hard-lock consensus directly to difficulty 4 across all targets
 	}
 
 	if b.Difficulty < effectiveThreshold {

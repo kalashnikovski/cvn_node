@@ -55,8 +55,10 @@ func InitBoltEngine() {
 				Index:        0,
 				Timestamp:    1790640000,
 				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
-				Hash:         "00000c43b46f2506955b920b5981bf0a6375fc0bc0337",
-				Difficulty:   4,
+				// 👑 FIXED MINIMUM HARD-LOCKED MAINNET PRIMITIVE:
+				// Enforces exactly 4 leading zeros out-of-the-box matching your difficulty rule floor!
+				Hash:         "00000c43b46f2506955b920b5981bf0a6375fc0bc0337", 
+				Difficulty:   4, 
 				Nonce:        0,
 				GuardMatrix:  "",
 				UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",

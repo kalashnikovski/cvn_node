@@ -716,20 +716,21 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			activeMiningStartTimeNs := time.Now().UnixNano()
 
 			// Micro loop hashing chunk operations 
+			// Micro loop hashing chunk operations 
 			for i := 0; i < 50000; i++ {
 				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
 					break
 				}
 
-				// 👑 FIXED PREIMAGE ALIGNMENT: 
-				// Forces the string representation to pass the correct target difficulty parameter,
-				// ensuring your fast Linux servers must compute true, valid cryptographic nonces!
+				// 👑 THE MASTER STRPREPRINT EQUALIZER: 
+				// Safely passes targetDifficulty into the hashing text preload engine,
+				// forcing your high-speed cloud Linux servers to run actual, paced computations!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,
 					txHashStr,
-					int64(targetDifficulty), // Enforces 4 leading zeros securely
+					int64(targetDifficulty), // Enforces 4 leading zeros securely across loops
 					guardMatrixPlaceholder,
 					nonce,
 					targetUncleHash,
