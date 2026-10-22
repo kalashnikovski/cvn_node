@@ -358,7 +358,7 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 			}(seedAddr)
 		}
 
-		time.Sleep(500 * time.Second)
+		time.Sleep(300 * time.Second)
 
 		PeerMapMutex.Lock()
 		for peer, lastSeen := range ActivePeerMap {
