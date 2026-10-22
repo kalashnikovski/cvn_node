@@ -622,9 +622,9 @@ func main() {
 				}
 
 				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
-				// Reconstruct the exact string format expected by your blockchain_core.go file.
-				// This includes the explicit type-cast int64(targetDifficulty) alongside default 
-				// uHash and uMiner fields inside the active hashing loop for perfect cross-platform parity!
+				// This matches your blockchain_core.go CalculateHash function layout perfectly, 
+				// positioning the nonce exactly seventh before the uncle fallbacks to ensure 
+				// absolute, cross-platform validation harmony!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
@@ -632,7 +632,7 @@ func main() {
 					txHashStr,
 					int64(targetDifficulty),
 					guardMatrixPlaceholder,
-					nonce,
+					nonce, // 👑 Positioned 7th cleanly matching blockchain_core.go
 					targetUncleHash,
 					targetUncleMiner,
 				)
@@ -642,8 +642,6 @@ func main() {
 				
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
 					// 👑 THE UN-FORKABLE STRUCTURAL PARITY LOCK:
-					// Enforce strict explicit value assignments matching both the internal 
-					// pointer properties and the explicit JSON schema definitions identically!
 					newBlock := Block{
 						Index:        nextIndex,
 						Timestamp:    simulatedTime,
@@ -679,7 +677,6 @@ func main() {
 				}
 				
 				// 👑 THE CORE CPU THROTTLER:
-				// Momentarily yield core tracks every 100,000 steps to protect home mining parity bounds.
 				if nonce % 100000 == 0 {
 					runtime.Gosched()
 					time.Sleep(1 * time.Microsecond)
