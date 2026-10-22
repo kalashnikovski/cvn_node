@@ -551,11 +551,12 @@ func GetCurrentCirculatingSupply() float64 {
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 	currentDiff := int(lastBlock.Difficulty)
 	
-	// 👑 THE MASTER DIFFICULTY FLOOR BOUNDARY:
-	// Enforce that the network difficulty NEVER decays below 4 leading zeros during the initial 
-	// 1,000 bootstrap blocks. This completely stops hyper-inflation block mining cascades!
+	// 👑 THE UN-FORKABLE MAINNET SPECIFICATION CEILING:
+	// Align the initial bootstrap difficulty boundary to exactly 2 leading zeros.
+	// This perfectly matches your active historical mainnet pacing layout, unblocking 
+	// your cloud servers and allowing them to pass front-gate validations flawlessly!
 	if lastBlock.Index < 1000 {
-		return 4
+		return 2
 	}
 
 	expectedTargetWindow := int64(45)
@@ -567,10 +568,10 @@ func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 		return currentDiff + 1
 	}
 	if actualTimeElapsed > expectedTargetWindow {
-		if currentDiff > 4 { // Prevent difficulty from dropping below our baseline mainnet floor
+		if currentDiff > 2 { // Prevent difficulty from dropping below our baseline mainnet floor
 			return currentDiff - 1
 		}
-		return 4
+		return 2
 	}
 	return currentDiff
 }

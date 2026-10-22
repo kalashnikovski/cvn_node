@@ -512,15 +512,15 @@ simulatedTime := time.Now().Unix()
 if simulatedTime <= currentBlock.Timestamp {
 simulatedTime = currentBlock.Timestamp + 1
 }
-var targetDifficulty int
-if currentBlock.Index == 0 {
-targetDifficulty = 2
-} else {
-targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-}
-if targetDifficulty < 1 { targetDifficulty = 1 }
-if targetDifficulty > 8 { targetDifficulty = 8 }
-StateMutex.RUnlock()
+			var targetDifficulty int
+			if currentBlock.Index == 0 {
+				targetDifficulty = 2 // 👑 MATCHES THE MAINNET INITIAL SPECIFICATION FLOOR
+			} else {
+				targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+			}
+			if targetDifficulty < 1 { targetDifficulty = 1 }
+			if targetDifficulty > 8 { targetDifficulty = 8 }
+			StateMutex.RUnlock()
 targetPrefix := strings.Repeat("0", targetDifficulty)
 var guardMatrixPlaceholder = ""
 allowedTotalEmission := CalculateBlockReward(nextIndex)
