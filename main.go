@@ -818,23 +818,23 @@ os.Stdout.Sync()
 }
 func osCheckArgs() []string { return os.Args }
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-currentDiff := int(lastBlock.Difficulty)
-if lastBlock.Index < 1000 {
-return 4
-}
-expectedTargetWindow := int64(45)
-actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-if actualTimeElapsed <= 0 {
-return currentDiff
-}
-if actualTimeElapsed < expectedTargetWindow {
-return currentDiff + 1
-}
-if actualTimeElapsed > expectedTargetWindow {
-if currentDiff > 1 {
-return currentDiff - 1
-}
-return 1
-}
-return currentDiff
+	currentDiff := int(lastBlock.Difficulty)
+	if lastBlock.Index < 1000 {
+		return 4
+	}
+	expectedTargetWindow := int64(45)
+	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+	if actualTimeElapsed <= 0 {
+		return currentDiff
+	}
+	if actualTimeElapsed < expectedTargetWindow {
+		return currentDiff + 1
+	}
+	if actualTimeElapsed > expectedTargetWindow {
+		if currentDiff > 1 {
+			return currentDiff - 1
+		}
+		return 1
+	}
+	return currentDiff
 }
