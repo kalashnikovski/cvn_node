@@ -129,6 +129,7 @@ func main() {
 
 			if r.URL.Path == "/addresses" {
 				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
 				
 				// 👑 THE MASTER ADDRESS CACHE LOCK:
 				// Read strictly out of your persistent StateBalanceCache map.
