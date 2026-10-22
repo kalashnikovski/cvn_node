@@ -21,9 +21,6 @@ func RunDesktopUIFrameworkIfApplicable() {
 		CustomMinerAddress = *minerAddrFlag
 	}
 
-	// 👑 THE WINDOWS-TO-LINUX PLATFORM BRIDGE:
-	// If no explicit address was passed via CLI flags, automatically check for or 
-	// generate a unique server identity profile right on disk to prevent loopback collisions!
 	if CustomMinerAddress == "" {
 		configFileBytes, err := os.ReadFile("miner_config.json")
 		if err == nil {
@@ -50,8 +47,15 @@ func RunDesktopUIFrameworkIfApplicable() {
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
 	}
 
+	// Ignite your core P2P Gossip mesh channels asynchronously
 	go StartMeshNetwork()
 
-	fmt.Println("⚙️  [IGNITION] Streaming core parameters down into main dashboard metrics...")
+	fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
 	fmt.Println("--------------------------------------------------------------------")
+	
+	// 👑 THE MASTER CONVERGENCE ANCHOR:
+	// Yield execution directly to an infinite blocking thread hold block right here!
+	// This permanently locks your headless server thread inside this file, stopping it 
+	// from ever falling into main.go to spawn duplicate network layers or corrupt difficulty targets!
+	select {}
 }

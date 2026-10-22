@@ -132,7 +132,7 @@ func main() {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				
 				// 👑 THE MASTER ADDRESS CACHE LOCK:
-				// Read strictly out of your persistent StateBalanceCache map.
+				// Read strictly out of your valid, persistent StateBalanceCache map.
 				// This completely eliminates loop double-counting and displays true yields!
 				BalanceCacheMutex.RLock()
 				activeWallets := make(map[string]float64)
