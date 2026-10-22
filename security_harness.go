@@ -113,9 +113,22 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 
+	// 👑 THE MASTER CONSENSUS GUARD:
+	// Calculate what the difficulty SHOULD be based on our local database history.
+	// If an incoming block attempts to use a lower fake difficulty, drop it instantly!
+	StateMutex.RLock()
+	expectedDifficulty := CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
+	StateMutex.RUnlock()
+
+	if b.Difficulty < expectedDifficulty {
+		fmt.Printf("🚨 REJECTION: Incoming block #%d uses fake difficulty %d (Expected: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
+		return false
+	}
+
 	if GlobalBoltEngine == nil {
 		return false
 	}
+    // ... rest of bbolt bucket iteration loop continues cleanly
 
 	isBlockValid := true
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {

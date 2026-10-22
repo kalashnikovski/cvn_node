@@ -44,6 +44,7 @@ func clearTerminalNatively() {
 }
 
 func initWindowsAnsi() {}
+
 func main() {
 	initWindowsAnsi()
 
@@ -112,6 +113,7 @@ func main() {
 	if CustomMinerAddress == "" {
 		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
 	}
+
 	go func() {
 		winMux := http.NewServeMux()
 
@@ -128,6 +130,9 @@ func main() {
 			if r.URL.Path == "/addresses" {
 				w.Header().Set("Content-Type", "application/json")
 				
+				// 👑 THE MASTER ADDRESS CACHE LOCK:
+				// Read strictly out of your persistent StateBalanceCache map.
+				// This completely eliminates loop double-counting and displays true yields!
 				BalanceCacheMutex.RLock()
 				activeWallets := make(map[string]float64)
 				for addr, bal := range StateBalanceCache {
@@ -136,26 +141,6 @@ func main() {
 					}
 				}
 				BalanceCacheMutex.RUnlock()
-
-				// 👑 THE MULTI-OUTPUT LEDGER MATRIX RE-INDEXER:
-				// Force the explorer engine to scan through ALL outputs inside the coinbase transaction array.
-				// This guarantees that Sparks' 20% Uncle block splits are captured and displayed live on your website!
-				StateMutex.RLock()
-				currentHeightIndex := GetLatestBlockInternal().Index
-				StateMutex.RUnlock()
-
-				for h := int64(0); h <= currentHeightIndex; h++ {
-					historicalBlock := GetBlockByHeightFromDB(h)
-					if len(historicalBlock.Transactions) > 0 {
-						coinbaseTx := historicalBlock.Transactions[0]
-						// Safely parse through every single output slice inside the block reward block
-						for _, output := range coinbaseTx.Outputs {
-							if output.Amount > 0 {
-								activeWallets[output.Recipient] += output.Amount
-							}
-						}
-					}
-				}
 
 				json.NewEncoder(w).Encode(activeWallets)
 				return
@@ -412,382 +397,309 @@ func main() {
 			}
 		}
 	}()
-
-	RunDesktopUIFrameworkIfApplicable()
-	go StartMeshNetwork()
-	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
-	seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
-	
-	for i, arg := range os.Args {
-		if arg == "--connect" && i+1 < len(os.Args) {
-			customTargetIP := os.Args[i+1]
-			if !strings.HasPrefix(customTargetIP, "http://") { 
-				customTargetIP = "http://" + customTargetIP 
-			}
-			seedGateways = []string{customTargetIP}
-		}
-	}
-
-	lastRenderTime := time.Now()
-
-	for {
-		StateMutex.RLock()
-		liveBlock := GetLatestBlockInternal()
-		StateMutex.RUnlock()
-		
-		currentLocalHeight := int64(liveBlock.Index)
-		var targetGlobalTip int64 = 0
-		var activeSyncSeed string = ""
-
-		// 👑 THE MASTER SEED CLOUD SYNC UNBLOCKER:
-		// Dynamically read out your server endpoints and block your local node from trying to 
-		// handshake with itself over the wire, stopping the Singapore sync freeze instantly!
-		for _, endpoint := range seedGateways {
-			if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" { 
-				continue 
-			}
-			if strings.Contains(endpoint, "207.148.67.11") && os.Getenv("CVN_RELAY_ONLY") == "1" {
-				continue // 🚀 Breaks the Singapore loopback sync deadlock!
-			}
-			
-			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
-			if remoteHeight > targetGlobalTip {
-				targetGlobalTip = remoteHeight
-				activeSyncSeed = endpoint
-			}
-		}
-
-		if targetGlobalTip <= 0 || currentLocalHeight >= targetGlobalTip || activeSyncSeed == "" { 
-			break 
-		}
-
-		// 👑 THE STATIC BULK SYNC SAFETY STATE LOCK:
-		// Explicitly flag the sync state tracker to hold open file transaction parameters.
-		// This pauses all mining background solvers entirely, stopping race conditions!
-		atomic.StoreInt32(&IsSyncingActive, 1)
-
-		nextBlockNeed := currentLocalHeight + 1
-		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed)
-		client := &http.Client{Timeout: 3 * time.Second}
-		resp, err := client.Get(requestURL)
-		if err == nil {
-			if resp.StatusCode == http.StatusOK {
-				var incomingBatch []Block
-				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
-					for _, incomingBlock := range incomingBatch {
-						StateMutex.RLock()
-						currentHeightCheck := GetLatestBlockInternal().Index
-						StateMutex.RUnlock()
-						
-						if incomingBlock.Index == int64(currentHeightCheck)+1 {
-							// 👑 THE MASTER CONSENSUS ALIGNMENT FILTER:
-							// Force explicit fallback strings inside the bulk sync ingestion pass.
-							// This guarantees that downloaded blocks match your live mining preimage
-							// formats perfectly, completely destroying the post-sync fork split!
-							if incomingBlock.UncleHash == "" {
-								incomingBlock.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
-							}
-							if incomingBlock.UncleMiner == "" {
-								incomingBlock.UncleMiner = "NONE"
-							}
-
-							SaveBlockToStorage(incomingBlock)
-							currentLocalHeight = incomingBlock.Index
-						}
-					}
-				}
-			}
-			resp.Body.Close()
-		}
-		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
-			lastRenderTime = time.Now()
-			var syncPercentage float64 = 0.00
-			if targetGlobalTip > 0 {
-				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
-			}
-			barWidth := 20
-			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
-			progressBar := ""
-			for i := 0; i < barWidth; i++ {
-				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
-			}
-			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
-			os.Stdout.Sync()
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	// Release the sync active lockout handle now that the batch catch-up pass is complete
-	atomic.StoreInt32(&IsSyncingActive, 0)
-	// ====================================================================
-	// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
-	// ====================================================================
-	// ✅ FIXED CONSENSUS MESH: Open up full mining capacities across all nodes.
-	// Fully automated throttling loops prevent cloud difficulty spikes from starving home rigs!
-	go func() {
-		var nonce int64 = 0
-		var chunkCeiling int64 = 1000000
-		
-		for {
-			if atomic.LoadInt32(&IsSyncingActive) == 1 {
-				time.Sleep(100 * time.Millisecond)
-				continue
-			}
-
-			StateMutex.RLock()
-			currentBlockForJitter := GetLatestBlockInternal()
-			nextIndexCheck := currentBlockForJitter.Index + 1
-			StateMutex.RUnlock()
-
-			if nextIndexCheck > 1 {
-				var seedInt int64 = 0
-				for _, char := range CustomMinerAddress { 
-					seedInt += int64(char) 
-				}
-				jitterDelayMs := (seedInt % 8) * 250
-				time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
-			}
-			
-			// ====================================================================
-			// 👑 THE PRODUCTION-GRADE BUILT-FROM-SCRATCH ASYNC MINING CORE
-			// ====================================================================
-			// Completely remove static 45-second sleep blocks. Let the protocol pace itself
-			// dynamically using the leading-zero difficulty mathematics natively!
-			StateMutex.RLock()
-			currentBlock := GetLatestBlockInternal()
-			nextIndex := currentBlock.Index + 1
-			parentBlockTipHash := currentBlock.Hash
-			
-			// Enforce explicit Unix relative tracking timestamps without artificial stalling
-			simulatedTime := time.Now().Unix()
-			if simulatedTime <= currentBlock.Timestamp {
-				simulatedTime = currentBlock.Timestamp + 1
-			}
-
-			var targetDifficulty int
-			if currentBlock.Index == 0 {
-				targetDifficulty = 2
-			} else {
-				targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-			}
-			if targetDifficulty < 1 { targetDifficulty = 1 }
-			if targetDifficulty > 8 { targetDifficulty = 8 }
-			StateMutex.RUnlock()
-
-			targetPrefix := strings.Repeat("0", targetDifficulty)
-			var guardMatrixPlaceholder = ""
-			
-			allowedTotalEmission := CalculateBlockReward(nextIndex)
-			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
-			
-			coinbaseOutputs := []UTXOOutput{
-				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
-			}
-			
-			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
-			targetUncleMiner := "NONE"
-
-			candidateTransactions := []Transaction{
-				{
-					ID:               coinbaseTxID,
-					Witness:          CustomMinerAddress,
-					PublicKey:        "GENESIS_VOID_REWARD_POOL",
-					Inputs:           []UTXOInput{},
-					Outputs:          coinbaseOutputs,
-					Timestamp:        simulatedTime, 
-					FreeWillOffering: 0.0,
-					DataSizeKB:       0.1,
-					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-				},
-			}
-
-			var txSummaryBuilder strings.Builder
-			for _, tx := range candidateTransactions {
-				txSummaryBuilder.WriteString(tx.ID + "-")
-			}
-			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-
-			activeMiningStartTimeNs := time.Now().UnixNano()
-
-			for nonce < chunkCeiling {
-				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
-					break 
-				}
-
-				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
-				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
-					nextIndex,
-					simulatedTime,
-					parentBlockTipHash,
-					txHashStr,
-					int64(targetDifficulty),
-					guardMatrixPlaceholder,
-					nonce,
-					targetUncleHash,
-					targetUncleMiner,
-				)
-
-				hashBytes := sha256.Sum256([]byte(inputStr))
-				computedHashHex := fmt.Sprintf("%x", hashBytes)
-				
-				if strings.HasPrefix(computedHashHex, targetPrefix) {
-					newBlock := Block{
-						Index:        nextIndex,
-						Timestamp:    simulatedTime,
-						Transactions: candidateTransactions,
-						PrevHash:     parentBlockTipHash,
-						Hash:         computedHashHex,
-						Difficulty:   targetDifficulty,
-						Nonce:        nonce,
-						GuardMatrix:  guardMatrixPlaceholder,
-						UncleHash:    targetUncleHash,
-						UncleMiner:   targetUncleMiner,
-					}
-					
-					_, err := json.Marshal(newBlock)
-					if err != nil {
-						break
-					}
-
-					if SaveBlockToStorage(newBlock) {
-						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
-						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-						logMutex.Unlock()
-						break
-					} else {
-						break
-					}
-				}
-				
-				if nonce % 100000 == 0 {
-					runtime.Gosched()
-					time.Sleep(1 * time.Microsecond)
-				}
-
-				atomic.AddUint64(&globalHashCount, 1)
-				nonce++
-			}
-
-			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
-			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
-
-			// 👑 ASYNC EQUILIBRIUM: Clear counters and immediately cycle back to mining without thread stalling!
-			nonce = 0
-			chunkCeiling = 1000000
-			runtime.Gosched()
-		}
-	}()
-
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-	clearTerminalNatively()
-	var loopCounter uint64 = 0
-	
-	for {
-		select {
-		case <-ticker.C:
-			loopCounter++
-			StateMutex.RLock()
-			liveBlock := GetLatestBlockInternal()
-			StateMutex.RUnlock()
-			actualBlocksHeight := liveBlock.Index
-			
-			BalanceCacheMutex.RLock()
-			actualCvnBalance := StateBalanceCache[CustomMinerAddress]
-			BalanceCacheMutex.RUnlock()
-
-			if loopCounter % 20 == 0 {
-				go func(targetAddress string) {
-					targetHost := "202.137.175.220:8081"
-					if runtime.GOOS == "windows" {
-						targetHost = "localhost:8081"
-					}
-
-					masterSeedURL := fmt.Sprintf("http://%s/audit?address=%s", targetHost, targetAddress)
-					client := &http.Client{Timeout: 3 * time.Second}
-					
-					resp, err := client.Get(masterSeedURL)
-					if err == nil && resp.StatusCode == http.StatusOK {
-						var ledgerPayload map[string]interface{}
-						if err := json.NewDecoder(resp.Body).Decode(&ledgerPayload); err == nil {
-							if verifiedBalanceVal, exists := ledgerPayload["balance"]; exists {
-								if trueOnChainCoins, ok := verifiedBalanceVal.(float64); ok {
-									BalanceCacheMutex.Lock()
-									StateBalanceCache[targetAddress] = trueOnChainCoins
-									BalanceCacheMutex.Unlock()
-								}
-							}
-						}
-						resp.Body.Close()
-					}
-				}(CustomMinerAddress)
-			}
-			
-			hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
-			activeDurationNs := atomic.SwapUint64(&activeMiningDurationNs, 0)
-			
-			var realHashrateMH float64 = 0.0
-			if activeDurationNs > 0 {
-				activeSeconds := float64(activeDurationNs) / 1000000000.0
-				realHashrateMH = (float64(hashesComputed) / activeSeconds) / 1000000.0
-			}
-			currentLiveHashrateTrack = realHashrateMH
-			
-			hashRateHistory15m = append(hashRateHistory15m, realHashrateMH)
-			if len(hashRateHistory15m) > 300 { hashRateHistory15m = hashRateHistory15m[1:] }
-			
-			decayed1hVal := realHashrateMH * (1.0 - (0.02 * (1.0 / float64(actualBlocksHeight+1))))
-			hashRateHistory1h = append(hashRateHistory1h, decayed1hVal)
-			if len(hashRateHistory1h) > 1200 { hashRateHistory1h = hashRateHistory1h[1:] }
-			
-			decayed24hVal := realHashrateMH * (1.0 - (0.05 * (1.0 / float64(actualBlocksHeight+1))))
-			hashRateHistory24h = append(hashRateHistory24h, decayed24hVal)
-			if len(hashRateHistory24h) > 28800 { hashRateHistory24h = hashRateHistory24h[1:] }
-			
-			var sum15m, sum1h, sum24h float64
-			for _, v := range hashRateHistory15m { sum15m += v }
-			for _, v := range hashRateHistory1h  { sum1h += v }
-			for _, v := range hashRateHistory24h { sum24h += v }
-			
-			var avg15m, avg1h, avg24h float64
-			if len(hashRateHistory15m) > 0 { avg15m = sum15m / float64(len(hashRateHistory15m)) }
-			if len(hashRateHistory1h) > 0  { avg1h  = sum1h  / float64(len(hashRateHistory1h)) }
-			if len(hashRateHistory24h) > 0 { avg24h = sum24h / float64(len(hashRateHistory24h)) }
-
-			if loopCounter%10 == 0 {
-				logMutex.Lock()
-				heartbeatLine := fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
-				liveTerminalEventLogs = append(liveTerminalEventLogs, heartbeatLine)
-				logMutex.Unlock()
-			}
-			
-			clearTerminalNatively()
-			fmt.Println("================================================================================")
-			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
-			fmt.Println("================================================================================")
-			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
-			fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
-			fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
-			fmt.Println("================================================================================")
-			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
-			fmt.Println("--------------------------------------------------------------------------------")
-			logMutex.Lock()
-			fmt.Print("\033[J")
-			if len(liveTerminalEventLogs) > 0 {
-				for _, event := range liveTerminalEventLogs {
-					fmt.Println(event)
-				}
-				if len(liveTerminalEventLogs) > 12 {
-					liveTerminalEventLogs = liveTerminalEventLogs[1:]
-				}
-			} else {
-				fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
-			}
-			logMutex.Unlock()
-			os.Stdout.Sync()
-		}
-	}
+RunDesktopUIFrameworkIfApplicable()
+go StartMeshNetwork()
+fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
+seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
+for i, arg := range os.Args {
+if arg == "--connect" && i+1 < len(os.Args) {
+customTargetIP := os.Args[i+1]
+if !strings.HasPrefix(customTargetIP, "http://") {
+customTargetIP = "http://" + customTargetIP
 }
-
+seedGateways = []string{customTargetIP}
+}
+}
+lastRenderTime := time.Now()
+for {
+StateMutex.RLock()
+liveBlock := GetLatestBlockInternal()
+StateMutex.RUnlock()
+currentLocalHeight := int64(liveBlock.Index)
+var targetGlobalTip int64 = 0
+var activeSyncSeed string = ""
+for _, endpoint := range seedGateways {
+if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
+continue
+}
+if strings.Contains(endpoint, "207.148.67.11") && os.Getenv("CVN_RELAY_ONLY") == "1" {
+continue
+}
+remoteHeight := GetGlobalMeshMaxHeight(endpoint)
+if remoteHeight > targetGlobalTip {
+targetGlobalTip = remoteHeight
+activeSyncSeed = endpoint
+}
+}
+if targetGlobalTip <= 0 || currentLocalHeight >= targetGlobalTip || activeSyncSeed == "" {
+break
+}
+atomic.StoreInt32(&IsSyncingActive, 1)
+nextBlockNeed := currentLocalHeight + 1
+requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed)
+client := &http.Client{Timeout: 3 * time.Second}
+resp, err := client.Get(requestURL)
+if err == nil {
+if resp.StatusCode == http.StatusOK {
+var incomingBatch []Block
+if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
+for _, incomingBlock := range incomingBatch {
+StateMutex.RLock()
+currentHeightCheck := GetLatestBlockInternal().Index
+StateMutex.RUnlock()
+if incomingBlock.Index == int64(currentHeightCheck)+1 {
+if incomingBlock.UncleHash == "" {
+incomingBlock.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
+}
+if incomingBlock.UncleMiner == "" {
+incomingBlock.UncleMiner = "NONE"
+}
+SaveBlockToStorage(incomingBlock)
+currentLocalHeight = incomingBlock.Index
+}
+}
+}
+}
+resp.Body.Close()
+}
+if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
+lastRenderTime = time.Now()
+var syncPercentage float64 = 0.00
+if targetGlobalTip > 0 {
+syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
+}
+barWidth := 20
+filledChars := int((syncPercentage / 100.0) * float64(barWidth))
+progressBar := ""
+for i := 0; i < barWidth; i++ {
+if i < filledChars { progressBar += "█" } else { progressBar += "░" }
+}
+fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+os.Stdout.Sync()
+}
+time.Sleep(10 * time.Millisecond)
+}
+atomic.StoreInt32(&IsSyncingActive, 0)
+// ====================================================================
+// ⛏️  STATE PHASE 2: GENUINE UN-THROTTLED BARE-METAL MINING CORE
+// ====================================================================
+go func() {
+var nonce int64 = 0
+var chunkCeiling int64 = 1000000
+for {
+if atomic.LoadInt32(&IsSyncingActive) == 1 {
+time.Sleep(100 * time.Millisecond)
+continue
+}
+StateMutex.RLock()
+currentBlockForJitter := GetLatestBlockInternal()
+nextIndexCheck := currentBlockForJitter.Index + 1
+StateMutex.RUnlock()
+if nextIndexCheck > 1 {
+var seedInt int64 = 0
+for _, char := range CustomMinerAddress {
+seedInt += int64(char)
+}
+jitterDelayMs := (seedInt % 8) * 250
+time.Sleep(time.Duration(jitterDelayMs) * time.Millisecond)
+}
+StateMutex.RLock()
+currentBlock := GetLatestBlockInternal()
+nextIndex := currentBlock.Index + 1
+parentBlockTipHash := currentBlock.Hash
+simulatedTime := time.Now().Unix()
+if simulatedTime <= currentBlock.Timestamp {
+simulatedTime = currentBlock.Timestamp + 1
+}
+var targetDifficulty int
+if currentBlock.Index == 0 {
+targetDifficulty = 2
+} else {
+targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+}
+if targetDifficulty < 1 { targetDifficulty = 1 }
+if targetDifficulty > 8 { targetDifficulty = 8 }
+StateMutex.RUnlock()
+targetPrefix := strings.Repeat("0", targetDifficulty)
+var guardMatrixPlaceholder = ""
+allowedTotalEmission := CalculateBlockReward(nextIndex)
+coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
+coinbaseOutputs := []UTXOOutput{
+{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
+}
+targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
+targetUncleMiner := "NONE"
+candidateTransactions := []Transaction{
+{
+ID:               coinbaseTxID,
+Witness:          CustomMinerAddress,
+PublicKey:        "GENESIS_VOID_REWARD_POOL",
+Inputs:           []UTXOInput{},
+Outputs:          coinbaseOutputs,
+Timestamp:        simulatedTime,
+FreeWillOffering: 0.0,
+DataSizeKB:       0.1,
+Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+},
+}
+var txSummaryBuilder strings.Builder
+for _, tx := range candidateTransactions {
+txSummaryBuilder.WriteString(tx.ID + "-")
+}
+txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+activeMiningStartTimeNs := time.Now().UnixNano()
+for nonce < chunkCeiling {
+if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
+break
+}
+inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+nextIndex,
+simulatedTime,
+parentBlockTipHash,
+txHashStr,
+int64(targetDifficulty),
+guardMatrixPlaceholder,
+nonce,
+targetUncleHash,
+targetUncleMiner,
+)
+hashBytes := sha256.Sum256([]byte(inputStr))
+computedHashHex := fmt.Sprintf("%x", hashBytes)
+if strings.HasPrefix(computedHashHex, targetPrefix) {
+newBlock := Block{
+Index:        nextIndex,
+Timestamp:    simulatedTime,
+Transactions: candidateTransactions,
+PrevHash:     parentBlockTipHash,
+Hash:         computedHashHex,
+Difficulty:   targetDifficulty,
+Nonce:        nonce,
+GuardMatrix:  guardMatrixPlaceholder,
+UncleHash:    targetUncleHash,
+UncleMiner:   targetUncleMiner,
+}
+_, err := json.Marshal(newBlock)
+if err != nil {
+break
+}
+if SaveBlockToStorage(newBlock) {
+logMutex.Lock()
+logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
+liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+logMutex.Unlock()
+break
+} else {
+break
+}
+}
+if nonce % 100000 == 0 {
+runtime.Gosched()
+time.Sleep(1 * time.Microsecond)
+}
+atomic.AddUint64(&globalHashCount, 1)
+nonce++
+}
+activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
+atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
+nonce = 0
+chunkCeiling = 1000000
+runtime.Gosched()
+}
+}()
+ticker := time.NewTicker(3 * time.Second)
+defer ticker.Stop()
+clearTerminalNatively()
+var loopCounter uint64 = 0
+for {
+select {
+case <-ticker.C:
+loopCounter++
+StateMutex.RLock()
+liveBlock := GetLatestBlockInternal()
+StateMutex.RUnlock()
+actualBlocksHeight := liveBlock.Index
+BalanceCacheMutex.RLock()
+actualCvnBalance := StateBalanceCache[CustomMinerAddress]
+BalanceCacheMutex.RUnlock()
+if loopCounter % 20 == 0 {
+go func(targetAddress string) {
+targetHost := "202.137.175.220:8081"
+if runtime.GOOS == "windows" {
+targetHost = "localhost:8081"
+}
+masterSeedURL := fmt.Sprintf("http://%s/audit?address=%s", targetHost, targetAddress)
+client := &http.Client{Timeout: 3 * time.Second}
+resp, err := client.Get(masterSeedURL)
+if err == nil && resp.StatusCode == http.StatusOK {
+var ledgerPayload map[string]interface{}
+if err := json.NewDecoder(resp.Body).Decode(&ledgerPayload); err == nil {
+if verifiedBalanceVal, exists := ledgerPayload["balance"]; exists {
+if trueOnChainCoins, ok := verifiedBalanceVal.(float64); ok {
+BalanceCacheMutex.Lock()
+StateBalanceCache[targetAddress] = trueOnChainCoins
+BalanceCacheMutex.Unlock()
+}
+}
+}
+resp.Body.Close()
+}
+}(CustomMinerAddress)
+}
+hashesComputed := atomic.SwapUint64(&globalHashCount, 0)
+activeDurationNs := atomic.SwapUint64(&activeMiningDurationNs, 0)
+var realHashrateMH float64 = 0.0
+if activeDurationNs > 0 {
+activeSeconds := float64(activeDurationNs) / 1000000000.0
+realHashrateMH = (float64(hashesComputed) / activeSeconds) / 1000000.0
+}
+currentLiveHashrateTrack = realHashrateMH
+hashRateHistory15m = append(hashRateHistory15m, realHashrateMH)
+if len(hashRateHistory15m) > 300 { hashRateHistory15m = hashRateHistory15m[1:] }
+decayed1hVal := realHashrateMH * (1.0 - (0.02 * (1.0 / float64(actualBlocksHeight+1))))
+hashRateHistory1h = append(hashRateHistory1h, decayed1hVal)
+if len(hashRateHistory1h) > 1200 { hashRateHistory1h = hashRateHistory1h[1:] }
+decayed24hVal := realHashrateMH * (1.0 - (0.05 * (1.0 / float64(actualBlocksHeight+1))))
+hashRateHistory24h = append(hashRateHistory24h, decayed24hVal)
+if len(hashRateHistory24h) > 28800 { hashRateHistory24h = hashRateHistory24h[1:] }
+var sum15m, sum1h, sum24h float64
+for _, v := range hashRateHistory15m { sum15m += v }
+for _, v := range hashRateHistory1h  { sum1h += v }
+for _, v := range hashRateHistory24h { sum24h += v }
+var avg15m, avg1h, avg24h float64
+if len(hashRateHistory15m) > 0 { avg15m = sum15m / float64(len(hashRateHistory15m)) }
+if len(hashRateHistory1h) > 0  { avg1h  = sum1h  / float64(len(hashRateHistory1h)) }
+if len(hashRateHistory24h) > 0 { avg24h = sum24h / float64(len(hashRateHistory24h)) }
+if loopCounter%10 == 0 {
+logMutex.Lock()
+heartbeatLine := fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+liveTerminalEventLogs = append(liveTerminalEventLogs, heartbeatLine)
+logMutex.Unlock()
+}
+clearTerminalNatively()
+fmt.Println("================================================================================")
+fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
+fmt.Println("================================================================================")
+fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
+fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
+fmt.Printf("🪪 RIG IDENTITY:   %-15.15s... | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
+fmt.Println("================================================================================")
+fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
+fmt.Println("--------------------------------------------------------------------------------")
+logMutex.Lock()
+fmt.Print("\033[J")
+if len(liveTerminalEventLogs) > 0 {
+for _, event := range liveTerminalEventLogs {
+fmt.Println(event)
+}
+if len(liveTerminalEventLogs) > 12 {
+liveTerminalEventLogs = liveTerminalEventLogs[1:]
+}
+} else {
+fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+}
+logMutex.Unlock()
+os.Stdout.Sync()
+}
+}
+}
 func osCheckArgs() []string { return os.Args }
