@@ -73,6 +73,19 @@ func handleIncomingPeerStream(conn net.Conn) {
 			continue
 		}
 
+		// 👑 THE MASTER FIREWALL NETWORK SHIELD:
+		// Forcefully change 'break' to 'return' right here!
+		// This guarantees that any non-protocol scanner spam or HTTP proxy probe drops out of
+		// the ENTIRE function call instantly, closing the TCP socket, freeing up system memory,
+		// and keeping your cloud servers 100% unblocked to mine nonces independently!
+		if !strings.HasPrefix(msg, "BLOCK_BROADCAST:") &&
+			!strings.HasPrefix(msg, "TX_BROADCAST:") &&
+			!strings.HasPrefix(msg, "PEER_PING:") &&
+			!strings.HasPrefix(msg, "PEER_LIST:") &&
+			!strings.HasPrefix(msg, "GET_BATCH:") {
+			return // 👑 Terminates and drops the dead socket immediately!
+		}
+
 		preview := msg
 		if len(preview) > 120 {
 			preview = preview[:120]
