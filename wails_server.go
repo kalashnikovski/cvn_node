@@ -24,10 +24,8 @@ func RunDesktopUIFrameworkIfApplicable() {
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
 	}
 
-	// 👑 THE CRITICAL DATA MOUNT:
-	// Force the headless execution path to initialize the BoltDB ledger core right on boot!
-	// This populates your database bucket contexts and connects the global pointer hooks cleanly.
-	InitBoltEngine()
+	// ✅ FIX: Remove the duplicate InitBoltEngine() call from here entirely!
+	// Let main.go handle the single database file file handle lock uniformly on boot.
 
 	go StartMeshNetwork()
 
