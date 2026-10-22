@@ -246,9 +246,9 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
 					currentTip.UncleHash = incomingBlock.Hash
 					
-					// 👑 THE BALANCE UNIFICATION FIX:
-					// Read the witness tag property *only* when a valid uncle block race occurs,
-					// rather than corrupting standard single-output blocks during active consensus traffic traffic tracks!
+					// 👑 THE CRITICAL SUBSCRIPT REPAIR:
+					// Securely check boundaries and isolate index slot 0 (The Coinbase Transaction)
+					// to extract the Witness profile string identity cleanly without thread panics!
 					if len(incomingBlock.Transactions) > 0 {
 						currentTip.UncleMiner = incomingBlock.Transactions[0].Witness
 					} else {

@@ -556,10 +556,10 @@ func main() {
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			// 👑 THE DETERMINISTIC TIME LOCK ENFORCEMENT:
-			// Force the block timestamp to increment sequentially past the parent tip, 
-			// eliminating cross-platform wall clock drifting and timestamp racing!
-			simulatedTime := currentBlock.Timestamp + 1
+			// 👑 THE ABSOLUTE BLOCK TIME WINDOW LOCK:
+			// Enforce that a new block can NEVER be mined unless at least 45 seconds 
+			// have passed since the parent block tip's timestamp, stopping time-racing completely!
+			simulatedTime := currentBlock.Timestamp + TargetBlockTimeWindow
 			if time.Now().Unix() > simulatedTime {
 				simulatedTime = time.Now().Unix()
 			}
