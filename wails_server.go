@@ -26,13 +26,15 @@ func RunDesktopUIFrameworkIfApplicable() {
 		if err == nil {
 			var parsedConfig map[string]string
 			if json.Unmarshal(configFileBytes, &parsedConfig) == nil {
-				CustomMinerAddress = parsedConfig["miner_address"]
+				// Cleanly strip string whitespaces and line endings to prevent Linux parsing breaks
+				CustomMinerAddress = strings.TrimSpace(parsedConfig["miner_address"])
 			}
 		}
 	}
 
+	// Force an immediate configuration reset if the file read path returned a broken placeholder string
 	if CustomMinerAddress == "" || CustomMinerAddress == "CVN_UNCONFIGURED_LOCAL_NODE_ID" {
-		fmt.Println("👤 [SERVER IDENTITY] Generating a unique headless cloud mining token profile...")
+		fmt.Println("👤 [SERVER IDENTITY] Missing valid miner configuration. Provisioning secure L1 address handle...")
 		_, _, serverAddress, err := GenerateKeyPair()
 		if err == nil {
 			CustomMinerAddress = serverAddress

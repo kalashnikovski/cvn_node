@@ -103,28 +103,35 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 
 // VerifyIncomingWireBlock performs deep validation checks on incoming blocks with strict difficulty parameters.
 func VerifyIncomingWireBlock(b Block) bool {
+	// 👑 THE MASTER IDENTITY SAFEGUARD:
+	// Prevent headless cloud servers from running consensus rules if their local address
+	// profile tracking parameters fell back to unconfigured system string literals.
+	if CustomMinerAddress == "" || CustomMinerAddress == "CVN_UNCONFIGURED_LOCAL_NODE_ID" {
+		fmt.Println("🚨 FRONT-GATE REFUSAL: Headless node configuration missing or uninstantiated. Aborting validation path.")
+		return false
+	}
+
 	targetPrefix := strings.Repeat("0", b.Difficulty)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
 		fmt.Printf("🚨 WIRE BLOCK FAULT: Hash signature %s missing difficulty constraints.\n", b.Hash)
 		return false
 	}
 
+	// 👑 THE CRYPTOGRAPHIC IDENTITY INVARIANT:
+	// Recalculate block hashes using the exact transaction array elements embedded inside
+	// the packet, preventing local wallet variable drift from corrupting historical validations.
 	if b.Hash != CalculateHash(b) {
 		fmt.Println("🚨 WIRE BLOCK FAULT: Block hash re-computation checks failed mismatch constraints.")
 		return false
 	}
 
-	// 👑 THE GEOGRAPHICAL LATENCY GRACE TUNER:
-	// Calculate what the difficulty SHOULD be based on local database history.
 	StateMutex.RLock()
 	expectedDifficulty := CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
 	StateMutex.RUnlock()
 
-	// Implement a 1-point dampening window to accommodate cross-continental cloud network latency
-	// variations between bare-metal clock ticks and remote virtual machine systems.
 	effectiveThreshold := expectedDifficulty - 1
 	if effectiveThreshold < 4 {
-		effectiveThreshold = 4 // Hard lock onto your mainnet specification floor
+		effectiveThreshold = 4 // Hard lock securely onto your baseline floor of 4 zeros
 	}
 
 	if b.Difficulty < effectiveThreshold {
@@ -144,10 +151,6 @@ func VerifyIncomingWireBlock(b Block) bool {
 			return nil
 		}
 
-		// 👑 THE MASTER FRONT-GATE BYPASS FILTER:
-		// Lock validation evaluation strictly past loop index slot 0 (txIdx == 0).
-		// This forces the incoming network wire block parser to skip evaluating the Coinbase parameters, 
-		// allowing Melbourne to accept Atlanta's blocks instantly and re-unify your global consensus!
 		for txIdx, tx := range b.Transactions {
 			if txIdx == 0 {
 				continue
