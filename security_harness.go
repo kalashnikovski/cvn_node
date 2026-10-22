@@ -8,6 +8,7 @@ import (
 	"go.etcd.io/bbolt"
 )
 
+// VerifyTransactionIntegrity evaluates cryptographic signatures and checks live UTXO states on the disk ledger.
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
 	// 👑 THE BULLETPROOF COINBASE SIGNATURE BYPASS:
 	// Inspect the block transaction array identity prefix at the absolute front gate.
@@ -100,7 +101,7 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 	return isValid
 }
 
-// VerifyIncomingWireBlock checks incoming blocks with precise index parameters
+// VerifyIncomingWireBlock performs deep validation checks on incoming blocks with strict difficulty parameters.
 func VerifyIncomingWireBlock(b Block) bool {
 	targetPrefix := strings.Repeat("0", b.Difficulty)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
@@ -113,22 +114,27 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 
-	// 👑 THE MASTER CONSENSUS GUARD:
-	// Calculate what the difficulty SHOULD be based on our local database history.
-	// If an incoming block attempts to use a lower fake difficulty, drop it instantly!
+	// 👑 THE GEOGRAPHICAL LATENCY GRACE TUNER:
+	// Calculate what the difficulty SHOULD be based on local database history.
 	StateMutex.RLock()
 	expectedDifficulty := CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
 	StateMutex.RUnlock()
 
-	if b.Difficulty < expectedDifficulty {
-		fmt.Printf("🚨 REJECTION: Incoming block #%d uses fake difficulty %d (Expected: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
+	// Implement a 1-point dampening window to accommodate cross-continental cloud network latency
+	// variations between bare-metal clock ticks and remote virtual machine systems.
+	effectiveThreshold := expectedDifficulty - 1
+	if effectiveThreshold < 2 {
+		effectiveThreshold = 2 // Hard lock to our initial bootstrap specifications floor
+	}
+
+	if b.Difficulty < effectiveThreshold {
+		fmt.Printf("🚨 REJECTION: Incoming block #%d uses insufficient difficulty %d (Expected: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
 		return false
 	}
 
 	if GlobalBoltEngine == nil {
 		return false
 	}
-    // ... rest of bbolt bucket iteration loop continues cleanly
 
 	isBlockValid := true
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {

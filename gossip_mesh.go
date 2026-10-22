@@ -110,159 +110,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 				endHeight = currentTip
 			}
 
-			for h := startHeight; h <= endHeight; h++ {
-				blocks = append(blocks, GetBlockByHeightFromDB(h))
-			}
-
-			jsonBytes, err := json.Marshal(blocks)
-			if err == nil {
-				_, _ = conn.Write(append(jsonBytes, '\n'))
-			}
-			return
-		}
-
-		if strings.HasPrefix(msg, "TX_BROADCAST:") {
-			txPayload := strings.TrimPrefix(msg, "TX_BROADCAST:")
-			var incomingTx Transaction
-			if err := json.Unmarshal([]byte(txPayload), &incomingTx); err == nil {
-				if VerifyIncomingWireTransaction(incomingTx) {
-					if MempoolMatrix.PushTransaction(incomingTx) {
-						go BroadcastTransactionToMesh(incomingTx)
-					}
-				} else {
-					log.Printf("🚨 [GATE FIREWALL] Dropped unauthenticated or spent transaction: %s\n", incomingTx.ID)
-				}
-			}
-			return
-		}
-
-		if strings.HasPrefix(msg, "BLOCK_BROADCAST:") {
-			blockPayload := strings.TrimPrefix(msg, "BLOCK_BROADCAST:")
-			var incomingBlock Block
-			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err == nil {
-				if VerifyIncomingWireBlock(incomingBlock) {
-					go ProcessIncomingWireBlockWithDelay(incomingBlock)
-				} else {
-					log.Printf("🚨 [GATE FIREWALL] Block #%d failed deep front-gate audit! Discarding.\n", incomingBlock.Index)
-				}
-			}
-			return
-		}
-
-		if strings.HasPrefix(msg, "PEER_PING:") {
-			PeerMapMutex.Lock()
-			peerMeshKey := fmt.Sprintf("%s:8080", remoteIP)
-			if _, exists := ActivePeerMap[peerMeshKey]; !exists {
-				fmt.Printf("🌐 [GOSSIP MESH] Handshake verified from raw cloud seed source: %s\n", peerMeshKey)
-			}
-			ActivePeerMap[peerMeshKey] = time.Now()
-			
-			var activePeersList []string
-			for currentPeer := range ActivePeerMap {
-				activePeersList = append(activePeersList, currentPeer)
-			}
-			PeerMapMutex.Unlock()
-
-			jsonPeers, err := json.Marshal(activePeersList)
-			if err == nil {
-				payloadResponse := fmt.Sprintf("PEER_LIST:%s\n", string(jsonPeers))
-				_, _ = fmt.Fprint(conn, payloadResponse)
-			}
-			return
-		}
-
-		if strings.HasPrefix(msg, "PEER_LIST:") {
-			rawPayload := strings.TrimPrefix(msg, "PEER_LIST:")
-			var receivedAddresses []string
-			if err := json.Unmarshal([]byte(rawPayload), &receivedAddresses); err != nil {
-				return
-			}
-
-			for _, potentialPeer := range receivedAddresses {
-				cleanedPeer := strings.TrimSpace(strings.ReplaceAll(potentialPeer, "\r", ""))
-				if cleanedPeer == "" {
-					continue
-				}
-
-				if strings.HasPrefix(cleanedPeer, "127.0.0.1") || strings.HasPrefix(cleanedPeer, "localhost") {
-					continue
-				}
-
-				PeerMapMutex.RLock()
-				_, alreadyConnected := ActivePeerMap[cleanedPeer]
-				PeerMapMutex.RUnlock()
-
-				if !alreadyConnected {
-					go func(targetIP string) {
-						localInterfaces, err := net.InterfaceAddrs()
-						if err == nil {
-							for _, interfaceAddr := range localInterfaces {
-								if ipnet, ok := interfaceAddr.(*net.IPNet); ok {
-									if strings.Contains(targetIP, ipnet.IP.String()) {
-										return
-									}
-								}
-							}
-						}
-
-						dialerConnection, dialErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
-						if dialErr != nil {
-							return
-						}
-						defer dialerConnection.Close()
-
-						_, _ = fmt.Fprintf(dialerConnection, "PEER_PING:DISCOVERY_REQUEST\n")
-					}(cleanedPeer)
-				}
-			}
-			return
-		}
-	}
-}
-
-// ProcessIncomingWireBlockWithDelay handles block integration deterministically without async race conditions!
-func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
-	if atomic.LoadInt32(&IsSyncingActive) == 1 {
-		return
-	}
-
-	StateMutex.Lock()
-	currentTip := GetLatestBlockInternal()
-	StateMutex.Unlock()
-
-	// 👑 THE UN-FORKABLE SEQUENTIAL GATEWAY:
-	if incomingBlock.Index == currentTip.Index+1 {
-		if incomingBlock.PrevHash != currentTip.Hash {
-			go TriggerActiveReSyncPass()
-			return
-		}
-
-		if SaveBlockToStorage(incomingBlock) {
-			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
-			go BroadcastNewBlock(incomingBlock)
-		}
-		return
-	}
-
-	// 👑 THE GHOST UNCLE INTEGRATION GATEWAY:
-	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		if incomingBlock.PrevHash == currentTip.PrevHash {
-			fmt.Printf("🛰️  [UNCLE RECOGNIZED] Capturing late competing block hash %s for height %d\n", incomingBlock.Hash[:16], incomingBlock.Index)
-			
-			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-				bBlocks := tx.Bucket(blocksBucket)
-				if bBlocks == nil {
-					return nil
-				}
-				
-				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
-				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
-					currentTip.UncleHash = incomingBlock.Hash
-					
-					// 👑 THE CRITICAL SUBSCRIPT REPAIR:
-					// Securely check boundaries and isolate index slot 0 (The Coinbase Transaction)
-					// to extract the Witness profile string identity cleanly without thread panics!
-					if len(incomingBlock.Transactions) > 0 {
+			for h := startHeight; h  0 {
 						currentTip.UncleMiner = incomingBlock.Transactions[0].Witness
 					} else {
 						currentTip.UncleMiner = "NONE"
@@ -339,37 +187,36 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 					_, _ = fmt.Fprintf(conn, "PEER_PING:DISCOVERY_REQUEST\n")
 					
 					reader := bufio.NewReader(conn)
-					responseString, readErr := reader.ReadString('\n')
-					if readErr == nil {
-						responseString = strings.TrimSpace(responseString)
-						if strings.HasPrefix(responseString, "PEER_LIST:") {
-							rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
-							var receivedAddresses []string
-							if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
-								for _, ip := range receivedAddresses {
-									cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
-									if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
-										continue
-									}
-									PeerMapMutex.RLock()
-									_, exists := ActivePeerMap[cleanedIP]
-									PeerMapMutex.RUnlock()
-									
-									if !exists {
-										go func(targetIP string) {
-											dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
-											if dErr == nil {
-												_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_REQUEST\n")
-												dConn.Close()
-											}
-										}(cleanedIP)
-									}
-								}
-							}
-						}
-					}
-					conn.Close()
-				}
+responseString, readErr := reader.ReadString('\n')
+if readErr == nil {
+responseString = strings.TrimSpace(responseString)
+if strings.HasPrefix(responseString, "PEER_LIST:") {
+rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
+var receivedAddresses []string
+if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
+for _, ip := range receivedAddresses {
+cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
+if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
+continue
+}
+PeerMapMutex.RLock()
+_, exists := ActivePeerMap[cleanedIP]
+PeerMapMutex.RUnlock()
+if !exists {
+go func(targetIP string) {
+dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
+if dErr == nil {
+_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_REQUEST\n")
+dConn.Close()
+}
+}(cleanedIP)
+}
+}
+}
+}
+}
+conn.Close()
+}
 }(seedAddr)
 }
 time.Sleep(250 * time.Second)
