@@ -123,8 +123,8 @@ func VerifyIncomingWireBlock(b Block) bool {
 	// Implement a 1-point dampening window to accommodate cross-continental cloud network latency
 	// variations between bare-metal clock ticks and remote virtual machine systems.
 	effectiveThreshold := expectedDifficulty - 1
-	if effectiveThreshold < 2 {
-		effectiveThreshold = 2 // Hard lock to our initial bootstrap specifications floor
+	if effectiveThreshold < 4 {
+		effectiveThreshold = 4 // Hard lock onto your mainnet specification floor
 	}
 
 	if b.Difficulty < effectiveThreshold {
