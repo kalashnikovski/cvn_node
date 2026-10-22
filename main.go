@@ -688,23 +688,6 @@ func main() {
 		}
 	}()
 
-			if blockSolved {
-				nonce = 0
-				chunkCeiling = 1000000
-				blockMiningEndTime := time.Now().Unix()
-				actualTimeElapsed := blockMiningEndTime - blockMiningStartTime
-				if actualTimeElapsed < TargetBlockTimeWindow {
-					requiredStallDelay := TargetBlockTimeWindow - actualTimeElapsed
-					time.Sleep(time.Duration(requiredStallDelay) * time.Second)
-				}
-			} else {
-				nonce = 0
-				chunkCeiling = 1000000
-				runtime.Gosched()
-			}
-		}
-	}()
-
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	clearTerminalNatively()
