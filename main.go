@@ -478,7 +478,19 @@ func main() {
 						StateMutex.RLock()
 						currentHeightCheck := GetLatestBlockInternal().Index
 						StateMutex.RUnlock()
+						
 						if incomingBlock.Index == int64(currentHeightCheck)+1 {
+							// 👑 THE MASTER CONSENSUS ALIGNMENT FILTER:
+							// Force explicit fallback strings inside the bulk sync ingestion pass.
+							// This guarantees that downloaded blocks match your live mining preimage
+							// formats perfectly, completely destroying the post-sync fork split!
+							if incomingBlock.UncleHash == "" {
+								incomingBlock.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
+							}
+							if incomingBlock.UncleMiner == "" {
+								incomingBlock.UncleMiner = "NONE"
+							}
+
 							SaveBlockToStorage(incomingBlock)
 							currentLocalHeight = incomingBlock.Index
 						}
