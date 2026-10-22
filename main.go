@@ -127,6 +127,7 @@ func main() {
 
 			if r.URL.Path == "/addresses" {
 				w.Header().Set("Content-Type", "application/json")
+				
 				BalanceCacheMutex.RLock()
 				activeWallets := make(map[string]float64)
 				for addr, bal := range StateBalanceCache {
@@ -135,6 +136,27 @@ func main() {
 					}
 				}
 				BalanceCacheMutex.RUnlock()
+
+				// 👑 THE MULTI-OUTPUT LEDGER MATRIX RE-INDEXER:
+				// Force the explorer engine to scan through ALL outputs inside the coinbase transaction array.
+				// This guarantees that Sparks' 20% Uncle block splits are captured and displayed live on your website!
+				StateMutex.RLock()
+				currentHeightIndex := GetLatestBlockInternal().Index
+				StateMutex.RUnlock()
+
+				for h := int64(0); h <= currentHeightIndex; h++ {
+					historicalBlock := GetBlockByHeightFromDB(h)
+					if len(historicalBlock.Transactions) > 0 {
+						coinbaseTx := historicalBlock.Transactions[0]
+						// Safely parse through every single output slice inside the block reward block
+						for _, output := range coinbaseTx.Outputs {
+							if output.Amount > 0 {
+								activeWallets[output.Recipient] += output.Amount
+							}
+						}
+					}
+				}
+
 				json.NewEncoder(w).Encode(activeWallets)
 				return
 			}
