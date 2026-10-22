@@ -548,58 +548,68 @@ for _, tx := range candidateTransactions {
 txSummaryBuilder.WriteString(tx.ID + "-")
 }
 txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-activeMiningStartTimeNs := time.Now().UnixNano()
-for nonce < chunkCeiling {
-if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
-break
-}
-inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
-nextIndex,
-simulatedTime,
-parentBlockTipHash,
-txHashStr,
-int64(targetDifficulty),
-guardMatrixPlaceholder,
-nonce,
-targetUncleHash,
-targetUncleMiner,
-)
-hashBytes := sha256.Sum256([]byte(inputStr))
-computedHashHex := fmt.Sprintf("%x", hashBytes)
-if strings.HasPrefix(computedHashHex, targetPrefix) {
-newBlock := Block{
-Index:        nextIndex,
-Timestamp:    simulatedTime,
-Transactions: candidateTransactions,
-PrevHash:     parentBlockTipHash,
-Hash:         computedHashHex,
-Difficulty:   targetDifficulty,
-Nonce:        nonce,
-GuardMatrix:  guardMatrixPlaceholder,
-UncleHash:    targetUncleHash,
-UncleMiner:   targetUncleMiner,
-}
-_, err := json.Marshal(newBlock)
-if err != nil {
-break
-}
-if SaveBlockToStorage(newBlock) {
-logMutex.Lock()
-logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
-liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-logMutex.Unlock()
-break
-} else {
-break
-}
-}
-if nonce % 100000 == 0 {
-runtime.Gosched()
-time.Sleep(1 * time.Microsecond)
-}
-atomic.AddUint64(&globalHashCount, 1)
-nonce++
-}
+			activeMiningStartTimeNs := time.Now().UnixNano()
+
+			for nonce < chunkCeiling {
+				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
+					break 
+				}
+
+				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+					nextIndex,
+					simulatedTime,
+					parentBlockTipHash,
+					txHashStr,
+					int64(targetDifficulty),
+					guardMatrixPlaceholder,
+					nonce,
+					targetUncleHash,
+					targetUncleMiner,
+				)
+
+				hashBytes := sha256.Sum256([]byte(inputStr))
+				computedHashHex := fmt.Sprintf("%x", hashBytes)
+				
+				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					newBlock := Block{
+						Index:        nextIndex,
+						Timestamp:    simulatedTime,
+						Transactions: candidateTransactions,
+						PrevHash:     parentBlockTipHash,
+						Hash:         computedHashHex,
+						Difficulty:   targetDifficulty,
+						Nonce:        nonce,
+						GuardMatrix:  guardMatrixPlaceholder,
+						UncleHash:    targetUncleHash,
+						UncleMiner:   targetUncleMiner,
+					}
+					
+					_, err := json.Marshal(newBlock)
+					if err != nil {
+						break
+					}
+
+					if SaveBlockToStorage(newBlock) {
+						logMutex.Lock()
+						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Committed | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), newBlock.Index, newBlock.Hash[:16], currentLiveHashrateTrack)
+						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+						logMutex.Unlock()
+						break
+					} else {
+						break
+					}
+				}
+				
+				// 👑 THE BARE-METAL PLATFORM EQUALIZER:
+				// Avoid high-precision kernel time.Sleep commands entirely inside the hashing steps!
+				// Only call runtime.Gosched() to yield CPU core threads without killing Linux throughput.
+				if nonce % 200000 == 0 {
+					runtime.Gosched()
+				}
+
+				atomic.AddUint64(&globalHashCount, 1)
+				nonce++
+			}
 activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
 atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
 nonce = 0
