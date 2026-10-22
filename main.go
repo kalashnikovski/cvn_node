@@ -552,16 +552,20 @@ func main() {
 			blockMiningStartTime := time.Now().Unix()
 
 			StateMutex.RLock()
+			// ====================================================================
+			// 👑 THE PRODUCTION-GRADE BUILT-FROM-SCRATCH ASYNC MINING CORE
+			// ====================================================================
+			// Completely remove static 45-second sleep blocks. Let the protocol pace itself
+			// dynamically using the leading-zero difficulty mathematics natively!
+			StateMutex.RLock()
 			currentBlock := GetLatestBlockInternal()
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			// 👑 THE ABSOLUTE BLOCK TIME WINDOW LOCK:
-			// Enforce that a new block can NEVER be mined unless at least 45 seconds 
-			// have passed since the parent block tip's timestamp, stopping time-racing completely!
-			simulatedTime := currentBlock.Timestamp + TargetBlockTimeWindow
-			if time.Now().Unix() > simulatedTime {
-				simulatedTime = time.Now().Unix()
+			// Enforce explicit Unix relative tracking timestamps without artificial stalling
+			simulatedTime := time.Now().Unix()
+			if simulatedTime <= currentBlock.Timestamp {
+				simulatedTime = currentBlock.Timestamp + 1
 			}
 
 			var targetDifficulty int
@@ -578,10 +582,6 @@ func main() {
 			blockSolved := false
 			var guardMatrixPlaceholder = ""
 			
-			// 👑 THE BULLETPROOF STANDARD COINBASE EMISSION BUILDER
-			// Mandate that the mining engine loop always generates uniform, single-output
-			// block templates by default. This eliminates internal memory race conditions
-			// and ensures all freshly mined block headers match identically across all nodes!
 			allowedTotalEmission := CalculateBlockReward(nextIndex)
 			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
 			
@@ -589,7 +589,6 @@ func main() {
 				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
 			}
 			
-			// Hard-code clean initial defaults for the block headers to ensure absolute hash symmetry
 			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 			targetUncleMiner := "NONE"
 
@@ -621,10 +620,6 @@ func main() {
 					break 
 				}
 
-				// 👑 THE DETERMINISTIC NONCE PREIMAGE MERGER:
-				// This matches your blockchain_core.go CalculateHash function layout perfectly, 
-				// positioning the nonce exactly seventh before the uncle fallbacks to ensure 
-				// absolute, cross-platform validation harmony!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
@@ -632,7 +627,7 @@ func main() {
 					txHashStr,
 					int64(targetDifficulty),
 					guardMatrixPlaceholder,
-					nonce, // 👑 Positioned 7th cleanly matching blockchain_core.go
+					nonce,
 					targetUncleHash,
 					targetUncleMiner,
 				)
@@ -641,7 +636,6 @@ func main() {
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
 				
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
-					// 👑 THE UN-FORKABLE STRUCTURAL PARITY LOCK:
 					newBlock := Block{
 						Index:        nextIndex,
 						Timestamp:    simulatedTime,
@@ -655,7 +649,6 @@ func main() {
 						UncleMiner:   targetUncleMiner,
 					}
 					
-					// Force serialize to confirm alignment down to the single character string bit
 					_, err := json.Marshal(newBlock)
 					if err != nil {
 						blockSolved = false
@@ -676,7 +669,6 @@ func main() {
 					}
 				}
 				
-				// 👑 THE CORE CPU THROTTLER:
 				if nonce % 100000 == 0 {
 					runtime.Gosched()
 					time.Sleep(1 * time.Microsecond)
@@ -688,6 +680,13 @@ func main() {
 
 			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
 			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
+
+			// 👑 ASYNC EQUILIBRIUM: Clear counters and immediately cycle back to mining without thread stalling!
+			nonce = 0
+			chunkCeiling = 1000000
+			runtime.Gosched()
+		}
+	}()
 
 			if blockSolved {
 				nonce = 0
