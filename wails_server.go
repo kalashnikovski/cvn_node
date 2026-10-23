@@ -1,4 +1,4 @@
-//go:build server
+//go:build linux && server
 package main
 
 import (
@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-// RunDesktopUIFrameworkIfApplicable handles the headless initialization parameters on server targets.
 func RunDesktopUIFrameworkIfApplicable() {
 	fmt.Println("====================================================================")
 	fmt.Println("📡 COVENANT STANDARD (CVN) NATIVE HEADLESS SERVER CORE ENGAGED     ")
@@ -28,13 +27,11 @@ func RunDesktopUIFrameworkIfApplicable() {
 		if err == nil {
 			var parsedConfig map[string]string
 			if json.Unmarshal(configFileBytes, &parsedConfig) == nil {
-				// Cleanly strip string whitespaces and line endings to prevent Linux parsing breaks
 				CustomMinerAddress = strings.TrimSpace(parsedConfig["miner_address"])
 			}
 		}
 	}
 
-	// Force an immediate configuration reset if the file read path returned a broken placeholder string
 	if CustomMinerAddress == "" || CustomMinerAddress == "CVN_UNCONFIGURED_LOCAL_NODE_ID" {
 		fmt.Println("👤 [SERVER IDENTITY] Missing valid miner configuration. Provisioning secure L1 address handle...")
 		_, _, serverAddress, err := GenerateKeyPair()
@@ -51,15 +48,10 @@ func RunDesktopUIFrameworkIfApplicable() {
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
 	}
 
-	// Ignite your core P2P Gossip mesh channels asynchronously
 	go StartMeshNetwork()
 
 	fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
 	fmt.Println("--------------------------------------------------------------------")
 	
-	// 👑 THE MASTER CONVERGENCE REPAIR ANCHOR:
-	// Yield execution directly to an infinite blocking thread hold block right here!
-	// This permanently locks your headless server thread inside this file, stopping it 
-	// from ever falling into main.go to spawn duplicate network layers or corrupt difficulty targets!
 	select {}
 }

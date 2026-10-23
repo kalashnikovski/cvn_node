@@ -1,6 +1,4 @@
-//go:build !server
-// +build !server
-
+//go:build !server || windows
 package main
 
 import (
@@ -14,7 +12,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
-// RunDesktopUIFrameworkIfApplicable only parses and loads graphics when compiled for desktop targets
 func RunDesktopUIFrameworkIfApplicable() {
 	runDesktopUI := true
 	if runtime.GOOS != "windows" {
@@ -22,7 +19,7 @@ func RunDesktopUIFrameworkIfApplicable() {
 	} else {
 		for _, arg := range os.Args {
 			if arg == "--connect" || arg == "--miner-address" {
-				runDesktopUI = false
+				runDesktopUI = false // Fall through seamlessly to the main.go terminal dashboard
 			}
 		}
 	}
@@ -44,6 +41,6 @@ func RunDesktopUIFrameworkIfApplicable() {
 		if err != nil {
 			log.Fatalf("Wails execution fault: %v", err)
 		}
-		os.Exit(0) // Safely end the process once the window is closed
+		os.Exit(0)
 	}
 }
