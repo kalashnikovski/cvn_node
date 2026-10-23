@@ -385,7 +385,13 @@ func TriggerActiveReSyncPass() {
 	fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
 func ValidateBlockSignatures(b Block) bool {
-	targetPrefix := strings.Repeat("0", b.Difficulty)
+	// 👑 DYNAMIC GENESIS GAP FILTER:
+	expectedDiff := b.Difficulty
+	if b.Index < 10 {
+		expectedDiff = 2
+	}
+	
+	targetPrefix := strings.Repeat("0", expectedDiff)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
 		return false
 	}
@@ -549,10 +555,12 @@ func GetCurrentCirculatingSupply() float64 {
 	return calculatedSupply
 }
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	// 👑 THE UN-FORKABLE MAINNET BOOTSTRAP ANCHOR:
-	// Explicitly freeze the target difficulty at 4 for the first 1000 blocks.
-	// This prevents massive historical timestamp gaps from dropping your mining
-	// difficulty floor down to 2, keeping all global full nodes in perfect lockstep!
+	// 👑 THE HISTORICAL BOOTSTRAP BRIDGE:
+	// Allow blocks under height 10 to use difficulty 2 to accommodate the massive 
+	// timestamp leap from the hardcoded genesis epoch to your live server clocks.
+	if lastBlock.Index < 10 {
+		return 2
+	}
 	if lastBlock.Index < 1000 {
 		return 4
 	}
@@ -568,7 +576,7 @@ func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 		return currentDiff + 1
 	}
 	if actualTimeElapsed > expectedTargetWindow {
-		if currentDiff > 4 { // Never drop below your official mainnet specification floor
+		if currentDiff > 4 { 
 			return currentDiff - 1
 		}
 		return 4

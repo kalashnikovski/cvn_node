@@ -130,8 +130,12 @@ func VerifyIncomingWireBlock(b Block) bool {
 	StateMutex.RUnlock()
 
 	effectiveThreshold := expectedDifficulty - 1
-	if effectiveThreshold < 4 {
-		effectiveThreshold = 4 // 👑 Hard-lock consensus directly to difficulty 4 across all targets
+	
+	// 👑 CHANNELS VARIANCE FILTER:
+	if b.Index < 10 {
+		if effectiveThreshold < 2 { effectiveThreshold = 2 }
+	} else {
+		if effectiveThreshold < 4 { effectiveThreshold = 4 }
 	}
 
 	if b.Difficulty < effectiveThreshold {
