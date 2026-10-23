@@ -549,18 +549,18 @@ func GetCurrentCirculatingSupply() float64 {
 	return calculatedSupply
 }
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	currentDiff := int(lastBlock.Difficulty)
-	
-	// 👑 THE UN-FORKABLE MAINNET SPECIFICATION FLOOR:
-	// Align the initial bootstrap difficulty boundary to exactly 4 leading zeros.
-	// This perfectly matches your active historical mainnet pacing layout, unblocking 
-	// your cloud servers and allowing them to pass front-gate validations flawlessly!
+	// 👑 THE UN-FORKABLE MAINNET BOOTSTRAP ANCHOR:
+	// Explicitly freeze the target difficulty at 4 for the first 1000 blocks.
+	// This prevents massive historical timestamp gaps from dropping your mining
+	// difficulty floor down to 2, keeping all global full nodes in perfect lockstep!
 	if lastBlock.Index < 1000 {
 		return 4
 	}
 
+	currentDiff := int(lastBlock.Difficulty)
 	expectedTargetWindow := int64(45)
 	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+	
 	if actualTimeElapsed <= 0 {
 		return currentDiff
 	}
@@ -568,7 +568,7 @@ func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
 		return currentDiff + 1
 	}
 	if actualTimeElapsed > expectedTargetWindow {
-		if currentDiff > 4 { // Prevent difficulty from dropping below our baseline mainnet floor
+		if currentDiff > 4 { // Never drop below your official mainnet specification floor
 			return currentDiff - 1
 		}
 		return 4
