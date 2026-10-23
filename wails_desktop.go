@@ -1,4 +1,6 @@
 //go:build !server || windows
+// +build !server windows
+
 package main
 
 import (
@@ -12,14 +14,16 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
+// RunDesktopUIFrameworkIfApplicable parses options and launches the graphical interface layout on desktop builds.
 func RunDesktopUIFrameworkIfApplicable() {
 	runDesktopUI := true
 	if runtime.GOOS != "windows" {
 		runDesktopUI = false
 	} else {
+		// Scan execution argument arrays for terminal console miner configurations
 		for _, arg := range os.Args {
 			if arg == "--connect" || arg == "--miner-address" {
-				runDesktopUI = false // Fall through seamlessly to the main.go terminal dashboard
+				runDesktopUI = false // Fall through seamlessly to the main.go terminal mining dashboard
 			}
 		}
 	}
@@ -27,6 +31,7 @@ func RunDesktopUIFrameworkIfApplicable() {
 	if runDesktopUI {
 		fmt.Println("🎨 [WAILS ENGINE] Initiating thread-safe graphical matrix windows...")
 		wailsApp := NewApp()
+		
 		err := wails.Run(&options.App{
 			Title:            "💎 COVENANT STANDARD (CVN) MATRIX CORE",
 			Width:            1100,
@@ -41,6 +46,6 @@ func RunDesktopUIFrameworkIfApplicable() {
 		if err != nil {
 			log.Fatalf("Wails execution fault: %v", err)
 		}
-		os.Exit(0)
+		os.Exit(0) // Safely terminate execution threads once the graphical wrapper environment window closes
 	}
 }

@@ -1,4 +1,6 @@
 //go:build linux && server
+// +build linux,server
+
 package main
 
 import (
@@ -9,6 +11,7 @@ import (
 	"strings"
 )
 
+// RunHeadlessServerUIFramework acts as the pure headless initializer for Linux cloud virtual instances.
 func RunDesktopUIFrameworkIfApplicable() {
 	fmt.Println("====================================================================")
 	fmt.Println("📡 COVENANT STANDARD (CVN) NATIVE HEADLESS SERVER CORE ENGAGED     ")
@@ -19,7 +22,7 @@ func RunDesktopUIFrameworkIfApplicable() {
 	flag.Parse()
 
 	if *minerAddrFlag != "" {
-		CustomMinerAddress = *minerAddrFlag
+		CustomMinerAddress = strings.TrimSpace(*minerAddrFlag)
 	}
 
 	if CustomMinerAddress == "" {
@@ -48,10 +51,12 @@ func RunDesktopUIFrameworkIfApplicable() {
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
 	}
 
+	// Ignite core P2P mesh parameters
 	go StartMeshNetwork()
 
 	fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
 	fmt.Println("--------------------------------------------------------------------")
 	
+	// Infinite background daemon hold
 	select {}
 }

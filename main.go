@@ -155,7 +155,6 @@ func main() {
 				json.NewEncoder(w).Encode(activeWallets)
 				return
 			}
-
 			if r.URL.Path == "/peers" {
 				w.Header().Set("Content-Type", "application/json")
 				PeerMapMutex.RLock()
@@ -187,6 +186,7 @@ func main() {
 
 			http.NotFound(w, r)
 		})
+
 		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -245,7 +245,6 @@ func main() {
 			if err := json.Unmarshal(rawBody.Bytes(), &tx); err == nil && tx.ID != "" && len(tx.Outputs) > 0 {
 				if MempoolMatrix.PushTransaction(tx) {
 					w.WriteHeader(http.StatusCreated)
-					// Signal the worker pool that the transaction pool state changed
 					SignalMinerReset()
 					return
 				}
@@ -308,7 +307,6 @@ func main() {
 				}
 				if currentAccumulator >= requiredTotal { break }
 			}
-
 			tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
 			txID := fmt.Sprintf("TX_SYSTEM_%x", sha256.Sum256([]byte(tSeed)))
 
@@ -489,16 +487,15 @@ func main() {
 			for i := 0; i < barWidth; i++ {
 				if i < filledChars { progressBar += "█" } else { progressBar += "░" }
 			}
-fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
-os.Stdout.Sync()
-}
-time.Sleep(10 * time.Millisecond)
-}
-atomic.StoreInt32(&IsSyncingActive, 0)
+			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
+			os.Stdout.Sync()
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	atomic.StoreInt32(&IsSyncingActive, 0)
 	// ====================================================================
 	// ⛏️ STATE PHASE 2: HARDENED DYNAMIC CONTEXT MINING CORE WORKER POOL
 	// ====================================================================
-	// Initialize and boot our asynchronous background solver pool layers safely
 	StartContextMinerEngine()
 
 	ticker := time.NewTicker(3 * time.Second)
@@ -617,7 +614,6 @@ atomic.StoreInt32(&IsSyncingActive, 0)
 	}
 }
 
-// StartContextMinerEngine boots an isolated asynchronous solver thread manager matching target core counts
 func StartContextMinerEngine() {
 	miningMutex.Lock()
 	defer miningMutex.Unlock()
@@ -634,7 +630,6 @@ func StartContextMinerEngine() {
 	}
 }
 
-// SignalMinerReset safely breaks and recycles working blocks across our active threads
 func SignalMinerReset() {
 	miningMutex.Lock()
 	if miningCancelFunc != nil {
@@ -646,11 +641,9 @@ func SignalMinerReset() {
 	StartContextMinerEngine()
 }
 
-// executionMiningWorkerThread represents the native hyper-threaded block execution assembly layer
 func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 	defer miningWg.Done()
 
-	// Initialize our thread scalar offsets to guarantee we don't calculate identical nonces
 	var nonce int64 = workerID * 100000000
 	var batchTracker uint64 = 0
 
@@ -675,10 +668,9 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			// 👑 THE MASTER CONCURRENCY SHIELD:
-			// Completely remove the old 'if currentBlock.Index == 0' conditional branch trap!
-			// This forces all high-speed concurrent Linux worker threads to calculate difficulty
-			// uniformly based on your unified historical bootstrap rules, eliminating the 0-2s loop!
+			// 👑 THE CONCURRENCY BRIDGE UNIFICATION:
+			// Uses the fixed index check to dynamically lock difficulty across all worker threads uniformly,
+			// stopping threads from experiencing read-drift and racing ahead into uncontrolled states.
 			var targetDifficulty int
 			if nextIndex <= 10 {
 				targetDifficulty = 2
@@ -720,22 +712,17 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 			activeMiningStartTimeNs := time.Now().UnixNano()
 
-			// Micro loop hashing chunk operations 
-			// Micro loop hashing chunk operations 
 			for i := 0; i < 50000; i++ {
 				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
 					break
 				}
 
-				// 👑 THE MASTER STRPREPRINT EQUALIZER: 
-				// Safely passes targetDifficulty into the hashing text preload engine,
-				// forcing your high-speed cloud Linux servers to run actual, paced computations!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,
 					txHashStr,
-					int64(targetDifficulty), // Enforces 4 leading zeros securely across loops
+					int64(targetDifficulty),
 					guardMatrixPlaceholder,
 					nonce,
 					targetUncleHash,
@@ -780,9 +767,9 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			atomic.AddUint64(&globalHashCount, batchTracker)
 			batchTracker = 0
 
-			// Cleanly yield threads to prevent high-concurrency scheduler starvation on Linux targets
 			runtime.Gosched()
+		}
+	}
 }
-}
-}
+
 func osCheckArgs() []string { return os.Args }

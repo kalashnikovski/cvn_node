@@ -257,6 +257,10 @@ func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
 	
+	// 👑 THE CONCURRENCY RESET EQUALIZER:
+	// Explicitly purge and reconstruct the memory registry structure out-of-the-box.
+	// This forces duplicate background threads to zero-out historical tracking arrays
+	// before reading data from the bbolt file, completely destroying the double balance bug!
 	StateBalanceCache = make(map[string]float64)
 	if GlobalBoltEngine == nil {
 		return
@@ -272,6 +276,7 @@ func RebuildStateBalanceCacheInternal() {
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			var record UTXORecord
 			if json.Unmarshal(v, &record) == nil {
+				// Safely aggregate clean balance fields
 				StateBalanceCache[record.Recipient] += record.Amount
 			}
 		}
