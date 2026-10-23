@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
+// RunDesktopUIFrameworkIfApplicable handles the headless initialization parameters on server targets.
 func RunDesktopUIFrameworkIfApplicable() {
 	fmt.Println("====================================================================")
 	fmt.Println("📡 COVENANT STANDARD (CVN) NATIVE HEADLESS SERVER CORE ENGAGED     ")
@@ -52,10 +54,12 @@ func RunDesktopUIFrameworkIfApplicable() {
 	// Ignite your core P2P Gossip mesh channels asynchronously
 	go StartMeshNetwork()
 
-	fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools. Returning to core runtime...")
-	fmt.--------------------------------------------------------------------")
+	fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
+	fmt.Println("--------------------------------------------------------------------")
 	
-	// 👑 THE MASTER CONVERGENCE REPAIR:
-	// Removed the empty select{} lock block entirely.
-	// Execution now falls through to main.go seamlessly to fire the hashing threads on Linux nodes!
+	// 👑 THE MASTER CONVERGENCE REPAIR ANCHOR:
+	// Yield execution directly to an infinite blocking thread hold block right here!
+	// This permanently locks your headless server thread inside this file, stopping it 
+	// from ever falling into main.go to spawn duplicate network layers or corrupt difficulty targets!
+	select {}
 }
