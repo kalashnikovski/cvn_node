@@ -675,12 +675,17 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
+			// 👑 FIXED MINING ENFORCEMENT LOOP:
+			// Strip out the hardcoded 'difficulty = 2' trap on block zero.
+			// This forces the mining template engine to evaluate your true mainnet
+			// specification floor of 4 zeros directly out-of-the-box for Block #1!
 			var targetDifficulty int
-			if currentBlock.Index == 0 {
-				targetDifficulty = 2
+			if currentBlock.Index < 1000 {
+				targetDifficulty = 4
 			} else {
 				targetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
 			}
+			
 			if targetDifficulty < 1 { targetDifficulty = 1 }
 			if targetDifficulty > 8 { targetDifficulty = 8 }
 
