@@ -679,10 +679,22 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			for time.Now().Unix() <= currentBlock.Timestamp {
-				time.Sleep(10 * time.Millisecond)
+			// 👑 THE HARDWARE EMISSION THROTTLING GATE:
+			// Calculate the elapsed time since the current block tip was committed.
+			// If it falls short of our 45-second mainnet pacing window, force a precise
+			// non-blocking delay to uniform block emission speeds across blocks 1-10.
+			elapsedSinceLastTip := time.Now().Unix() - currentBlock.Timestamp
+			const TargetBlockTimeWindow = 45
+			
+			if elapsedSinceLastTip < TargetBlockTimeWindow && currentBlock.Index > 0 {
+				deficitSeconds := TargetBlockTimeWindow - elapsedSinceLastTip
+				time.Sleep(time.Duration(deficitSeconds) * time.Second)
 			}
+
 			simulatedTime := time.Now().Unix()
+			if simulatedTime <= currentBlock.Timestamp {
+				simulatedTime = currentBlock.Timestamp + 1
+			}
 
 			var workerTargetDifficulty int
 			if nextIndex <= 10 {
@@ -702,9 +714,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
 			}
 			
-			// 👑 PREIMAGE ALIGNMENT INITIALIZATION:
-			// Enforce hardcoded field fallbacks variables matching CalculateHash exactly
-			// to guarantee that formatting delimiters serialize identically across platforms!
 			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 			targetUncleMiner := "NONE"
 
@@ -737,9 +746,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					break
 				}
 
-				// 👑 FIXED STRING PREIMAGE COMPILATION MATRIX:
-				// Employs the identical formatting tag structure, parameter spacing positions, 
-				// and variable constraints as your main database block engine calculator function!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,

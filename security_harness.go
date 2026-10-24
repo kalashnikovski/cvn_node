@@ -102,12 +102,23 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 }
 
 // VerifyIncomingWireBlock performs deep validation checks on incoming blocks with strict difficulty parameters.
+// VerifyIncomingWireBlock performs strict validation audits on incoming P2P blocks.
 func VerifyIncomingWireBlock(b Block) bool {
 	// 👑 THE MASTER IDENTITY SAFEGUARD:
-	// Prevent headless cloud servers from running consensus rules if their local address
-	// profile tracking parameters fell back to unconfigured system string literals.
 	if CustomMinerAddress == "" || CustomMinerAddress == "CVN_UNCONFIGURED_LOCAL_NODE_ID" {
 		fmt.Println("🚨 FRONT-GATE REFUSAL: Headless node configuration missing or uninstantiated. Aborting validation path.")
+		return false
+	}
+
+	// 👑 EXACT MATCH CONSENSUS GATEWAY:
+	// Recalculate what the exact difficulty target should be for this block's timestamp.
+	StateMutex.RLock()
+	expectedDifficulty := CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
+	StateMutex.RUnlock()
+
+	// Enforce an absolute exact equality check to kill fork-split vulnerabilities.
+	if b.Difficulty != expectedDifficulty {
+		fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
 		return false
 	}
 
@@ -117,29 +128,9 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 
-	// 👑 THE CRYPTOGRAPHIC IDENTITY INVARIANT:
-	// Recalculate block hashes using the exact transaction array elements embedded inside
-	// the packet, preventing local wallet variable drift from corrupting historical validations.
+	// Recalculate block hashes using the exact transaction array elements embedded inside the packet
 	if b.Hash != CalculateHash(b) {
 		fmt.Println("🚨 WIRE BLOCK FAULT: Block hash re-computation checks failed mismatch constraints.")
-		return false
-	}
-
-	StateMutex.RLock()
-	expectedDifficulty := CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
-	StateMutex.RUnlock()
-
-	effectiveThreshold := expectedDifficulty - 1
-	
-	// 👑 CHANNELS VARIANCE FILTER:
-	if b.Index < 10 {
-		if effectiveThreshold < 2 { effectiveThreshold = 2 }
-	} else {
-		if effectiveThreshold < 4 { effectiveThreshold = 4 }
-	}
-
-	if b.Difficulty < effectiveThreshold {
-		fmt.Printf("🚨 REJECTION: Incoming block #%d uses insufficient difficulty %d (Expected: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
 		return false
 	}
 

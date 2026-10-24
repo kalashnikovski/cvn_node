@@ -529,31 +529,44 @@ return MaxTotalSupplyCap
 }
 return calculatedSupply
 }
-// Refactored Reactive Difficulty Adjustment Matrix Engine
-func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-currentDiff := int(lastBlock.Difficulty)
-actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-// 👑 THE ARITHMETIC PUNISHMENT VALVE:
-// Instantly penalize zero or negative time stamps caused by cross-platform clock jumps
-// by incrementing target requirements by +1 difficulty block natively.
-if actualTimeElapsed <= 0 {
-return currentDiff + 1
-}
-const TargetBlockTimeWindow = int64(45)
-if actualTimeElapsed < TargetBlockTimeWindow {
-// Hyper-accelerated write pass occurred. Instantly scale difficulty upwards!
-return currentDiff + 1
-} else if actualTimeElapsed > TargetBlockTimeWindow {
-// Emission window extended. Drop requirements down to safe baseline targets.
-decreasedDiff := currentDiff - 1
-// Enforce strict mainnet specification floors across historical slots
-if lastBlock.Index < 10 {
-if decreasedDiff < 2 { return 2 }
-} else {
-if decreasedDiff < 4 { return 4 }
-}
-return decreasedDiff
-}
-// Blocks pacing parameters hit precisely on our target timeline matrix. Maintain state!
-return currentDiff
+// CalculateNextDifficulty evaluates historical block-header relative deltas 
+// to enforce a stable 45-second block emission pace across the decentralized mesh.
+func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
+	currentDiff := int(lastBlock.Difficulty)
+
+	// Hard-locked bootstrap policy constraint floors
+	if lastBlock.Index < 10 {
+		return 2
+	}
+
+	// 👑 THE RELATIVE temporal DELTA ANCHOR:
+	// Calculate the difference strictly bound inside the block structures,
+	// completely eliminating cross-continental system clock variances.
+	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
+
+	// Penalize forged, zero, or negative time deltas instantly
+	if actualTimeElapsed <= 0 {
+		return currentDiff + 1
+	}
+
+	// 👑 STABILIZED DIFFICULTY ADJUSTMENT MATRIX:
+	if actualTimeElapsed < 30 {
+		// Hyper-accelerated block emission pass. Step up difficulty aggressively.
+		return currentDiff + 1
+	} else if actualTimeElapsed > 90 {
+		// Stalled block generation window. Decrease difficulty by -1.
+		decreasedDiff := currentDiff - 1
+		
+		// Enforce strict mainnet specification floors across historical slots
+		if lastBlock.Index < 10 {
+			if decreasedDiff < 2 { return 2 }
+		} else {
+			if decreasedDiff < 4 { return 4 }
+		}
+		return decreasedDiff
+	}
+
+	// Deliberate operational buffer window (30 to 90 seconds).
+	// Maintain the current difficulty to prevent network clock-jitter spikes.
+	return currentDiff
 }
