@@ -531,9 +531,6 @@ return calculatedSupply
 }
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 	// 👑 THE ABSOLUTE INCLUSIVE BOOTSTRAP ANCHOR:
-	// Evaluate the target block height index directly (lastBlock.Index + 1).
-	// This ensures blocks 1 through 10 are hard-locked to difficulty 2 across
-	// both mining worker loops and live gossip validation firewalls!
 	if (lastBlock.Index + 1) <= 10 {
 		return 2
 	}
@@ -541,18 +538,28 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 	currentDiff := int(lastBlock.Difficulty)
 	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
 
+	// Penalize forged, zero, or negative time deltas instantly
 	if actualTimeElapsed <= 0 {
 		return currentDiff + 1
 	}
 
 	const TargetBlockTimeWindow = int64(45)
 
+	// 👑 THE ABSOLUTE TARGET EQUILIBRIUM COUPLING:
+	// If block pacing hits precisely inside our operational target window buffer,
+	// immediately return the current difficulty unchanged. This completely blocks
+	// target drift and eliminates the 'Expected exactly: 5' gossip firewall rejections!
+	if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
+		return currentDiff
+	}
+
+	// Dynamic adjustments for outlier blocks falling outside the operational buffer
 	if actualTimeElapsed < 30 {
 		return currentDiff + 1
 	} else if actualTimeElapsed > 90 {
 		decreasedDiff := currentDiff - 1
 		if decreasedDiff < 4 {
-			return 4 // Hard floor remains 4 for all blocks height 11 and above
+			return 4 // Hard-lock mainnet specification floor past block 10
 		}
 		return decreasedDiff
 	}
