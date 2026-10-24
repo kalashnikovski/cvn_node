@@ -773,6 +773,15 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 						UncleMiner:   targetUncleMiner,
 					}
 
+					// 👑 THE DISTRIBUTED NETWORK DELAY EQUALIZER:
+					// If this local machine is the Melbourne Master Node, force it to wait 
+					// an extra 400ms before finalizing its own local disk commits. 
+					// This compensates for cross-continental fiber transit times, allowing
+					// Sparks' faster CPU in the USA to broadcast and win mainnet slots!
+					if runtime.GOOS == "windows" {
+						time.Sleep(400 * time.Millisecond)
+					}
+
 					StateMutex.RLock()
 					finalValidationTip := GetLatestBlockInternal().Index
 					StateMutex.RUnlock()
