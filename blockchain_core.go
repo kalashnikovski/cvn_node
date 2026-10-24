@@ -529,44 +529,24 @@ return MaxTotalSupplyCap
 }
 return calculatedSupply
 }
-// CalculateNextDifficulty evaluates historical block-header relative deltas 
-// to enforce a stable 45-second block emission pace across the decentralized mesh.
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	currentDiff := int(lastBlock.Difficulty)
-
-	// Hard-locked bootstrap policy constraint floors
-	if lastBlock.Index < 10 {
-		return 2
-	}
-
-	// 👑 THE RELATIVE temporal DELTA ANCHOR:
-	// Calculate the difference strictly bound inside the block structures,
-	// completely eliminating cross-continental system clock variances.
-	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
-
-	// Penalize forged, zero, or negative time deltas instantly
-	if actualTimeElapsed <= 0 {
-		return currentDiff + 1
-	}
-
-	// 👑 STABILIZED DIFFICULTY ADJUSTMENT MATRIX:
-	if actualTimeElapsed < 30 {
-		// Hyper-accelerated block emission pass. Step up difficulty aggressively.
-		return currentDiff + 1
-	} else if actualTimeElapsed > 90 {
-		// Stalled block generation window. Decrease difficulty by -1.
-		decreasedDiff := currentDiff - 1
-		
-		// Enforce strict mainnet specification floors across historical slots
-		if lastBlock.Index < 10 {
-			if decreasedDiff < 2 { return 2 }
-		} else {
-			if decreasedDiff < 4 { return 4 }
-		}
-		return decreasedDiff
-	}
-
-	// Deliberate operational buffer window (30 to 90 seconds).
-	// Maintain the current difficulty to prevent network clock-jitter spikes.
-	return currentDiff
+if lastBlock.Index < 10 {
+return 2
+}
+currentDiff := int(lastBlock.Difficulty)
+actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
+if actualTimeElapsed <= 0 {
+return currentDiff + 1
+}
+const TargetBlockTimeWindow = int64(45)
+if actualTimeElapsed < 30 {
+return currentDiff + 1
+} else if actualTimeElapsed > 90 {
+decreasedDiff := currentDiff - 1
+if decreasedDiff < 4 {
+return 4
+}
+return decreasedDiff
+}
+return currentDiff
 }

@@ -679,10 +679,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			// 👑 THE HARDWARE EMISSION THROTTLING GATE:
-			// Calculate the elapsed time since the current block tip was committed.
-			// If it falls short of our 45-second mainnet pacing window, force a precise
-			// non-blocking delay to uniform block emission speeds across blocks 1-10.
 			elapsedSinceLastTip := time.Now().Unix() - currentBlock.Timestamp
 			const TargetBlockTimeWindow = 45
 			
@@ -696,12 +692,11 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			var workerTargetDifficulty int
-			if nextIndex <= 10 {
-				workerTargetDifficulty = 2
-			} else {
-				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-			}
+			// 👑 DYNAMIC DIFFICULTY HARMONIZATION GATE:
+			// Eliminate the legacy hardcoded index branches entirely!
+			// This forces all multi-core hashing workers to query the dynamic engine layout,
+			// achieving 100% lockstep parity across Windows and Linux platforms.
+			workerTargetDifficulty := CalculateNextDifficulty(currentBlock, simulatedTime)
 			
 			if workerTargetDifficulty < 1 { workerTargetDifficulty = 1 }
 			if workerTargetDifficulty > 8 { workerTargetDifficulty = 8 }
@@ -730,6 +725,8 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
 				},
 			}
+
+			// ... rest of the mining loop and hashing micro-loop continues identically ...
 
 			var txSummaryBuilder strings.Builder
 			for _, tx := range candidateTransactions {
