@@ -6,6 +6,7 @@ import (
 	"log"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -152,6 +153,20 @@ func SaveBlockToStorageInternal(block Block) bool {
 		return false
 	}
 
+	// 👑 THE FIRWALL RE-ALIGNMENT CHECKPOINT:
+	// Enforce true cryptographic consensus verification checks directly at the front gate 
+	// of your storage engine. If an un-computed nonce or forged loopback block attempts to bypass
+	// main.go, it gets caught and rejected here, preventing hyper-acceleration forks entirely!
+	expectedDiff := block.Difficulty
+	if block.Index < 10 {
+		expectedDiff = 2
+	}
+	targetPrefix := strings.Repeat("0", expectedDiff)
+	if !strings.HasPrefix(block.Hash, targetPrefix) || block.Hash != CalculateHash(block) {
+		fmt.Printf("🚨 STORAGE REFUSAL: Block #%d failed strict cryptographic verification filters inside database_core!\n", block.Index)
+		return false
+	}
+
 	err := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
 		bMeta := tx.Bucket(metaBucket)
@@ -178,11 +193,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		BalanceCacheMutex.Lock()
-		defer BalanceCacheMutex.Unlock()
-		
-		// 👑 OPTIMIZED TRANS-LATENCY LEDGER TRACKER:
-		// Cleanly processes spends and rewards past position zero without duplicating array entries!
+		// Process unspent transaction outputs and spends without creating map duplication leaks
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx != 0 {
 				for _, input := range txPayload.Inputs {

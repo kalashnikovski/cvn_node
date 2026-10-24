@@ -120,6 +120,7 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	}
 	return 0
 }
+
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
@@ -361,225 +362,198 @@ func TriggerActiveReSyncPass() {
 		for _, block := range incomingBatch {
 			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
 				if ValidateBlockSignatures(block) {
-					// 👑 THE BULK RESYNC CONVERSIONS ALIGNER:
-					// Enforce the same fallback string defaults inside the catchup pipeline loop
-					// to prevent syncing nodes from writing empty strings that trigger mismatches!
 					if block.UncleHash == "" {
-						block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
-					}
-					if block.UncleMiner == "" {
-						block.UncleMiner = "NONE"
-					}
-
-					SaveBlockToStorageInternal(block)
-					fmt.Printf(" -> [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
-				} else {
-					fmt.Printf(" -> [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
-					break
-				}
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	StateMutex.Unlock()
-	fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
+block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
+}
+if block.UncleMiner == "" {
+block.UncleMiner = "NONE"
+}
+SaveBlockToStorageInternal(block)
+fmt.Printf(" -> [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
+} else {
+fmt.Printf(" -> [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
+break
+}
+}
+}
+time.Sleep(10 * time.Millisecond)
+}
+StateMutex.Unlock()
+fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
 func ValidateBlockSignatures(b Block) bool {
-	// 👑 DYNAMIC GENESIS GAP FILTER:
-	expectedDiff := b.Difficulty
-	if b.Index < 10 {
-		expectedDiff = 2
-	}
-	
-	targetPrefix := strings.Repeat("0", expectedDiff)
-	if !strings.HasPrefix(b.Hash, targetPrefix) {
-		return false
-	}
-	if b.Hash != CalculateHash(b) {
-		return false
-	}
-	if len(b.Transactions) == 0 {
-		return false
-	}
-
-	isBlockValid := true
-	if GlobalBoltEngine != nil {
-		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			bUTXO := dbTx.Bucket([]byte("utxo"))
-			if bUTXO == nil {
-				isBlockValid = false
-				return nil
-			}
-			
-			// 👑 THE ABSOLUTE PROTOCOL INTEGRITY RESCUE VALVE:
-			// Lock validation evaluation strictly past loop index slot 0 (txIdx == 0).
-			// This ensures incoming network blocks skip evaluating the raw Coinbase layout inputs, 
-			// instantly unblocking your cloud servers and bringing them into 100% hash lockstep harmony!
-			for txIdx, tx := range b.Transactions {
-				if txIdx == 0 {
-					continue
-				}
-				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
-					isBlockValid = false
-					return nil
-				}
-			}
-			return nil
-		})
-	}
-	if !isBlockValid {
-		return false
-	}
-
-	// Isolate the primary Coinbase transaction structure cleanly from the first slice index
-	coinbaseTx := b.Transactions[0]
-
-	var totalCoinbasePayout float64 = 0.0
-	for _, out := range coinbaseTx.Outputs {
-		totalCoinbasePayout += out.Amount
-	}
-
-	targetBlockHeight := int64(b.Index)
-	allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-	if targetBlockHeight > 21024000 {
-		allowedTotalEmission += 5.0
-	}
-
-	if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
-		fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
-		return false
-	}
-
-	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" {
-		if len(coinbaseTx.Outputs) < 2 {
-			fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash requires two coinbase outputs.")
-			return false
-		}
-		mainMinerPayout := coinbaseTx.Outputs[0].Amount
-		uncleMinerPayout := coinbaseTx.Outputs[1].Amount
-		expectedMainSplit := allowedTotalEmission * 0.80
-		expectedUncleSplit := allowedTotalEmission * 0.20
-		if (mainMinerPayout - expectedMainSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) > 0.00001 {
-			fmt.Printf("🚨 REJECTION: Invalid Split. Main: %f, Uncle: %f\n", mainMinerPayout, uncleMinerPayout)
-			return false
-		}
-	}
-	return true
+expectedDiff := b.Difficulty
+if b.Index < 10 {
+expectedDiff = 2
+}
+targetPrefix := strings.Repeat("0", expectedDiff)
+if !strings.HasPrefix(b.Hash, targetPrefix) {
+return false
+}
+if b.Hash != CalculateHash(b) {
+return false
+}
+if len(b.Transactions) == 0 {
+return false
+}
+isBlockValid := true
+if GlobalBoltEngine != nil {
+_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+bUTXO := dbTx.Bucket([]byte("utxo"))
+if bUTXO == nil {
+isBlockValid = false
+return nil
+}
+for txIdx, tx := range b.Transactions {
+if txIdx == 0 {
+continue
+}
+if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
+isBlockValid = false
+return nil
+}
+}
+return nil
+})
+}
+if !isBlockValid {
+return false
+}
+coinbaseTx := b.Transactions[0]
+var totalCoinbasePayout float64 = 0.0
+for _, out := range coinbaseTx.Outputs {
+totalCoinbasePayout += out.Amount
+}
+targetBlockHeight := int64(b.Index)
+allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
+if targetBlockHeight > 21024000 {
+allowedTotalEmission += 5.0
+}
+if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
+fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
+return false
+}
+if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" {
+if len(coinbaseTx.Outputs) < 2 {
+fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash requires two coinbase outputs.")
+return false
+}
+mainMinerPayout := coinbaseTx.Outputs[0].Amount
+uncleMinerPayout := coinbaseTx.Outputs[1].Amount
+expectedMainSplit := allowedTotalEmission * 0.80
+expectedUncleSplit := allowedTotalEmission * 0.20
+if (mainMinerPayout - expectedMainSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) > 0.00001 {
+fmt.Printf("🚨 REJECTION: Invalid Split. Main: %f, Uncle: %f\n", mainMinerPayout, uncleMinerPayout)
+return false
+}
+}
+return true
 }
 func CalculateHash(b Block) string {
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(tx.ID + "-")
-	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-	
-	// 👑 THE CRYPTOGRAPHIC ALIGNMENT LOCK:
-	// Force empty or un-instantiated Uncle parameters to fall back to hard-coded strings.
-	// This guarantees that the string preimage formats identically across all nodes!
-	uHash := b.UncleHash
-	if uHash == "" {
-		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
-	}
-	uMiner := b.UncleMiner
-	if uMiner == "" {
-		uMiner = "NONE"
-	}
-	
-	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
-		b.Index,
-		b.Timestamp,
-		b.PrevHash,
-		txHashStr,
-		int64(b.Difficulty),
-		b.GuardMatrix,
-		b.Nonce,
-		uHash,
-		uMiner,
-	)
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
+var txSummaryBuilder strings.Builder
+for _, tx := range b.Transactions {
+txSummaryBuilder.WriteString(tx.ID + "-")
 }
-
+txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+uHash := b.UncleHash
+if uHash == "" {
+uHash = "0000000000000000000000000000000000000000000000000000000000000000"
+}
+uMiner := b.UncleMiner
+if uMiner == "" {
+uMiner = "NONE"
+}
+inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+b.Index,
+b.Timestamp,
+b.PrevHash,
+txHashStr,
+int64(b.Difficulty),
+b.GuardMatrix,
+b.Nonce,
+uHash,
+uMiner,
+)
+h := sha256.New()
+h.Write([]byte(inputStr))
+return fmt.Sprintf("%x", h.Sum(nil))
+}
 func ForceBackgroundSyncPass() {}
-
 func GetAddressBalance(address string) float64 {
-	BalanceCacheMutex.RLock()
-	defer BalanceCacheMutex.RUnlock()
-	if val, exists := StateBalanceCache[address]; exists {
-		return val
-	}
-	return 0.0
+BalanceCacheMutex.RLock()
+privateBalance, exists := StateBalanceCache[address]
+BalanceCacheMutex.RUnlock()
+if exists {
+return privateBalance
 }
-
+return 0.0
+}
 const MaxTotalSupplyCap = 2100000000.0
-
 func GetCurrentCirculatingSupply() float64 {
-	StateMutex.RLock()
-	latestBlock := GetLatestBlockInternal()
-	StateMutex.RUnlock()
-	height := latestBlock.Index
-	var calculatedSupply float64 = 0.0
-	var processedBlocks int64 = 0
-	if height > 5256000 {
-		calculatedSupply += 5256000 * 50.0
-		processedBlocks = 5256000
-	} else {
-		calculatedSupply += float64(height) * 50.0
-		return calculatedSupply
-	}
-	if height > 10512000 {
-		calculatedSupply += (10512000 - 5256000) * 25.0
-		processedBlocks = 10512000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 25.0
-		return calculatedSupply
-	}
-	if height > 15768000 {
-		calculatedSupply += (15768000 - 10512000) * 12.5
-		processedBlocks = 15768000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 12.5
-		return calculatedSupply
-	}
-	if height > 21024000 {
-		calculatedSupply += (21024000 - 15768000) * 6.25
-		processedBlocks = 21024000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 6.25
-		return calculatedSupply
-	}
-	if calculatedSupply > MaxTotalSupplyCap {
-		return MaxTotalSupplyCap
-	}
-	return calculatedSupply
+StateMutex.RLock()
+latestBlock := GetLatestBlockInternal()
+StateMutex.RUnlock()
+height := latestBlock.Index
+var calculatedSupply float64 = 0.0
+var processedBlocks int64 = 0
+if height > 5256000 {
+calculatedSupply += 5256000 * 50.0
+processedBlocks = 5256000
+} else {
+calculatedSupply += float64(height) * 50.0
+return calculatedSupply
 }
+if height > 10512000 {
+calculatedSupply += (10512000 - 5256000) * 25.0
+processedBlocks = 10512000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 25.0
+return calculatedSupply
+}
+if height > 15768000 {
+calculatedSupply += (15768000 - 10512000) * 12.5
+processedBlocks = 15768000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 12.5
+return calculatedSupply
+}
+if height > 21024000 {
+calculatedSupply += (21024000 - 15768000) * 6.25
+processedBlocks = 21024000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 6.25
+return calculatedSupply
+}
+if calculatedSupply > MaxTotalSupplyCap {
+return MaxTotalSupplyCap
+}
+return calculatedSupply
+}
+// Refactored Reactive Difficulty Adjustment Matrix Engine
 func CalculateNextDifficulty(lastBlock Block, currentTimestamp int64) int {
-	// 👑 THE HISTORICAL BOOTSTRAP BRIDGE:
-	// Allow blocks under height 10 to use difficulty 2 to accommodate the massive 
-	// timestamp leap from the hardcoded genesis epoch to your live server clocks.
-	if lastBlock.Index < 10 {
-		return 2
-	}
-	if lastBlock.Index < 1000 {
-		return 4
-	}
-
-	currentDiff := int(lastBlock.Difficulty)
-	expectedTargetWindow := int64(45)
-	actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
-	
-	if actualTimeElapsed <= 0 {
-		return currentDiff
-	}
-	if actualTimeElapsed < expectedTargetWindow {
-		return currentDiff + 1
-	}
-	if actualTimeElapsed > expectedTargetWindow {
-		if currentDiff > 4 { 
-			return currentDiff - 1
-		}
-		return 4
-	}
-	return currentDiff
+currentDiff := int(lastBlock.Difficulty)
+actualTimeElapsed := currentTimestamp - lastBlock.Timestamp
+// 👑 THE ARITHMETIC PUNISHMENT VALVE:
+// Instantly penalize zero or negative time stamps caused by cross-platform clock jumps
+// by incrementing target requirements by +1 difficulty block natively.
+if actualTimeElapsed <= 0 {
+return currentDiff + 1
+}
+const TargetBlockTimeWindow = int64(45)
+if actualTimeElapsed < TargetBlockTimeWindow {
+// Hyper-accelerated write pass occurred. Instantly scale difficulty upwards!
+return currentDiff + 1
+} else if actualTimeElapsed > TargetBlockTimeWindow {
+// Emission window extended. Drop requirements down to safe baseline targets.
+decreasedDiff := currentDiff - 1
+// Enforce strict mainnet specification floors across historical slots
+if lastBlock.Index < 10 {
+if decreasedDiff < 2 { return 2 }
+} else {
+if decreasedDiff < 4 { return 4 }
+}
+return decreasedDiff
+}
+// Blocks pacing parameters hit precisely on our target timeline matrix. Maintain state!
+return currentDiff
 }

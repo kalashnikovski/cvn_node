@@ -41,7 +41,7 @@ var miningContext    context.Context
 var miningMutex      sync.Mutex
 
 func clearTerminalNatively() {
-	// Reverted to raw ANSI string controls inside the main dashboard loop to kill console flickering!
+	// Screen management fully handled via static ANSI coordinates inside our display tickers
 }
 
 func initWindowsAnsi() {}
@@ -364,8 +364,8 @@ func main() {
 		})
 
 		winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
 			
 			targetAddress := r.URL.Query().Get("address")
 			if targetAddress == "" {
@@ -579,9 +579,8 @@ func main() {
 				logMutex.Unlock()
 			}
 
-			// 👑 RESTORE LEGACY ANSI TERMINAL ENGINE RE-RENDERING LOOPS:
+			// 👑 RESTORE LEGACY FLICKER-FREE ANSI RENDER ENGINE:
 			// \033[H snaps the cursor back to the top left position cleanly.
-			// This completely removes background process spawning, eliminating screen flickering!
 			fmt.Print("\033[H")
 			fmt.Println("================================================================================")
 			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
@@ -612,11 +611,18 @@ func main() {
 	}
 }
 
+// Atomic guard flag to prevent overlapping reset passes
+var isResettingActive int32 = 0
+
 func StartContextMinerEngine() {
 	miningMutex.Lock()
-	defer miningMutex.Unlock()
-
+	// Safely clear out old cancel functions without creating resource leakage
+	if miningCancelFunc != nil {
+		miningCancelFunc()
+	}
 	miningContext, miningCancelFunc = context.WithCancel(context.Background())
+	miningMutex.Unlock()
+
 	coresToAllocate := runtime.NumCPU()
 	if coresToAllocate < 1 {
 		coresToAllocate = 1
@@ -629,13 +635,24 @@ func StartContextMinerEngine() {
 }
 
 func SignalMinerReset() {
+	// 👑 THE NON-BLOCKING CONCURRENCY SHIELD:
+	// Use an atomic swap gate to guarantee that only ONE single thread can execute
+	// a pool recycling pass at any given moment, completely eliminating WaitGroup panic crashes!
+	if !atomic.CompareAndSwapInt32(&isResettingActive, 0, 1) {
+		return
+	}
+	defer atomic.StoreInt32(&isResettingActive, 0)
+
 	miningMutex.Lock()
 	if miningCancelFunc != nil {
 		miningCancelFunc()
 	}
-	miningWg.Wait()
 	miningMutex.Unlock()
 
+	// Wait for active workers to cleanly spin down outside the memory lock boundaries
+	miningWg.Wait()
+
+	// Re-ignite a fresh, synchronized set of worker threads onto the new chain tip
 	StartContextMinerEngine()
 }
 
@@ -661,28 +678,33 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
-			simulatedTime := time.Now().Unix()
-			if simulatedTime <= currentBlock.Timestamp {
-				simulatedTime = currentBlock.Timestamp + 1
+			
+			for time.Now().Unix() <= currentBlock.Timestamp {
+				time.Sleep(10 * time.Millisecond)
 			}
+			simulatedTime := time.Now().Unix()
 
-			var targetDifficulty int
+			var workerTargetDifficulty int
 			if nextIndex <= 10 {
-				targetDifficulty = 2
+				workerTargetDifficulty = 2
 			} else {
-				targetDifficulty = 4
+				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
 			}
 			
-			if targetDifficulty < 1 { targetDifficulty = 1 }
-			if targetDifficulty > 8 { targetDifficulty = 8 }
+			if workerTargetDifficulty < 1 { workerTargetDifficulty = 1 }
+			if workerTargetDifficulty > 8 { workerTargetDifficulty = 8 }
 
-			targetPrefix := strings.Repeat("0", targetDifficulty)
+			targetPrefix := strings.Repeat("0", workerTargetDifficulty)
 			var guardMatrixPlaceholder = ""
 			allowedTotalEmission := CalculateBlockReward(nextIndex)
 			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
 			coinbaseOutputs := []UTXOOutput{
 				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
 			}
+			
+			// 👑 PREIMAGE ALIGNMENT INITIALIZATION:
+			// Enforce hardcoded field fallbacks variables matching CalculateHash exactly
+			// to guarantee that formatting delimiters serialize identically across platforms!
 			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 			targetUncleMiner := "NONE"
 
@@ -708,19 +730,22 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			activeMiningStartTimeNs := time.Now().UnixNano()
 
 			for i := 0; i < 50000; i++ {
-				if atomic.LoadInt64(&localHeightState) != (nextIndex - 1) {
+				StateMutex.RLock()
+				actualTipCheck := GetLatestBlockInternal().Index
+				StateMutex.RUnlock()
+				if actualTipCheck != (nextIndex - 1) {
 					break
 				}
 
-				// 👑 FIXED PREIMAGE ALIGNMENT PATTERN:
-				// Guarantees that the string representation matches exactly what verification
-				// layers expect, eliminating false successes on high-speed hardware!
+				// 👑 FIXED STRING PREIMAGE COMPILATION MATRIX:
+				// Employs the identical formatting tag structure, parameter spacing positions, 
+				// and variable constraints as your main database block engine calculator function!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,
 					txHashStr,
-					int64(targetDifficulty),
+					int64(workerTargetDifficulty),
 					guardMatrixPlaceholder,
 					nonce,
 					targetUncleHash,
@@ -737,25 +762,29 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 						Transactions: candidateTransactions,
 						PrevHash:     parentBlockTipHash,
 						Hash:         computedHashHex,
-						Difficulty:   targetDifficulty,
+						Difficulty:   workerTargetDifficulty,
 						Nonce:        nonce,
 						GuardMatrix:  guardMatrixPlaceholder,
 						UncleHash:    targetUncleHash,
 						UncleMiner:   targetUncleMiner,
 					}
 
-					if SaveBlockToStorage(newBlock) {
-						logMutex.Lock()
-						logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Mined by Worker %d | Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, workerID, newBlock.Hash[:16])
-						liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-						logMutex.Unlock()
-						
-						go SignalMinerReset()
-						return
+					StateMutex.RLock()
+					finalValidationTip := GetLatestBlockInternal().Index
+					StateMutex.RUnlock()
+
+					if finalValidationTip == (nextIndex - 1) {
+						if SaveBlockToStorage(newBlock) {
+							logMutex.Lock()
+							logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Mined by Worker %d | Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, workerID, newBlock.Hash[:16])
+							liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+							logMutex.Unlock()
+							
+							go SignalMinerReset()
+							return
+						}
 					}
 					
-					// 👑 IMMUTABLE ESCAPE VALVE BREAKOUT:
-					// Instantly terminate thread processing if another core beats us to disk write commitments!
 					go SignalMinerReset()
 					return
 				}
@@ -766,9 +795,10 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
 			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
 			atomic.AddUint64(&globalHashCount, batchTracker)
-batchTracker = 0
-runtime.Gosched()
-}
-}
+			batchTracker = 0
+
+			runtime.Gosched()
+		}
+	}
 }
 func osCheckArgs() []string { return os.Args }
