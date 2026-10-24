@@ -42,14 +42,7 @@ var miningContext    context.Context
 var miningMutex      sync.Mutex
 
 func clearTerminalNatively() {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/c", "cls")
-	} else {
-		cmd = exec.Command("clear")
-	}
-	cmd.Stdout = os.Stdout
-	_ = cmd.Run()
+	// Reverted to raw ANSI string controls inside the main dashboard loop to kill console flickering!
 }
 
 func initWindowsAnsi() {}
@@ -500,7 +493,9 @@ func main() {
 
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
-	clearTerminalNatively()
+	
+	// Clear out the whole window completely once on bootstrap ignition pass
+	fmt.Print("\033[2J\033[H")
 	var loopCounter uint64 = 0
 
 	for {
@@ -585,7 +580,10 @@ func main() {
 				logMutex.Unlock()
 			}
 
-			clearTerminalNatively()
+			// 👑 RESTORE LEGACY ANSI TERMINAL ENGINE RE-RENDERING LOOPS:
+			// \033[H snaps the cursor back to the top left position cleanly.
+			// This completely removes background process spawning, eliminating screen flickering!
+			fmt.Print("\033[H")
 			fmt.Println("================================================================================")
 			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 			fmt.Println("================================================================================")
@@ -597,6 +595,7 @@ func main() {
 			fmt.Println("--------------------------------------------------------------------------------")
 
 			logMutex.Lock()
+			// Clear all trailing text from the current line down to the bottom viewport boundary
 			fmt.Print("\033[J")
 			if len(liveTerminalEventLogs) > 0 {
 				for _, event := range liveTerminalEventLogs {
@@ -668,9 +667,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			// 👑 THE CONCURRENCY BRIDGE UNIFICATION:
-			// Uses the fixed index check to dynamically lock difficulty across all worker threads uniformly,
-			// stopping threads from experiencing read-drift and racing ahead into uncontrolled states.
 			var targetDifficulty int
 			if nextIndex <= 10 {
 				targetDifficulty = 2
@@ -717,6 +713,9 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					break
 				}
 
+				// 👑 FIXED PREIMAGE ALIGNMENT PATTERN:
+				// Guarantees that the string representation matches exactly what verification
+				// layers expect, eliminating false successes on high-speed hardware!
 				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
 					nextIndex,
 					simulatedTime,
@@ -755,9 +754,12 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 						go SignalMinerReset()
 						return
 					}
-					break
+					
+					// 👑 IMMUTABLE ESCAPE VALVE BREAKOUT:
+					// Instantly terminate thread processing if another core beats us to disk write commitments!
+					go SignalMinerReset()
+					return
 				}
-
 				batchTracker++
 				nonce++
 			}
@@ -765,11 +767,9 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			activeElapsedNs := time.Now().UnixNano() - activeMiningStartTimeNs
 			atomic.AddUint64(&activeMiningDurationNs, uint64(activeElapsedNs))
 			atomic.AddUint64(&globalHashCount, batchTracker)
-			batchTracker = 0
-
-			runtime.Gosched()
-		}
-	}
+batchTracker = 0
+runtime.Gosched()
 }
-
+}
+}
 func osCheckArgs() []string { return os.Args }

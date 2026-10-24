@@ -1,5 +1,4 @@
 //go:build !server || windows
-// +build !server windows
 
 package main
 

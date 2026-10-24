@@ -1,5 +1,4 @@
-//go:build linux && server
-// +build linux,server
+//go:build server && !windows
 
 package main
 
