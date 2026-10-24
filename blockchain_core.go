@@ -530,23 +530,32 @@ return MaxTotalSupplyCap
 return calculatedSupply
 }
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-if lastBlock.Index < 10 {
-return 2
-}
-currentDiff := int(lastBlock.Difficulty)
-actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
-if actualTimeElapsed <= 0 {
-return currentDiff + 1
-}
-const TargetBlockTimeWindow = int64(45)
-if actualTimeElapsed < 30 {
-return currentDiff + 1
-} else if actualTimeElapsed > 90 {
-decreasedDiff := currentDiff - 1
-if decreasedDiff < 4 {
-return 4
-}
-return decreasedDiff
-}
-return currentDiff
+	// 👑 THE ABSOLUTE INCLUSIVE BOOTSTRAP ANCHOR:
+	// Evaluate the target block height index directly (lastBlock.Index + 1).
+	// This ensures blocks 1 through 10 are hard-locked to difficulty 2 across
+	// both mining worker loops and live gossip validation firewalls!
+	if (lastBlock.Index + 1) <= 10 {
+		return 2
+	}
+
+	currentDiff := int(lastBlock.Difficulty)
+	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
+
+	if actualTimeElapsed <= 0 {
+		return currentDiff + 1
+	}
+
+	const TargetBlockTimeWindow = int64(45)
+
+	if actualTimeElapsed < 30 {
+		return currentDiff + 1
+	} else if actualTimeElapsed > 90 {
+		decreasedDiff := currentDiff - 1
+		if decreasedDiff < 4 {
+			return 4 // Hard floor remains 4 for all blocks height 11 and above
+		}
+		return decreasedDiff
+	}
+
+	return currentDiff
 }

@@ -692,11 +692,12 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			// 👑 DYNAMIC DIFFICULTY HARMONIZATION GATE:
-			// Eliminate the legacy hardcoded index branches entirely!
-			// This forces all multi-core hashing workers to query the dynamic engine layout,
-			// achieving 100% lockstep parity across Windows and Linux platforms.
-			workerTargetDifficulty := CalculateNextDifficulty(currentBlock, simulatedTime)
+			var workerTargetDifficulty int
+			if nextIndex <= 10 {
+				workerTargetDifficulty = 2
+			} else {
+				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+			}
 			
 			if workerTargetDifficulty < 1 { workerTargetDifficulty = 1 }
 			if workerTargetDifficulty > 8 { workerTargetDifficulty = 8 }
