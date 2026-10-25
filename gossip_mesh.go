@@ -361,14 +361,16 @@ conn.Close()
 }
 }(seedAddr)
 }
-time.Sleep(250 * time.Second)
-PeerMapMutex.Lock()
-for peer, lastSeen := range ActivePeerMap {
-if time.Since(lastSeen) > (2 * time.Minute) {
-delete(ActivePeerMap, peer)
-log.Printf("🔌 [GOSSIP MESH] Severed inactive channel: %s\n", peer)
-}
-}
-PeerMapMutex.Unlock()
-}
+		time.Sleep(15 * time.Second)
+		
+		PeerMapMutex.Lock()
+		for peer, lastSeen := range ActivePeerMap {
+			// If a peer hasn't responded within 90 seconds, drop the dead socket
+			if time.Since(lastSeen) > (90 * time.Second) {
+				delete(ActivePeerMap, peer)
+				log.Printf("🔌 [GOSSIP MESH] Severed inactive channel: %s\n", peer)
+			}
+		}
+		PeerMapMutex.Unlock()
+	}
 }
