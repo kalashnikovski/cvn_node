@@ -268,10 +268,7 @@ func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
 	
-	// 👑 THE CONCURRENCY RESET EQUALIZER:
-	// Explicitly purge and reconstruct the memory registry structure out-of-the-box.
-	// This forces duplicate background threads to zero-out historical tracking arrays
-	// before reading data from the bbolt file, completely destroying the double balance bug!
+	// Purge and reconstruct the memory registry structure cleanly
 	StateBalanceCache = make(map[string]float64)
 	if GlobalBoltEngine == nil {
 		return
@@ -279,16 +276,41 @@ func RebuildStateBalanceCacheInternal() {
 
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		bUTXO := tx.Bucket(utxoBucket)
-		if bUTXO == nil {
-			return nil
-		}
+		bBlocks := tx.Bucket(blocksBucket)
 		
-		c := bUTXO.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var record UTXORecord
-			if json.Unmarshal(v, &record) == nil {
-				// Safely aggregate clean balance fields
-				StateBalanceCache[record.Recipient] += record.Amount
+		// Pass 1: Scan and aggregate standard standard transaction UTXO records from disk
+		if bUTXO != nil {
+			c := bUTXO.Cursor()
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				var record UTXORecord
+				if json.Unmarshal(v, &record) == nil {
+					StateBalanceCache[record.Recipient] += record.Amount
+				}
+			}
+		}
+
+		// 👑 Pass 2: THE UNCLE SUBSIDY MEMORY INJECTION ENGINE
+		// Chronologically step through the entire block bucket database. If an uncle
+		// block signature is found trapped in the metadata headers, dynamically compute
+		// its 20% reward allocation split and credit it straight to the in-memory cache map!
+		if bBlocks != nil {
+			bc := bBlocks.Cursor()
+			for k, v := bc.First(); k != nil; k, v = bc.Next() {
+				var blk Block
+				if json.Unmarshal(v, &blk) == nil {
+					if blk.UncleHash != "" && 
+					   blk.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
+					   blk.UncleMiner != "NONE" && 
+					   strings.TrimSpace(blk.UncleMiner) != "" {
+						
+						// Calculate the exact 20% Uncle subsidy split based on the block index height
+						totalBlockEmission := CalculateBlockReward(blk.Index)
+						uncleSubsidy := totalBlockEmission * 0.20
+						
+						// Forcefully allocate the reward directly into the public wallet tracking map
+						StateBalanceCache[strings.TrimSpace(blk.UncleMiner)] += uncleSubsidy
+					}
+				}
 			}
 		}
 		return nil
