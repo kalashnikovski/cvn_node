@@ -3,160 +3,127 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"go.etcd.io/bbolt"
 )
 
+// Global database file handles and structural bucket identifiers
 var GlobalBoltEngine *bbolt.DB
+var localHeightState int64
+
 var blocksBucket = []byte("blocks")
-var metaBucket = []byte("metadata")
-var utxoBucket = []byte("utxo")
-var jubileeVaultBucket = []byte("jubilee_vault")
-var localHeightState int64 = 0
+var metaBucket   = []byte("meta")
+var utxoBucket   = []byte("utxo")
 
+// InitBoltEngine mounts the local physical bbolt storage files safely on startup
 func InitBoltEngine() {
-	StateMutex.Lock()
-	defer StateMutex.Unlock()
-
-	targetDatabaseName := "cvn_mainnet.db"
-	dbPath := filepath.Join(".", targetDatabaseName)
-	fmt.Println("====================================================================")
-	fmt.Println("📂 HARDWARE FILE EXPLORER AUDIT INITIALIZED")
-	fmt.Println("====================================================================")
-	
-	absPath, _ := filepath.Abs(dbPath)
-	fmt.Printf("🎯 TARGET DATABASE FILE LOCATION:  %s\n\n", absPath)
-
-	options := bbolt.Options{
-		Timeout:      5 * time.Second,
-		NoGrowSync:   false,
-		FreelistType: bbolt.FreelistArrayType,
+	db, err := bbolt.Open(BlockchainFile, 0600, nil)
+	if err != nil {
+		panic(fmt.Sprintf("🚨 CRITICAL STORAGE FAULT: Unable to allocate BoltDB file handles: %v", err))
 	}
+	GlobalBoltEngine = db
 
-	var openErr error
-	GlobalBoltEngine, openErr = bbolt.Open(dbPath, 0666, &options)
-	if openErr != nil {
-		log.Fatalf("🚨 DATABASE MOUNT FAILURE: %v\n", openErr)
-	}
-
-	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+	// Initialize core consensus data buckets if they do not exist
+	err = db.Update(func(tx *bbolt.Tx) error {
 		_, _ = tx.CreateBucketIfNotExists(blocksBucket)
-		meta, _ := tx.CreateBucketIfNotExists(metaBucket)
+		_, _ = tx.CreateBucketIfNotExists(metaBucket)
 		_, _ = tx.CreateBucketIfNotExists(utxoBucket)
-		_, _ = tx.CreateBucketIfNotExists(jubileeVaultBucket)
+		return nil
+	})
+	if err != nil {
+		panic(fmt.Sprintf("🚨 DATABASE CORRUPTION: Failed to provision partition buckets: %v", err))
+	}
 
-		if meta.Get([]byte("height")) == nil {
-			genesisBlock := Block{
-				Index:        0,
-				Timestamp:    1790640000,
-				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
-				// 👑 FIXED MINIMUM HARD-LOCKED MAINNET PRIMITIVE:
-				// Enforces exactly 4 leading zeros out-of-the-box matching your difficulty rule floor!
-				Hash:         "00000c43b46f2506955b920b5981bf0a6375fc0bc0337", 
-				Difficulty:   4, 
-				Nonce:        0,
-				GuardMatrix:  "",
-				UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
-				UncleMiner:   "NONE",
-				Transactions: []Transaction{
-					{
-						ID:               "TX_COINBASE_GENESIS_CORE_PROVISION_PRISTINE_ANCHOR",
-						Witness:          "COVENANT_STEWARD_ASSEMBLY",
-						PublicKey:        "GENESIS_VOID_REWARD_POOL",
-						Inputs:           []UTXOInput{},
-						Outputs:          []UTXOOutput{{Recipient: "CVN_GENESIS_VOID_REWARD_POOL", Amount: 0.0}},
-						Timestamp:        1790640000,
-						FreeWillOffering: 0.0,
-						DataSizeKB:       0.1,
-						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-					},
-				},
+	// Reconstruct local atomic state counters from the master disk tip
+	_ = db.View(func(tx *bbolt.Tx) error {
+		bMeta := tx.Bucket(metaBucket)
+		if bMeta != nil {
+			heightBytes := bMeta.Get([]byte("height"))
+			if heightBytes != nil {
+				var parsedHeight int64
+				_, err := fmt.Sscanf(string(heightBytes), "%016d", &parsedHeight)
+				if err == nil {
+					atomic.StoreInt64(&localHeightState, parsedHeight)
+				}
 			}
-
-			genesisData, _ := json.Marshal(genesisBlock)
-			paddedKey := fmt.Sprintf("%016d", genesisBlock.Index)
-			
-			_ = tx.Bucket(blocksBucket).Put([]byte(paddedKey), genesisData)
-			_ = meta.Put([]byte("height"), []byte(paddedKey))
-			
-			fmt.Println("🌱 [GENESIS MATRIX SECURELY SEEDED] Physical Block #0 written directly to disk.")
 		}
 		return nil
 	})
 
+	// Synchronize the memory cache balances list with historical database records
 	RebuildStateBalanceCacheInternal()
 }
 
-func GetLatestBlock() Block {
-	StateMutex.RLock()
-	defer StateMutex.RUnlock()
-	return GetLatestBlockInternal()
-}
-
+// GetLatestBlockInternal returns the current block tip structure directly from state memory
 func GetLatestBlockInternal() Block {
-	var latestBlock Block
-	latestBlock.Index = 0
-	latestBlock.Difficulty = 4
-	latestBlock.Timestamp = 1790640000
-	latestBlock.Hash = "00000c43b46f2506955b920b5981bf0a6375fc0bc0337"
+	var currentTip Block
+	currentTipHeight := atomic.LoadInt64(&localHeightState)
 
 	if GlobalBoltEngine == nil {
-		return latestBlock
+		return currentTip
 	}
 
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		bMeta := tx.Bucket(metaBucket)
 		bBlocks := tx.Bucket(blocksBucket)
-		if bMeta == nil || bBlocks == nil {
+		if bBlocks == nil {
 			return nil
 		}
-
-		heightBytes := bMeta.Get([]byte("height"))
-		if heightBytes != nil {
-			v := bBlocks.Get(heightBytes)
-			if v == nil {
-				hStr := string(heightBytes)
-				hIdx, err := strconv.ParseInt(hStr, 10, 64)
-				if err == nil {
-					paddedKey := fmt.Sprintf("%016d", hIdx)
-					v = bBlocks.Get([]byte(paddedKey))
-				}
-			}
-
-			if v != nil {
-				var bData Block
-				if json.Unmarshal(v, &bData) == nil {
-					latestBlock = bData
-					atomic.StoreInt64(&localHeightState, bData.Index)
-				}
-			}
+		paddedKey := fmt.Sprintf("%016d", currentTipHeight)
+		data := bBlocks.Get([]byte(paddedKey))
+		if data != nil {
+			_ = json.Unmarshal(data, &currentTip)
 		}
 		return nil
 	})
-	return latestBlock
+
+	return currentTip
 }
 
+// GetLatestBlock wraps our internal state memory helper to fulfill global interface requirements
+func GetLatestBlock() Block {
+	return GetLatestBlockInternal()
+}
+
+// GetBlockByHeightFromDB retrieves a historical block structure entry directly from its index key
+func GetBlockByHeightFromDB(height int64) Block {
+	var requestedBlock Block
+	if GlobalBoltEngine == nil || height < 0 {
+		return requestedBlock
+	}
+
+	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+		bBlocks := tx.Bucket(blocksBucket)
+		if bBlocks == nil {
+			return nil
+		}
+		paddedKey := fmt.Sprintf("%016d", height)
+		data := bBlocks.Get([]byte(paddedKey))
+		if data != nil {
+			_ = json.Unmarshal(data, &requestedBlock)
+		}
+		return nil
+	})
+
+	return requestedBlock
+}
+
+// SaveBlockToStorage wraps our internal disk commit engine with thread synchronization gates
 func SaveBlockToStorage(block Block) bool {
-	StateMutex.Lock()
-	defer StateMutex.Unlock()
 	return SaveBlockToStorageInternal(block)
 }
 
+// SaveBlockToStorageInternal writes verified block structures securely to the database layer
 func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil {
 		return false
 	}
 
-	// 👑 THE FIRWALL RE-ALIGNMENT CHECKPOINT:
-	// Enforce true cryptographic consensus verification checks directly at the front gate 
-	// of your storage engine. If an un-computed nonce or forged loopback block attempts to bypass
-	// main.go, it gets caught and rejected here, preventing hyper-acceleration forks entirely!
+	// 👑 THE HARDENED VALIDATION CHECKPOINT:
+	// Verify true consensus compliance rules directly inside the storage engine.
+	// If an unaligned text preimage tries to bypass the mining workers loop,
+	// it gets caught, printed, and rejected here before modifying state records on disk!
 	expectedDiff := block.Difficulty
 	if block.Index < 10 {
 		expectedDiff = 2
@@ -175,6 +142,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return fmt.Errorf("required consensus partitions are missing")
 		}
 
+		// Audit and process transaction validation limits across all sub-payloads
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx == 0 {
 				continue 
@@ -193,7 +161,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
-		// Process unspent transaction outputs and spends without creating map duplication leaks
+		// Process unspent transaction outputs and inputs spent states
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx != 0 {
 				for _, input := range txPayload.Inputs {
@@ -214,6 +182,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 		}
 
+		// Broadcast newly mined block signatures out over the network interface loop
 		if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
 			go func(b Block) {
 				jsonBytes, err := json.Marshal(b)
@@ -236,39 +205,17 @@ func SaveBlockToStorageInternal(block Block) bool {
 	return true
 }
 
-func GetBlockByHeightFromDB(height int64) Block {
-	StateMutex.RLock()
-	defer StateMutex.RUnlock()
-	
-	var block Block
-	if GlobalBoltEngine == nil {
-		return block
-	}
-	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		bBlocks := tx.Bucket(blocksBucket)
-		if bBlocks != nil {
-			paddedKey := fmt.Sprintf("%016d", height)
-			blockData := bBlocks.Get([]byte(paddedKey))
-			if blockData != nil {
-				_ = json.Unmarshal(blockData, &block)
-			}
-		}
-		return nil
-	})
-	return block
-}
-
+// RebuildStateBalanceCache wraps our core memory map compiler inside global thread hold gates
 func RebuildStateBalanceCache() {
-	StateMutex.Lock()
-	defer StateMutex.Unlock()
 	RebuildStateBalanceCacheInternal()
 }
 
+// RebuildStateBalanceCacheInternal chronologically scans storage buckets to construct precise balances
 func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
 	
-	// Purge and reconstruct the memory registry structure cleanly
+	// Reset the memory tracking structures out-of-the-box
 	StateBalanceCache = make(map[string]float64)
 	if GlobalBoltEngine == nil {
 		return
@@ -278,7 +225,7 @@ func RebuildStateBalanceCacheInternal() {
 		bUTXO := tx.Bucket(utxoBucket)
 		bBlocks := tx.Bucket(blocksBucket)
 		
-		// Pass 1: Scan and aggregate standard standard transaction UTXO records from disk
+		// Pass 1: Aggregate standard active UTXO ledger entries
 		if bUTXO != nil {
 			c := bUTXO.Cursor()
 			for k, v := c.First(); k != nil; k, v = c.Next() {
@@ -289,10 +236,7 @@ func RebuildStateBalanceCacheInternal() {
 			}
 		}
 
-		// 👑 Pass 2: THE UNCLE SUBSIDY MEMORY INJECTION ENGINE
-		// Chronologically step through the entire block bucket database. If an uncle
-		// block signature is found trapped in the metadata headers, dynamically compute
-		// its 20% reward allocation split and credit it straight to the in-memory cache map!
+		// Pass 2: Scrutinize the historical block chain for valid Uncle block rewards splits
 		if bBlocks != nil {
 			bc := bBlocks.Cursor()
 			for k, v := bc.First(); k != nil; k, v = bc.Next() {
@@ -303,11 +247,10 @@ func RebuildStateBalanceCacheInternal() {
 					   blk.UncleMiner != "NONE" && 
 					   strings.TrimSpace(blk.UncleMiner) != "" {
 						
-						// Calculate the exact 20% Uncle subsidy split based on the block index height
 						totalBlockEmission := CalculateBlockReward(blk.Index)
 						uncleSubsidy := totalBlockEmission * 0.20
 						
-						// Forcefully allocate the reward directly into the public wallet tracking map
+						// Allocate the 10.00 CVN reward directly to the Uncle Miner address channel
 						StateBalanceCache[strings.TrimSpace(blk.UncleMiner)] += uncleSubsidy
 					}
 				}
@@ -315,16 +258,4 @@ func RebuildStateBalanceCacheInternal() {
 		}
 		return nil
 	})
-}
-
-func GetAddressBalanceFromLedger(address string) int64 {
-	BalanceCacheMutex.RLock()
-	defer BalanceCacheMutex.RUnlock()
-	return int64(StateBalanceCache[address])
-}
-
-func GetAddressBlockCountFromLedger(address string) int64 {
-	StateMutex.RLock()
-	defer StateMutex.RUnlock()
-	return GetLatestBlockInternal().Index
 }

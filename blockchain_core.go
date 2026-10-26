@@ -362,7 +362,7 @@ func TriggerActiveReSyncPass() {
 		for _, block := range incomingBatch {
 			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
 				if ValidateBlockSignatures(block) {
-					if block.UncleHash == "" {
+if block.UncleHash == "" {
 block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
 }
 if block.UncleMiner == "" {
@@ -382,77 +382,77 @@ StateMutex.Unlock()
 fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
 func ValidateBlockSignatures(b Block) bool {
-	expectedDiff := b.Difficulty
-	if b.Index < 10 {
-		expectedDiff = 2
-	}
-	
-	targetPrefix := strings.Repeat("0", expectedDiff)
-	if !strings.HasPrefix(b.Hash, targetPrefix) {
-		return false
-	}
-	if b.Hash != CalculateHash(b) {
-		return false
-	}
-	if len(b.Transactions) == 0 {
-		return false
-	}
-
-	isBlockValid := true
-	if GlobalBoltEngine != nil {
-		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			bUTXO := dbTx.Bucket([]byte("utxo"))
-			if bUTXO == nil {
-				isBlockValid = false
-				return nil
-			}
-			for txIdx, tx := range b.Transactions {
-				if txIdx == 0 {
-					continue
-				}
-				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
-					isBlockValid = false
-					return nil
-				}
-			}
-			return nil
-		})
-	}
-	if !isBlockValid {
-		return false
-	}
-
-	// 👑 IMMUTABLE ARRAY EXTRACTION SAFEGUARD:
-	// Safely isolate the primary Coinbase transaction structure from index slot 0
-	coinbaseTx := b.Transactions[0]
-
-	var totalCoinbasePayout float64 = 0.0
-	for _, out := range coinbaseTx.Outputs {
-		totalCoinbasePayout += out.Amount
-	}
-
-	targetBlockHeight := int64(b.Index)
-	allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-	
-	// 👑 THE ASYMMETRIC LOGIC COUPLER:
-	// Evaluate the transaction array output bounds based on the block metadata profile.
-	// If a block includes a valid Uncle block signature, the primary miner receives exactly 80%
-	// of the emission. This prevents array slice errors or size mismatches from blocking consensus!
-	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" {
-		expectedMainSplit := allowedTotalEmission * 0.80
-		if (totalCoinbasePayout - expectedMainSplit) > 0.00001 {
-			fmt.Printf("🚨 CONSENSUS VIOLATION: Main miner payout %f exceeds allowed Uncle main split fraction %f\n", totalCoinbasePayout, expectedMainSplit)
-			return false
-		}
-	} else {
-		// Standard full block reward verification parameters
-		if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
-			fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
-			return false
-		}
-	}
-
-	return true
+expectedDiff := b.Difficulty
+if b.Index < 10 {
+expectedDiff = 2
+}
+targetPrefix := strings.Repeat("0", expectedDiff)
+if !strings.HasPrefix(b.Hash, targetPrefix) {
+return false
+}
+if b.Hash != CalculateHash(b) {
+return false
+}
+if len(b.Transactions) == 0 {
+return false
+}
+isBlockValid := true
+if GlobalBoltEngine != nil {
+_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+bUTXO := dbTx.Bucket([]byte("utxo"))
+if bUTXO == nil {
+isBlockValid = false
+return nil
+}
+for txIdx, tx := range b.Transactions {
+if txIdx == 0 {
+continue
+}
+if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
+isBlockValid = false
+return nil
+}
+}
+return nil
+})
+}
+if !isBlockValid {
+return false
+}
+// 👑 IMMUTABLE SLICE SLOCK INTEGRITY:
+// Explicitly isolate the array slice index target wrapper.
+coinbaseTx := b.Transactions[0]
+var totalCoinbasePayout float64 = 0.0
+for _, out := range coinbaseTx.Outputs {
+totalCoinbasePayout += out.Amount
+}
+targetBlockHeight := int64(b.Index)
+allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
+if targetBlockHeight > 21024000 {
+allowedTotalEmission += 5.0
+}
+// 👑 THE ASYMMETRIC UNCLE SPLIT VERIFIER:
+if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" {
+if len(coinbaseTx.Outputs) < 2 {
+fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash requires two coinbase outputs.")
+return false
+}
+mainMinerPayout := coinbaseTx.Outputs[0].Amount
+uncleMinerPayout := coinbaseTx.Outputs[1].Amount
+expectedMainSplit := allowedTotalEmission * 0.80
+expectedUncleSplit := allowedTotalEmission * 0.20
+if (mainMinerPayout - expectedMainSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) > 0.00001 {
+fmt.Printf("🚨 REJECTION: Invalid Split. Main: %f, Uncle: %f\n", mainMinerPayout, uncleMinerPayout)
+return false
+}
+} else {
+// Standard single-reward validation sequence
+if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
+fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
+return false
+}
+}
+return true
 }
 func CalculateHash(b Block) string {
 var txSummaryBuilder strings.Builder
@@ -534,40 +534,34 @@ return MaxTotalSupplyCap
 }
 return calculatedSupply
 }
+// Fixed Harmonized Inclusive Edge-Case Difficulty Engine
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	// 👑 THE ABSOLUTE INCLUSIVE BOOTSTRAP ANCHOR:
-	if (lastBlock.Index + 1) <= 10 {
-		return 2
-	}
-
-	currentDiff := int(lastBlock.Difficulty)
-	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
-
-	// Penalize forged, zero, or negative time deltas instantly
-	if actualTimeElapsed <= 0 {
-		return currentDiff + 1
-	}
-
-	const TargetBlockTimeWindow = int64(45)
-
-	// 👑 THE ABSOLUTE TARGET EQUILIBRIUM COUPLING:
-	// If block pacing hits precisely inside our operational target window buffer,
-	// immediately return the current difficulty unchanged. This completely blocks
-	// target drift and eliminates the 'Expected exactly: 5' gossip firewall rejections!
-	if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
-		return currentDiff
-	}
-
-	// Dynamic adjustments for outlier blocks falling outside the operational buffer
-	if actualTimeElapsed < 30 {
-		return currentDiff + 1
-	} else if actualTimeElapsed > 90 {
-		decreasedDiff := currentDiff - 1
-		if decreasedDiff < 4 {
-			return 4 // Hard-lock mainnet specification floor past block 10
-		}
-		return decreasedDiff
-	}
-
-	return currentDiff
+// 👑 THE HARMONIZED INCLUSIVE INDEX ANCHOR:
+// Target block height (lastBlock.Index + 1) matches your worker threads loop identically,
+// hard-locking blocks 1 through 10 strictly onto difficulty 2 targets.
+if (lastBlock.Index + 1) <= 10 {
+return 2
+}
+currentDiff := int(lastBlock.Difficulty)
+actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
+if actualTimeElapsed <= 0 {
+return currentDiff + 1
+}
+const TargetBlockTimeWindow = int64(45)
+// 👑 THE STABILIZED EQUILIBRIUM COUPLER:
+// If cross-continental blocks land within an acceptable operational buffer (30 to 90 seconds),
+// return current difficulty unchanged to prevent target spikes or jitter fracturing!
+if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
+return currentDiff
+}
+if actualTimeElapsed < 30 {
+return currentDiff + 1
+} else if actualTimeElapsed > 90 {
+decreasedDiff := currentDiff - 1
+if decreasedDiff < 4 {
+return 4 // Absolute mainnet policy floor floor past block 10
+}
+return decreasedDiff
+}
+return currentDiff
 }
