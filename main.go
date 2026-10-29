@@ -57,20 +57,47 @@ func initWindowsAnsi() {
 func main() {
 	initWindowsAnsi()
 
+	// ====================================================================
+	// 👑 FIXED CORES ACCOUNT GENERATOR GATEWAY:
+	// Hardlocks the string sanitizers to serialize files with no hidden bytes,
+	// guaranteeing the batch launchpad reads your Layer-1 address cleanly!
+	// ====================================================================
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
 			privHex, pubHex, walletAddress, err := GenerateKeyPair()
-			if err != nil { os.Exit(1) }
+			if err != nil { 
+				fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Key allocation path rejected: %v\n", err)
+				os.Exit(1) 
+			}
 			
-			// Suppress unused compiler warnings securely
-			_ = privHex
-			_ = pubHex
+			// 👑 HARD-LOCKED STRING STRIPPER: Clean all space and control byte residues
+			walletAddress = strings.TrimSpace(walletAddress)
+			walletAddress = strings.ReplaceAll(walletAddress, " ", "")
+			walletAddress = strings.ReplaceAll(walletAddress, "\r", "")
+			walletAddress = strings.ReplaceAll(walletAddress, "\n", "")
 			
-			walletAddress = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(walletAddress, "\r", ""), "\n", ""), " ", ""))
+			fmt.Println("\n====================================================================")
+			fmt.Printf("🪪  NEW WALLET ADDRESS:     %s\n", walletAddress)
+			fmt.Printf("📋  UNTRUNCATED PUBLIC KEY: %s\n", pubHex)
+			fmt.Printf("🔐  PRIVATE KEY HEX:        %s\n", privHex)
+			fmt.Println("====================================================================")
+
+			// Force explicit file serialization passes onto the local drive track
+			backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPublic Key: %s\nPrivate Key: %s\n", walletAddress, pubHex, privHex)
+			err = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
+			if err != nil {
+				log.Printf("🚨 FILE FAULT: Unable to write secret backup to disk: %v\n", err)
+			}
+
 			configMap := map[string]string{"miner_address": walletAddress}
-			configMapBytes, _ := json.MarshalIndent(configMap, "", "  ")
-			_ = os.WriteFile("miner_config.json", configMapBytes, 0644)
+			configMapBytes, err := json.MarshalIndent(configMap, "", "  ")
+			if err == nil {
+				err = os.WriteFile("miner_config.json", configMapBytes, 0644)
+				if err != nil {
+					log.Printf("🚨 FILE FAULT: Unable to write config file to disk: %v\n", err)
+				}
+			}
 			os.Exit(0)
 		}
 	}
@@ -88,14 +115,49 @@ func main() {
 	}
 
 	InitBoltEngine()
-	
-	// 👑 THE IMPERMEABLE CHARACTER STRIPPER SANITIZER:
-	// Cleanse the active miner identity strings thoroughly out-of-the-box.
-	CustomMinerAddress = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(CustomMinerAddress, "\r", ""), "\n", ""), " ", ""))
 
-	if CustomMinerAddress == "" {
-		CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
+	// 👑 THE BULLETPROOF IDENTITY RESOLUTION GATEWAY:
+	// Reset your local transient string and enforce a rigid hierarchical read track.
+	var isolatedAddressTrack string = ""
+
+	// Pass 1: Scan command-line runtime arguments for a specific override flag
+	for i, arg := range os.Args {
+		if arg == "--miner-address" && i+1 < len(os.Args) {
+			isolatedAddressTrack = os.Args[i+1]
+		}
 	}
+
+	// Pass 2: If no command-line flag override was specified, parse miner_config.json directly
+	if strings.TrimSpace(isolatedAddressTrack) == "" {
+		configFileBytes, err := os.ReadFile("miner_config.json")
+		if err == nil {
+			var parsedConfig map[string]string
+			if json.Unmarshal(configFileBytes, &parsedConfig) == nil {
+				isolatedAddressTrack = parsedConfig["miner_address"]
+			}
+		}
+	}
+
+	// Pass 3: Sanitize character parameters entirely to eliminate any whitespace string mutations
+	isolatedAddressTrack = strings.TrimSpace(isolatedAddressTrack)
+	isolatedAddressTrack = strings.ReplaceAll(isolatedAddressTrack, " ", "")
+	isolatedAddressTrack = strings.ReplaceAll(isolatedAddressTrack, "\r", "")
+	isolatedAddressTrack = strings.ReplaceAll(isolatedAddressTrack, "\n", "")
+
+	// Pass 4: Global Variable Assignment Commitment Pass
+	if isolatedAddressTrack != "" && !strings.Contains(isolatedAddressTrack, "UNCONFIGURED") {
+		CustomMinerAddress = isolatedAddressTrack
+	} else {
+		// If both passes fail, fallback to a unique identity based on system hostname to prevent cluster doubling!
+		hostName, hostErr := os.Hostname()
+		if hostErr == nil {
+			CustomMinerAddress = fmt.Sprintf("CVN_FALLBACK_%s_%d", strings.ToUpper(hostName), time.Now().Unix()%1000)
+		} else {
+			CustomMinerAddress = "CVN_UNCONFIGURED_LOCAL_NODE_ID"
+		}
+	}
+
+	log.Printf("🪪  [CONSENSUS AUTHORITY ACTIVE] Mining pool node verified handle: %s\n", CustomMinerAddress)
 // Construct and launch our unified multi-port API server engine routing context
 	go func() {
 		winMux := http.NewServeMux()
