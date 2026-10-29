@@ -5,6 +5,8 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"runtime"
 	"strings"
@@ -121,21 +123,31 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	return 0
 }
 
+// Bounded memory channel queue to store real-time wire blocks during resync phases
+var DeferredBlockQueue = make(chan Block, 32)
+
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
+	StateMutex.Lock()
+	currentTip := GetLatestBlockInternal()
+	StateMutex.Unlock()
+
+	// 👑 THE NON-BLOCKING STREAM BUFFER VALVE:
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		select {
+		case DeferredBlockQueue <- incomingBlock:
+			log.Printf("📥 [DEFERRED QUEUE] Cached block #%d into bounded memory channel during active re-sync pass.\n", incomingBlock.Index)
+		default:
+			log.Printf("⚠️ [QUEUE SATURATED] Deferred block buffer capacity (32 slots) reached. Dropping block #%d.\n", incomingBlock.Index)
+		}
 		return
 	}
 
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 
-	currentTip := GetLatestBlockInternal()
-
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
 		timeDiff := incomingBlock.Timestamp - currentTip.Timestamp
-		if timeDiff < 0 {
-			timeDiff = -timeDiff
-		}
+		if timeDiff < 0 { timeDiff = -timeDiff }
 
 		preferIncoming := false
 		if incomingBlock.Timestamp < currentTip.Timestamp {
@@ -148,14 +160,11 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 
 		if preferIncoming {
 			fmt.Printf("🔄 [TIP SWITCH] Adopting competing block at height %d (7s grace)\n", incomingBlock.Index)
-
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
 				bMeta := tx.Bucket(metaBucket)
 				bUTXO := tx.Bucket(utxoBucket)
-				if bBlocks == nil || bMeta == nil || bUTXO == nil {
-					return nil
-				}
+				if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
 				paddedKey := []byte(fmt.Sprintf("%016d", currentTip.Index))
 				if data := bBlocks.Get(paddedKey); data != nil {
 					var localBlock Block
@@ -185,13 +194,8 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		return
 	}
 
-	if incomingBlock.Index < currentTip.Index {
-		return
-	}
-
-	if !ValidateBlockSignatures(incomingBlock) {
-		return
-	}
+	if incomingBlock.Index < currentTip.Index { return }
+	if !ValidateBlockSignatures(incomingBlock) { return }
 
 	if incomingBlock.Index > currentTip.Index+1 {
 		go TriggerActiveReSyncPass()
@@ -210,70 +214,78 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	}
 }
 
-func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
-	requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(seedURL, "/"), height)
-	resp, err := client.Get(requestURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response code: %d", resp.StatusCode)
-	}
-	var batch []Block
-	if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
-		return "", err
-	}
-	for _, block := range batch {
-		if block.Index == height {
-			return block.Hash, nil
-		}
-	}
-	return "", fmt.Errorf("block missing")
-}
-
 func TriggerActiveReSyncPass() {
 	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
 		return
 	}
-	defer atomic.StoreInt32(&IsSyncingActive, 0)
-	fmt.Println(" -> [RE-SYNC MATRIX ACTIVE] Local mining processes safely PAUSED.")
+	
+	log.Println("⏳ [SYNC GATEWAY ACTIVE] Consensus engine flag set: TRUE. Local mining loops safely PAUSED.")
+	
+	syncWatchdogTimer := time.NewTimer(90 * time.Second)
+	watchdogDoneChannel := make(chan struct{})
+	
+	go func() {
+		select {
+		case <-syncWatchdogTimer.C:
+			log.Println("🚨 [SYNC WATCHDOG TIMEOUT] Catch-up pass exceeded 90-second allocation limit! Enforcing fallback breakout.")
+			atomic.StoreInt32(&IsSyncingActive, 0)
+			drainAndProcessDeferredQueue()
+		case <-watchdogDoneChannel:
+			syncWatchdogTimer.Stop()
+		}
+	}()
+
+	defer func() {
+		close(watchdogDoneChannel)
+		atomic.StoreInt32(&IsSyncingActive, 0)
+		log.Println("🟩 [SYNC GATEWAY RELEASED] Consensus engine flag cleared: FALSE. Mining worker pool RESUMED.")
+		drainAndProcessDeferredQueue()
+	}()
 
 	activeGlobalRecoveryGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081", "http://202.137.175.220:9091"}
-	client := &http.Client{Timeout: 4 * time.Second}
+	client := &http.Client{Timeout: 3 * time.Second}
 	var chosenTargetSeedURL string
 	var selectedHighestTargetTip int64
 
-	for _, endpoint := range activeGlobalRecoveryGateways {
-		if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" {
-			continue
-		}
-		remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
-		if remotePeerHeight > selectedHighestTargetTip {
-			selectedHighestTargetTip = remotePeerHeight
-			chosenTargetSeedURL = endpoint
+	PeerMapMutex.RLock()
+	for activePeerAddress, lastSeenTimestamp := range ActivePeerMap {
+		if time.Since(lastSeenTimestamp) <= 30*time.Second {
+			cleanHostIP, _, _ := net.SplitHostPort(activePeerAddress)
+			peerHTTPGateway := fmt.Sprintf("http://%s:8081", cleanHostIP)
+			
+			remotePeerHeight := GetGlobalMeshMaxHeight(peerHTTPGateway)
+			if remotePeerHeight > selectedHighestTargetTip {
+				selectedHighestTargetTip = remotePeerHeight
+				chosenTargetSeedURL = peerHTTPGateway
+			}
 		}
 	}
+	PeerMapMutex.RUnlock()
+
 	if chosenTargetSeedURL == "" {
-		return
+		for _, endpoint := range activeGlobalRecoveryGateways {
+			if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" { continue }
+			remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
+			if remotePeerHeight > selectedHighestTargetTip {
+				selectedHighestTargetTip = remotePeerHeight
+				chosenTargetSeedURL = endpoint
+			}
+		}
 	}
+
+	if chosenTargetSeedURL == "" { return }
 
 	StateMutex.Lock()
 	localTip := GetLatestBlockInternal()
 	localHashesSnapshot := make(map[int64]string)
-
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
-		if bBlocks == nil {
-			return nil
-		}
+		if bBlocks == nil { return nil }
 		for h := localTip.Index; h >= 0; h-- {
 			paddedKey := []byte(fmt.Sprintf("%016d", h))
 			if data := bBlocks.Get(paddedKey); data != nil {
 				var blk Block
-				if json.Unmarshal(data, &blk) == nil {
-					localHashesSnapshot[h] = blk.Hash
-				}
+				if json.Unmarshal(data, &blk) == nil { localHashesSnapshot[h] = blk.Hash }
 			}
 		}
 		return nil
@@ -282,7 +294,6 @@ func TriggerActiveReSyncPass() {
 
 	scanHeight := localTip.Index
 	var commonAncestorHeight int64 = -1
-
 	for scanHeight >= 0 {
 		localHash := localHashesSnapshot[scanHeight]
 		remoteHash, remoteErr := fetchRemoteBlockHeader(client, chosenTargetSeedURL, scanHeight)
@@ -292,10 +303,7 @@ func TriggerActiveReSyncPass() {
 		}
 		scanHeight--
 	}
-
-	if commonAncestorHeight == -1 {
-		return
-	}
+	if commonAncestorHeight == -1 { return }
 
 	StateMutex.Lock()
 	shadowTip := GetLatestBlockInternal()
@@ -304,10 +312,7 @@ func TriggerActiveReSyncPass() {
 			bBlocks := tx.Bucket(blocksBucket)
 			bMeta := tx.Bucket(metaBucket)
 			bUTXO := tx.Bucket(utxoBucket)
-			if bBlocks == nil || bMeta == nil || bUTXO == nil {
-				return nil
-			}
-
+			if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
 			for h := shadowTip.Index; h > commonAncestorHeight; h-- {
 				paddedKey := []byte(fmt.Sprintf("%016d", h))
 				if data := bBlocks.Get(paddedKey); data != nil {
@@ -325,53 +330,56 @@ func TriggerActiveReSyncPass() {
 			_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%016d", commonAncestorHeight)))
 			return nil
 		})
-		atomic.StoreInt64(&localHeightState, commonAncestorHeight)
-		RebuildStateBalanceCacheInternal()
-	}
-
-	for {
-		currentLocalTip := GetLatestBlockInternal()
-		nextNeededBlock := currentLocalTip.Index + 1
-		if nextNeededBlock > selectedHighestTargetTip {
-			break
-		}
-		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
-
-		StateMutex.Unlock()
-		resp, err := client.Get(requestURL)
-		if err != nil {
-			StateMutex.Lock()
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			StateMutex.Lock()
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		var incomingBatch []Block
-		err = json.NewDecoder(resp.Body).Decode(&incomingBatch)
-		resp.Body.Close()
-		if err != nil || len(incomingBatch) == 0 {
-			StateMutex.Lock()
-			break
-		}
-
-		StateMutex.Lock()
-		for _, block := range incomingBatch {
-			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
-				if ValidateBlockSignatures(block) {
-if block.UncleHash == "" {
-block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
+atomic.StoreInt64(&localHeightState, commonAncestorHeight)
+RebuildStateBalanceCacheInternal()
 }
-if block.UncleMiner == "" {
-block.UncleMiner = "NONE"
+consecutiveHTTPFailures := 0
+for {
+currentLocalTip := GetLatestBlockInternal()
+nextNeededBlock := currentLocalTip.Index + 1
+if nextNeededBlock > selectedHighestTargetTip { break }
+requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
+StateMutex.Unlock()
+resp, err := client.Get(requestURL)
+if err != nil {
+consecutiveHTTPFailures++
+if consecutiveHTTPFailures >= 3 {
+log.Println("🔌 [HTTP GATEWAYS DROPPING] Executing emergency fallback query directly over TCP Gossip Mesh channel loops...")
+requestBatchOverTCPMeshNatively(nextNeededBlock)
+StateMutex.Lock()
+break
 }
+StateMutex.Lock()
+continue
+}
+if resp.StatusCode != http.StatusOK {
+resp.Body.Close()
+consecutiveHTTPFailures++
+if consecutiveHTTPFailures >= 3 {
+requestBatchOverTCPMeshNatively(nextNeededBlock)
+StateMutex.Lock()
+break
+}
+StateMutex.Lock()
+continue
+}
+consecutiveHTTPFailures = 0
+var incomingBatch []Block
+err = json.NewDecoder(resp.Body).Decode(&incomingBatch)
+resp.Body.Close()
+if err != nil || len(incomingBatch) == 0 {
+StateMutex.Lock()
+break
+}
+StateMutex.Lock()
+for _, block := range incomingBatch {
+if block.Index == int64(GetLatestBlockInternal().Index)+1 {
+if ValidateBlockSignatures(block) {
+if block.UncleHash == "" { block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000" }
+if block.UncleMiner == "" { block.UncleMiner = "NONE" }
 SaveBlockToStorageInternal(block)
-fmt.Printf(" -> [DECENTRALIZED RESILIENCE] Ingested block #%d straight from endpoint -> %s\n", block.Index, chosenTargetSeedURL)
 } else {
-fmt.Printf(" -> [SECURITY CATCHUP PASS] Malformed peer block detected at height #%d. Halting ingest pipeline.\n", block.Index)
+log.Printf("⚠️ [SYNC EXCLUSION FILTER] Rejected invalid block layout sequence at height #%d\n", block.Index)
 break
 }
 }
@@ -379,80 +387,68 @@ break
 time.Sleep(10 * time.Millisecond)
 }
 StateMutex.Unlock()
-fmt.Println(" -> [SYNC COMPLETE] Local ledger aligned with mainnet. Resuming mining...")
 }
-func ValidateBlockSignatures(b Block) bool {
-expectedDiff := b.Difficulty
-if b.Index < 10 {
-expectedDiff = 2
-}
-targetPrefix := strings.Repeat("0", expectedDiff)
-if !strings.HasPrefix(b.Hash, targetPrefix) {
-return false
-}
-if b.Hash != CalculateHash(b) {
-return false
-}
-if len(b.Transactions) == 0 {
-return false
-}
-isBlockValid := true
-if GlobalBoltEngine != nil {
-_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-bUTXO := dbTx.Bucket([]byte("utxo"))
-if bUTXO == nil {
-isBlockValid = false
-return nil
-}
-for txIdx, tx := range b.Transactions {
-if txIdx == 0 {
-continue
-}
-if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
-isBlockValid = false
-return nil
+func drainAndProcessDeferredQueue() {
+StateMutex.Lock()
+withLock := func() {
+defer StateMutex.Unlock()
+log.Println("🔄 [DRAIN PHASE INITIALIZED] Sequential block deployment pass streaming from cached memory channel...")
+queueLength := len(DeferredBlockQueue)
+for i := 0; i < queueLength; i++ {
+select {
+case cachedBlock := <-DeferredBlockQueue:
+currentTip := GetLatestBlockInternal()
+if cachedBlock.Index == currentTip.Index+1 {
+if ValidateBlockSignatures(cachedBlock) && cachedBlock.PrevHash == currentTip.Hash {
+if SaveBlockToStorageInternal(cachedBlock) {
+log.Printf("🟩 [QUEUE RECOVERY SUCCESS] Sequentially applied buffered block #%d to disk map storage.\n", cachedBlock.Index)
+atomic.StoreInt64(&localHeightState, cachedBlock.Index)
+go BroadcastNewBlock(cachedBlock)
 }
 }
-return nil
-})
 }
-if !isBlockValid {
-return false
-}
-// 👑 IMMUTABLE SLICE SLOCK INTEGRITY:
-// Explicitly isolate the array slice index target wrapper.
-coinbaseTx := b.Transactions[0]
-var totalCoinbasePayout float64 = 0.0
-for _, out := range coinbaseTx.Outputs {
-totalCoinbasePayout += out.Amount
-}
-targetBlockHeight := int64(b.Index)
-allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-if targetBlockHeight > 21024000 {
-allowedTotalEmission += 5.0
-}
-// 👑 THE ASYMMETRIC UNCLE SPLIT VERIFIER:
-if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" {
-if len(coinbaseTx.Outputs) < 2 {
-fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash requires two coinbase outputs.")
-return false
-}
-mainMinerPayout := coinbaseTx.Outputs[0].Amount
-uncleMinerPayout := coinbaseTx.Outputs[1].Amount
-expectedMainSplit := allowedTotalEmission * 0.80
-expectedUncleSplit := allowedTotalEmission * 0.20
-if (mainMinerPayout - expectedMainSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) > 0.00001 {
-fmt.Printf("🚨 REJECTION: Invalid Split. Main: %f, Uncle: %f\n", mainMinerPayout, uncleMinerPayout)
-return false
-}
-} else {
-// Standard single-reward validation sequence
-if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
-fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
-return false
+default:
+return
 }
 }
-return true
+}
+withLock()
+}
+func requestBatchOverTCPMeshNatively(height int64) {
+PeerMapMutex.RLock()
+var fallbackTargets []string
+for targetIP := range ActivePeerMap { fallbackTargets = append(fallbackTargets, targetIP) }
+PeerMapMutex.RUnlock()
+for _, endpointHost := range fallbackTargets {
+conn, err := net.DialTimeout("tcp", endpointHost, 2*time.Second)
+if err == nil {
+payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
+_, _ = fmt.Fprint(conn, payloadCommand)
+conn.Close()
+return
+}
+}
+}
+func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
+requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(seedURL, "/"), height)
+resp, err := client.Get(requestURL)
+if err != nil {
+return "", err
+}
+defer resp.Body.Close()
+if resp.StatusCode != http.StatusOK {
+return "", fmt.Errorf("invalid response code: %d", resp.StatusCode)
+}
+var batch []Block
+if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
+return "", err
+}
+for _, block := range batch {
+if block.Index == height {
+return block.Hash, nil
+}
+}
+return "", fmt.Errorf("block missing")
 }
 func CalculateHash(b Block) string {
 var txSummaryBuilder strings.Builder
@@ -534,11 +530,7 @@ return MaxTotalSupplyCap
 }
 return calculatedSupply
 }
-// Fixed Harmonized Inclusive Edge-Case Difficulty Engine
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-// 👑 THE HARMONIZED INCLUSIVE INDEX ANCHOR:
-// Target block height (lastBlock.Index + 1) matches your worker threads loop identically,
-// hard-locking blocks 1 through 10 strictly onto difficulty 2 targets.
 if (lastBlock.Index + 1) <= 10 {
 return 2
 }
@@ -548,10 +540,10 @@ if actualTimeElapsed <= 0 {
 return currentDiff + 1
 }
 const TargetBlockTimeWindow = int64(45)
-// 👑 THE STABILIZED EQUILIBRIUM COUPLER:
-// If cross-continental blocks land within an acceptable operational buffer (30 to 90 seconds),
-// return current difficulty unchanged to prevent target spikes or jitter fracturing!
 if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
+if currentDiff < 4 {
+return 4
+}
 return currentDiff
 }
 if actualTimeElapsed < 30 {
@@ -559,9 +551,85 @@ return currentDiff + 1
 } else if actualTimeElapsed > 90 {
 decreasedDiff := currentDiff - 1
 if decreasedDiff < 4 {
-return 4 // Absolute mainnet policy floor floor past block 10
+return 4
 }
 return decreasedDiff
 }
 return currentDiff
+}
+func ValidateBlockSignatures(b Block) bool {
+expectedDiff := b.Difficulty
+if b.Index <= 10 {
+expectedDiff = 2
+} else {
+if expectedDiff < 4 {
+return false
+}
+}
+targetPrefix := strings.Repeat("0", expectedDiff)
+if !strings.HasPrefix(b.Hash, targetPrefix) {
+return false
+}
+if b.Hash != CalculateHash(b) {
+return false
+}
+if len(b.Transactions) == 0 {
+return false
+}
+isBlockValid := true
+if GlobalBoltEngine != nil {
+_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+bUTXO := dbTx.Bucket([]byte("utxo"))
+if bUTXO == nil {
+isBlockValid = false
+return nil
+}
+for txIdx, tx := range b.Transactions {
+if txIdx == 0 {
+continue
+}
+if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
+isBlockValid = false
+return nil
+}
+}
+return nil
+})
+}
+if !isBlockValid {
+return false
+}
+coinbaseTx := b.Transactions
+var totalCoinbasePayout float64 = 0.0
+// 👑 THE CRITICAL BOUNDS RE-ALIGNMENT PATCH:
+// Verify that the Coinbase transaction array payload is populated safely
+// before extracting its sub-output metrics to prevent array index out of bounds!
+if len(coinbaseTx) > 0 {
+for _, out := range coinbaseTx[0].Outputs {
+totalCoinbasePayout += out.Amount
+}
+} else {
+return false
+}
+targetBlockHeight := int64(b.Index)
+allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
+if targetBlockHeight > 21024000 {
+allowedTotalEmission += 5.0
+}
+if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" {
+if len(coinbaseTx[0].Outputs) < 2 {
+fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash requires two coinbase outputs.")
+return false
+}
+mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
+expectedMainSplit := allowedTotalEmission * 0.80
+if (mainMinerPayout - expectedMainSplit) > 0.00001 {
+return false
+}
+} else {
+if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
+return false
+}
+}
+return true
 }
