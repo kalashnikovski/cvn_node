@@ -119,9 +119,6 @@ func SaveBlockToStorage(block Block) bool {
 func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil { return false }
 
-	// 👑 THE FIRWALL RE-ALIGNMENT CHECKPOINT:
-	// Enforce true cryptographic consensus verification checks directly at the front gate 
-	// of your storage engine, matching the inclusive height-10 boundary layout rule perfectly!
 	expectedDiff := block.Difficulty
 	if block.Index <= 10 {
 		expectedDiff = 2
@@ -173,6 +170,20 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 		}
 
+		// 👑 REQUIREMENT 1: MATERIALISE UNCLE REWARDS AS REAL ON-DISK UTXOs
+		// Commit spendable Uncle coin subsidies permanently into the authoritative utxo bucket.
+		if block.UncleHash != "" && 
+		   block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
+		   block.UncleMiner != "NONE" && 
+		   block.UncleMiner != "" {
+			
+			uncleSubsidy := CalculateBlockReward(block.Index) * 0.20
+			uncleKey := []byte(fmt.Sprintf("UNCLE_%d_%s", block.Index, block.UncleMiner))
+			utxoRecord := UTXORecord{Amount: uncleSubsidy, Recipient: strings.TrimSpace(block.UncleMiner)}
+			utxoData, _ := json.Marshal(utxoRecord)
+			_ = bUTXO.Put(uncleKey, utxoData)
+		}
+
 		if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
 			go func(b Block) {
 				jsonBytes, err := json.Marshal(b)
@@ -201,7 +212,6 @@ func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
 	
-	// Reset the memory tracking structures out-of-the-box
 	StateBalanceCache = make(map[string]float64)
 	if GlobalBoltEngine == nil {
 		return
@@ -211,7 +221,10 @@ func RebuildStateBalanceCacheInternal() {
 		bUTXO := tx.Bucket(utxoBucket)
 		bBlocks := tx.Bucket(blocksBucket)
 		
-		// Pass 1: Aggregate standard active UTXO ledger entries
+		// 👑 REQUIREMENT 4: CACHE REBUILD AUTHORITY SURVIVES RESTART
+		// The UTXO bucket cursor is now the absolute, authoritative source of truth.
+		// It natively houses all standard transaction outputs and durable UNCLE_* records 
+		// generated during SaveBlockToStorageInternal passes.
 		if bUTXO != nil {
 			c := bUTXO.Cursor()
 			for k, v := c.First(); k != nil; k, v = c.Next() {
@@ -222,7 +235,7 @@ func RebuildStateBalanceCacheInternal() {
 			}
 		}
 
-		// Pass 2: Scrutinize the historical block chain for valid Uncle block rewards splits
+		// Fast fallback in-memory cache verification mirror path
 		if bBlocks != nil {
 			bc := bBlocks.Cursor()
 			for k, v := bc.First(); k != nil; k, v = bc.Next() {
@@ -233,11 +246,12 @@ func RebuildStateBalanceCacheInternal() {
 					   blk.UncleMiner != "NONE" && 
 					   strings.TrimSpace(blk.UncleMiner) != "" {
 						
-						totalBlockEmission := CalculateBlockReward(blk.Index)
-						uncleSubsidy := totalBlockEmission * 0.20
-						
-						// Allocate the 10.00 CVN reward directly to the Uncle Miner address channel
-						StateBalanceCache[strings.TrimSpace(blk.UncleMiner)] += uncleSubsidy
+						uncleKeyCheck := fmt.Sprintf("UNCLE_%d_%s", blk.Index, blk.UncleMiner)
+						if bUTXO != nil && bUTXO.Get([]byte(uncleKeyCheck)) == nil {
+							totalBlockEmission := CalculateBlockReward(blk.Index)
+							uncleSubsidy := totalBlockEmission * 0.20
+							StateBalanceCache[strings.TrimSpace(blk.UncleMiner)] += uncleSubsidy
+						}
 					}
 				}
 			}
