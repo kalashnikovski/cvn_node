@@ -164,14 +164,20 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 			for outIdx, output := range txPayload.Outputs {
 				compoundOutputKey := fmt.Sprintf("%s_%d", txPayload.ID, outIdx)
-				utxoRecord := UTXORecord{Amount: output.Amount, Recipient: output.Recipient}
+				
+				// 👑 REQUIREMENT 4: TRIM RECIPIENT CARRIER ON COINBASE SPLITS
+				sanitizedRecipient := strings.TrimSpace(output.Recipient)
+				utxoRecord := UTXORecord{Amount: output.Amount, Recipient: sanitizedRecipient}
 				utxoData, _ := json.Marshal(utxoRecord)
+				
+				// 👑 FIX PASS: Explicitly typecast your string compoundOutputKey variable 
+				// to a raw []byte slice signature format to pass BoltDB parameters flawlessly!
 				_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
 			}
 		}
 
-		// 👑 REQUIREMENT 1: MATERIALISE UNCLE REWARDS AS REAL ON-DISK UTXOs
-		// Commit spendable Uncle coin subsidies permanently into the authoritative utxo bucket.
+		// 👑 REQUIREMENT 4: FORCE PRE-TRIMMED CANONICAL KEYS BEFORE WRITING UNCLE SUBSIDIES
+		block.UncleMiner = strings.TrimSpace(block.UncleMiner)
 		if block.UncleHash != "" && 
 		   block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
 		   block.UncleMiner != "NONE" && 
@@ -179,7 +185,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			
 			uncleSubsidy := CalculateBlockReward(block.Index) * 0.20
 			uncleKey := []byte(fmt.Sprintf("UNCLE_%d_%s", block.Index, block.UncleMiner))
-			utxoRecord := UTXORecord{Amount: uncleSubsidy, Recipient: strings.TrimSpace(block.UncleMiner)}
+			utxoRecord := UTXORecord{Amount: uncleSubsidy, Recipient: block.UncleMiner}
 			utxoData, _ := json.Marshal(utxoRecord)
 			_ = bUTXO.Put(uncleKey, utxoData)
 		}
@@ -207,7 +213,6 @@ func RebuildStateBalanceCache() {
 	RebuildStateBalanceCacheInternal()
 }
 
-// RebuildStateBalanceCacheInternal chronologically scans storage buckets to construct precise balances
 func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
@@ -221,36 +226,35 @@ func RebuildStateBalanceCacheInternal() {
 		bUTXO := tx.Bucket(utxoBucket)
 		bBlocks := tx.Bucket(blocksBucket)
 		
-		// 👑 REQUIREMENT 4: CACHE REBUILD AUTHORITY SURVIVES RESTART
-		// The UTXO bucket cursor is now the absolute, authoritative source of truth.
-		// It natively houses all standard transaction outputs and durable UNCLE_* records 
-		// generated during SaveBlockToStorageInternal passes.
 		if bUTXO != nil {
 			c := bUTXO.Cursor()
 			for k, v := c.First(); k != nil; k, v = c.Next() {
 				var record UTXORecord
 				if json.Unmarshal(v, &record) == nil {
-					StateBalanceCache[record.Recipient] += record.Amount
+					// 👑 REQUIREMENT 5: CANONICALISE MEMORY PROFILE MAP RECIPIENTS KEY BOUNDS
+					sanitizedRecipient := strings.TrimSpace(record.Recipient)
+					StateBalanceCache[sanitizedRecipient] += record.Amount
 				}
 			}
 		}
 
-		// Fast fallback in-memory cache verification mirror path
 		if bBlocks != nil {
 			bc := bBlocks.Cursor()
 			for k, v := bc.First(); k != nil; k, v = bc.Next() {
 				var blk Block
 				if json.Unmarshal(v, &blk) == nil {
+					// 👑 REQUIREMENT 5: CANONICALISE UNCLE SUBSIDY FIELD READ BOUNDARIES
+					canonicalUncleMiner := strings.TrimSpace(blk.UncleMiner)
 					if blk.UncleHash != "" && 
 					   blk.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
-					   blk.UncleMiner != "NONE" && 
-					   strings.TrimSpace(blk.UncleMiner) != "" {
+					   canonicalUncleMiner != "NONE" && 
+					   canonicalUncleMiner != "" {
 						
-						uncleKeyCheck := fmt.Sprintf("UNCLE_%d_%s", blk.Index, blk.UncleMiner)
+						uncleKeyCheck := fmt.Sprintf("UNCLE_%d_%s", blk.Index, canonicalUncleMiner)
 						if bUTXO != nil && bUTXO.Get([]byte(uncleKeyCheck)) == nil {
 							totalBlockEmission := CalculateBlockReward(blk.Index)
 							uncleSubsidy := totalBlockEmission * 0.20
-							StateBalanceCache[strings.TrimSpace(blk.UncleMiner)] += uncleSubsidy
+							StateBalanceCache[canonicalUncleMiner] += uncleSubsidy
 						}
 					}
 				}

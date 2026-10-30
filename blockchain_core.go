@@ -28,8 +28,8 @@ type Block struct {
 	Difficulty   int           `json:"difficulty"`
 	Nonce        int64         `json:"nonce"`
 	GuardMatrix  string        `json:"guard_matrix"`
-	UncleHash    string        `json:"uncle_hash"`
-	UncleMiner   string        `json:"uncle_miner"`
+	UncleHash    string        `json:"uncle_hash"`  
+	UncleMiner   string        `json:"uncle_miner"` 
 }
 
 type Transaction struct {
@@ -84,7 +84,7 @@ var StateBalanceCache = make(map[string]float64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
-// Peer latency witness anchor for fork-race resolution
+// 👑 THE CRITICAL PEER LATENCY WITNESS ANCHOR:
 var BlockWitnessTimestamps sync.Map
 
 func CalculateBlockReward(blockIndex int64) float64 {
@@ -129,8 +129,20 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 // Bounded memory channel queue to store real-time wire blocks during resync phases
 var DeferredBlockQueue = make(chan Block, 32)
 
+// 👑 REQUIREMENT 1: CANONICAL UNCLE UTXO REMOVAL HELPER
+// This function dynamically targets and expels an old block's uncle subsidy 
+// from your state partitions during chain tip reorganizations.
+func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
+	trimmed := strings.TrimSpace(uncleMiner)
+	if trimmed == "" || trimmed == "NONE" {
+		return
+	}
+	key := []byte(fmt.Sprintf("UNCLE_%d_%s", height, trimmed))
+	_ = bUTXO.Delete(key)
+}
+
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
-	// Timelock arrival stamps immediately on intercept
+	// Timelock arrival stamps immediately on intercept down to the millisecond
 	nowUnixMs := time.Now().UnixNano() / int64(time.Millisecond)
 	BlockWitnessTimestamps.LoadOrStore(incomingBlock.Hash, nowUnixMs)
 
@@ -155,12 +167,8 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
 		var localTipSeenTime, incomingSeenTime int64
 
-		if val, ok := BlockWitnessTimestamps.Load(currentTip.Hash); ok {
-			localTipSeenTime = val.(int64)
-		}
-		if val, ok := BlockWitnessTimestamps.Load(incomingBlock.Hash); ok {
-			incomingSeenTime = val.(int64)
-		}
+		if val, ok := BlockWitnessTimestamps.Load(currentTip.Hash); ok { localTipSeenTime = val.(int64) }
+		if val, ok := BlockWitnessTimestamps.Load(incomingBlock.Hash); ok { incomingSeenTime = val.(int64) }
 
 		const AdaptiveForkRaceWindowFloor = int64(400)
 		timeDeltaBetweenArrivals := incomingSeenTime - localTipSeenTime
@@ -171,9 +179,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		}
 
 		timeDiff := incomingBlock.Timestamp - currentTip.Timestamp
-		if timeDiff < 0 {
-			timeDiff = -timeDiff
-		}
+		if timeDiff < 0 { timeDiff = -timeDiff }
 
 		preferIncoming := false
 		if incomingBlock.Timestamp < currentTip.Timestamp {
@@ -190,9 +196,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 				bBlocks := tx.Bucket(blocksBucket)
 				bMeta := tx.Bucket(metaBucket)
 				bUTXO := tx.Bucket(utxoBucket)
-				if bBlocks == nil || bMeta == nil || bUTXO == nil {
-					return nil
-				}
+				if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
 				paddedKey := []byte(fmt.Sprintf("%016d", currentTip.Index))
 				if data := bBlocks.Get(paddedKey); data != nil {
 					var localBlock Block
@@ -201,6 +205,15 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 							for outIdx := range txPayload.Outputs {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
+						}
+						// 👑 REQUIREMENT 2: PURGE REORG UNCLE UTXO ON DISK TIP CONFLICTS
+						// Forcefully remove spendable uncle rewards from the authoritative bucket 
+						// when a chain reorg rolls back a competitive tip block.
+						if localBlock.UncleHash != "" && 
+						   localBlock.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
+						   strings.TrimSpace(localBlock.UncleMiner) != "NONE" &&
+						   strings.TrimSpace(localBlock.UncleMiner) != "" {
+							deleteUncleUTXO(bUTXO, localBlock.Index, localBlock.UncleMiner)
 						}
 					}
 				}
@@ -222,12 +235,8 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		return
 	}
 
-	if incomingBlock.Index < currentTip.Index {
-		return
-	}
-	if !ValidateBlockSignatures(incomingBlock) {
-		return
-	}
+	if incomingBlock.Index < currentTip.Index { return }
+	if !ValidateBlockSignatures(incomingBlock) { return }
 
 	if incomingBlock.Index > currentTip.Index+1 {
 		go TriggerActiveReSyncPass()
@@ -245,17 +254,16 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		}
 	}
 }
-
 func TriggerActiveReSyncPass() {
 	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
 		return
 	}
-
+	
 	log.Println("⏳ [SYNC GATEWAY ACTIVE] Consensus engine flag set: TRUE. Local mining loops safely PAUSED.")
-
+	
 	syncWatchdogTimer := time.NewTimer(90 * time.Second)
 	watchdogDoneChannel := make(chan struct{})
-
+	
 	go func() {
 		select {
 		case <-syncWatchdogTimer.C:
@@ -284,7 +292,7 @@ func TriggerActiveReSyncPass() {
 		if time.Since(lastSeenTimestamp) <= 30*time.Second {
 			cleanHostIP, _, _ := net.SplitHostPort(activePeerAddress)
 			peerHTTPGateway := fmt.Sprintf("http://%s:8081", cleanHostIP)
-
+			
 			remotePeerHeight := GetGlobalMeshMaxHeight(peerHTTPGateway)
 			if remotePeerHeight > selectedHighestTargetTip {
 				selectedHighestTargetTip = remotePeerHeight
@@ -296,9 +304,7 @@ func TriggerActiveReSyncPass() {
 
 	if chosenTargetSeedURL == "" {
 		for _, endpoint := range activeGlobalRecoveryGateways {
-			if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" {
-				continue
-			}
+			if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" { continue }
 			remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
 			if remotePeerHeight > selectedHighestTargetTip {
 				selectedHighestTargetTip = remotePeerHeight
@@ -307,25 +313,19 @@ func TriggerActiveReSyncPass() {
 		}
 	}
 
-	if chosenTargetSeedURL == "" {
-		return
-	}
+	if chosenTargetSeedURL == "" { return }
 
 	StateMutex.Lock()
 	localTip := GetLatestBlockInternal()
 	localHashesSnapshot := make(map[int64]string)
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
-		if bBlocks == nil {
-			return nil
-		}
+		if bBlocks == nil { return nil }
 		for h := localTip.Index; h >= 0; h-- {
 			paddedKey := []byte(fmt.Sprintf("%016d", h))
 			if data := bBlocks.Get(paddedKey); data != nil {
 				var blk Block
-				if json.Unmarshal(data, &blk) == nil {
-					localHashesSnapshot[h] = blk.Hash
-				}
+				if json.Unmarshal(data, &blk) == nil { localHashesSnapshot[h] = blk.Hash }
 			}
 		}
 		return nil
@@ -343,9 +343,7 @@ func TriggerActiveReSyncPass() {
 		}
 		scanHeight--
 	}
-	if commonAncestorHeight == -1 {
-		return
-	}
+	if commonAncestorHeight == -1 { return }
 
 	StateMutex.Lock()
 	shadowTip := GetLatestBlockInternal()
@@ -354,9 +352,7 @@ func TriggerActiveReSyncPass() {
 			bBlocks := tx.Bucket(blocksBucket)
 			bMeta := tx.Bucket(metaBucket)
 			bUTXO := tx.Bucket(utxoBucket)
-			if bBlocks == nil || bMeta == nil || bUTXO == nil {
-				return nil
-			}
+			if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
 			for h := shadowTip.Index; h > commonAncestorHeight; h-- {
 				paddedKey := []byte(fmt.Sprintf("%016d", h))
 				if data := bBlocks.Get(paddedKey); data != nil {
@@ -366,6 +362,13 @@ func TriggerActiveReSyncPass() {
 							for outIdx := range txPayload.Outputs {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
+						}
+						// 👑 REQUIREMENT 3: REORG CLEANUP DURING COMMON-ANCESTOR ROLLBACKS
+						if block.UncleHash != "" && 
+						   block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
+						   strings.TrimSpace(block.UncleMiner) != "NONE" &&
+						   strings.TrimSpace(block.UncleMiner) != "" {
+							deleteUncleUTXO(bUTXO, block.Index, block.UncleMiner)
 						}
 					}
 				}
@@ -382,9 +385,7 @@ func TriggerActiveReSyncPass() {
 	for {
 		currentLocalTip := GetLatestBlockInternal()
 		nextNeededBlock := currentLocalTip.Index + 1
-		if nextNeededBlock > selectedHighestTargetTip {
-			break
-		}
+		if nextNeededBlock > selectedHighestTargetTip { break }
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
 		StateMutex.Unlock()
 		resp, err := client.Get(requestURL)
@@ -422,12 +423,8 @@ func TriggerActiveReSyncPass() {
 		for _, block := range incomingBatch {
 			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
 				if ValidateBlockSignatures(block) {
-					if block.UncleHash == "" {
-						block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
-					}
-					if block.UncleMiner == "" {
-						block.UncleMiner = "NONE"
-					}
+					if block.UncleHash == "" { block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000" }
+					if block.UncleMiner == "" { block.UncleMiner = "NONE" }
 					SaveBlockToStorageInternal(block)
 				} else {
 					log.Printf("⚠️ [SYNC EXCLUSION FILTER] Rejected invalid block layout sequence at height #%d\n", block.Index)
@@ -442,34 +439,35 @@ func TriggerActiveReSyncPass() {
 
 func drainAndProcessDeferredQueue() {
 	StateMutex.Lock()
-	defer StateMutex.Unlock()
-	log.Println("🔄 [DRAIN PHASE INITIALIZED] Sequential block deployment pass streaming from cached memory channel...")
-	queueLength := len(DeferredBlockQueue)
-	for i := 0; i < queueLength; i++ {
-		select {
-		case cachedBlock := <-DeferredBlockQueue:
-			currentTip := GetLatestBlockInternal()
-			if cachedBlock.Index == currentTip.Index+1 {
-				if ValidateBlockSignatures(cachedBlock) && cachedBlock.PrevHash == currentTip.Hash {
-					if SaveBlockToStorageInternal(cachedBlock) {
-						log.Printf("🟩 [QUEUE RECOVERY SUCCESS] Sequentially applied buffered block #%d to disk map storage.\n", cachedBlock.Index)
-						atomic.StoreInt64(&localHeightState, cachedBlock.Index)
-						go BroadcastNewBlock(cachedBlock)
+	withLock := func() {
+		defer StateMutex.Unlock()
+		log.Println("🔄 [DRAIN PHASE INITIALIZED] Sequential block deployment pass streaming from cached memory channel...")
+		queueLength := len(DeferredBlockQueue)
+		for i := 0; i < queueLength; i++ {
+			select {
+			case cachedBlock := <-DeferredBlockQueue:
+				currentTip := GetLatestBlockInternal()
+				if cachedBlock.Index == currentTip.Index+1 {
+					if ValidateBlockSignatures(cachedBlock) && cachedBlock.PrevHash == currentTip.Hash {
+						if SaveBlockToStorage(cachedBlock) {
+							log.Printf("🟩 [QUEUE RECOVERY SUCCESS] Sequentially applied buffered block #%d to disk map storage.\n", cachedBlock.Index)
+							atomic.StoreInt64(&localHeightState, cachedBlock.Index)
+							go BroadcastNewBlock(cachedBlock)
+						}
 					}
 				}
+			default:
+				return
 			}
-		default:
-			return
 		}
 	}
+	withLock()
 }
 
 func requestBatchOverTCPMeshNatively(height int64) {
 	PeerMapMutex.RLock()
 	var fallbackTargets []string
-	for targetIP := range ActivePeerMap {
-		fallbackTargets = append(fallbackTargets, targetIP)
-	}
+	for targetIP := range ActivePeerMap { fallbackTargets = append(fallbackTargets, targetIP) }
 	PeerMapMutex.RUnlock()
 	for _, endpointHost := range fallbackTargets {
 		conn, err := net.DialTimeout("tcp", endpointHost, 2*time.Second)
@@ -573,134 +571,132 @@ func GetCurrentCirculatingSupply() float64 {
 		calculatedSupply += (15768000 - 10512000) * 12.5
 		processedBlocks = 15768000
 	} else {
-		calculatedSupply += float64(height-processedBlocks) * 12.5
-		return calculatedSupply
-	}
-	if height > 21024000 {
-		calculatedSupply += (21024000 - 15768000) * 6.25
-		processedBlocks = 21024000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 6.25
-		return calculatedSupply
-	}
-	if calculatedSupply > MaxTotalSupplyCap {
-		return MaxTotalSupplyCap
-	}
-	return calculatedSupply
+calculatedSupply += float64(height-processedBlocks) * 12.5
+return calculatedSupply
 }
-
+if height > 21024000 {
+calculatedSupply += (21024000 - 15768000) * 6.25
+processedBlocks = 21024000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 6.25
+return calculatedSupply
+}
+if calculatedSupply > MaxTotalSupplyCap {
+return MaxTotalSupplyCap
+}
+return calculatedSupply
+}
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	if (lastBlock.Index + 1) <= 10 {
-		return 2
-	}
-	currentDiff := int(lastBlock.Difficulty)
-	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed <= 0 {
-		return currentDiff + 1
-	}
-	const TargetBlockTimeWindow = int64(45)
-	if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
-		if currentDiff < 4 {
-			return 4
-		}
-		return currentDiff
-	}
-	if actualTimeElapsed < 30 {
-		return currentDiff + 1
-	} else if actualTimeElapsed > 90 {
-		decreasedDiff := currentDiff - 1
-		if decreasedDiff < 4 {
-			return 4
-		}
-		return decreasedDiff
-	}
-	return currentDiff
+if (lastBlock.Index + 1) <= 10 {
+return 2
 }
-
+currentDiff := int(lastBlock.Difficulty)
+actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
+if actualTimeElapsed <= 0 {
+return currentDiff + 1
+}
+const TargetBlockTimeWindow = int64(45)
+if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
+if currentDiff < 4 {
+return 4
+}
+return currentDiff
+}
+if actualTimeElapsed < 30 {
+return currentDiff + 1
+} else if actualTimeElapsed > 90 {
+decreasedDiff := currentDiff - 1
+if decreasedDiff < 4 {
+return 4
+}
+return decreasedDiff
+}
+return currentDiff
+}
 func ValidateBlockSignatures(b Block) bool {
-	expectedDiff := b.Difficulty
-	if b.Index <= 10 {
-		expectedDiff = 2
-	} else {
-		if expectedDiff < 4 {
-			return false
-		}
-	}
-	targetPrefix := strings.Repeat("0", expectedDiff)
-	if !strings.HasPrefix(b.Hash, targetPrefix) {
-		return false
-	}
-	if b.Hash != CalculateHash(b) {
-		return false
-	}
-	if len(b.Transactions) == 0 {
-		return false
-	}
-	isBlockValid := true
-	if GlobalBoltEngine != nil {
-		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			bUTXO := dbTx.Bucket([]byte("utxo"))
-			if bUTXO == nil {
-				isBlockValid = false
-				return nil
-			}
-			for txIdx, tx := range b.Transactions {
-				if txIdx == 0 {
-					continue
-				}
-				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
-					isBlockValid = false
-					return nil
-				}
-			}
-			return nil
-		})
-	}
-	if !isBlockValid {
-		return false
-	}
-	coinbaseTx := b.Transactions
-	var totalCoinbasePayout float64 = 0.0
-	if len(coinbaseTx) > 0 {
-		for _, out := range coinbaseTx[0].Outputs {
-			totalCoinbasePayout += out.Amount
-		}
-	} else {
-		return false
-	}
-	targetBlockHeight := int64(b.Index)
-	allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-	if targetBlockHeight > 21024000 {
-		allowedTotalEmission += 5.0
-	}
-	// Enforce exact 80/20 coinbase payout economic split when uncle is present
-	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" && b.UncleMiner != "" {
-		if len(coinbaseTx[0].Outputs) != 2 {
-			fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
-			return false
-		}
-		mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
-		uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
-		uncleMinerRecipient := coinbaseTx[0].Outputs[1].Recipient
-		expectedMainSplit := allowedTotalEmission * 0.80
-		expectedUncleSplit := allowedTotalEmission * 0.20
-		if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
-			return false
-		}
-		if (uncleMinerPayout-expectedUncleSplit) > 0.00001 || (uncleMinerPayout-expectedUncleSplit) < -0.00001 {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Uncle Miner Payout footprint. Got: %f, Expected: %f\n", uncleMinerPayout, expectedUncleSplit)
-			return false
-		}
-		if strings.TrimSpace(uncleMinerRecipient) != strings.TrimSpace(b.UncleMiner) {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Coinbase index recipient %s does not match Uncle header signature metadata %s\n", uncleMinerRecipient, b.UncleMiner)
-			return false
-		}
-	} else {
-		if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
-			fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
-			return false
-		}
-	}
-	return true
+expectedDiff := b.Difficulty
+if b.Index <= 10 {
+expectedDiff = 2
+} else {
+if expectedDiff < 4 {
+return false
+}
+}
+targetPrefix := strings.Repeat("0", expectedDiff)
+if !strings.HasPrefix(b.Hash, targetPrefix) {
+return false
+}
+if b.Hash != CalculateHash(b) {
+return false
+}
+if len(b.Transactions) == 0 {
+return false
+}
+isBlockValid := true
+if GlobalBoltEngine != nil {
+_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+bUTXO := dbTx.Bucket([]byte("utxo"))
+if bUTXO == nil {
+isBlockValid = false
+return nil
+}
+for txIdx, tx := range b.Transactions {
+if txIdx == 0 {
+continue
+}
+if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
+isBlockValid = false
+return nil
+}
+}
+return nil
+})
+}
+if !isBlockValid {
+return false
+}
+coinbaseTx := b.Transactions
+var totalCoinbasePayout float64 = 0.0
+if len(coinbaseTx) > 0 {
+for _, out := range coinbaseTx[0].Outputs {
+totalCoinbasePayout += out.Amount
+}
+} else {
+return false
+}
+targetBlockHeight := int64(b.Index)
+allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
+if targetBlockHeight > 21024000 {
+allowedTotalEmission += 5.0
+}
+// 👑 REQUIREMENT 2: ENFORCE EXACT 80/20 COINBASE PAYOUT ECONOMIC SPLIT WHEN UNCLE IS PRESENT
+if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" && b.UncleMiner != "" {
+if len(coinbaseTx[0].Outputs) != 2 {
+fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
+return false
+}
+mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
+uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
+uncleMinerRecipient := coinbaseTx[0].Outputs[1].Recipient
+expectedMainSplit := allowedTotalEmission * 0.80
+expectedUncleSplit := allowedTotalEmission * 0.20
+if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
+fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
+return false
+}
+if (uncleMinerPayout-expectedUncleSplit) > 0.00001 || (uncleMinerPayout-expectedUncleSplit) < -0.00001 {
+fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Uncle Miner Payout footprint. Got: %f, Expected: %f\n", uncleMinerPayout, expectedUncleSplit)
+return false
+}
+if strings.TrimSpace(uncleMinerRecipient) != strings.TrimSpace(b.UncleMiner) {
+fmt.Printf("🚨 CONSENSUS REJECTION: Coinbase index recipient %s does not match Uncle header signature metadata %s\n", uncleMinerRecipient, b.UncleMiner)
+return false
+}
+} else {
+if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
+fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
+return false
+}
+}
+return true
 }
