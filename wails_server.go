@@ -50,12 +50,16 @@ func RunDesktopUIFrameworkIfApplicable() {
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
 	}
 
-	// Ignite core P2P mesh parameters
-	go StartMeshNetwork()
+go StartMeshNetwork()
 
-	fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
-	fmt.Println("--------------------------------------------------------------------")
-	
-	// Infinite background daemon hold
-	select {}
-}
+fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
+fmt.Println("--------------------------------------------------------------------")
+
+// Force an initial bulk sync 5 seconds after startup
+go func() {
+	time.Sleep(5 * time.Second)
+	TriggerActiveReSyncPass()
+}()
+
+// Infinite background daemon hold
+select {}
