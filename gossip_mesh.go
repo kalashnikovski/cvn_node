@@ -85,15 +85,25 @@ func handleIncomingPeerStream(conn net.Conn) {
 			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")
 			startHeight, err := strconv.ParseInt(heightStr, 10, 64)
 			if err != nil || startHeight < 0 { return }
+			
+			// Compile and serialize the requested block objects cleanly back down the TCP wire
 			var blocks []Block
 			StateMutex.RLock()
 			currentTip := GetLatestBlockInternal().Index
 			StateMutex.RUnlock()
+			
 			endHeight := startHeight + 511
 			if endHeight > currentTip { endHeight = currentTip }
-			for h := startHeight; h <= endHeight; h++ { blocks = append(blocks, GetBlockByHeightFromDB(h)) }
+			
+			for h := startHeight; h <= endHeight; h++ { 
+				blocks = append(blocks, GetBlockByHeightFromDB(h)) 
+			}
+			
 			jsonBytes, err := json.Marshal(blocks)
-			if err == nil { _, _ = conn.Write(append(jsonBytes, '\n')) }
+			if err == nil { 
+				// Write the historical block batch data payload directly back to the requesting node
+				_, _ = conn.Write(append(jsonBytes, '\n')) 
+			}
 			return
 		}
 
