@@ -390,13 +390,17 @@ func TriggerActiveReSyncPass() {
 		resp, err := client.Get(requestURL)
 		if err != nil {
 			consecutiveHTTPFailures++
+			// 👑 HARDENED CROSS-CONTINENTAL FALLBACK LAYER:
+			// If the HTTP sync gateway fails 3 times or times out over long distances,
+			// immediately break the loop and request the block data stream via TCP Mesh Port 8080!
 			if consecutiveHTTPFailures >= 3 {
-				log.Println("🔌 [HTTP GATEWAYS DROPPING] Executing emergency fallback query directly over TCP Gossip Mesh channel loops...")
+				log.Printf("🔌 [HTTP TIMEOUT] Failed to sync over Port 8081. Routing P2P GET_BATCH request for block #%d directly over TCP mesh Port 8080!\n", nextNeededBlock)
 				requestBatchOverTCPMeshNatively(nextNeededBlock)
 				StateMutex.Lock()
 				break
 			}
 			StateMutex.Lock()
+			time.Sleep(100 * time.Millisecond) // Add a slight cooldown between failover attempts
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
