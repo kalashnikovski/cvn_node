@@ -11,9 +11,6 @@ import (
 // VerifyTransactionIntegrity evaluates cryptographic signatures and checks live UTXO states on the disk ledger.
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
 	// 👑 THE BULLETPROOF COINBASE SIGNATURE BYPASS:
-	// Inspect the block transaction array identity prefix at the absolute front gate.
-	// This guarantees that valid block reward payouts bypass empty inputs and floating-point 
-	// signature constraints uniformly across both Windows and Linux network validations!
 	if strings.HasPrefix(tx.ID, "TX_COINBASE") {
 		if txIndex != 0 {
 			fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
@@ -27,7 +24,7 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 		return false
 	}
 
-	// 2. CRYPTOGRAPHIC SIGNATURE PASS: Validates ECDSA key-pair coordinates over message payload strings
+	// CRYPTOGRAPHIC SIGNATURE PASS: Validates ECDSA key-pair coordinates over message payload strings
 	txMessage := fmt.Sprintf("%s-%s-%.8f", tx.ID, tx.Witness, tx.FreeWillOffering)
 	sigSegments := strings.Split(tx.Signature, "|")
 	if len(sigSegments) < 2 {
@@ -43,7 +40,7 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 		return false
 	}
 
-	// 3. UTXO DISK INTEGRITY VERIFICATION: Ensures parental references exist and remain unspent
+	// UTXO DISK INTEGRITY VERIFICATION: Ensures parental references exist and remain unspent
 	var totalInputVolume float64 = 0.0
 	for _, in := range tx.Inputs {
 		compoundKey := fmt.Sprintf("%s_%d", in.SourceTxID, in.Index)
@@ -71,7 +68,7 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 		totalOutputVolume += out.Amount
 	}
 
-	// 4. BALANCING EQUILIBRIUM RULES: Enforces total inputs can cover outputs and network offering fee metrics
+	// BALANCING EQUILIBRIUM RULES: Enforces total inputs can cover outputs and network offering fee metrics
 	if totalInputVolume < (totalOutputVolume + tx.FreeWillOffering) {
 		fmt.Printf("🚨 ACCRUAL FAILURE: Inputs (%f) insufficient for required outputs + fee offering total (%f)\n", totalInputVolume, totalOutputVolume+tx.FreeWillOffering)
 		return false
@@ -101,22 +98,32 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 	return isValid
 }
 
-// VerifyIncomingWireBlock performs deep validation checks on incoming blocks with strict difficulty parameters.
 // VerifyIncomingWireBlock performs strict validation audits on incoming P2P blocks.
 func VerifyIncomingWireBlock(b Block) bool {
-	// 👑 THE MASTER IDENTITY SAFEGUARD:
+	// THE MASTER IDENTITY SAFEGUARD:
 	if CustomMinerAddress == "" || CustomMinerAddress == "CVN_UNCONFIGURED_LOCAL_NODE_ID" {
 		fmt.Println("🚨 FRONT-GATE REFUSAL: Headless node configuration missing or uninstantiated. Aborting validation path.")
 		return false
 	}
 
-	// 👑 EXACT MATCH CONSENSUS GATEWAY:
-	// Recalculate what the exact difficulty target should be for this block's timestamp.
-	StateMutex.RLock()
-	expectedDifficulty := CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
-	StateMutex.RUnlock()
+	// 👑 THE HARMONIZED DIFFICULTY BOUNDARY FIREWALL:
+	// Explicitly align validation criteria to reject off-by-one errors past height 10.
+	var expectedDifficulty int
+	if b.Index <= 10 {
+		expectedDifficulty = 2
+	} else {
+		// Past block 10, the absolute mainnet policy specification floor is strictly 4 zeros!
+		if b.Difficulty < 4 {
+			fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d below mainnet floor (4)\n", b.Index, b.Difficulty)
+			return false
+		}
+		
+		StateMutex.RLock()
+		expectedDifficulty = CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
+		StateMutex.RUnlock()
+	}
 
-	// Enforce an absolute exact equality check to kill fork-split vulnerabilities.
+	// Enforce exact consensus matching rules down to the bit
 	if b.Difficulty != expectedDifficulty {
 		fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
 		return false
@@ -128,7 +135,6 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 
-	// Recalculate block hashes using the exact transaction array elements embedded inside the packet
 	if b.Hash != CalculateHash(b) {
 		fmt.Println("🚨 WIRE BLOCK FAULT: Block hash re-computation checks failed mismatch constraints.")
 		return false

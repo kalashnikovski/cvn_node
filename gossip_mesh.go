@@ -209,6 +209,9 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 				
 				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
 					currentTip.UncleHash = incomingBlock.Hash
+					
+					// 👑 FIXED COINBASE LAYER MATCH:
+					// Read the witness identity data from slice index 0 matching consensus specs!
 					if len(incomingBlock.Transactions) > 0 {
 						currentTip.UncleMiner = incomingBlock.Transactions[0].Witness
 					} else {
