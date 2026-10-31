@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // RunHeadlessServerUIFramework acts as the pure headless initializer for Linux cloud virtual instances.
@@ -50,16 +51,17 @@ func RunDesktopUIFrameworkIfApplicable() {
 		fmt.Printf("📡 Connected to Synchronization Gateway: %s\n", *connectFlag)
 	}
 
-go StartMeshNetwork()
+	go StartMeshNetwork()
 
-fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
-fmt.Println("--------------------------------------------------------------------")
+	fmt.Println("⚙️  [IGNITION] Headless sync engine securely locked into memory pools.")
+	fmt.Println("--------------------------------------------------------------------")
 
-// Force an initial bulk sync 5 seconds after startup
-go func() {
-	time.Sleep(5 * time.Second)
-	TriggerActiveReSyncPass()
-}()
+	// Force an initial bulk sync 5 seconds after startup
+	go func() {
+		time.Sleep(5 * time.Second)
+		TriggerActiveReSyncPass()
+	}()
 
-// Infinite background daemon hold
-select {}
+	// Infinite background daemon hold
+	select {}
+}
