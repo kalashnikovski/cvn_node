@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
@@ -140,7 +141,6 @@ func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 }
 
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
-	// Timelock arrival stamps immediately on intercept
 	nowUnixMs := time.Now().UnixNano() / int64(time.Millisecond)
 	BlockWitnessTimestamps.LoadOrStore(incomingBlock.Hash, nowUnixMs)
 
@@ -161,7 +161,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
 
-	// Reduce the 1-block fork race window via millisecond arrival anchoring
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
 		var localTipSeenTime, incomingSeenTime int64
 
@@ -212,7 +211,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
-						// Purge uncle UTXO on tip conflict
 						if localBlock.UncleHash != "" &&
 							localBlock.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
 							strings.TrimSpace(localBlock.UncleMiner) != "NONE" &&
@@ -384,7 +382,6 @@ func TriggerActiveReSyncPass() {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
-						// Purge uncle UTXO during common-ancestor rollback
 						if block.UncleHash != "" &&
 							block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
 							strings.TrimSpace(block.UncleMiner) != "NONE" &&
@@ -412,32 +409,24 @@ func TriggerActiveReSyncPass() {
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
 		StateMutex.Unlock()
 		resp, err := client.Get(requestURL)
+		var incomingBatch []Block
 		if err != nil {
 			consecutiveHTTPFailures++
-			log.Printf("🔌 [HTTP BLOCK] Port 8081 inaccessible to peer. Switching to native P2P mesh over Port 8080 for Block #%d\n", nextNeededBlock)
-			requestBatchOverTCPMeshNatively(nextNeededBlock)
-			StateMutex.Lock()
-			break
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			consecutiveHTTPFailures++
-			if consecutiveHTTPFailures >= 3 {
-				log.Printf("🔌 [HTTP BLOCK] Server responded with error %d. Switching to native P2P mesh over Port 8080 for Block #%d\n", resp.StatusCode, nextNeededBlock)
-				requestBatchOverTCPMeshNatively(nextNeededBlock)
+			log.Printf("🔌 [HTTP GATEWAY TIMEOUT] Port 8081 inaccessible. Executing emergency failover block payload pull via TCP Port 8080 for Block #%d\n", nextNeededBlock)
+			incomingBatch = requestBatchOverTCPMeshNatively(nextNeededBlock)
+			if len(incomingBatch) == 0 {
 				StateMutex.Lock()
 				break
 			}
-			StateMutex.Lock()
-			continue
-		}
-		consecutiveHTTPFailures = 0
-		var incomingBatch []Block
-		err = json.NewDecoder(resp.Body).Decode(&incomingBatch)
-		resp.Body.Close()
-		if err != nil || len(incomingBatch) == 0 {
-			StateMutex.Lock()
-			break
+		} else {
+			if resp.StatusCode == http.StatusOK {
+				_ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
+			}
+			resp.Body.Close()
+			if len(incomingBatch) == 0 {
+				StateMutex.Lock()
+				break
+			}
 		}
 		StateMutex.Lock()
 		for _, block := range incomingBatch {
@@ -485,7 +474,7 @@ func drainAndProcessDeferredQueue() {
 	}
 }
 
-func requestBatchOverTCPMeshNatively(height int64) {
+func requestBatchOverTCPMeshNatively(height int64) []Block {
 	PeerMapMutex.RLock()
 	var fallbackTargets []string
 	for targetIP := range ActivePeerMap {
@@ -493,14 +482,25 @@ func requestBatchOverTCPMeshNatively(height int64) {
 	}
 	PeerMapMutex.RUnlock()
 	for _, endpointHost := range fallbackTargets {
-		conn, err := net.DialTimeout("tcp", endpointHost, 2*time.Second)
+		conn, err := net.DialTimeout("tcp", endpointHost, 3*time.Second)
 		if err == nil {
 			payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
 			_, _ = fmt.Fprint(conn, payloadCommand)
+			_ = conn.SetReadDeadline(time.Now().Add(6 * time.Second))
+			scanner := bufio.NewScanner(conn)
+			buf := make([]byte, 0, 64*1024)
+			scanner.Buffer(buf, 10*1024*1024)
+			if scanner.Scan() {
+				var blocks []Block
+				if json.Unmarshal(scanner.Bytes(), &blocks) == nil && len(blocks) > 0 {
+					conn.Close()
+					return blocks
+				}
+			}
 			conn.Close()
-			return
 		}
 	}
+	return nil
 }
 
 func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
@@ -694,7 +694,6 @@ func ValidateBlockSignatures(b Block) bool {
 	if targetBlockHeight > 21024000 {
 		allowedTotalEmission += 5.0
 	}
-	// Enforce exact 80/20 coinbase payout economic split when uncle is present
 	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" && b.UncleMiner != "" {
 		if len(coinbaseTx[0].Outputs) != 2 {
 			fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
 )
 
 var (
@@ -24,14 +25,14 @@ func StartMeshNetwork() {
 	fmt.Println("====================================================================")
 	fmt.Println("📡 P2P GOSSIP MESH CORE ENGINE INITIALIZING ON PORT 8080...")
 	fmt.Println("====================================================================")
-
+	
 	listener8080, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		log.Printf("🚨 CRITICAL MESH FAILURE: Unable to bind raw TCP socket on Port 8080: %v\n", err)
 		return
 	}
 	defer listener8080.Close()
-
+	
 	fmt.Println("📡 P2P MATRIX: Successfully bound to core data channels on port :8080")
 	go runNetworkTopologyDiscoveryDiscoveryLoop()
 
@@ -40,7 +41,7 @@ func StartMeshNetwork() {
 		if err != nil {
 			continue
 		}
-
+		
 		select {
 		case MaxMeshConnectionPool <- struct{}{}:
 			go handleIncomingPeerStream(conn)
@@ -112,10 +113,37 @@ func handleIncomingPeerStream(conn net.Conn) {
 			continue
 		}
 
+		// 👑 THE CRITICAL P2P DATA COMPILED DISPATCHER:
+		// When a lagging peer sends a GET_BATCH command, parse the target start index,
+		// load the historical blocks from disk buckets, and serialize them straight back down the wire socket!
 		if strings.HasPrefix(msg, "GET_BATCH:") {
 			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")
-			height, _ := strconv.ParseInt(strings.TrimSpace(heightStr), 10, 64)
-			_ = height
+			startHeight, err := strconv.ParseInt(strings.TrimSpace(heightStr), 10, 64)
+			if err != nil || startHeight < 0 {
+				continue
+			}
+
+			var blocks []Block
+			StateMutex.RLock()
+			currentTipHeight := GetLatestBlockInternal().Index
+			StateMutex.RUnlock()
+
+			endHeight := startHeight + 511
+			if endHeight > currentTipHeight {
+				endHeight = currentTipHeight
+			}
+
+			for h := startHeight; h <= endHeight; h++ {
+				loadedBlk := GetBlockByHeightFromDB(h)
+				if loadedBlk.Hash != "" {
+					blocks = append(blocks, loadedBlk)
+				}
+			}
+
+			jsonBytes, err := json.Marshal(blocks)
+			if err == nil {
+				_, _ = conn.Write(append(jsonBytes, '\n'))
+			}
 			continue
 		}
 	}
