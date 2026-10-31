@@ -129,6 +129,16 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 // Bounded memory channel queue to store real-time wire blocks during resync phases
 var DeferredBlockQueue = make(chan Block, 32)
 
+// Canonical uncle UTXO removal helper used by all reorg paths
+func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
+	trimmed := strings.TrimSpace(uncleMiner)
+	if trimmed == "" || trimmed == "NONE" {
+		return
+	}
+	key := []byte(fmt.Sprintf("UNCLE_%d_%s", height, trimmed))
+	_ = bUTXO.Delete(key)
+}
+
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	// Timelock arrival stamps immediately on intercept
 	nowUnixMs := time.Now().UnixNano() / int64(time.Millisecond)
@@ -201,6 +211,13 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 							for outIdx := range txPayload.Outputs {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
+						}
+						// Purge uncle UTXO on tip conflict
+						if localBlock.UncleHash != "" &&
+							localBlock.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
+							strings.TrimSpace(localBlock.UncleMiner) != "NONE" &&
+							strings.TrimSpace(localBlock.UncleMiner) != "" {
+							deleteUncleUTXO(bUTXO, localBlock.Index, localBlock.UncleMiner)
 						}
 					}
 				}
@@ -367,6 +384,13 @@ func TriggerActiveReSyncPass() {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
+						// Purge uncle UTXO during common-ancestor rollback
+						if block.UncleHash != "" &&
+							block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
+							strings.TrimSpace(block.UncleMiner) != "NONE" &&
+							strings.TrimSpace(block.UncleMiner) != "" {
+							deleteUncleUTXO(bUTXO, block.Index, block.UncleMiner)
+						}
 					}
 				}
 				_ = bBlocks.Delete(paddedKey)
@@ -390,19 +414,16 @@ func TriggerActiveReSyncPass() {
 		resp, err := client.Get(requestURL)
 		if err != nil {
 			consecutiveHTTPFailures++
-			if consecutiveHTTPFailures >= 3 {
-				log.Println("🔌 [HTTP GATEWAYS DROPPING] Executing emergency fallback query directly over TCP Gossip Mesh channel loops...")
-				requestBatchOverTCPMeshNatively(nextNeededBlock)
-				StateMutex.Lock()
-				break
-			}
+			log.Printf("🔌 [HTTP BLOCK] Port 8081 inaccessible to peer. Switching to native P2P mesh over Port 8080 for Block #%d\n", nextNeededBlock)
+			requestBatchOverTCPMeshNatively(nextNeededBlock)
 			StateMutex.Lock()
-			continue
+			break
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
 			consecutiveHTTPFailures++
 			if consecutiveHTTPFailures >= 3 {
+				log.Printf("🔌 [HTTP BLOCK] Server responded with error %d. Switching to native P2P mesh over Port 8080 for Block #%d\n", resp.StatusCode, nextNeededBlock)
 				requestBatchOverTCPMeshNatively(nextNeededBlock)
 				StateMutex.Lock()
 				break
@@ -590,7 +611,7 @@ func GetCurrentCirculatingSupply() float64 {
 }
 
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	if (lastBlock.Index + 1) <= 10 {
+	if lastBlock.Index < 10 {
 		return 2
 	}
 	currentDiff := int(lastBlock.Difficulty)
@@ -598,7 +619,6 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 	if actualTimeElapsed <= 0 {
 		return currentDiff + 1
 	}
-	const TargetBlockTimeWindow = int64(45)
 	if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
 		if currentDiff < 4 {
 			return 4
@@ -618,13 +638,14 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 }
 
 func ValidateBlockSignatures(b Block) bool {
-	expectedDiff := b.Difficulty
-	if b.Index <= 10 {
+	var expectedDiff int
+	if b.Index < 10 {
 		expectedDiff = 2
 	} else {
-		if expectedDiff < 4 {
+		if b.Difficulty < 4 {
 			return false
 		}
+		expectedDiff = b.Difficulty
 	}
 	targetPrefix := strings.Repeat("0", expectedDiff)
 	if !strings.HasPrefix(b.Hash, targetPrefix) {

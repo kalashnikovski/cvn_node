@@ -10,7 +10,6 @@ import (
 
 // VerifyTransactionIntegrity evaluates cryptographic signatures and checks live UTXO states on the disk ledger.
 func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txBucket *bbolt.Bucket) bool {
-	// 👑 THE BULLETPROOF COINBASE SIGNATURE BYPASS:
 	if strings.HasPrefix(tx.ID, "TX_COINBASE") {
 		if txIndex != 0 {
 			fmt.Println("🚨 CRITICAL BLOCK FRAUD: Malicious Coinbase injection detected outside index 0!")
@@ -18,20 +17,19 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 		}
 		return true
 	}
-	
+
 	if len(tx.Inputs) == 0 {
 		fmt.Println("🚨 TRANSACTION EXPLOIT REJECTED: Input-less transactions require valid Coinbase.")
 		return false
 	}
 
-	// CRYPTOGRAPHIC SIGNATURE PASS: Validates ECDSA key-pair coordinates over message payload strings
 	txMessage := fmt.Sprintf("%s-%s-%.8f", tx.ID, tx.Witness, tx.FreeWillOffering)
 	sigSegments := strings.Split(tx.Signature, "|")
 	if len(sigSegments) < 2 {
 		fmt.Println("🚨 SIGNATURE FAULT: Transaction formatting dropped or corrupted segment blocks.")
 		return false
 	}
-	
+
 	rStr := sigSegments[0]
 	sStr := sigSegments[1]
 
@@ -40,12 +38,11 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 		return false
 	}
 
-	// UTXO DISK INTEGRITY VERIFICATION: Ensures parental references exist and remain unspent
 	var totalInputVolume float64 = 0.0
 	for _, in := range tx.Inputs {
 		compoundKey := fmt.Sprintf("%s_%d", in.SourceTxID, in.Index)
 		utxoBytes := txBucket.Get([]byte(compoundKey))
-		
+
 		if utxoBytes == nil {
 			fmt.Printf("🚨 UTXO SPEND FAILURE: Reference key '%s' missing or spent on disk ledger tracking partitions.\n", compoundKey)
 			return false
@@ -68,9 +65,8 @@ func VerifyTransactionIntegrity(tx Transaction, blockIndex int, txIndex int, txB
 		totalOutputVolume += out.Amount
 	}
 
-	// BALANCING EQUILIBRIUM RULES: Enforces total inputs can cover outputs and network offering fee metrics
 	if totalInputVolume < (totalOutputVolume + tx.FreeWillOffering) {
-		fmt.Printf("🚨 ACCRUAL FAILURE: Inputs (%f) insufficient for required outputs + fee offering total (%f)\n", totalInputVolume, totalOutputVolume+tx.FreeWillOffering)
+		fmt.Printf("🚨 BALANCE FAULT: Inputs (%f) insufficient for outputs (%f) + fee (%f)\n", totalInputVolume, totalOutputVolume, tx.FreeWillOffering)
 		return false
 	}
 
@@ -100,30 +96,24 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 
 // VerifyIncomingWireBlock performs strict validation audits on incoming P2P blocks.
 func VerifyIncomingWireBlock(b Block) bool {
-	// THE MASTER IDENTITY SAFEGUARD:
 	if CustomMinerAddress == "" || CustomMinerAddress == "CVN_UNCONFIGURED_LOCAL_NODE_ID" {
 		fmt.Println("🚨 FRONT-GATE REFUSAL: Headless node configuration missing or uninstantiated. Aborting validation path.")
 		return false
 	}
 
-	// 👑 THE HARMONIZED DIFFICULTY BOUNDARY FIREWALL:
-	// Explicitly align validation criteria to reject off-by-one errors past height 10.
+	// Unified difficulty rule: height < 10 → exactly 2; height >= 10 → at least 4.
+	// Do not derive the bootstrap floor from the local tip.
 	var expectedDifficulty int
-	if b.Index <= 10 {
+	if b.Index < 10 {
 		expectedDifficulty = 2
 	} else {
-		// Past block 10, the absolute mainnet policy specification floor is strictly 4 zeros!
 		if b.Difficulty < 4 {
 			fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d below mainnet floor (4)\n", b.Index, b.Difficulty)
 			return false
 		}
-		
-		StateMutex.RLock()
-		expectedDifficulty = CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
-		StateMutex.RUnlock()
+		expectedDifficulty = b.Difficulty
 	}
 
-	// Enforce exact consensus matching rules down to the bit
 	if b.Difficulty != expectedDifficulty {
 		fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
 		return false
