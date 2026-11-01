@@ -12,6 +12,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.etcd.io/bbolt"
 )
 
 var (
@@ -77,9 +79,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 			log.Println("📥 [STALL SNAPSHOT] Real-time BLOCK_BROADCAST deferred from peer during active re-sync.")
 		}
 
-		// 👑 THE HARDENED IP ANCHOR MAPPING PASS:
-		// Map and store peer records using their canonical P2P listening port (:8080)
-		// instead of ephemeral client ports. This keeps global full nodes connected indefinitely.
 		if strings.HasPrefix(msg, "PEER_PING:") {
 			PeerMapMutex.Lock()
 			canonicalPeerKey := fmt.Sprintf("%s:8080", remoteIP)
@@ -113,15 +112,12 @@ func handleIncomingPeerStream(conn net.Conn) {
 			var incomingBlock Block
 			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err == nil {
 				if VerifyIncomingWireBlock(incomingBlock) {
-					go ProcessIncomingNetworkBlock(incomingBlock)
+					go ProcessIncomingWireBlockWithDelay(incomingBlock)
 				}
 			}
 			continue
 		}
 
-		// 👑 THE FULLY CONNECTED P2P WIRE EXTRACTOR DATA DISPATCHER:
-		// When a lagging node requests a batch, parse the target height index, 
-		// fetch blocks sequentially from BoltDB, and write the JSON payload array back down the open socket.
 		if strings.HasPrefix(msg, "GET_BATCH:") {
 			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")
 			startHeight, err := strconv.ParseInt(strings.TrimSpace(heightStr), 10, 64)
@@ -153,6 +149,66 @@ func handleIncomingPeerStream(conn net.Conn) {
 			continue
 		}
 	}
+}
+
+// 👑 THE RE-ESTABLISHED GOSSIP INTERCEPTOR CORE:
+// Safely buffers real-time incoming wire blocks. It filters out competing forks
+// and records late sibling hashes directly into the BoltDB storage partitions.
+func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		return
+	}
+	
+	StateMutex.Lock()
+	currentTip := GetLatestBlockInternal()
+	StateMutex.Unlock()
+
+	if incomingBlock.Index == currentTip.Index+1 {
+		if incomingBlock.PrevHash != currentTip.Hash {
+			go TriggerActiveReSyncPass()
+			return
+		}
+		if SaveBlockToStorage(incomingBlock) {
+			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
+			SignalMinerReset()
+			go BroadcastNewBlock(incomingBlock)
+		}
+		return
+	}
+
+	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
+		if incomingBlock.PrevHash == currentTip.PrevHash {
+			fmt.Printf("📂 [UNCLE RECOGNIZED] Capturing late competing block hash %s for height %d\n", incomingBlock.Hash[:16], incomingBlock.Index)
+			
+			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+				bBlocks := tx.Bucket(blocksBucket)
+				if bBlocks == nil {
+					return nil
+				}
+				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
+				
+				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
+					currentTip.UncleHash = incomingBlock.Hash
+					
+					if len(incomingBlock.Transactions) > 0 && len(incomingBlock.Transactions[0].Outputs) > 0 {
+						currentTip.UncleMiner = strings.TrimSpace(incomingBlock.Transactions[0].Outputs[0].Recipient)
+					} else {
+						currentTip.UncleMiner = "NONE"
+					}
+					
+					updatedData, err := json.Marshal(currentTip)
+					if err == nil {
+						_ = bBlocks.Put([]byte(paddedKey), updatedData)
+						fmt.Println("💾 [GHOST CONSENSUS SECURED] Uncle block metrics permanently written to disk bucket!")
+						go RebuildStateBalanceCacheInternal()
+					}
+				}
+				return nil
+			})
+		}
+		return
+	}
+	ProcessIncomingNetworkBlock(incomingBlock)
 }
 
 func BroadcastNewBlock(b Block) {

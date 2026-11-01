@@ -85,7 +85,6 @@ var StateBalanceCache = make(map[string]float64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
-// Peer latency witness anchor for fork-race resolution
 var BlockWitnessTimestamps sync.Map
 
 func CalculateBlockReward(blockIndex int64) float64 {
@@ -127,10 +126,8 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	return 0
 }
 
-// Bounded memory channel queue to store real-time wire blocks during resync phases
 var DeferredBlockQueue = make(chan Block, 32)
 
-// Canonical uncle UTXO removal helper used by all reorg paths
 func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 	trimmed := strings.TrimSpace(uncleMiner)
 	if trimmed == "" || trimmed == "NONE" {
