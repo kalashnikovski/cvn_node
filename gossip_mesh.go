@@ -190,6 +190,9 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
 					currentTip.UncleHash = incomingBlock.Hash
 					
+					// 👑 THE ARMED SLICE LOCK PROTECTOR:
+					// Correctly isolate Index [0] (The Coinbase transaction allocation payload) 
+					// before traversing down to output properties to eliminate the runtime panic entirely!
 					if len(incomingBlock.Transactions) > 0 && len(incomingBlock.Transactions[0].Outputs) > 0 {
 						currentTip.UncleMiner = strings.TrimSpace(incomingBlock.Transactions[0].Outputs[0].Recipient)
 					} else {
