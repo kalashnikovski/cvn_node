@@ -27,9 +27,54 @@ func InitBoltEngine() {
 
 	// Initialize core consensus data buckets if they do not exist
 	err = db.Update(func(tx *bbolt.Tx) error {
-		_, _ = tx.CreateBucketIfNotExists(blocksBucket)
-		_, _ = tx.CreateBucketIfNotExists(metaBucket)
-		_, _ = tx.CreateBucketIfNotExists(utxoBucket)
+		bBlocks, _ := tx.CreateBucketIfNotExists(blocksBucket)
+		bMeta, _ := tx.CreateBucketIfNotExists(metaBucket)
+		bUTXO, _ := tx.CreateBucketIfNotExists(utxoBucket)
+
+		// 👑 THE DETERMINISTIC GENESIS BOOTSTRAPPER ENGINE:
+		// If a node boots with a fresh database, programmatically build and seed Block #0.
+		// This guarantees every node across continental boundaries starts from an identical hash!
+		if bBlocks.Stats().KeyN == 0 {
+			paddedZeroKey := fmt.Sprintf("%016d", int64(0))
+
+			genesisBlock := Block{
+				Index:        0,
+				Timestamp:    1790640000, // Fixed historical launch epoch
+				Transactions: []Transaction{
+					{
+						ID:               "TX_GENESIS_FAIR_LAUNCH_POOL",
+						Witness:          "COVENANT_STEWARD_ASSEMBLY",
+						PublicKey:        "GENESIS_VOID_REWARD_POOL",
+						Inputs:           []UTXOInput{},
+						Outputs:          []UTXOOutput{
+							{Recipient: "COVENANT_STEWARD_ASSEMBLY", Amount: 2100000000.0},
+						},
+						Timestamp:        1790640000,
+						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+					},
+				},
+				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
+				Difficulty:   2,
+				Nonce:        0,
+				GuardMatrix:  "",
+				UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
+				UncleMiner:   "NONE",
+			}
+
+			// Generate a completely valid hash for Block #0 using the unified hash algorithm
+			genesisBlock.Hash = CalculateHash(genesisBlock)
+
+			// Commit the Genesis Block structures to their respective bbolt buckets
+			genesisData, _ := json.Marshal(genesisBlock)
+			_ = bBlocks.Put([]byte(paddedZeroKey), genesisData)
+			_ = bMeta.Put([]byte("height"), []byte(paddedZeroKey))
+
+			// Seed the initial transaction ledger balance output to the master pool channel
+			utxoRecord := UTXORecord{Amount: 2100000000.0, Recipient: "COVENANT_STEWARD_ASSEMBLY"}
+			utxoData, _ := json.Marshal(utxoRecord)
+			compoundOutputKey := fmt.Sprintf("TX_GENESIS_FAIR_LAUNCH_POOL_%d", 0)
+			_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
+		}
 		return nil
 	})
 	if err != nil {
