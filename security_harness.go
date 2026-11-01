@@ -101,17 +101,19 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 
-	// Unified difficulty rule: height < 10 → exactly 2; height >= 10 → at least 4.
-	// Do not derive the bootstrap floor from the local tip.
+	// 👑 FIXED CORES ALIGNMENT ANCHOR:
 	var expectedDifficulty int
-	if b.Index < 10 {
+	if b.Index <= 10 {
 		expectedDifficulty = 2
 	} else {
 		if b.Difficulty < 4 {
 			fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d below mainnet floor (4)\n", b.Index, b.Difficulty)
 			return false
 		}
-		expectedDifficulty = b.Difficulty
+		
+		StateMutex.RLock()
+		expectedDifficulty = CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
+		StateMutex.RUnlock()
 	}
 
 	if b.Difficulty != expectedDifficulty {

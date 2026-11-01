@@ -642,35 +642,35 @@ func GetCurrentCirculatingSupply() float64 {
 }
 
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	if lastBlock.Index < 10 {
+	// 👑 FIXED CORES ALIGNMENT ANCHOR:
+	// Maintain the low bootstrap floor up to and including height 10.
+	if lastBlock.Index <= 10 {
 		return 2
 	}
 	currentDiff := int(lastBlock.Difficulty)
 	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed <= 0 {
-		return currentDiff + 1
-	}
+	if actualTimeElapsed <= 0 { return currentDiff + 1 }
+
 	if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
-		if currentDiff < 4 {
-			return 4
-		}
+		if currentDiff < 4 { return 4 } 
 		return currentDiff
 	}
+
 	if actualTimeElapsed < 30 {
 		return currentDiff + 1
 	} else if actualTimeElapsed > 90 {
 		decreasedDiff := currentDiff - 1
-		if decreasedDiff < 4 {
-			return 4
-		}
+		if decreasedDiff < 4 { return 4 }
 		return decreasedDiff
 	}
 	return currentDiff
 }
 
 func ValidateBlockSignatures(b Block) bool {
+	// 👑 THE UNIFIED EXACT BOUNDARY DICTATOR FILTER:
+	// Secure identical signature validation rules up to and including height 10.
 	var expectedDiff int
-	if b.Index < 10 {
+	if b.Index <= 10 {
 		expectedDiff = 2
 	} else {
 		if b.Difficulty < 4 {
@@ -679,15 +679,10 @@ func ValidateBlockSignatures(b Block) bool {
 		expectedDiff = b.Difficulty
 	}
 	targetPrefix := strings.Repeat("0", expectedDiff)
-	if !strings.HasPrefix(b.Hash, targetPrefix) {
-		return false
-	}
-	if b.Hash != CalculateHash(b) {
-		return false
-	}
-	if len(b.Transactions) == 0 {
-		return false
-	}
+	if !strings.HasPrefix(b.Hash, targetPrefix) { return false }
+	if b.Hash != CalculateHash(b) { return false }
+	if len(b.Transactions) == 0 { return false }
+
 	isBlockValid := true
 	if GlobalBoltEngine != nil {
 		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
@@ -697,9 +692,7 @@ func ValidateBlockSignatures(b Block) bool {
 				return nil
 			}
 			for txIdx, tx := range b.Transactions {
-				if txIdx == 0 {
-					continue
-				}
+				if txIdx == 0 { continue }
 				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 					isBlockValid = false
 					return nil
@@ -708,11 +701,13 @@ func ValidateBlockSignatures(b Block) bool {
 			return nil
 		})
 	}
-	if !isBlockValid {
-		return false
-	}
+	if !isBlockValid { return false }
+
 	coinbaseTx := b.Transactions
 	var totalCoinbasePayout float64 = 0.0
+	
+	// 👑 FIXED COINBASE LAYER ARRAYS SLICE LOCK:
+	// Explicitly reference transaction element index 0 to parse outputs safely!
 	if len(coinbaseTx) > 0 {
 		for _, out := range coinbaseTx[0].Outputs {
 			totalCoinbasePayout += out.Amount
@@ -720,26 +715,31 @@ func ValidateBlockSignatures(b Block) bool {
 	} else {
 		return false
 	}
+
 	targetBlockHeight := int64(b.Index)
 	allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-	if targetBlockHeight > 21024000 {
-		allowedTotalEmission += 5.0
-	}
+	if targetBlockHeight > 21024000 { allowedTotalEmission += 5.0 }
+
+	// Enforce exact 80/20 coinbase payout economic split when uncle is present
 	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" && b.UncleMiner != "" {
 		if len(coinbaseTx[0].Outputs) != 2 {
 			fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
 			return false
 		}
+
+		// 👑 FIXED COINBASE ARRAY TARGETING SLICE INDICES:
 		mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
 		uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
 		uncleMinerRecipient := coinbaseTx[0].Outputs[1].Recipient
+
 		expectedMainSplit := allowedTotalEmission * 0.80
 		expectedUncleSplit := allowedTotalEmission * 0.20
-		if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
+
+		if (mainMinerPayout - expectedMainSplit) > 0.00001 || (mainMinerPayout - expectedMainSplit) < -0.00001 {
 			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
 			return false
 		}
-		if (uncleMinerPayout-expectedUncleSplit) > 0.00001 || (uncleMinerPayout-expectedUncleSplit) < -0.00001 {
+		if (uncleMinerPayout - expectedUncleSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) < -0.00001 {
 			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Uncle Miner Payout footprint. Got: %f, Expected: %f\n", uncleMinerPayout, expectedUncleSplit)
 			return false
 		}
