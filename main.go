@@ -117,17 +117,14 @@ func main() {
 	InitBoltEngine()
 
 	// 👑 THE BULLETPROOF IDENTITY RESOLUTION GATEWAY:
-	// Reset your local transient string and enforce a rigid hierarchical read track.
 	var isolatedAddressTrack string = ""
 
-	// Pass 1: Scan command-line runtime arguments for a specific override flag
 	for i, arg := range os.Args {
 		if arg == "--miner-address" && i+1 < len(os.Args) {
 			isolatedAddressTrack = os.Args[i+1]
 		}
 	}
 
-	// Pass 2: If no command-line flag override was specified, parse miner_config.json directly
 	if strings.TrimSpace(isolatedAddressTrack) == "" {
 		configFileBytes, err := os.ReadFile("miner_config.json")
 		if err == nil {
@@ -138,17 +135,14 @@ func main() {
 		}
 	}
 
-	// Pass 3: Sanitize character parameters entirely to eliminate any whitespace string mutations
 	isolatedAddressTrack = strings.TrimSpace(isolatedAddressTrack)
 	isolatedAddressTrack = strings.ReplaceAll(isolatedAddressTrack, " ", "")
 	isolatedAddressTrack = strings.ReplaceAll(isolatedAddressTrack, "\r", "")
 	isolatedAddressTrack = strings.ReplaceAll(isolatedAddressTrack, "\n", "")
 
-	// Pass 4: Global Variable Assignment Commitment Pass
 	if isolatedAddressTrack != "" && !strings.Contains(isolatedAddressTrack, "UNCONFIGURED") {
 		CustomMinerAddress = isolatedAddressTrack
 	} else {
-		// If both passes fail, fallback to a unique identity based on system hostname to prevent cluster doubling!
 		hostName, hostErr := os.Hostname()
 		if hostErr == nil {
 			CustomMinerAddress = fmt.Sprintf("CVN_FALLBACK_%s_%d", strings.ToUpper(hostName), time.Now().Unix()%1000)
@@ -158,7 +152,7 @@ func main() {
 	}
 
 	log.Printf("🪪  [CONSENSUS AUTHORITY ACTIVE] Mining pool node verified handle: %s\n", CustomMinerAddress)
-// Construct and launch our unified multi-port API server engine routing context
+	// Construct and launch our unified multi-port API server engine routing context
 	go func() {
 		winMux := http.NewServeMux()
 
@@ -259,7 +253,7 @@ func main() {
 			}
 			json.NewEncoder(w).Encode(payload)
 		})
-winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
+		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Type", "application/json")
 			if r.Method != http.MethodPost {
@@ -444,7 +438,6 @@ winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 	RunDesktopUIFrameworkIfApplicable()
 	go StartMeshNetwork()
 	
-	// 👑 PORT 8082 REAL-TIME METRICS MIRROR ENGINE:
 	mirrorMux := http.NewServeMux()
 	mirrorMux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -460,14 +453,13 @@ winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 	})
 	
 	go func() {
-		// Non-fatal deployment execution pass. Optional status mirror configuration.
 		if err := http.ListenAndServe(":8082", mirrorMux); err != nil {
 			log.Printf("Port 8082 status mirror channel unavailable (non-fatal): %v\n", err)
 		}
 	}()
 
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
-seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
+	seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	for i, arg := range os.Args {
 		if arg == "--connect" && i+1 < len(os.Args) {
 			customTargetIP := os.Args[i+1]
@@ -504,36 +496,39 @@ seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:80
 		}
 		atomic.StoreInt32(&IsSyncingActive, 1)
 		
-		// 👑 FIXED FIXED VARIABLE MATCH:
-		// Properly bind the initialized block tracking state index variable name
-		// into your dynamic HTTP endpoint request string constructor cleanly.
 		nextBlockNeed := currentLocalHeight + 1
 		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed)
 		client := &http.Client{Timeout: 3 * time.Second}
 		resp, err := client.Get(requestURL)
-		if err == nil {
+		var incomingBatch []Block
+		if err != nil {
+			log.Printf("🔌 [HTTP GATEWAY TIMEOUT] Port 8081 inaccessible. Executing emergency block pull via TCP Port 8080 for Block #%d\n", nextBlockNeed)
+			incomingBatch = requestBatchOverTCPMeshNatively(nextBlockNeed)
+			if len(incomingBatch) == 0 {
+				break
+			}
+		} else {
 			if resp.StatusCode == http.StatusOK {
-				var incomingBatch []Block
-				if err := json.NewDecoder(resp.Body).Decode(&incomingBatch); err == nil && len(incomingBatch) > 0 {
-					for _, incomingBlock := range incomingBatch {
-						StateMutex.RLock()
-						currentHeightCheck := GetLatestBlockInternal().Index
-						StateMutex.RUnlock()
-						if incomingBlock.Index == int64(currentHeightCheck)+1 {
-							if incomingBlock.UncleHash == "" {
-								incomingBlock.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
-							}
-							if incomingBlock.UncleMiner == "" {
-								incomingBlock.UncleMiner = "NONE"
-							}
-							SaveBlockToStorage(incomingBlock)
-							currentLocalHeight = incomingBlock.Index
-						}
-					}
-				}
+				_ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
 			}
 			resp.Body.Close()
 		}
+		StateMutex.Lock()
+		for _, block := range incomingBatch {
+			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
+				if ValidateBlockSignatures(block) {
+					if block.UncleHash == "" {
+						block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
+					}
+					if block.UncleMiner == "" {
+						block.UncleMiner = "NONE"
+					}
+					SaveBlockToStorageInternal(block)
+					currentLocalHeight = block.Index
+				}
+			}
+		}
+		StateMutex.Unlock()
 		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 			lastRenderTime = time.Now()
 			var syncPercentage float64 = 0.00
@@ -552,7 +547,6 @@ seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:80
 		time.Sleep(10 * time.Millisecond)
 	}
 	atomic.StoreInt32(&IsSyncingActive, 0)
-
 	// ====================================================================
 	// ⛏️ STATE PHASE 2: HARDENED DYNAMIC CONTEXT MINING CORE WORKER POOL
 	// ====================================================================
@@ -641,9 +635,6 @@ seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:80
 			if len(hashRateHistory24h) > 0 { avg24h = sum24h / float64(len(hashRateHistory24h)) }
 			hashrateMutex.Unlock()
 
-			// 👑 FIXED UNUSED ROLLING VARIABLES SUPPRESSION:
-			// Suppress unused compilation errors cleanly by wrapping their parameters 
-			// securely into empty interfaces, satisfying Go's strict variable rules!
 			_ = avg1h
 			_ = avg24h
 
@@ -690,6 +681,7 @@ seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:80
 		}
 	}
 }
+
 func StartContextMinerEngine() {
 	miningMutex.Lock()
 	if miningCancelFunc != nil {
@@ -740,8 +732,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				continue
 			}
 
-			// 👑 FIXED FIXED METHOD RE-ENTRY:
-			// Invoke thread locks correctly without typographical type pollution
 			StateMutex.RLock()
 			currentBlock := GetLatestBlockInternal()
 			StateMutex.RUnlock()
@@ -762,7 +752,20 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			workerTargetDifficulty := CalculateNextDifficulty(currentBlock, simulatedTime)
+			// 👑 THE HARMONIZED HARD-LOCKED MINING CONTROLLER:
+			// Ensure that the mining worker thread targets difficulty 2 up to and including
+			// block height 9 (which solves block height 10). The exact millisecond block 10 is 
+			// committed, currentBlock.Index becomes 10, forcing the next block (Height 11) 
+			// to target difficulty 4 natively, perfectly matching the database validators!
+			var workerTargetDifficulty int
+			if currentBlock.Index < 10 {
+				workerTargetDifficulty = 2
+			} else {
+				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+				if workerTargetDifficulty < 4 {
+					workerTargetDifficulty = 4 // Lock to absolute mainnet specification floor past block 10
+				}
+			}
 			
 			if workerTargetDifficulty < 1 { workerTargetDifficulty = 1 }
 			if workerTargetDifficulty > 8 { workerTargetDifficulty = 8 }
@@ -839,32 +842,25 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					StateMutex.RLock()
 					finalValidationTip := GetLatestBlockInternal().Index
 					StateMutex.RUnlock()
-
-					if finalValidationTip == (nextIndex - 1) {
-						if SaveBlockToStorage(newBlock) {
-							logMutex.Lock()
-							logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Mined by Worker %d | Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, workerID, newBlock.Hash[:16])
-							liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-							logMutex.Unlock()
-							
-							go SignalMinerReset()
-							return
-						}
-					}
-					
-					go SignalMinerReset()
-					return
-				}
-
-				// 👑 HIGH-SPEED UN-TRUNCATED METRICS COUNTER:
-				// Safely increment our metric counts directly inside the tight noncing loops.
-				atomic.AddUint64(&globalHashCount, 1)
-				nonce++
-			}
-
-			runtime.Gosched()
-		}
-	}
+if finalValidationTip == (nextIndex - 1) {
+if SaveBlockToStorage(newBlock) {
+logMutex.Lock()
+logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Mined by Worker %d | Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, workerID, newBlock.Hash[:16])
+liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
+logMutex.Unlock()
+go SignalMinerReset()
+return
 }
-
+}
+go SignalMinerReset()
+return
+}
+// 👑 HIGH-SPEED UN-TRUNCATED METRICS COUNTER:
+atomic.AddUint64(&globalHashCount, 1)
+nonce++
+}
+runtime.Gosched()
+}
+}
+}
 func osCheckArgs() []string { return os.Args }
