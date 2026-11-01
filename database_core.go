@@ -115,16 +115,14 @@ func SaveBlockToStorage(block Block) bool {
 }
 
 // SaveBlockToStorageInternal writes verified block structures securely to the database layers.
-// Unit Test Coverage Note: Verified across height 10 and height 11 boundary transitions cleanly.
 func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil { return false }
 
 	expectedDiff := block.Difficulty
-	if block.Index <= 10 {
+	if block.Index < 10 {
 		expectedDiff = 2
 	} else {
 		if expectedDiff < 4 {
-			fmt.Printf("🚨 STORAGE REFUSAL: Block #%d index height specifies invalid difficulty %d below mainnet policy floor (4)\n", block.Index, expectedDiff)
 			return false
 		}
 	}
@@ -169,9 +167,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 				sanitizedRecipient := strings.TrimSpace(output.Recipient)
 				utxoRecord := UTXORecord{Amount: output.Amount, Recipient: sanitizedRecipient}
 				utxoData, _ := json.Marshal(utxoRecord)
-				
-				// 👑 FIX PASS: Explicitly typecast your string compoundOutputKey variable 
-				// to a raw []byte slice signature format to pass BoltDB parameters flawlessly!
 				_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
 			}
 		}

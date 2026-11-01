@@ -260,7 +260,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		}
 	}
 }
-
 func TriggerActiveReSyncPass() {
 	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
 		return
@@ -382,6 +381,8 @@ func TriggerActiveReSyncPass() {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
+						// 👑 REQUIREMENT 3: IDENTICAL REORG CLEANUP DURING COMMON-ANCESTOR ROLLBACKS
+						// Erase the old block's uncle subsidy UTXO cleanly to kill balance drifts on deep reorg loops.
 						if block.UncleHash != "" &&
 							block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
 							strings.TrimSpace(block.UncleMiner) != "NONE" &&
@@ -585,142 +586,145 @@ func GetCurrentCirculatingSupply() float64 {
 	}
 	if height > 10512000 {
 		calculatedSupply += (10512000 - 5256000) * 25.0
-		processedBlocks = 10512000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 25.0
-		return calculatedSupply
-	}
-	if height > 15768000 {
-		calculatedSupply += (15768000 - 10512000) * 12.5
-		processedBlocks = 15768000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 12.5
-		return calculatedSupply
-	}
-	if height > 21024000 {
-		calculatedSupply += (21024000 - 15768000) * 6.25
-		processedBlocks = 21024000
-	} else {
-		calculatedSupply += float64(height-processedBlocks) * 6.25
-		return calculatedSupply
-	}
-	if calculatedSupply > MaxTotalSupplyCap {
-		return MaxTotalSupplyCap
-	}
-	return calculatedSupply
+processedBlocks = 10512000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 25.0
+return calculatedSupply
 }
-
+if height > 15768000 {
+calculatedSupply += (15768000 - 10512000) * 12.5
+processedBlocks = 15768000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 12.5
+return calculatedSupply
+}
+if height > 21024000 {
+calculatedSupply += (21024000 - 15768000) * 6.25
+processedBlocks = 21024000
+} else {
+calculatedSupply += float64(height-processedBlocks) * 6.25
+return calculatedSupply
+}
+if calculatedSupply > MaxTotalSupplyCap {
+return MaxTotalSupplyCap
+}
+return calculatedSupply
+}
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	if lastBlock.Index < 10 {
-		return 2
-	}
-	currentDiff := int(lastBlock.Difficulty)
-	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed <= 0 {
-		return currentDiff + 1
-	}
-	if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
-		if currentDiff < 4 {
-			return 4
-		}
-		return currentDiff
-	}
-	if actualTimeElapsed < 30 {
-		return currentDiff + 1
-	} else if actualTimeElapsed > 90 {
-		decreasedDiff := currentDiff - 1
-		if decreasedDiff < 4 {
-			return 4
-		}
-		return decreasedDiff
-	}
-	return currentDiff
+// 👑 THE UNIFIED BOOTSTRAP THRESHOLD GATING:
+// Explicitly assign difficulty 2 strictly when blocks are less than height 10.
+if lastBlock.Index < 10 {
+return 2
 }
-
+currentDiff := int(lastBlock.Difficulty)
+actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
+if actualTimeElapsed <= 0 {
+return currentDiff + 1
+}
+if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
+if currentDiff < 4 {
+return 4
+}
+return currentDiff
+}
+if actualTimeElapsed < 30 {
+return currentDiff + 1
+} else if actualTimeElapsed > 90 {
+decreasedDiff := currentDiff - 1
+if decreasedDiff < 4 {
+return 4
+}
+return decreasedDiff
+}
+return currentDiff
+}
 func ValidateBlockSignatures(b Block) bool {
-	var expectedDiff int
-	if b.Index < 10 {
-		expectedDiff = 2
-	} else {
-		if b.Difficulty < 4 {
-			return false
-		}
-		expectedDiff = b.Difficulty
-	}
-	targetPrefix := strings.Repeat("0", expectedDiff)
-	if !strings.HasPrefix(b.Hash, targetPrefix) {
-		return false
-	}
-	if b.Hash != CalculateHash(b) {
-		return false
-	}
-	if len(b.Transactions) == 0 {
-		return false
-	}
-	isBlockValid := true
-	if GlobalBoltEngine != nil {
-		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			bUTXO := dbTx.Bucket([]byte("utxo"))
-			if bUTXO == nil {
-				isBlockValid = false
-				return nil
-			}
-			for txIdx, tx := range b.Transactions {
-				if txIdx == 0 {
-					continue
-				}
-				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
-					isBlockValid = false
-					return nil
-				}
-			}
-			return nil
-		})
-	}
-	if !isBlockValid {
-		return false
-	}
-	coinbaseTx := b.Transactions
-	var totalCoinbasePayout float64 = 0.0
-	if len(coinbaseTx) > 0 {
-		for _, out := range coinbaseTx[0].Outputs {
-			totalCoinbasePayout += out.Amount
-		}
-	} else {
-		return false
-	}
-	targetBlockHeight := int64(b.Index)
-	allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-	if targetBlockHeight > 21024000 {
-		allowedTotalEmission += 5.0
-	}
-	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" && b.UncleMiner != "" {
-		if len(coinbaseTx[0].Outputs) != 2 {
-			fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
-			return false
-		}
-		mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
-		uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
-		uncleMinerRecipient := coinbaseTx[0].Outputs[1].Recipient
-		expectedMainSplit := allowedTotalEmission * 0.80
-		expectedUncleSplit := allowedTotalEmission * 0.20
-		if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
-			return false
-		}
-		if (uncleMinerPayout-expectedUncleSplit) > 0.00001 || (uncleMinerPayout-expectedUncleSplit) < -0.00001 {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Uncle Miner Payout footprint. Got: %f, Expected: %f\n", uncleMinerPayout, expectedUncleSplit)
-			return false
-		}
-		if strings.TrimSpace(uncleMinerRecipient) != strings.TrimSpace(b.UncleMiner) {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Coinbase index recipient %s does not match Uncle header signature metadata %s\n", uncleMinerRecipient, b.UncleMiner)
-			return false
-		}
-	} else {
-		if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
-			fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
-			return false
-		}
-	}
-	return true
+// 👑 THE HARMONIZED INCLUSIVE SPECIFICATION FLOOR:
+// Standardize expected targets identically to prevent block validation rejection drop loops.
+var expectedDiff int
+if b.Index < 10 {
+expectedDiff = 2
+} else {
+if b.Difficulty < 4 {
+return false
+}
+expectedDiff = b.Difficulty
+}
+targetPrefix := strings.Repeat("0", expectedDiff)
+if !strings.HasPrefix(b.Hash, targetPrefix) {
+return false
+}
+if b.Hash != CalculateHash(b) {
+return false
+}
+if len(b.Transactions) == 0 {
+return false
+}
+isBlockValid := true
+if GlobalBoltEngine != nil {
+_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+bUTXO := dbTx.Bucket([]byte("utxo"))
+if bUTXO == nil {
+isBlockValid = false
+return nil
+}
+for txIdx, tx := range b.Transactions {
+if txIdx == 0 {
+continue
+}
+if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
+isBlockValid = false
+return nil
+}
+}
+return nil
+})
+}
+if !isBlockValid {
+return false
+}
+coinbaseTx := b.Transactions
+var totalCoinbasePayout float64 = 0.0
+if len(coinbaseTx) > 0 {
+for _, out := range coinbaseTx[0].Outputs {
+totalCoinbasePayout += out.Amount
+}
+} else {
+return false
+}
+targetBlockHeight := int64(b.Index)
+allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
+if targetBlockHeight > 21024000 {
+allowedTotalEmission += 5.0
+}
+// Enforce exact 80/20 coinbase payout economic split when uncle is present
+if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" && b.UncleMiner != "" {
+if len(coinbaseTx[0].Outputs) != 2 {
+fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
+return false
+}
+mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
+uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
+uncleMinerRecipient := coinbaseTx[0].Outputs[1].Recipient
+expectedMainSplit := allowedTotalEmission * 0.80
+expectedUncleSplit := allowedTotalEmission * 0.20
+if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
+fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
+return false
+}
+if (uncleMinerPayout-expectedUncleSplit) > 0.00001 || (uncleMinerPayout-expectedUncleSplit) < -0.00001 {
+fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Uncle Miner Payout footprint. Got: %f, Expected: %f\n", uncleMinerPayout, expectedUncleSplit)
+return false
+}
+if strings.TrimSpace(uncleMinerRecipient) != strings.TrimSpace(b.UncleMiner) {
+fmt.Printf("🚨 CONSENSUS REJECTION: Coinbase index recipient %s does not match Uncle header signature metadata %s\n", uncleMinerRecipient, b.UncleMiner)
+return false
+}
+} else {
+if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
+fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
+return false
+}
+}
+return true
 }
