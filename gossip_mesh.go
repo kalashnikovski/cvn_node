@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
 )
 
 var (
@@ -25,14 +24,14 @@ func StartMeshNetwork() {
 	fmt.Println("====================================================================")
 	fmt.Println("📡 P2P GOSSIP MESH CORE ENGINE INITIALIZING ON PORT 8080...")
 	fmt.Println("====================================================================")
-	
+
 	listener8080, err := net.Listen("tcp", ":8080")
 	if err != nil {
 		log.Printf("🚨 CRITICAL MESH FAILURE: Unable to bind raw TCP socket on Port 8080: %v\n", err)
 		return
 	}
 	defer listener8080.Close()
-	
+
 	fmt.Println("📡 P2P MATRIX: Successfully bound to core data channels on port :8080")
 	go runNetworkTopologyDiscoveryDiscoveryLoop()
 
@@ -41,7 +40,7 @@ func StartMeshNetwork() {
 		if err != nil {
 			continue
 		}
-		
+
 		select {
 		case MaxMeshConnectionPool <- struct{}{}:
 			go handleIncomingPeerStream(conn)
@@ -54,11 +53,14 @@ func StartMeshNetwork() {
 
 func handleIncomingPeerStream(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
+	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
+	
 	defer func() {
 		conn.Close()
 		<-MaxMeshConnectionPool
 	}()
-	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	
+	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
 	scanner := bufio.NewScanner(conn)
 
 	for scanner.Scan() {
@@ -75,16 +77,20 @@ func handleIncomingPeerStream(conn net.Conn) {
 			log.Println("📥 [STALL SNAPSHOT] Real-time BLOCK_BROADCAST deferred from peer during active re-sync.")
 		}
 
+		// 👑 THE HARDENED IP ANCHOR MAPPING PASS:
+		// Map and store peer records using their canonical P2P listening port (:8080)
+		// instead of ephemeral client ports. This keeps global full nodes connected indefinitely.
 		if strings.HasPrefix(msg, "PEER_PING:") {
 			PeerMapMutex.Lock()
-			ActivePeerMap[remoteAddr] = time.Now()
-			PeerMapMutex.Unlock()
-			PeerMapMutex.RLock()
+			canonicalPeerKey := fmt.Sprintf("%s:8080", remoteIP)
+			ActivePeerMap[canonicalPeerKey] = time.Now()
+			
 			var peers []string
 			for p := range ActivePeerMap {
 				peers = append(peers, p)
 			}
-			PeerMapMutex.RUnlock()
+			PeerMapMutex.Unlock()
+			
 			listBytes, _ := json.Marshal(peers)
 			_, _ = fmt.Fprintf(conn, "PEER_LIST:%s\n", string(listBytes))
 			continue
@@ -113,9 +119,9 @@ func handleIncomingPeerStream(conn net.Conn) {
 			continue
 		}
 
-		// 👑 THE CRITICAL P2P DATA COMPILED DISPATCHER:
-		// When a lagging peer sends a GET_BATCH command, parse the target start index,
-		// load the historical blocks from disk buckets, and serialize them straight back down the wire socket!
+		// 👑 THE FULLY CONNECTED P2P WIRE EXTRACTOR DATA DISPATCHER:
+		// When a lagging node requests a batch, parse the target height index, 
+		// fetch blocks sequentially from BoltDB, and write the JSON payload array back down the open socket.
 		if strings.HasPrefix(msg, "GET_BATCH:") {
 			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")
 			startHeight, err := strconv.ParseInt(strings.TrimSpace(heightStr), 10, 64)
