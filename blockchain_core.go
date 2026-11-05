@@ -85,7 +85,13 @@ var StateBalanceCache = make(map[string]float64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
+// 👑 THE CRITICAL PEER LATENCY WITNESS ANCHOR:
 var BlockWitnessTimestamps sync.Map
+
+// 👑 PATCH 2: UNIVERSAL STRING SANITIZER HELPER
+func cleanAddr(a string) string {
+	return strings.TrimSpace(a)
+}
 
 func CalculateBlockReward(blockIndex int64) float64 {
 	if blockIndex < 0 {
@@ -128,13 +134,23 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 
 var DeferredBlockQueue = make(chan Block, 32)
 
+// 👑 REQUIREMENT 1: CANONICAL UNCLE UTXO REMOVAL HELPER
 func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
-	trimmed := strings.TrimSpace(uncleMiner)
+	trimmed := cleanAddr(uncleMiner)
 	if trimmed == "" || trimmed == "NONE" {
 		return
 	}
 	key := []byte(fmt.Sprintf("UNCLE_%d_%s", height, trimmed))
 	_ = bUTXO.Delete(key)
+}
+
+// 👑 PATCH 3: JUBILEE DECAY CANDIDATE STUB
+func ApplyJubileeDecayIfNeeded(address string, lastActivityUnix int64) {
+	const JubileeWindow = 49 * 365 * 24 * 60 * 60
+	if time.Now().Unix()-lastActivityUnix > JubileeWindow {
+		// Route stagnant balance to burn void; implementation deferred to storage layer
+		log.Printf("JUBILEE_CANDIDATE: %s inactive >49y", cleanAddr(address))
+	}
 }
 
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
@@ -208,10 +224,12 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
+						// 👑 PATCH 5: REORG CONFIRMATION SAFETY AUDIT RECTOR
+						// Atomic deletion of standard outputs + UNCLE_ keys guarantees cross-OS balance parity.
 						if localBlock.UncleHash != "" &&
 							localBlock.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
-							strings.TrimSpace(localBlock.UncleMiner) != "NONE" &&
-							strings.TrimSpace(localBlock.UncleMiner) != "" {
+							cleanAddr(localBlock.UncleMiner) != "NONE" &&
+							cleanAddr(localBlock.UncleMiner) != "" {
 							deleteUncleUTXO(bUTXO, localBlock.Index, localBlock.UncleMiner)
 						}
 					}
@@ -286,7 +304,12 @@ func TriggerActiveReSyncPass() {
 		drainAndProcessDeferredQueue()
 	}()
 
-	activeGlobalRecoveryGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081", "http://202.137.175.220:9091"}
+	activeGlobalRecoveryGateways := []string{
+		"http://202.137.175.220:8081",
+		"http://207.148.67.11:8081",
+		"http://64.177.45.153:8081",
+		"http://202.137.175.220:9091",
+	}
 	client := &http.Client{Timeout: 3 * time.Second}
 	var chosenTargetSeedURL string
 	var selectedHighestTargetTip int64
@@ -386,10 +409,12 @@ func TriggerActiveReSyncPass() {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
+						// 👑 PATCH 5: REORG CONFIRMATION SAFETY AUDIT RECTOR
+						// Atomic deletion of standard outputs + UNCLE_ keys guarantees cross-OS balance parity.
 						if block.UncleHash != "" &&
 							block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
-							strings.TrimSpace(block.UncleMiner) != "NONE" &&
-							strings.TrimSpace(block.UncleMiner) != "" {
+							cleanAddr(block.UncleMiner) != "NONE" &&
+							cleanAddr(block.UncleMiner) != "" {
 							deleteUncleUTXO(bUTXO, block.Index, block.UncleMiner)
 						}
 					}
@@ -403,7 +428,6 @@ func TriggerActiveReSyncPass() {
 		RebuildStateBalanceCacheInternal()
 	}
 
-	consecutiveHTTPFailures := 0
 	for {
 		currentLocalTip := GetLatestBlockInternal()
 		nextNeededBlock := currentLocalTip.Index + 1
@@ -415,7 +439,6 @@ func TriggerActiveReSyncPass() {
 		resp, err := client.Get(requestURL)
 		var incomingBatch []Block
 		if err != nil {
-			consecutiveHTTPFailures++
 			log.Printf("🔌 [HTTP GATEWAY TIMEOUT] Port 8081 inaccessible. Executing emergency block pull via TCP Port 8080 for Block #%d\n", nextNeededBlock)
 			incomingBatch = requestBatchOverTCPMeshNatively(nextNeededBlock)
 			if len(incomingBatch) == 0 {
@@ -434,7 +457,7 @@ func TriggerActiveReSyncPass() {
 		}
 		StateMutex.Lock()
 		for _, block := range incomingBatch {
-			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
+			if block.Index == GetLatestBlockInternal().Index+1 {
 				if ValidateBlockSignatures(block) {
 					if block.UncleHash == "" {
 						block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
@@ -590,7 +613,7 @@ func ForceBackgroundSyncPass() {}
 
 func GetAddressBalance(address string) float64 {
 	BalanceCacheMutex.RLock()
-	privateBalance, exists := StateBalanceCache[address]
+	privateBalance, exists := StateBalanceCache[cleanAddr(address)]
 	BalanceCacheMutex.RUnlock()
 	if exists {
 		return privateBalance
@@ -641,26 +664,25 @@ func GetCurrentCirculatingSupply() float64 {
 	return calculatedSupply
 }
 
+// 45s equilibrium target; 30-90s band is the no-adjust window.
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	// 👑 FIXED CORES ALIGNMENT ANCHOR:
-	// Maintain the low bootstrap floor up to and including height 10.
+	// 👑 THE HARMONIZED INCLUSIVE INDEX ANCHOR:
 	if lastBlock.Index <= 10 {
 		return 2
 	}
 	currentDiff := int(lastBlock.Difficulty)
 	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
-	if actualTimeElapsed <= 0 { return currentDiff + 1 }
-
-	if actualTimeElapsed >= 30 && actualTimeElapsed <= 90 {
-		if currentDiff < 4 { return 4 } 
-		return currentDiff
+	if actualTimeElapsed <= 0 {
+		return currentDiff + 1
 	}
-
+	// 👑 PATCH 1: 45S EQUILIBRIUM TARGET RETARGETING CORE
 	if actualTimeElapsed < 30 {
 		return currentDiff + 1
 	} else if actualTimeElapsed > 90 {
 		decreasedDiff := currentDiff - 1
-		if decreasedDiff < 4 { return 4 }
+		if decreasedDiff < 4 {
+			return 4
+		}
 		return decreasedDiff
 	}
 	return currentDiff
@@ -668,7 +690,6 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 
 func ValidateBlockSignatures(b Block) bool {
 	// 👑 THE UNIFIED EXACT BOUNDARY DICTATOR FILTER:
-	// Secure identical signature validation rules up to and including height 10.
 	var expectedDiff int
 	if b.Index <= 10 {
 		expectedDiff = 2
@@ -679,9 +700,15 @@ func ValidateBlockSignatures(b Block) bool {
 		expectedDiff = b.Difficulty
 	}
 	targetPrefix := strings.Repeat("0", expectedDiff)
-	if !strings.HasPrefix(b.Hash, targetPrefix) { return false }
-	if b.Hash != CalculateHash(b) { return false }
-	if len(b.Transactions) == 0 { return false }
+	if !strings.HasPrefix(b.Hash, targetPrefix) {
+		return false
+	}
+	if b.Hash != CalculateHash(b) {
+		return false
+	}
+	if len(b.Transactions) == 0 {
+		return false
+	}
 
 	isBlockValid := true
 	if GlobalBoltEngine != nil {
@@ -692,7 +719,9 @@ func ValidateBlockSignatures(b Block) bool {
 				return nil
 			}
 			for txIdx, tx := range b.Transactions {
-				if txIdx == 0 { continue }
+				if txIdx == 0 {
+					continue
+				}
 				if !VerifyTransactionIntegrity(tx, int(b.Index), txIdx, bUTXO) {
 					isBlockValid = false
 					return nil
@@ -701,13 +730,14 @@ func ValidateBlockSignatures(b Block) bool {
 			return nil
 		})
 	}
-	if !isBlockValid { return false }
+	if !isBlockValid {
+		return false
+	}
 
 	coinbaseTx := b.Transactions
 	var totalCoinbasePayout float64 = 0.0
-	
+
 	// 👑 FIXED COINBASE LAYER ARRAYS SLICE LOCK:
-	// Explicitly reference transaction element index 0 to parse outputs safely!
 	if len(coinbaseTx) > 0 {
 		for _, out := range coinbaseTx[0].Outputs {
 			totalCoinbasePayout += out.Amount
@@ -718,10 +748,12 @@ func ValidateBlockSignatures(b Block) bool {
 
 	targetBlockHeight := int64(b.Index)
 	allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-	if targetBlockHeight > 21024000 { allowedTotalEmission += 5.0 }
+	if targetBlockHeight > 21024000 {
+		allowedTotalEmission += 5.0
+	}
 
 	// Enforce exact 80/20 coinbase payout economic split when uncle is present
-	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && b.UncleMiner != "NONE" && b.UncleMiner != "" {
+	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
 		if len(coinbaseTx[0].Outputs) != 2 {
 			fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
 			return false
@@ -730,20 +762,20 @@ func ValidateBlockSignatures(b Block) bool {
 		// 👑 FIXED COINBASE ARRAY TARGETING SLICE INDICES:
 		mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
 		uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
-		uncleMinerRecipient := coinbaseTx[0].Outputs[1].Recipient
+		uncleMinerRecipient := cleanAddr(coinbaseTx[0].Outputs[1].Recipient)
 
 		expectedMainSplit := allowedTotalEmission * 0.80
 		expectedUncleSplit := allowedTotalEmission * 0.20
 
-		if (mainMinerPayout - expectedMainSplit) > 0.00001 || (mainMinerPayout - expectedMainSplit) < -0.00001 {
+		if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
 			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
 			return false
 		}
-		if (uncleMinerPayout - expectedUncleSplit) > 0.00001 || (uncleMinerPayout - expectedUncleSplit) < -0.00001 {
+		if (uncleMinerPayout-expectedUncleSplit) > 0.00001 || (uncleMinerPayout-expectedUncleSplit) < -0.00001 {
 			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Uncle Miner Payout footprint. Got: %f, Expected: %f\n", uncleMinerPayout, expectedUncleSplit)
 			return false
 		}
-		if strings.TrimSpace(uncleMinerRecipient) != strings.TrimSpace(b.UncleMiner) {
+		if uncleMinerRecipient != cleanAddr(b.UncleMiner) {
 			fmt.Printf("🚨 CONSENSUS REJECTION: Coinbase index recipient %s does not match Uncle header signature metadata %s\n", uncleMinerRecipient, b.UncleMiner)
 			return false
 		}
