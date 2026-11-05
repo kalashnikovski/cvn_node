@@ -740,12 +740,19 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			elapsedSinceLastTip := time.Now().Unix() - currentBlock.Timestamp
-			const TargetBlockTimeWindow = 45
+			// 👑 THE MASTER PACING ANCHOR FIXED:
+			// Explicitly calculate elapsed time against mainnet 45-second rules.
+			// This completely prevents the flash-mining block loop vulnerability.
+			currentUnixTime := time.Now().Unix()
+			elapsedSinceLastTip := currentUnixTime - currentBlock.Timestamp
+			const GlobalTargetBlockTimeFloor = int64(45)
 			
-			if elapsedSinceLastTip < TargetBlockTimeWindow && currentBlock.Index > 0 {
-				deficitSeconds := TargetBlockTimeWindow - elapsedSinceLastTip
-				time.Sleep(time.Duration(deficitSeconds) * time.Second)
+			if currentBlock.Index > 0 && elapsedSinceLastTip < GlobalTargetBlockTimeFloor {
+				deficitSeconds := GlobalTargetBlockTimeFloor - elapsedSinceLastTip
+				if deficitSeconds > 0 && deficitSeconds <= GlobalTargetBlockTimeFloor {
+					// Put the worker thread to sleep for the remaining block delay time window
+					time.Sleep(time.Duration(deficitSeconds) * time.Second)
+				}
 			}
 
 			simulatedTime := time.Now().Unix()
@@ -753,18 +760,14 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			// 👑 CRITICAL REMEDY 6: UNIFIED INCLUSIVE DIFFICULTY MINING GATEWAY
-			// Ensure that the mining worker thread targets difficulty 2 up to and including
-			// block height 9 (which solves block height 10). The exact millisecond block 10 is 
-			// committed, currentBlock.Index becomes 10, forcing the next block (Height 11) 
-			// to target difficulty 4 natively, matching your validation firewalls perfectly!
+			// UNIFIED INCLUSIVE DIFFICULTY MINING GATEWAY
 			var workerTargetDifficulty int
 			if currentBlock.Index <= 9 {
 				workerTargetDifficulty = 2
 			} else {
 				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
 				if workerTargetDifficulty < 4 {
-					workerTargetDifficulty = 4 // Lock to absolute mainnet specification floor past block 10
+					workerTargetDifficulty = 4 
 				}
 			}
 			
