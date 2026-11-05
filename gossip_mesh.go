@@ -152,9 +152,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 	}
 }
 
-// 👑 THE RE-ESTABLISHED GOSSIP INTERCEPTOR CORE:
-// Safely buffers real-time incoming wire blocks. It filters out competing forks
-// and records late sibling hashes directly into the BoltDB storage partitions.
 func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
@@ -183,38 +180,35 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 			
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
-				if bBlocks == nil { return nil }
+				bUTXO := tx.Bucket(utxoBucket)
+				if bBlocks == nil || bUTXO == nil { return nil }
+				
 				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
 				
 				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
 					currentTip.UncleHash = incomingBlock.Hash
 					
-					// 👑 CRITICAL REMEDY 1: MUTATE COINBASE IN-PLACE FOR 80/20 SPLIT
-					// Extract the Uncle Miner's identity from the incoming competing block's coinbase output
 					if len(incomingBlock.Transactions) > 0 && len(incomingBlock.Transactions[0].Outputs) > 0 {
 						currentTip.UncleMiner = strings.TrimSpace(incomingBlock.Transactions[0].Outputs[0].Recipient)
 					} else {
 						currentTip.UncleMiner = "NONE"
 					}
 
-					// Realignment: If a valid Uncle Miner is registered, rewrite currentTip's Coinbase
-					if currentTip.UncleMiner != "NONE" && currentTip.UncleMiner != "" && len(currentTip.Transactions) > 0 {
+					// 👑 GHOST CONSENSUS FIX: COMMIT TO AN ISOLATED REWARD UTXO WITHOUT MUTATING BLOCK HEADERS
+					if currentTip.UncleMiner != "NONE" && currentTip.UncleMiner != "" {
 						allowedTotalEmission := CalculateBlockReward(currentTip.Index)
-						if currentTip.Index > 21024000 { allowedTotalEmission += 5.0 }
-
-						mainMinerRecipient := currentTip.Transactions[0].Outputs[0].Recipient
+						uncleSubsidyReward := allowedTotalEmission * 0.20
 						
-						// Hard-lock the precise 80/20 economic emission split outputs
-						currentTip.Transactions[0].Outputs = []UTXOOutput{
-							{Recipient: mainMinerRecipient, Amount: allowedTotalEmission * 0.80},
-							{Recipient: currentTip.UncleMiner, Amount: allowedTotalEmission * 0.20},
-						}
+						uncleUTXOKey := fmt.Sprintf("UNCLE_SUBSIDY_%d_%s", currentTip.Index, currentTip.UncleMiner)
+						utxoRecord := UTXORecord{Amount: uncleSubsidyReward, Recipient: currentTip.UncleMiner}
+						utxoData, _ := json.Marshal(utxoRecord)
+						_ = bUTXO.Put([]byte(uncleUTXOKey), utxoData)
 					}
 					
 					updatedData, err := json.Marshal(currentTip)
 					if err == nil {
 						_ = bBlocks.Put([]byte(paddedKey), updatedData)
-						fmt.Println("💾 [GHOST CONSENSUS SECURED] Tip Coinbase rewritten in-place with 80/20 split and written to disk bucket!")
+						fmt.Println("💾 [GHOST CONSENSUS SECURED] Uncle block mapped to isolated state storage cleanly.")
 						go RebuildStateBalanceCacheInternal()
 					}
 				}

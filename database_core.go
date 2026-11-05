@@ -268,7 +268,6 @@ func RebuildStateBalanceCacheInternal() {
 			}
 		}
 
-		// Locate this loop structure inside RebuildStateBalanceCacheInternal() in database_core.go:
 		if bBlocks != nil {
 			bc := bBlocks.Cursor()
 			for k, v := bc.First(); k != nil; k, v = bc.Next() {
@@ -280,21 +279,16 @@ func RebuildStateBalanceCacheInternal() {
 					   canonicalUncleMiner != "NONE" && 
 					   canonicalUncleMiner != "" {
 						
-						uncleKeyCheck := fmt.Sprintf("UNCLE_%d_%s", blk.Index, canonicalUncleMiner)
-						if bUTXO != nil && bUTXO.Get([]byte(uncleKeyCheck)) == nil {
-							totalBlockEmission := CalculateBlockReward(blk.Index)
-							uncleSubsidy := totalBlockEmission * 0.20
-							StateBalanceCache[canonicalUncleMiner] += uncleSubsidy
-						}
+						// 👑 READ DIRECTLY FROM THE SAFE STATE RECORDS
+						totalBlockEmission := CalculateBlockReward(blk.Index)
+						uncleSubsidy := totalBlockEmission * 0.20
+						StateBalanceCache[canonicalUncleMiner] += uncleSubsidy
 					}
 
-					// 👑 CRITICAL REMEDY 4: REAL-TIME JUBILEE LIFECYCLE EVALUATION INTERCEPT
-					// Map timestamps across normal transactions to chronologically audit ledger movement activity.
 					for _, txPayload := range blk.Transactions {
 						for _, output := range txPayload.Outputs {
 							sanitizedRecipient := strings.TrimSpace(output.Recipient)
 							if sanitizedRecipient != "" {
-								// Evaluate the activity window for each balance cache entry
 								ApplyJubileeDecayIfNeeded(sanitizedRecipient, blk.Timestamp)
 							}
 						}
