@@ -192,24 +192,16 @@ func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 	_ = bUTXO.Delete(key)
 }
 
-// 👑 CRITICAL REMEDY 4: IMPLEMENT JUBILEE DECAY STATE SCANNER
-// Chronologically tracks stagnant balances against a strict 49-year window.
-// If an address crosses the threshold, it flags it explicitly to prepare for burn-void routing.
 func ApplyJubileeDecayIfNeeded(address string, lastActivityUnix int64) {
-	// 49 Years calculated in standard Unix seconds
 	const JubileeWindow = 49 * 365 * 24 * 60 * 60
 	cleanedAddress := cleanAddr(address)
-
 	if cleanedAddress == "" || cleanedAddress == "COVENANT_STEWARD_ASSEMBLY" || cleanedAddress == "GENESIS_VOID_REWARD_POOL" {
 		return
 	}
-
 	currentUnixTime := time.Now().Unix()
 	stagnantDuration := currentUnixTime - lastActivityUnix
-
 	if stagnantDuration > JubileeWindow {
-		// Route stagnant balance to burn void; implementation deferred to storage layer
-		log.Printf("⚠️ [JUBILEE TRIGGERED] CANDIDATE DETECTED: %s has remained inactive for %d years. Eligible for permanent decay reclamation.\n", 
+		log.Printf("⚠️ [JUBILEE TRIGGERED] CANDIDATE DETECTED: %s has remained inactive for %d years. Eligible for permanent decay reclamation.\n",
 			cleanedAddress, int(stagnantDuration/(365*24*60*60)))
 	}
 }
@@ -501,7 +493,6 @@ func TriggerActiveReSyncPass() {
 				StateMutex.Lock()
 				break
 			}
-		// Locate this block structure inside your TriggerActiveReSyncPass loop engine:
 		} else {
 			if resp.StatusCode == http.StatusOK {
 				_ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
@@ -512,11 +503,8 @@ func TriggerActiveReSyncPass() {
 				break
 			}
 		}
-
-		// 👑 CRITICAL REMEDY 8: CONCURRENCY MUTEX LOCK SYNCHRONIZATION
-		// Hard-lock the state mutex over the block iteration engine to block concurrent 
-		// worker threads from reading or writing states mid-sync.
 		StateMutex.Lock()
+		syncFilterRejected := false
 		for _, block := range incomingBatch {
 			if block.Index == GetLatestBlockInternal().Index+1 {
 				if ValidateBlockSignatures(block) {
@@ -526,44 +514,37 @@ func TriggerActiveReSyncPass() {
 					if block.UncleMiner == "" {
 						block.UncleMiner = "NONE"
 					}
-					// Invoke internal writer safely under locked conditions
 					SaveBlockToStorageInternal(block)
 				} else {
 					log.Printf("⚠️ [SYNC EXCLUSION FILTER] Rejected invalid block layout sequence at height #%d\n", block.Index)
+					syncFilterRejected = true
 					break
 				}
 			}
 		}
 		StateMutex.Unlock()
+		if syncFilterRejected {
+			break
+		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	// Note: The final StateMutex.Unlock() statement right at the end of the loop body is removed 
-	// because locks are now precisely handled within each execution chunk.
 }
 
 func drainAndProcessDeferredQueue() {
-	// 👑 CRITICAL REMEDY 8: RE-ENTRY SYNC LOCK GATEWAY
-	// Violently abort queue drainage passes if an active catch-up resync pass 
-	// is still modifying state partitions to prevent data corruption.
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		log.Println("⚠️ [RE-ENTRY BLOCK] Sync engine remains active. Deferring block channel queue drainage pass.")
 		return
 	}
-
-	// Lock the master state mutex firmly before allowing data memory modifications
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
-
 	log.Println("🔄 [DRAIN PHASE INITIALIZED] Sequential block deployment pass streaming from cached memory channel...")
 	queueLength := len(DeferredBlockQueue)
-	
 	for i := 0; i < queueLength; i++ {
 		select {
 		case cachedBlock := <-DeferredBlockQueue:
 			currentTip := GetLatestBlockInternal()
 			if cachedBlock.Index == currentTip.Index+1 {
 				if ValidateBlockSignatures(cachedBlock) && cachedBlock.PrevHash == currentTip.Hash {
-					// StateMutex is already locked, so call internal write routines safely
 					if SaveBlockToStorageInternal(cachedBlock) {
 						log.Printf("🟩 [QUEUE RECOVERY SUCCESS] Sequentially applied buffered block #%d to disk map storage.\n", cachedBlock.Index)
 						atomic.StoreInt64(&localHeightState, cachedBlock.Index)
@@ -745,7 +726,6 @@ func ValidateBlockSignatures(b Block) bool {
 	return true
 }
 
-// 👑 RE-ENGINEERED REMEDY 8: TYPE-SAFE SYNCHRONOUS TWO-WAY P2P BATCH READER
 func requestBatchOverTCPMeshNatively(height int64) []Block {
 	PeerMapMutex.RLock()
 	var fallbackTargets []string
@@ -753,19 +733,15 @@ func requestBatchOverTCPMeshNatively(height int64) []Block {
 		fallbackTargets = append(fallbackTargets, targetIP)
 	}
 	PeerMapMutex.RUnlock()
-	
 	for _, endpointHost := range fallbackTargets {
 		conn, err := net.DialTimeout("tcp", endpointHost, 3*time.Second)
 		if err == nil {
 			payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
 			_, _ = fmt.Fprint(conn, payloadCommand)
-			
 			_ = conn.SetReadDeadline(time.Now().Add(6 * time.Second))
 			scanner := bufio.NewScanner(conn)
-			
 			buf := make([]byte, 0, 64*1024)
 			scanner.Buffer(buf, 10*1024*1024)
-			
 			if scanner.Scan() {
 				var blocks []Block
 				if json.Unmarshal(scanner.Bytes(), &blocks) == nil && len(blocks) > 0 {
@@ -779,7 +755,6 @@ func requestBatchOverTCPMeshNatively(height int64) []Block {
 	return nil
 }
 
-// 👑 RE-ENGINEERED REMEDY 8: DYNAMIC P2P WIRE HEADER FETCH ENGINE
 func fetchRemoteBlockHeaderViaP2P(height int64) string {
 	PeerMapMutex.RLock()
 	var fallbackTargets []string
@@ -787,16 +762,13 @@ func fetchRemoteBlockHeaderViaP2P(height int64) string {
 		fallbackTargets = append(fallbackTargets, targetIP)
 	}
 	PeerMapMutex.RUnlock()
-
 	for _, endpointHost := range fallbackTargets {
 		conn, err := net.DialTimeout("tcp", endpointHost, 2*time.Second)
 		if err == nil {
 			payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
 			_, _ = fmt.Fprint(conn, payloadCommand)
-			
 			_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 			scanner := bufio.NewScanner(conn)
-			
 			if scanner.Scan() {
 				var blocks []Block
 				if json.Unmarshal(scanner.Bytes(), &blocks) == nil && len(blocks) > 0 {
@@ -810,7 +782,6 @@ func fetchRemoteBlockHeaderViaP2P(height int64) string {
 	return ""
 }
 
-// 👑 RE-ENGINEERED REMEDY 8: SEED HTTP BATCH DISPATCHER
 func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
 	requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(seedURL, "/"), height)
 	resp, err := client.Get(requestURL)
