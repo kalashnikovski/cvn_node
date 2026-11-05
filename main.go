@@ -757,13 +757,13 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			// block height 9 (which solves block height 10). The exact millisecond block 10 is 
 			// committed, currentBlock.Index becomes 10, forcing the next block (Height 11) 
 			// to target difficulty 4 natively, perfectly matching the database validators!
-			var workerTargetDifficulty int
-			if currentBlock.Index < 10 {
+var workerTargetDifficulty int
+			if currentBlock.Index <= 9 {
 				workerTargetDifficulty = 2
 			} else {
 				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
 				if workerTargetDifficulty < 4 {
-					workerTargetDifficulty = 4 // Lock to absolute mainnet specification floor past block 10
+					workerTargetDifficulty = 4 
 				}
 			}
 			

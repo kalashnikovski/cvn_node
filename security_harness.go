@@ -101,16 +101,13 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 
-	// 👑 FIXED CORES ALIGNMENT ANCHOR:
 	var expectedDifficulty int
 	if b.Index <= 10 {
 		expectedDifficulty = 2
 	} else {
 		if b.Difficulty < 4 {
-			fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d below mainnet floor (4)\n", b.Index, b.Difficulty)
 			return false
 		}
-		
 		StateMutex.RLock()
 		expectedDifficulty = CalculateNextDifficulty(GetLatestBlockInternal(), b.Timestamp)
 		StateMutex.RUnlock()

@@ -155,12 +155,14 @@ func SaveBlockToStorage(block Block) bool {
 	return SaveBlockToStorageInternal(block)
 }
 
-// SaveBlockToStorageInternal writes verified block structures securely to the database layers.
 func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil { return false }
 
 	expectedDiff := block.Difficulty
-	if block.Index < 10 {
+	// 👑 FIXED CORES ALIGNMENT ANCHOR:
+	// Allow block height 10 to be stored at difficulty 2. The moment block 10 
+	// is saved, block 11 hits this gate, forcing the strict difficulty 4 floor.
+	if block.Index <= 10 {
 		expectedDiff = 2
 	} else {
 		if expectedDiff < 4 {
