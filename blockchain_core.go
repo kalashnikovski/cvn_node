@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
@@ -744,11 +745,90 @@ func ValidateBlockSignatures(b Block) bool {
 	return true
 }
 
-// NOTE: The following helpers are referenced above and must exist in this package
-// (they were present in your original dump). If they are missing from your current
-// tree, restore them from the earlier full source dump.
-func requestBatchOverTCPMeshNatively(height int64) []Block { return nil }
-func fetchRemoteBlockHeaderViaP2P(height int64) string     { return "" }
+// 👑 RE-ENGINEERED REMEDY 8: TYPE-SAFE SYNCHRONOUS TWO-WAY P2P BATCH READER
+func requestBatchOverTCPMeshNatively(height int64) []Block {
+	PeerMapMutex.RLock()
+	var fallbackTargets []string
+	for targetIP := range ActivePeerMap {
+		fallbackTargets = append(fallbackTargets, targetIP)
+	}
+	PeerMapMutex.RUnlock()
+	
+	for _, endpointHost := range fallbackTargets {
+		conn, err := net.DialTimeout("tcp", endpointHost, 3*time.Second)
+		if err == nil {
+			payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
+			_, _ = fmt.Fprint(conn, payloadCommand)
+			
+			_ = conn.SetReadDeadline(time.Now().Add(6 * time.Second))
+			scanner := bufio.NewScanner(conn)
+			
+			buf := make([]byte, 0, 64*1024)
+			scanner.Buffer(buf, 10*1024*1024)
+			
+			if scanner.Scan() {
+				var blocks []Block
+				if json.Unmarshal(scanner.Bytes(), &blocks) == nil && len(blocks) > 0 {
+					conn.Close()
+					return blocks
+				}
+			}
+			conn.Close()
+		}
+	}
+	return nil
+}
+
+// 👑 RE-ENGINEERED REMEDY 8: DYNAMIC P2P WIRE HEADER FETCH ENGINE
+func fetchRemoteBlockHeaderViaP2P(height int64) string {
+	PeerMapMutex.RLock()
+	var fallbackTargets []string
+	for targetIP := range ActivePeerMap {
+		fallbackTargets = append(fallbackTargets, targetIP)
+	}
+	PeerMapMutex.RUnlock()
+
+	for _, endpointHost := range fallbackTargets {
+		conn, err := net.DialTimeout("tcp", endpointHost, 2*time.Second)
+		if err == nil {
+			payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
+			_, _ = fmt.Fprint(conn, payloadCommand)
+			
+			_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+			scanner := bufio.NewScanner(conn)
+			
+			if scanner.Scan() {
+				var blocks []Block
+				if json.Unmarshal(scanner.Bytes(), &blocks) == nil && len(blocks) > 0 {
+					conn.Close()
+					return blocks[0].Hash
+				}
+			}
+			conn.Close()
+		}
+	}
+	return ""
+}
+
+// 👑 RE-ENGINEERED REMEDY 8: SEED HTTP BATCH DISPATCHER
 func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
-	return "", fmt.Errorf("not implemented in this stub")
+	requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(seedURL, "/"), height)
+	resp, err := client.Get(requestURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("invalid response code: %d", resp.StatusCode)
+	}
+	var batch []Block
+	if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
+		return "", err
+	}
+	for _, block := range batch {
+		if block.Index == height {
+			return block.Hash, nil
+		}
+	}
+	return "", fmt.Errorf("block missing")
 }
