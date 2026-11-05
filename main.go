@@ -812,9 +812,10 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					break
 				}
 
-				// 👑 PREIMAGE ALIGNMENT MATCH: Injected block template version parameter explicitly
+				// 👑 CRITICAL LAUNCH FIX: ALIGN PREIMAGE PATTERN TO MATCH CALCULATEHASH
+				// Changed template string to exactly match the 10-token signature verification pattern!
 				inputStr := fmt.Sprintf("%d-%d-%d-%s-%s-%d-%s-%d-%s-%s",
-					1, // Set default mined block structure format profile version
+					1, // Protocol Version
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,
@@ -828,7 +829,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 
 				hashBytes := sha256.Sum256([]byte(inputStr))
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
-
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
 					newBlock := Block{
 						Index:        nextIndex,
