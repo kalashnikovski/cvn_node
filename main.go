@@ -58,9 +58,9 @@ func main() {
 	initWindowsAnsi()
 
 	// ====================================================================
-	// 👑 FIXED CORES ACCOUNT GENERATOR GATEWAY:
-	// Hardlocks the string sanitizers to serialize files with no hidden bytes,
-	// guaranteeing the batch launchpad reads your Layer-1 address cleanly!
+	// 👑 CRITICAL REMEDY 7: SECURE PRIVATE KEY CONTEXT CONTROLS
+	// Wipes the dangerous plaintext file writing pass completely from disk tracks.
+	// Private data payloads stream exclusively to your secure terminal display session.
 	// ====================================================================
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
@@ -71,31 +71,32 @@ func main() {
 				os.Exit(1) 
 			}
 			
-			// 👑 HARD-LOCKED STRING STRIPPER: Clean all space and control byte residues
+			// HARD-LOCKED STRING STRIPPER: Clean all space and control byte residues
 			walletAddress = strings.TrimSpace(walletAddress)
 			walletAddress = strings.ReplaceAll(walletAddress, " ", "")
 			walletAddress = strings.ReplaceAll(walletAddress, "\r", "")
 			walletAddress = strings.ReplaceAll(walletAddress, "\n", "")
 			
 			fmt.Println("\n====================================================================")
-			fmt.Printf("🪪  NEW WALLET ADDRESS:     %s\n", walletAddress)
+			fmt.Println("💎 NEW SOVEREIGN COVENANT Standard KEYPAIR MATERIALIZATION DETECTED  ")
+			fmt.Println("====================================================================")
+			fmt.Printf("🪪  PUBLIC WALLET ADDRESS:  %s\n", walletAddress)
 			fmt.Printf("📋  UNTRUNCATED PUBLIC KEY: %s\n", pubHex)
-			fmt.Printf("🔐  PRIVATE KEY HEX:        %s\n", privHex)
+			fmt.Printf("🔐  SECRET PRIVATE KEY HEX: %s\n", privHex)
+			fmt.Println("====================================================================")
+			fmt.Println("⚠️  CRITICAL PROTOCOL SAFETY WARNING:                                ")
+			fmt.Println("👉 COPY AND RECORD THE SECRET PRIVATE KEY DISPLAYED ABOVE MANUALLY NOW. ")
+			fmt.Println("👉 FOR SECURITY, IT IS EXCLUSIVELY STREAMED TO THIS WINDOW BUFFER.   ")
+			fmt.Println("❌ IT IS NO LONGER SAVED AS A PLANTEXT SECRETS REPOSITORY FILE ON DISK. ")
 			fmt.Println("====================================================================")
 
-			// Force explicit file serialization passes onto the local drive track
-			backupContent := fmt.Sprintf("=== COVENANT STANDARD SECURITY BACKUP ===\nAddress: %s\nPublic Key: %s\nPrivate Key: %s\n", walletAddress, pubHex, privHex)
-			err = os.WriteFile("cvn_secret_backup.txt", []byte(backupContent), 0600)
-			if err != nil {
-				log.Printf("🚨 FILE FAULT: Unable to write secret backup to disk: %v\n", err)
-			}
-
+			// Safely serialize ONLY your public address string to configuration maps
 			configMap := map[string]string{"miner_address": walletAddress}
 			configMapBytes, err := json.MarshalIndent(configMap, "", "  ")
 			if err == nil {
 				err = os.WriteFile("miner_config.json", configMapBytes, 0644)
 				if err != nil {
-					log.Printf("🚨 FILE FAULT: Unable to write config file to disk: %v\n", err)
+					log.Printf("🚨 FILE FAULT: Unable to write public configuration to disk: %v\n", err)
 				}
 			}
 			os.Exit(0)
@@ -752,18 +753,18 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			// 👑 THE HARMONIZED HARD-LOCKED MINING CONTROLLER:
+			// 👑 CRITICAL REMEDY 6: UNIFIED INCLUSIVE DIFFICULTY MINING GATEWAY
 			// Ensure that the mining worker thread targets difficulty 2 up to and including
 			// block height 9 (which solves block height 10). The exact millisecond block 10 is 
 			// committed, currentBlock.Index becomes 10, forcing the next block (Height 11) 
-			// to target difficulty 4 natively, perfectly matching the database validators!
-var workerTargetDifficulty int
+			// to target difficulty 4 natively, matching your validation firewalls perfectly!
+			var workerTargetDifficulty int
 			if currentBlock.Index <= 9 {
 				workerTargetDifficulty = 2
 			} else {
 				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
 				if workerTargetDifficulty < 4 {
-					workerTargetDifficulty = 4 
+					workerTargetDifficulty = 4 // Lock to absolute mainnet specification floor past block 10
 				}
 			}
 			
@@ -780,8 +781,10 @@ var workerTargetDifficulty int
 			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 			targetUncleMiner := "NONE"
 
+			// Locate this block structure inside your mining execution loops:
 			candidateTransactions := []Transaction{
 				{
+					Version:          1, // Lock standard default transaction layout format profile version
 					ID:               coinbaseTxID,
 					Witness:          CustomMinerAddress,
 					PublicKey:        "GENESIS_VOID_REWARD_POOL",
@@ -806,7 +809,9 @@ var workerTargetDifficulty int
 					break
 				}
 
-				inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
+				// 👑 PREIMAGE ALIGNMENT MATCH: Injected block template version parameter explicitly
+				inputStr := fmt.Sprintf("%d-%d-%d-%s-%s-%d-%s-%d-%s-%s",
+					1, // Set default mined block structure format profile version
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,

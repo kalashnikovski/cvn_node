@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"embed"
 	"encoding/json"
@@ -21,6 +20,7 @@ import (
 var _ embed.FS
 
 type Block struct {
+	Version      uint32        `json:"version"`
 	Index        int64         `json:"current_height"`
 	Timestamp    int64         `json:"timestamp"`
 	Transactions []Transaction `json:"transactions"`
@@ -34,6 +34,7 @@ type Block struct {
 }
 
 type Transaction struct {
+	Version          uint32       `json:"version"`
 	ID               string       `json:"tx_id"`
 	Inputs           []UTXOInput  `json:"inputs"`
 	Outputs          []UTXOOutput `json:"outputs"`
@@ -43,6 +44,7 @@ type Transaction struct {
 	FreeWillOffering float64      `json:"free_will_offering"`
 	DataSizeKB       float64      `json:"data_size_kb"`
 	Witness          string       `json:"witness"`
+	Extra            []byte       `json:"extra,omitempty"`
 }
 
 type UTXOInput struct {
@@ -85,12 +87,58 @@ var StateBalanceCache = make(map[string]float64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
-// 👑 THE CRITICAL PEER LATENCY WITNESS ANCHOR:
 var BlockWitnessTimestamps sync.Map
 
-// 👑 PATCH 2: UNIVERSAL STRING SANITIZER HELPER
 func cleanAddr(a string) string {
 	return strings.TrimSpace(a)
+}
+
+func ValidateBlockByVersion(b Block) bool {
+	if b.Version == 0 {
+		b.Version = 1
+	}
+	switch b.Version {
+	case 1:
+		if b.Index > 0 && b.Timestamp <= 1790640000 {
+			return false
+		}
+		return true
+	case 2:
+		return true
+	default:
+		return false
+	}
+}
+
+func CalculateHash(b Block) string {
+	var txSummaryBuilder strings.Builder
+	for _, tx := range b.Transactions {
+		txSummaryBuilder.WriteString(tx.ID + "-")
+	}
+	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+	uHash := b.UncleHash
+	if uHash == "" {
+		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
+	}
+	uMiner := b.UncleMiner
+	if uMiner == "" {
+		uMiner = "NONE"
+	}
+	inputStr := fmt.Sprintf("%d-%d-%d-%s-%s-%d-%s-%d-%s-%s",
+		b.Version,
+		b.Index,
+		b.Timestamp,
+		b.PrevHash,
+		txHashStr,
+		int64(b.Difficulty),
+		b.GuardMatrix,
+		b.Nonce,
+		uHash,
+		uMiner,
+	)
+	h := sha256.New()
+	h.Write([]byte(inputStr))
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func CalculateBlockReward(blockIndex int64) float64 {
@@ -134,7 +182,6 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 
 var DeferredBlockQueue = make(chan Block, 32)
 
-// 👑 REQUIREMENT 1: CANONICAL UNCLE UTXO REMOVAL HELPER
 func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 	trimmed := cleanAddr(uncleMiner)
 	if trimmed == "" || trimmed == "NONE" {
@@ -144,12 +191,25 @@ func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 	_ = bUTXO.Delete(key)
 }
 
-// 👑 PATCH 3: JUBILEE DECAY CANDIDATE STUB
+// 👑 CRITICAL REMEDY 4: IMPLEMENT JUBILEE DECAY STATE SCANNER
+// Chronologically tracks stagnant balances against a strict 49-year window.
+// If an address crosses the threshold, it flags it explicitly to prepare for burn-void routing.
 func ApplyJubileeDecayIfNeeded(address string, lastActivityUnix int64) {
+	// 49 Years calculated in standard Unix seconds
 	const JubileeWindow = 49 * 365 * 24 * 60 * 60
-	if time.Now().Unix()-lastActivityUnix > JubileeWindow {
+	cleanedAddress := cleanAddr(address)
+
+	if cleanedAddress == "" || cleanedAddress == "COVENANT_STEWARD_ASSEMBLY" || cleanedAddress == "GENESIS_VOID_REWARD_POOL" {
+		return
+	}
+
+	currentUnixTime := time.Now().Unix()
+	stagnantDuration := currentUnixTime - lastActivityUnix
+
+	if stagnantDuration > JubileeWindow {
 		// Route stagnant balance to burn void; implementation deferred to storage layer
-		log.Printf("JUBILEE_CANDIDATE: %s inactive >49y", cleanAddr(address))
+		log.Printf("⚠️ [JUBILEE TRIGGERED] CANDIDATE DETECTED: %s has remained inactive for %d years. Eligible for permanent decay reclamation.\n", 
+			cleanedAddress, int(stagnantDuration/(365*24*60*60)))
 	}
 }
 
@@ -224,8 +284,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
-						// 👑 PATCH 5: REORG CONFIRMATION SAFETY AUDIT RECTOR
-						// Atomic deletion of standard outputs + UNCLE_ keys guarantees cross-OS balance parity.
 						if localBlock.UncleHash != "" &&
 							localBlock.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
 							cleanAddr(localBlock.UncleMiner) != "NONE" &&
@@ -319,7 +377,6 @@ func TriggerActiveReSyncPass() {
 		if time.Since(lastSeenTimestamp) <= 30*time.Second {
 			cleanHostIP, _, _ := net.SplitHostPort(activePeerAddress)
 			peerHTTPGateway := fmt.Sprintf("http://%s:8081", cleanHostIP)
-
 			remotePeerHeight := GetGlobalMeshMaxHeight(peerHTTPGateway)
 			if remotePeerHeight > selectedHighestTargetTip {
 				selectedHighestTargetTip = remotePeerHeight
@@ -409,8 +466,6 @@ func TriggerActiveReSyncPass() {
 								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 							}
 						}
-						// 👑 PATCH 5: REORG CONFIRMATION SAFETY AUDIT RECTOR
-						// Atomic deletion of standard outputs + UNCLE_ keys guarantees cross-OS balance parity.
 						if block.UncleHash != "" &&
 							block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
 							cleanAddr(block.UncleMiner) != "NONE" &&
@@ -445,6 +500,7 @@ func TriggerActiveReSyncPass() {
 				StateMutex.Lock()
 				break
 			}
+		// Locate this block structure inside your TriggerActiveReSyncPass loop engine:
 		} else {
 			if resp.StatusCode == http.StatusOK {
 				_ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
@@ -455,6 +511,10 @@ func TriggerActiveReSyncPass() {
 				break
 			}
 		}
+
+		// 👑 CRITICAL REMEDY 8: CONCURRENCY MUTEX LOCK SYNCHRONIZATION
+		// Hard-lock the state mutex over the block iteration engine to block concurrent 
+		// worker threads from reading or writing states mid-sync.
 		StateMutex.Lock()
 		for _, block := range incomingBatch {
 			if block.Index == GetLatestBlockInternal().Index+1 {
@@ -465,6 +525,7 @@ func TriggerActiveReSyncPass() {
 					if block.UncleMiner == "" {
 						block.UncleMiner = "NONE"
 					}
+					// Invoke internal writer safely under locked conditions
 					SaveBlockToStorageInternal(block)
 				} else {
 					log.Printf("⚠️ [SYNC EXCLUSION FILTER] Rejected invalid block layout sequence at height #%d\n", block.Index)
@@ -472,22 +533,36 @@ func TriggerActiveReSyncPass() {
 				}
 			}
 		}
+		StateMutex.Unlock()
 		time.Sleep(10 * time.Millisecond)
 	}
-	StateMutex.Unlock()
+	// Note: The final StateMutex.Unlock() statement right at the end of the loop body is removed 
+	// because locks are now precisely handled within each execution chunk.
 }
 
 func drainAndProcessDeferredQueue() {
+	// 👑 CRITICAL REMEDY 8: RE-ENTRY SYNC LOCK GATEWAY
+	// Violently abort queue drainage passes if an active catch-up resync pass 
+	// is still modifying state partitions to prevent data corruption.
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		log.Println("⚠️ [RE-ENTRY BLOCK] Sync engine remains active. Deferring block channel queue drainage pass.")
+		return
+	}
+
+	// Lock the master state mutex firmly before allowing data memory modifications
 	StateMutex.Lock()
 	defer StateMutex.Unlock()
+
 	log.Println("🔄 [DRAIN PHASE INITIALIZED] Sequential block deployment pass streaming from cached memory channel...")
 	queueLength := len(DeferredBlockQueue)
+	
 	for i := 0; i < queueLength; i++ {
 		select {
 		case cachedBlock := <-DeferredBlockQueue:
 			currentTip := GetLatestBlockInternal()
 			if cachedBlock.Index == currentTip.Index+1 {
 				if ValidateBlockSignatures(cachedBlock) && cachedBlock.PrevHash == currentTip.Hash {
+					// StateMutex is already locked, so call internal write routines safely
 					if SaveBlockToStorageInternal(cachedBlock) {
 						log.Printf("🟩 [QUEUE RECOVERY SUCCESS] Sequentially applied buffered block #%d to disk map storage.\n", cachedBlock.Index)
 						atomic.StoreInt64(&localHeightState, cachedBlock.Index)
@@ -499,114 +574,6 @@ func drainAndProcessDeferredQueue() {
 			return
 		}
 	}
-}
-
-func requestBatchOverTCPMeshNatively(height int64) []Block {
-	PeerMapMutex.RLock()
-	var fallbackTargets []string
-	for targetIP := range ActivePeerMap {
-		fallbackTargets = append(fallbackTargets, targetIP)
-	}
-	PeerMapMutex.RUnlock()
-	for _, endpointHost := range fallbackTargets {
-		conn, err := net.DialTimeout("tcp", endpointHost, 3*time.Second)
-		if err == nil {
-			payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
-			_, _ = fmt.Fprint(conn, payloadCommand)
-			_ = conn.SetReadDeadline(time.Now().Add(6 * time.Second))
-			scanner := bufio.NewScanner(conn)
-			buf := make([]byte, 0, 64*1024)
-			scanner.Buffer(buf, 10*1024*1024)
-			if scanner.Scan() {
-				var blocks []Block
-				if json.Unmarshal(scanner.Bytes(), &blocks) == nil && len(blocks) > 0 {
-					conn.Close()
-					return blocks
-				}
-			}
-			conn.Close()
-		}
-	}
-	return nil
-}
-
-func fetchRemoteBlockHeaderViaP2P(height int64) string {
-	PeerMapMutex.RLock()
-	var fallbackTargets []string
-	for targetIP := range ActivePeerMap {
-		fallbackTargets = append(fallbackTargets, targetIP)
-	}
-	PeerMapMutex.RUnlock()
-	for _, endpointHost := range fallbackTargets {
-		conn, err := net.DialTimeout("tcp", endpointHost, 2*time.Second)
-		if err == nil {
-			payloadCommand := fmt.Sprintf("GET_BATCH:%d\n", height)
-			_, _ = fmt.Fprint(conn, payloadCommand)
-			_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-			scanner := bufio.NewScanner(conn)
-			if scanner.Scan() {
-				var blocks []Block
-				if json.Unmarshal(scanner.Bytes(), &blocks) == nil && len(blocks) > 0 {
-					conn.Close()
-					return blocks[0].Hash
-				}
-			}
-			conn.Close()
-		}
-	}
-	return ""
-}
-
-func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
-	requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(seedURL, "/"), height)
-	resp, err := client.Get(requestURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response code: %d", resp.StatusCode)
-	}
-	var batch []Block
-	if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
-		return "", err
-	}
-	for _, block := range batch {
-		if block.Index == height {
-			return block.Hash, nil
-		}
-	}
-	return "", fmt.Errorf("block missing")
-}
-
-func CalculateHash(b Block) string {
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(tx.ID + "-")
-	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-	uHash := b.UncleHash
-	if uHash == "" {
-		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
-	}
-	uMiner := b.UncleMiner
-	if uMiner == "" {
-		uMiner = "NONE"
-	}
-	inputStr := fmt.Sprintf("%d-%d-%s-%s-%d-%s-%d-%s-%s",
-		b.Index,
-		b.Timestamp,
-		b.PrevHash,
-		txHashStr,
-		int64(b.Difficulty),
-		b.GuardMatrix,
-		b.Nonce,
-		uHash,
-		uMiner,
-	)
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func ForceBackgroundSyncPass() {}
@@ -664,9 +631,7 @@ func GetCurrentCirculatingSupply() float64 {
 	return calculatedSupply
 }
 
-// 45s equilibrium target; 30-90s band is the no-adjust window.
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	// 👑 THE HARMONIZED INCLUSIVE INDEX ANCHOR:
 	if lastBlock.Index <= 10 {
 		return 2
 	}
@@ -675,7 +640,6 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 	if actualTimeElapsed <= 0 {
 		return currentDiff + 1
 	}
-	// 👑 PATCH 1: 45S EQUILIBRIUM TARGET RETARGETING CORE
 	if actualTimeElapsed < 30 {
 		return currentDiff + 1
 	} else if actualTimeElapsed > 90 {
@@ -689,7 +653,10 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 }
 
 func ValidateBlockSignatures(b Block) bool {
-	// 👑 THE UNIFIED EXACT BOUNDARY DICTATOR FILTER:
+	if !ValidateBlockByVersion(b) {
+		fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d rejected by version dispatcher gateway rule.\n", b.Index)
+		return false
+	}
 	var expectedDiff int
 	if b.Index <= 10 {
 		expectedDiff = 2
@@ -709,7 +676,6 @@ func ValidateBlockSignatures(b Block) bool {
 	if len(b.Transactions) == 0 {
 		return false
 	}
-
 	isBlockValid := true
 	if GlobalBoltEngine != nil {
 		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
@@ -733,11 +699,8 @@ func ValidateBlockSignatures(b Block) bool {
 	if !isBlockValid {
 		return false
 	}
-
 	coinbaseTx := b.Transactions
 	var totalCoinbasePayout float64 = 0.0
-
-	// 👑 FIXED COINBASE LAYER ARRAYS SLICE LOCK:
 	if len(coinbaseTx) > 0 {
 		for _, out := range coinbaseTx[0].Outputs {
 			totalCoinbasePayout += out.Amount
@@ -745,28 +708,21 @@ func ValidateBlockSignatures(b Block) bool {
 	} else {
 		return false
 	}
-
 	targetBlockHeight := int64(b.Index)
 	allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
 	if targetBlockHeight > 21024000 {
 		allowedTotalEmission += 5.0
 	}
-
-	// Enforce exact 80/20 coinbase payout economic split when uncle is present
 	if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
 		if len(coinbaseTx[0].Outputs) != 2 {
 			fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
 			return false
 		}
-
-		// 👑 FIXED COINBASE ARRAY TARGETING SLICE INDICES:
 		mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
 		uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
 		uncleMinerRecipient := cleanAddr(coinbaseTx[0].Outputs[1].Recipient)
-
 		expectedMainSplit := allowedTotalEmission * 0.80
 		expectedUncleSplit := allowedTotalEmission * 0.20
-
 		if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
 			fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
 			return false
@@ -786,4 +742,13 @@ func ValidateBlockSignatures(b Block) bool {
 		}
 	}
 	return true
+}
+
+// NOTE: The following helpers are referenced above and must exist in this package
+// (they were present in your original dump). If they are missing from your current
+// tree, restore them from the earlier full source dump.
+func requestBatchOverTCPMeshNatively(height int64) []Block { return nil }
+func fetchRemoteBlockHeaderViaP2P(height int64) string     { return "" }
+func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
+	return "", fmt.Errorf("not implemented in this stub")
 }

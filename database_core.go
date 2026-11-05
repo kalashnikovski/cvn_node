@@ -18,7 +18,6 @@ var metaBucket   = []byte("meta")
 var utxoBucket   = []byte("utxo")
 
 // InitBoltEngine mounts the local physical bbolt storage files safely on startup
-// InitBoltEngine mounts the local physical bbolt storage files safely on startup
 func InitBoltEngine() {
 	db, err := bbolt.Open(BlockchainFile, 0600, nil)
 	if err != nil {
@@ -36,10 +35,12 @@ func InitBoltEngine() {
 			paddedZeroKey := fmt.Sprintf("%016d", int64(0))
 
 			genesisBlock := Block{
+				Version:      1, // 👑 Establish baseline protocol version parameter
 				Index:        0,
 				Timestamp:    1790640000, 
 				Transactions: []Transaction{
 					{
+						Version:          1, // Establish baseline transaction version parameter
 						ID:               "TX_GENESIS_FAIR_LAUNCH_POOL",
 						Witness:          "COVENANT_STEWARD_ASSEMBLY",
 						PublicKey:        "GENESIS_VOID_REWARD_POOL",
@@ -214,19 +215,10 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 		}
 
-		// 👑 REQUIREMENT 4: FORCE PRE-TRIMMED CANONICAL KEYS BEFORE WRITING UNCLE SUBSIDIES
-		block.UncleMiner = strings.TrimSpace(block.UncleMiner)
-		if block.UncleHash != "" && 
-		   block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
-		   block.UncleMiner != "NONE" && 
-		   block.UncleMiner != "" {
-			
-			uncleSubsidy := CalculateBlockReward(block.Index) * 0.20
-			uncleKey := []byte(fmt.Sprintf("UNCLE_%d_%s", block.Index, block.UncleMiner))
-			utxoRecord := UTXORecord{Amount: uncleSubsidy, Recipient: block.UncleMiner}
-			utxoData, _ := json.Marshal(utxoRecord)
-			_ = bUTXO.Put(uncleKey, utxoData)
-		}
+		// 👑 CRITICAL REMEDY 1: STRIKE OUT SEPARATE UNCLE_ KEY EXTRA WRITES
+		// The legacy standalone UNCLE_ key block is removed completely. 
+		// Uncle rewards are now cleanly committed above as regular transaction outputs,
+		// maintaining absolute ledger consistency and eliminating balance duplication.
 
 		if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
 			go func(b Block) {
@@ -276,12 +268,12 @@ func RebuildStateBalanceCacheInternal() {
 			}
 		}
 
+		// Locate this loop structure inside RebuildStateBalanceCacheInternal() in database_core.go:
 		if bBlocks != nil {
 			bc := bBlocks.Cursor()
 			for k, v := bc.First(); k != nil; k, v = bc.Next() {
 				var blk Block
 				if json.Unmarshal(v, &blk) == nil {
-					// 👑 REQUIREMENT 5: CANONICALISE UNCLE SUBSIDY FIELD READ BOUNDARIES
 					canonicalUncleMiner := strings.TrimSpace(blk.UncleMiner)
 					if blk.UncleHash != "" && 
 					   blk.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
@@ -293,6 +285,18 @@ func RebuildStateBalanceCacheInternal() {
 							totalBlockEmission := CalculateBlockReward(blk.Index)
 							uncleSubsidy := totalBlockEmission * 0.20
 							StateBalanceCache[canonicalUncleMiner] += uncleSubsidy
+						}
+					}
+
+					// 👑 CRITICAL REMEDY 4: REAL-TIME JUBILEE LIFECYCLE EVALUATION INTERCEPT
+					// Map timestamps across normal transactions to chronologically audit ledger movement activity.
+					for _, txPayload := range blk.Transactions {
+						for _, output := range txPayload.Outputs {
+							sanitizedRecipient := strings.TrimSpace(output.Recipient)
+							if sanitizedRecipient != "" {
+								// Evaluate the activity window for each balance cache entry
+								ApplyJubileeDecayIfNeeded(sanitizedRecipient, blk.Timestamp)
+							}
 						}
 					}
 				}
