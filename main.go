@@ -830,7 +830,10 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				hashBytes := sha256.Sum256([]byte(inputStr))
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					// 👑 CRITICAL LAUNCH FIX: POPULATE EXPLICIT STRUCT VERSION SIGNATURE
+					// This forces the version field to match your mining preimage string exactly!
 					newBlock := Block{
+						Version:      1, // Crucial protocol version layer mapping
 						Index:        nextIndex,
 						Timestamp:    simulatedTime,
 						Transactions: candidateTransactions,
