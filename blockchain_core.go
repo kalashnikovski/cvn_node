@@ -265,9 +265,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 				bBlocks := tx.Bucket(blocksBucket)
 				bMeta := tx.Bucket(metaBucket)
 				bUTXO := tx.Bucket(utxoBucket)
-				if bBlocks == nil || bMeta == nil || bUTXO == nil {
-					return nil
-				}
+				if bBlocks == nil || bMeta == nil || bUTXO == nil { return nil }
 				paddedKey := []byte(fmt.Sprintf("%016d", currentTip.Index))
 				if data := bBlocks.Get(paddedKey); data != nil {
 					var localBlock Block
@@ -291,6 +289,10 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 			})
 
 			atomic.StoreInt64(&localHeightState, currentTip.Index-1)
+			
+			// 👑 CRITICAL IGNITION RETARGET: FORCE INSTANT SYNCHRONIZATION
+			// This completely wipes out the dirty memory balance states during a tip switch reorg,
+			// stopping the reward subtraction loop and keeping all nodes perfectly aligned!
 			RebuildStateBalanceCacheInternal()
 
 			if ValidateBlockSignatures(incomingBlock) && incomingBlock.PrevHash == GetLatestBlockInternal().Hash {
