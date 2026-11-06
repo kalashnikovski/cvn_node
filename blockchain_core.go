@@ -615,31 +615,38 @@ func GetCurrentCirculatingSupply() float64 {
 	return calculatedSupply
 }
 
+// 45s equilibrium target; autoadjusts difficulty dynamically per block.
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	// 👑 CRITICAL IGNITION LINE REALIGNMENT:
-	// Use strict less-than to ensure Block 10 (on Parent 9) stays at difficulty 2, 
-	// while Block 11 (on Parent 10) natively evaluates to the mainnet floor of 4+.
+	// 👑 THE HARMONIZED INCLUSIVE INDEX ANCHOR:
 	if lastBlock.Index < 10 {
 		return 2
 	}
 	currentDiff := int(lastBlock.Difficulty)
 	if currentDiff < 4 {
-		return 4
+		return 4 // Enforce mainnet specification floor past block 10
 	}
-	
+
 	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
 	if actualTimeElapsed <= 0 {
 		return currentDiff + 1
 	}
-	if actualTimeElapsed < 30 {
+
+	// 👑 THE DYNAMIC DIFFICULTY HEARTBEAT ADJUSTMENT:
+	// Hard-locked around a clean 45-second target window.
+	// If the network solves a block quicker than 45 seconds, the difficulty goes up.
+	// If the network finds a block longer than 45 seconds, the difficulty goes down.
+	const TargetHeartbeatWindow = int64(45)
+
+	if actualTimeElapsed < TargetHeartbeatWindow {
 		return currentDiff + 1
-	} else if actualTimeElapsed > 90 {
+	} else if actualTimeElapsed > TargetHeartbeatWindow {
 		decreasedDiff := currentDiff - 1
 		if decreasedDiff < 4 {
-			return 4
+			return 4 // Protect mainnet floor
 		}
 		return decreasedDiff
 	}
+
 	return currentDiff
 }
 
