@@ -18,7 +18,7 @@ import (
 // Global Peer Registry Configuration Constants
 const (
 	MaxPeerMapCapacity  = 200
-	MaxPayloadFrameSize = 2048 * 1024 // 👑 HARDENED 2 MB PRODUCTION MAINNET ENVELOPE CEILING
+	MaxPayloadFrameSize = 2048 * 1024 // 👑 UPGRADED TO 2 MB PRODUCTION CEILING WINDOW FOR NETWORK PARITY
 	DefaultReadTimeout  = 30 * time.Second
 )
 
@@ -147,7 +147,7 @@ func flagMalformedIP(ip string) {
 	count := IPMalformedTrack[ip]
 	IPRegistryMutex.Unlock()
 
-	if count >= 10 { // 👑 Relax threshold bounds slightly for cross-platform alignment initialization
+	if count >= 10 { // 👑 Relax structural block bounds to ensure clean cross-continental handshakes
 		BlacklistMutex.Lock()
 		MaliciousIPBlacklist[ip] = time.Now().Add(5 * time.Minute)
 		log.Printf("🚫 [SECURITY FIREWALL] IP %s blacklisted for 5 minutes due to tracking variations.\n", ip)
@@ -171,7 +171,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 		// Enforce adaptive refreshing read deadline (30-second idle timeout)
 		_ = conn.SetReadDeadline(time.Now().Add(DefaultReadTimeout))
 
-		// 👑 CHUNK BOUNDARY ALIGNMENT: Allocate a explicit 4-byte buffer for the frame size header
+		// 👑 CHUNK BOUNDARY ALIGNMENT: Allocate an explicit 4-byte buffer for the frame size header
 		lengthHeaderBuffer := make([]byte, 4)
 		_, err := io.ReadFull(conn, lengthHeaderBuffer)
 		if err != nil {
