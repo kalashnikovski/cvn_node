@@ -13,9 +13,10 @@ import (
 var GlobalBoltEngine *bbolt.DB
 var localHeightState int64
 
-var blocksBucket = []byte("blocks")
-var metaBucket   = []byte("meta")
-var utxoBucket   = []byte("utxo")
+var blocksBucket      = []byte("blocks")
+var metaBucket        = []byte("meta")
+var utxoBucket        = []byte("utxo")
+var uncleLedgerBucket = []byte("uncle_ledger") // 👑 NEW EXCLUSIVE GHOST LEDGER PARTITION
 
 // InitBoltEngine mounts the local physical bbolt storage files safely on startup
 func InitBoltEngine() {
@@ -29,6 +30,7 @@ func InitBoltEngine() {
 		bBlocks, _ := tx.CreateBucketIfNotExists(blocksBucket)
 		_, _ = tx.CreateBucketIfNotExists(metaBucket)
 		bUTXO, _ := tx.CreateBucketIfNotExists(utxoBucket)
+		_, _ = tx.CreateBucketIfNotExists(uncleLedgerBucket) // 👑 INITIALIZE THE UNCLE BUCKET
 
 		// 👑 THE DETERMINISTIC GENESIS BOOTSTRAPPER ENGINE: Wiped Clean of Pre-mines
 		if bBlocks.Stats().KeyN == 0 {
@@ -255,6 +257,7 @@ func RebuildStateBalanceCacheInternal() {
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		bUTXO := tx.Bucket(utxoBucket)
 		bBlocks := tx.Bucket(blocksBucket)
+		bUncle := tx.Bucket(uncleLedgerBucket) // 👑 OPEN THE UNCLE ACCOUNTING PARTITION
 		
 		if bUTXO != nil {
 			c := bUTXO.Cursor()
@@ -267,12 +270,29 @@ func RebuildStateBalanceCacheInternal() {
 			}
 		}
 
+		// 👑 PARSE UNCLE REWARD BALANCES DIRECTLY FROM THE INDEPENDENT STORAGE PARTITIONS
+		if bUncle != nil {
+			uc := bUncle.Cursor()
+			for k, v := uc.First(); k != nil; k, v = uc.Next() {
+				var meta map[string]string
+				if json.Unmarshal(v, &meta) == nil {
+					uncleMinerAddress := strings.TrimSpace(meta["uncle_miner"])
+					var heightIndex int64
+					_, err := fmt.Sscanf(string(k), "UNCLE_METADATA_%d", &heightIndex)
+					if err == nil && uncleMinerAddress != "" && uncleMinerAddress != "NONE" {
+						totalBlockEmission := CalculateBlockReward(heightIndex)
+						uncleSubsidy := totalBlockEmission * 0.20
+						StateBalanceCache[uncleMinerAddress] += uncleSubsidy
+					}
+				}
+			}
+		}
+
 		if bBlocks != nil {
 			bc := bBlocks.Cursor()
 			for k, v := bc.First(); k != nil; k, v = bc.Next() {
 				var blk Block
 				if json.Unmarshal(v, &blk) == nil {
-					// 👑 JUBILEE TIMELINE CHECK LOOP TRACER
 					for _, txPayload := range blk.Transactions {
 						for _, output := range txPayload.Outputs {
 							sanitizedRecipient := strings.TrimSpace(output.Recipient)

@@ -178,7 +178,7 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash &&
 		incomingBlock.PrevHash == currentTip.PrevHash {
 
-		// 👑 IMMUTABILITY PROTECTOR: Lower hash selection locks the canonical track
+		// 👑 WINNER LOCK: Deterministic lower hash selection preserves main chain lineage
 		var winner, loser Block
 		if currentTip.Hash < incomingBlock.Hash {
 			winner = currentTip
@@ -199,40 +199,37 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 			uncleMiner = "NONE"
 		}
 
-		// 👑 CRITICAL REMEDY: WRITING UNCLE SUBSIDY TO SEPARATE LEDGER KEY ONLY
-		// Block records remain 100% untouched to satisfy cryptographic Nonce constraints.
 		if uncleMiner != "NONE" && uncleMiner != "" {
 			StateMutex.Lock()
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-				bBlocks := tx.Bucket(blocksBucket)
+				bUncle := tx.Bucket(uncleLedgerBucket)
 				bUTXO := tx.Bucket(utxoBucket)
-				if bBlocks == nil || bUTXO == nil { return nil }
+				if bUncle == nil || bUTXO == nil { return nil }
 
-				// Lock the winner structure state cleanly to record metadata traces
-				paddedKey := []byte(fmt.Sprintf("%016d", winner.Index))
-				if oldData := bBlocks.Get(paddedKey); oldData != nil {
-					var activeBlock Block
-					if json.Unmarshal(oldData, &activeBlock) == nil {
-						if activeBlock.UncleHash == "" || activeBlock.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
-							activeBlock.UncleHash = loser.Hash
-							activeBlock.UncleMiner = uncleMiner
-
-							// Save updated block metadata wrapper without breaking the main coinbase outputs array
-							updatedBlockBytes, _ := json.Marshal(activeBlock)
-							_ = bBlocks.Put(paddedKey, updatedBlockBytes)
-
-							// Materialize the 20% subsidy cleanly into the UTXO database partition
-							allowedTotalEmission := CalculateBlockReward(winner.Index)
-							uncleSubsidyReward := allowedTotalEmission * 0.20
-							
-							uncleUTXOKey := fmt.Sprintf("UNCLE_REWARD_%d_%s", winner.Index, uncleMiner)
-							utxoRecord := UTXORecord{Amount: uncleSubsidyReward, Recipient: uncleMiner}
-							utxoData, _ := json.Marshal(utxoRecord)
-							_ = bUTXO.Put([]byte(uncleUTXOKey), utxoData)
-
-							fmt.Printf("💾 [GHOST CONSENSUS SECURED] Uncle reward committed cleanly to: %s\n", uncleUTXOKey)
-						}
+				uncleKey := []byte(fmt.Sprintf("UNCLE_METADATA_%d", winner.Index))
+				
+				// 👑 IMMUTABILITY SECURITY SHIELD: 
+				// Write uncle information strictly to the separate uncle_ledger bucket.
+				// Stored blocks are never modified after being mined, preserving PoW nonces.
+				if bUncle.Get(uncleKey) == nil {
+					metadataPayload := map[string]string{
+						"winning_hash": winner.Hash,
+						"uncle_hash":   loser.Hash,
+						"uncle_miner":  uncleMiner,
 					}
+					metaBytes, _ := json.Marshal(metadataPayload)
+					_ = bUncle.Put(uncleKey, metaBytes)
+
+					// Materialize the 20% ghost subsidy safely inside the UTXO partition
+					allowedTotalEmission := CalculateBlockReward(winner.Index)
+					uncleSubsidyReward := allowedTotalEmission * 0.20
+					
+					uncleUTXOKey := fmt.Sprintf("UNCLE_REWARD_%d_%s", winner.Index, uncleMiner)
+					utxoRecord := UTXORecord{Amount: uncleSubsidyReward, Recipient: uncleMiner}
+					utxoData, _ := json.Marshal(utxoRecord)
+					_ = bUTXO.Put([]byte(uncleUTXOKey), utxoData)
+
+					fmt.Printf("💾 [GHOST CONSENSUS SECURED] Uncle details stored in independent ledger partition: %s\n", uncleUTXOKey)
 				}
 				return nil
 			})
