@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"embed"
-	"encoding/json" // 👑 VALID STANDARD LIBRARY SERIALIZER PATH
+	"encoding/json" // 👑 CORRECT STANDARD LIBRARY IMPORT RESIDENCY
 	"fmt"
 	"log"
 	"net/http"
@@ -105,7 +105,7 @@ func main() {
 
 	InitBoltEngine()
 
-	// 👑 STABLE MASTER LATCH ALIGNMENT ON STARTUP
+	// 👑 SYNC ATOMIC ARCHITECTURE TRACKER TO DATABASE HEIGHT UPON BOOT
 	StateMutex.RLock()
 	atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(GetLatestBlockInternal().Index))
 	StateMutex.RUnlock()
@@ -150,7 +150,7 @@ func main() {
 	go func() {
 		winMux := http.NewServeMux()
 
-		// 👑 HANDLER ASTERISK VERIFICATION SPREE: Confirmed pointer *http.Request context
+		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
 		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -211,7 +211,7 @@ func main() {
 			http.NotFound(w, r)
 		})
 
-		// 👑 HANDLER ASTERISK VERIFICATION SPREE: Confirmed pointer *http.Request context
+		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
 		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Type", "application/json")
@@ -239,7 +239,7 @@ func main() {
 			json.NewEncoder(w).Encode(blocks)
 		})
 
-		// 👑 HANDLER ASTERISK VERIFICATION SPREE: Confirmed pointer *http.Request context
+		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
 		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -253,7 +253,7 @@ func main() {
 			json.NewEncoder(w).Encode(payload)
 		})
 
-		// 👑 HANDLER ASTERISK VERIFICATION SPREE: Confirmed pointer *http.Request context
+		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
 		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Type", "application/json")
@@ -305,8 +305,8 @@ func main() {
 			localBalanceTrack := StateBalanceCache[CustomMinerAddress]
 			BalanceCacheMutex.RUnlock()
 
-			if localBalanceTrack < requiredTotal {
-				w.WriteHeader(http.StatusPaymentRequired)
+if localBalanceTrack < requiredTotal {
+w.WriteHeader(http.StatusPaymentRequired)
 return
 }
 StateMutex.RLock()
@@ -375,7 +375,7 @@ return
 }
 w.WriteHeader(http.StatusInternalServerError)
 })
-// 👑 HANDLER ASTERISK VERIFICATION SPREE: Confirmed pointer *http.Request context
+// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
 winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Access-Control-Allow-Origin", "")
 w.Header().Set("Content-Type", "application/json")
@@ -607,7 +607,7 @@ _ = http.ListenAndServe(":9091", winMux)
 					liveTerminalEventLogs = liveTerminalEventLogs[1:]
 				}
 			} else {
-				fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+				fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Ledger Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
 			}
 			logMutex.Unlock()
 			os.Stdout.Sync()
@@ -666,12 +666,15 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			currentBlock := GetLatestBlockInternal()
 			StateMutex.RUnlock()
 
-			// 👑 FIXED LOOP POINT: nextIndex updates dynamically on every frame loop entry pass
+			// 👑 HARD FIXED LOOP PROGRESSION ENTRY STEP
+			// Instead of binding to historical variables outside the block scope, we explicitly evaluate
+			// and update block parameters dynamically on every select tick turn to clear block-2 stalls!
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			currentUnixTime := time.Now().Unix()
 			elapsedSinceLastTip := currentUnixTime - currentBlock.Timestamp
 			const GlobalTargetBlockTimeFloor = int64(45)
+			
 			if currentBlock.Index > 0 && elapsedSinceLastTip < GlobalTargetBlockTimeFloor {
 				deficitSeconds := GlobalTargetBlockTimeFloor - elapsedSinceLastTip
 				if deficitSeconds > 0 && deficitSeconds <= GlobalTargetBlockTimeFloor {
@@ -679,33 +682,29 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				}
 			}
 
-			// Synchronize tip variables following execution time delay sleeps
+			// Synchronize block parameters dynamically after target pacing sleeps
 			StateMutex.RLock()
 			currentBlock = GetLatestBlockInternal()
 			StateMutex.RUnlock()
+			
 			nextIndex = currentBlock.Index + 1
 			parentBlockTipHash = currentBlock.Hash
 
 			simulatedTime := time.Now().Unix()
 			if simulatedTime <= currentBlock.Timestamp {
-				simulatedTime = currentBlock.Timestamp + 1
-			}
-
-			var workerTargetDifficulty int
-			if currentBlock.Index <= 9 {
-				workerTargetDifficulty = 2
-			} else {
+simulatedTime = currentBlock.Timestamp + 1
+}
+var workerTargetDifficulty int
+if currentBlock.Index <= 9 {
+workerTargetDifficulty = 2
+} else {
 workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
 if workerTargetDifficulty < 4 {
 workerTargetDifficulty = 4
 }
 }
-if workerTargetDifficulty < 1 {
-workerTargetDifficulty = 1
-}
-if workerTargetDifficulty > 8 {
-workerTargetDifficulty = 8
-}
+if workerTargetDifficulty < 1 { workerTargetDifficulty = 1 }
+if workerTargetDifficulty > 8 { workerTargetDifficulty = 8 }
 targetPrefix := strings.Repeat("0", workerTargetDifficulty)
 var guardMatrixPlaceholder = ""
 coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
@@ -724,54 +723,87 @@ Timestamp:        simulatedTime,
 Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
 },
 }
-for i := 0; i < 100000; i++ {
-nonce++
-atomic.AddUint64(&globalHashCount, 1)
-StateMutex.RLock()
-actualTipCheck := GetLatestBlockInternal().Index
-StateMutex.RUnlock()
-if actualTipCheck != (nextIndex - 1) {
-break
+			var txSummaryBuilder strings.Builder
+			for _, tx := range candidateTransactions {
+				txSummaryBuilder.WriteString(tx.ID + "-")
+			}
+			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+
+			for i := 0; i < 100000; i++ {
+				nonce++
+				atomic.AddUint64(&globalHashCount, 1)
+				
+				StateMutex.RLock()
+				actualTipCheck := GetLatestBlockInternal().Index
+				StateMutex.RUnlock()
+				if actualTipCheck != (nextIndex - 1) {
+					break
+				}
+
+				// 👑 FIXED PARITY BUILDER: txHashStr is now explicitly bound to clear unused compilation faults!
+				mockTemplateBlock := Block{
+					Version:      1,
+					Index:        nextIndex,
+					Timestamp:    simulatedTime,
+					Transactions: candidateTransactions,
+					PrevHash:     parentBlockTipHash,
+					Hash:         "",
+					Difficulty:   workerTargetDifficulty,
+					Nonce:        nonce,
+					GuardMatrix:  guardMatrixPlaceholder,
+					UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
+					UncleMiner:   "NONE",
+				}
+
+				// Generate the dynamic header format string preimage using the summary token natively
+				inputStr := fmt.Sprintf("%d-%d-%d-%s-%s-%d-%s-%d-%s-%s",
+					mockTemplateBlock.Version,
+					mockTemplateBlock.Index,
+					mockTemplateBlock.Timestamp,
+					mockTemplateBlock.PrevHash,
+					txHashStr, // 👑 SECURED RE-REFERENCE PASS
+					int64(mockTemplateBlock.Difficulty),
+					mockTemplateBlock.GuardMatrix,
+					mockTemplateBlock.Nonce,
+					mockTemplateBlock.UncleHash,
+					mockTemplateBlock.UncleMiner,
+				)
+
+				h := sha256.New()
+				h.Write([]byte(inputStr))
+				computedHashHex := fmt.Sprintf("%x", h.Sum(nil))
+
+				if strings.HasPrefix(computedHashHex, targetPrefix) {
+					StateMutex.RLock()
+					latestOnDiskTipHeight := GetLatestBlockInternal().Index
+					StateMutex.RUnlock()
+					
+					currentLatchValue := atomic.LoadUint64(&GlobalHeightSolverLatch)
+					if currentLatchValue >= uint64(nextIndex) || latestOnDiskTipHeight >= nextIndex {
+						break
+					}
+					if !atomic.CompareAndSwapUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1), uint64(nextIndex)) {
+						break
+					}
+					mockTemplateBlock.Hash = computedHashHex
+
+					time.Sleep(400 * time.Millisecond)
+
+					fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", mockTemplateBlock.Index, workerID, mockTemplateBlock.Hash[:16])
+					if SaveBlockToStorage(mockTemplateBlock) {
+						go BroadcastNewBlock(mockTemplateBlock)
+						SignalMinerReset()
+					} else {
+						atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1))
+					}
+					break
+				}
+			}
+		}
+	}
 }
-// 👑 FIXED DYNAMIC OBJECT CONSTRUCTOR INTERCEPT PASS
-// This fully preserves Grok's rigid, cross-platform matching template formatting.
-// By moving it back inside the 100,000 block boundary but safely behind an explicit
-// height validation state synchronizer, we break the block 2 hardlock permanently!
-mockTemplateBlock := Block{
-Version:      1,
-Index:        nextIndex,
-Timestamp:    simulatedTime,
-Transactions: candidateTransactions,
-PrevHash:     parentBlockTipHash,
-Difficulty:   workerTargetDifficulty,
-Nonce:        nonce,
-GuardMatrix:  guardMatrixPlaceholder,
-UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
-UncleMiner:   "NONE",
-}
-computedHashHex := CalculateHash(mockTemplateBlock)
-if strings.HasPrefix(computedHashHex, targetPrefix) {
-StateMutex.RLock()
-latestOnDiskTipHeight := GetLatestBlockInternal().Index
-StateMutex.RUnlock()
-currentLatchValue := atomic.LoadUint64(&GlobalHeightSolverLatch)
-if currentLatchValue >= uint64(nextIndex) || latestOnDiskTipHeight >= nextIndex {
-break
-}
-if !atomic.CompareAndSwapUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1), uint64(nextIndex)) {
-break
-}
-mockTemplateBlock.Hash = computedHashHex
-time.Sleep(400 * time.Millisecond)
-fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", mockTemplateBlock.Index, workerID, mockTemplateBlock.Hash[:16])
-if SaveBlockToStorage(mockTemplateBlock) {
-go BroadcastNewBlock(mockTemplateBlock)
-} else {
-atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1))
-}
-break
-}
-}
-}
-}
+
+// 👑 REPAIRED METHOD ALIGNMENT PASS: Balanced brackets cleanly to pass strict compiler syntax gates
+func osCheckArgs() []string { 
+	return os.Args 
 }
