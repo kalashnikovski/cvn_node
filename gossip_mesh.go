@@ -156,7 +156,7 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
 	}
-	
+
 	StateMutex.Lock()
 	currentTip := GetLatestBlockInternal()
 	StateMutex.Unlock()
@@ -174,49 +174,108 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		return
 	}
 
-	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		if incomingBlock.PrevHash == currentTip.PrevHash {
-			fmt.Printf("📂 [UNCLE RECOGNIZED] Capturing late competing block hash %s for height %d\n", incomingBlock.Hash[:16], incomingBlock.Index)
-			
+	// Same-height fork → Ghost uncle resolution
+	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash &&
+		incomingBlock.PrevHash == currentTip.PrevHash {
+
+		// 👑 DETERMINISTIC WINNER SELECTION: Lower hash value locks canonical priority
+		var winner, loser Block
+		if currentTip.Hash < incomingBlock.Hash {
+			winner = currentTip
+			loser = incomingBlock
+		} else {
+			winner = incomingBlock
+			loser = currentTip
+		}
+
+		var uncleMiner string
+		if len(loser.Transactions) > 0 {
+			uncleMiner = strings.TrimSpace(loser.Transactions[0].Witness)
+		}
+		if uncleMiner == "" && len(loser.Transactions) > 0 && len(loser.Transactions[0].Outputs) > 0 {
+			uncleMiner = strings.TrimSpace(loser.Transactions[0].Outputs[0].Recipient)
+		}
+		if uncleMiner == "" {
+			uncleMiner = "NONE"
+		}
+
+		if winner.UncleHash == "" || winner.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
+			winner.UncleHash = loser.Hash
+			winner.UncleMiner = uncleMiner
+
+			allowed := CalculateBlockReward(winner.Index)
+			if winner.Index > 21024000 {
+				allowed += 5.0
+			}
+			mainShare := allowed * 0.80
+			uncleShare := allowed * 0.20
+
+			if len(winner.Transactions) > 0 {
+				mainMiner := strings.TrimSpace(winner.Transactions[0].Witness)
+				if (mainMiner == "" || mainMiner == "GENESIS_VOID_REWARD_POOL") && len(winner.Transactions[0].Outputs) > 0 {
+					mainMiner = strings.TrimSpace(winner.Transactions[0].Outputs[0].Recipient)
+				}
+				
+				// 👑 ARRAY SLICE FIX: Correctly reconstruct structural coinbase reward arrays
+				winner.Transactions[0].Outputs = []UTXOOutput{
+					{Recipient: mainMiner, Amount: mainShare},
+					{Recipient: uncleMiner, Amount: uncleShare},
+				}
+			}
+
+			// Recompute immutable block hash identifier metrics
+			winner.Hash = CalculateHash(winner)
+
+			// 👑 HARDENED REMEDY 8 CONCURRENCY MUTEX SAFEGUARD
+			StateMutex.Lock()
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
 				bUTXO := tx.Bucket(utxoBucket)
-				if bBlocks == nil || bUTXO == nil { return nil }
-				
-				paddedKey := fmt.Sprintf("%016d", currentTip.Index)
-				
-				if currentTip.UncleHash == "" || currentTip.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
-					currentTip.UncleHash = incomingBlock.Hash
-					
-					if len(incomingBlock.Transactions) > 0 && len(incomingBlock.Transactions[0].Outputs) > 0 {
-						currentTip.UncleMiner = strings.TrimSpace(incomingBlock.Transactions[0].Outputs[0].Recipient)
-					} else {
-						currentTip.UncleMiner = "NONE"
-					}
+				if bBlocks == nil || bUTXO == nil {
+					return nil
+				}
+				paddedKey := []byte(fmt.Sprintf("%016d", winner.Index))
 
-					// 👑 GHOST CONSENSUS FIX: COMMIT TO AN ISOLATED REWARD UTXO WITHOUT MUTATING BLOCK HEADERS
-					if currentTip.UncleMiner != "NONE" && currentTip.UncleMiner != "" {
-						allowedTotalEmission := CalculateBlockReward(currentTip.Index)
-						uncleSubsidyReward := allowedTotalEmission * 0.20
-						
-						uncleUTXOKey := fmt.Sprintf("UNCLE_SUBSIDY_%d_%s", currentTip.Index, currentTip.UncleMiner)
-						utxoRecord := UTXORecord{Amount: uncleSubsidyReward, Recipient: currentTip.UncleMiner}
-						utxoData, _ := json.Marshal(utxoRecord)
-						_ = bUTXO.Put([]byte(uncleUTXOKey), utxoData)
+				if oldData := bBlocks.Get(paddedKey); oldData != nil {
+					var old Block
+					if json.Unmarshal(oldData, &old) == nil && len(old.Transactions) > 0 {
+						for outIdx := range old.Transactions[0].Outputs {
+							_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", old.Transactions[0].ID, outIdx)))
+						}
 					}
-					
-					updatedData, err := json.Marshal(currentTip)
-					if err == nil {
-						_ = bBlocks.Put([]byte(paddedKey), updatedData)
-						fmt.Println("💾 [GHOST CONSENSUS SECURED] Uncle block mapped to isolated state storage cleanly.")
-						go RebuildStateBalanceCacheInternal()
+				}
+				_ = bUTXO.Delete([]byte(fmt.Sprintf("UNCLE_SUBSIDY_%d_%s", winner.Index, uncleMiner)))
+
+				updated, err := json.Marshal(winner)
+				if err != nil {
+					return err
+				}
+				if err := bBlocks.Put(paddedKey, updated); err != nil {
+					return err
+				}
+
+				if len(winner.Transactions) > 0 {
+					txPayload := winner.Transactions[0]
+					for outIdx, out := range txPayload.Outputs {
+						rec := UTXORecord{Amount: out.Amount, Recipient: strings.TrimSpace(out.Recipient)}
+						data, _ := json.Marshal(rec)
+						_ = bUTXO.Put([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)), data)
 					}
 				}
 				return nil
 			})
+			
+			atomic.StoreInt64(&localHeightState, winner.Index)
+			StateMutex.Unlock()
+			
+			go RebuildStateBalanceCacheInternal()
+			go BroadcastNewBlock(winner)
+			fmt.Printf("💾 [GHOST] Canonical block #%d now references uncle %s (miner %s)\n",
+				winner.Index, winner.UncleHash[:16], uncleMiner)
 		}
 		return
 	}
+
 	ProcessIncomingNetworkBlock(incomingBlock)
 }
 
@@ -246,8 +305,6 @@ func transmitPayloadToNetworkBoundary(payload string) {
 	}
 	PeerMapMutex.RUnlock()
 
-	// 👑 CRITICAL REMEDY 5: ANTI-SELF-CONNECT DYNAMIC RESOLUTION
-	// Fallback bypass parameters derived from configuration contexts
 	localBypassIP := os.Getenv("CVN_BYPASS_SEED_IP")
 	if localBypassIP == "" {
 		localBypassIP = "202.137.175.220"
@@ -255,7 +312,7 @@ func transmitPayloadToNetworkBoundary(payload string) {
 
 	for _, address := range targets {
 		if strings.Contains(address, localBypassIP) && runtime.GOOS == "windows" {
-			continue // Temporary anti-self-connect logic, not consensus constraint
+			continue
 		}
 		go func(addr string) {
 			conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
@@ -269,8 +326,6 @@ func transmitPayloadToNetworkBoundary(payload string) {
 
 func runNetworkTopologyDiscoveryDiscoveryLoop() {
 	for {
-		// 👑 CRITICAL REMEDY 5: CONFIGURATION-DRIVEN SEED ARRAY REGISTRATION
-		// Extract active peer network target matrices directly from the local JSON config file
 		staticMeshSeeds := []string{
 			"202.137.175.220:8080",
 			"207.148.67.11:8080",
@@ -300,53 +355,49 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 		for _, seedAddr := range staticMeshSeeds {
 			go func(addr string) {
 				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
-				if err == nil {
-					_, _ = fmt.Fprintf(conn, "PEER_PING:DISCOVERY_REQUEST\n")
-					reader := bufio.NewReader(conn)
-					responseString, readErr := reader.ReadString('\n')
-
-					if readErr == nil {
-						responseString = strings.TrimSpace(responseString)
-						if strings.HasPrefix(responseString, "PEER_LIST:") {
-							rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
-							var receivedAddresses []string
-							if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
-								for _, ip := range receivedAddresses {
-									cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
-									if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
-										continue
-									}
-
-									PeerMapMutex.RLock()
-									_, exists := ActivePeerMap[cleanedIP]
-									PeerMapMutex.RUnlock()
-
-									if !exists {
-										go func(targetIP string) {
-											dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
-											if dErr == nil {
-												_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_REQUEST\n")
-												dConn.Close()
-											}
-										}(cleanedIP)
-									}
-								}
-							}
-						}
-					}
-					conn.Close()
-				}
-			}(seedAddr)
-		}
-		time.Sleep(15 * time.Second)
-
-		PeerMapMutex.Lock()
-		for peer, lastSeen := range ActivePeerMap {
-			if time.Since(lastSeen) > (90 * time.Second) {
-				delete(ActivePeerMap, peer)
-				log.Printf("🔌 [GOSSIP MESH] Severed inactive channel: %s\n", peer)
-			}
-		}
-		PeerMapMutex.Unlock()
-	}
+if err == nil {
+_, _ = fmt.Fprintf(conn, "PEER_PING:DISCOVERY_REQUEST\n")
+reader := bufio.NewReader(conn)
+responseString, readErr := reader.ReadString('\n')
+if readErr == nil {
+responseString = strings.TrimSpace(responseString)
+if strings.HasPrefix(responseString, "PEER_LIST:") {
+rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
+var receivedAddresses []string
+if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
+for _, ip := range receivedAddresses {
+cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
+if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
+continue
+}
+PeerMapMutex.RLock()
+_, exists := ActivePeerMap[cleanedIP]
+PeerMapMutex.RUnlock()
+if !exists {
+go func(targetIP string) {
+dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
+if dErr == nil {
+_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_REQUEST\n")
+dConn.Close()
+}
+}(cleanedIP)
+}
+}
+}
+}
+}
+conn.Close()
+}
+}(seedAddr)
+}
+time.Sleep(15 * time.Second)
+PeerMapMutex.Lock()
+for peer, lastSeen := range ActivePeerMap {
+if time.Since(lastSeen) > (90 * time.Second) {
+delete(ActivePeerMap, peer)
+log.Printf("🔌 [GOSSIP MESH] Severed inactive channel: %s\n", peer)
+}
+}
+PeerMapMutex.Unlock()
+}
 }
