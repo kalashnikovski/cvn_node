@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"embed"
-	"encoding/json" // 👑 REPAIRED STANDARD LIBRARY PACKAGING PATH
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -56,16 +56,16 @@ func main() {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
 			privHex, pubHex, walletAddress, err := GenerateKeyPair()
-			if err != nil { 
+			if err != nil {
 				fmt.Printf("🚨 CRYPTOGRAPHIC FAULT: Key allocation path rejected: %v\n", err)
-				os.Exit(1) 
+				os.Exit(1)
 			}
-			
+
 			walletAddress = strings.TrimSpace(walletAddress)
 			walletAddress = strings.ReplaceAll(walletAddress, " ", "")
 			walletAddress = strings.ReplaceAll(walletAddress, "\r", "")
 			walletAddress = strings.ReplaceAll(walletAddress, "\n", "")
-			
+
 			fmt.Println("\n====================================================================")
 			fmt.Println("💎 NEW SOVEREIGN COVENANT Standard KEYPAIR MATERIALIZATION DETECTED  ")
 			fmt.Println("====================================================================")
@@ -76,7 +76,7 @@ func main() {
 			fmt.Println("⚠️  CRITICAL PROTOCOL SAFETY WARNING:                                ")
 			fmt.Println("👉 COPY AND RECORD THE SECRET PRIVATE KEY DISPLAYED ABOVE MANUALLY NOW. ")
 			fmt.Println("👉 FOR SECURITY, IT IS EXCLUSIVELY STREAMED TO THIS WINDOW BUFFER.   ")
-			fmt.Printf("❌ IT IS NO LONGER SAVED AS A PLANTEXT SECRETS REPOSITORY FILE ON DISK.\n")
+			fmt.Println("❌ IT IS NO LONGER SAVED AS A PLANTEXT SECRETS REPOSITORY FILE ON DISK. ")
 			fmt.Println("====================================================================")
 
 			configMap := map[string]string{"miner_address": walletAddress}
@@ -105,7 +105,7 @@ func main() {
 
 	InitBoltEngine()
 
-	// 👑 ANCHOR SYNC CORES TO ON-DISK HEIGHT DIRECTLY ON INITIALIZATION STARTUP WINDOWS
+	// Sync atomic architecture tracker to database height upon boot
 	StateMutex.RLock()
 	atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(GetLatestBlockInternal().Index))
 	StateMutex.RUnlock()
@@ -150,7 +150,6 @@ func main() {
 	go func() {
 		winMux := http.NewServeMux()
 
-		// 👑 MANDATORY CRITICAL SCAN CHECK: Fixed pointer signature context reference
 		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -164,9 +163,6 @@ func main() {
 			if r.URL.Path == "/addresses" {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Access-Control-Allow-Origin", "*")
-				
-				// Force cache realignments to secure explorer calculations against inflation artifacts
-				RebuildStateBalanceCacheInternal()
 
 				BalanceCacheMutex.RLock()
 				activeWallets := make(map[string]float64)
@@ -212,11 +208,10 @@ func main() {
 			http.NotFound(w, r)
 		})
 
-		// 👑 MANDATORY CRITICAL SCAN CHECK: Fixed pointer signature context reference
 		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Type", "application/json")
-			
+
 			startStr := r.URL.Query().Get("start")
 			startHeight, err := strconv.ParseInt(startStr, 10, 64)
 			if err != nil || startHeight < 0 {
@@ -240,7 +235,6 @@ func main() {
 			json.NewEncoder(w).Encode(blocks)
 		})
 
-		// 👑 MANDATORY CRITICAL SCAN CHECK: Fixed pointer signature context reference
 		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -254,7 +248,6 @@ func main() {
 			json.NewEncoder(w).Encode(payload)
 		})
 
-		// 👑 MANDATORY CRITICAL SCAN CHECK: Fixed pointer signature context reference
 		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Type", "application/json")
@@ -304,108 +297,127 @@ func main() {
 
 			BalanceCacheMutex.RLock()
 			localBalanceTrack := StateBalanceCache[CustomMinerAddress]
-BalanceCacheMutex.RUnlock()
-if localBalanceTrack < requiredTotal {
-w.WriteHeader(http.StatusPaymentRequired)
-return
-}
-StateMutex.RLock()
-currentHeightIndex := GetLatestBlockInternal().Index
-StateMutex.RUnlock()
-for h := int64(0); h <= currentHeightIndex; h++ {
-historicalBlock := GetBlockByHeightFromDB(h)
-for _, historicalTx := range historicalBlock.Transactions {
-for outIdx, out := range historicalTx.Outputs {
-if out.Recipient == CustomMinerAddress {
-spendableInputs = append(spendableInputs, UTXOInput{
-SourceTxID: historicalTx.ID,
-Index:      outIdx,
-Signature:  "",
-})
-currentAccumulator += out.Amount
-if currentAccumulator >= requiredTotal {
-break
-}
-}
-}
-if currentAccumulator >= requiredTotal { break }
-}
-if currentAccumulator >= requiredTotal { break }
-}
-tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
-txID := fmt.Sprintf("TX_SYSTEM_%x", sha256.Sum256([]byte(tSeed)))
-localPrivateKey := os.Getenv("CVN_SECRET_SIGNING_KEY")
-localPublicKey := os.Getenv("CVN_PUBLIC_SIGNING_KEY")
-if localPrivateKey == "" || localPublicKey == "" {
-localPrivateKey = "TEST_ENVIRONMENT_LOCAL_DEFAULT_SECRET_KEY"
-localPublicKey = "TEST_ENVIRONMENT_LOCAL_DEFAULT_PUBLIC_KEY"
-}
-txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
-rStr, sStr, err := SignTransactionPayload(localPrivateKey, txMessage)
-if err != nil {
-w.WriteHeader(http.StatusInternalServerError)
-return
-}
-combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
-for i := range spendableInputs {
-spendableInputs[i].Signature = combinedSignature
-}
-var finalOutputs []UTXOOutput
-finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
-if inputsValueSum := currentAccumulator; inputsValueSum > requiredTotal {
-changeAmount := inputsValueSum - requiredTotal
-finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
-}
-tx = Transaction{
-ID:               txID,
-Inputs:           spendableInputs,
-Outputs:          finalOutputs,
-Signature:        combinedSignature,
-PublicKey:        localPublicKey,
-Timestamp:        time.Now().Unix(),
-FreeWillOffering: fee,
-DataSizeKB:       1.0,
-Witness:          CustomMinerAddress,
-}
-if MempoolMatrix.PushTransaction(tx) {
-w.WriteHeader(http.StatusCreated)
-go BroadcastNewBlock(Block{Transactions: []Transaction{tx}, Hash: "MEMPOOL_GOSSIP_WIRE_ROUTE"})
-SignalMinerReset()
-return
-}
-w.WriteHeader(http.StatusInternalServerError)
-})
-// 👑 MANDATORY CRITICAL SCAN CHECK: Fixed pointer signature context reference
-winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
-w.Header().Set("Access-Control-Allow-Origin", "")
-w.Header().Set("Content-Type", "application/json")
-targetAddress := r.URL.Query().Get("address")
-if targetAddress == "" {
-w.WriteHeader(http.StatusBadRequest)
-return
-}
-BalanceCacheMutex.RLock()
-balance, exists := StateBalanceCache[targetAddress]
-BalanceCacheMutex.RUnlock()
-payload := map[string]interface{}{
-"address":        targetAddress,
-"balance":        balance,
-"exists":         exists,
-"account_status": "VALIDATED_ON_CHAIN",
-}
-json.NewEncoder(w).Encode(payload)
-})
-fmt.Println("📡 [PORT 8081] Initializing HTTP Bulk Sync api channels...")
-if err := http.ListenAndServe(":8081", winMux); err != nil {
-if runtime.GOOS == "windows" {
-_ = http.ListenAndServe(":9091", winMux)
-}
-}
-}()
+			BalanceCacheMutex.RUnlock()
+
+			if localBalanceTrack < requiredTotal {
+				w.WriteHeader(http.StatusPaymentRequired)
+				return
+			}
+
+			StateMutex.RLock()
+			currentHeightIndex := GetLatestBlockInternal().Index
+			StateMutex.RUnlock()
+
+			for h := int64(0); h <= currentHeightIndex; h++ {
+				historicalBlock := GetBlockByHeightFromDB(h)
+				for _, historicalTx := range historicalBlock.Transactions {
+					for outIdx, out := range historicalTx.Outputs {
+						if out.Recipient == CustomMinerAddress {
+							spendableInputs = append(spendableInputs, UTXOInput{
+								SourceTxID: historicalTx.ID,
+								Index:      outIdx,
+								Signature:  "",
+							})
+							currentAccumulator += out.Amount
+							if currentAccumulator >= requiredTotal {
+								break
+							}
+						}
+					}
+					if currentAccumulator >= requiredTotal {
+						break
+					}
+				}
+				if currentAccumulator >= requiredTotal {
+					break
+				}
+			}
+
+			tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
+			txID := fmt.Sprintf("TX_SYSTEM_%x", sha256.Sum256([]byte(tSeed)))
+
+			localPrivateKey := os.Getenv("CVN_SECRET_SIGNING_KEY")
+			localPublicKey := os.Getenv("CVN_PUBLIC_SIGNING_KEY")
+			if localPrivateKey == "" || localPublicKey == "" {
+				localPrivateKey = "TEST_ENVIRONMENT_LOCAL_DEFAULT_SECRET_KEY"
+				localPublicKey = "TEST_ENVIRONMENT_LOCAL_DEFAULT_PUBLIC_KEY"
+			}
+
+			txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
+			rStr, sStr, err := SignTransactionPayload(localPrivateKey, txMessage)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
+
+			for i := range spendableInputs {
+				spendableInputs[i].Signature = combinedSignature
+			}
+
+			var finalOutputs []UTXOOutput
+			finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
+
+			if currentAccumulator > requiredTotal {
+				changeAmount := currentAccumulator - requiredTotal
+				finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
+			}
+
+			tx = Transaction{
+				ID:               txID,
+				Inputs:           spendableInputs,
+				Outputs:          finalOutputs,
+				Signature:        combinedSignature,
+				PublicKey:        localPublicKey,
+				Timestamp:        time.Now().Unix(),
+				FreeWillOffering: fee,
+				DataSizeKB:       1.0,
+				Witness:          CustomMinerAddress,
+			}
+
+			if MempoolMatrix.PushTransaction(tx) {
+				w.WriteHeader(http.StatusCreated)
+				go BroadcastNewBlock(Block{Transactions: []Transaction{tx}, Hash: "MEMPOOL_GOSSIP_WIRE_ROUTE"})
+				SignalMinerReset()
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+
+		winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
+
+			targetAddress := r.URL.Query().Get("address")
+			if targetAddress == "" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			BalanceCacheMutex.RLock()
+			balance, exists := StateBalanceCache[targetAddress]
+			BalanceCacheMutex.RUnlock()
+
+			payload := map[string]interface{}{
+				"address":        targetAddress,
+				"balance":        balance,
+				"exists":         exists,
+				"account_status": "VALIDATED_ON_CHAIN",
+			}
+			json.NewEncoder(w).Encode(payload)
+		})
+
+		fmt.Println("📡 [PORT 8081] Initializing HTTP Bulk Sync api channels...")
+		if err := http.ListenAndServe(":8081", winMux); err != nil {
+			if runtime.GOOS == "windows" {
+				_ = http.ListenAndServe(":9091", winMux)
+			}
+		}
+	}()
+
 	go StartMeshNetwork()
 
 	mirrorMux := http.NewServeMux()
-	// 👑 EXPLICIT HANDLER VERIFICATION PASS: Confirmed pointer *http.Request receiver context
 	mirrorMux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
@@ -678,6 +690,15 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				}
 			}
 
+			// Re-read tip after possible sleep so we do not mine on a stale parent
+			StateMutex.RLock()
+			currentBlock = GetLatestBlockInternal()
+			StateMutex.RUnlock()
+			if currentBlock.Index+1 != nextIndex {
+				continue
+			}
+			parentBlockTipHash = currentBlock.Hash
+
 			simulatedTime := time.Now().Unix()
 			if simulatedTime <= currentBlock.Timestamp {
 				simulatedTime = currentBlock.Timestamp + 1
@@ -699,84 +720,69 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				workerTargetDifficulty = 8
 			}
 			targetPrefix := strings.Repeat("0", workerTargetDifficulty)
-var guardMatrixPlaceholder = ""
-coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
-var coinbaseOutputs []UTXOOutput
-allowedEmission := CalculateBlockReward(nextIndex)
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission})
-candidateTransactions := []Transaction{
-{
-Version:          1,
-ID:               coinbaseTxID,
-Witness:          CustomMinerAddress,
-PublicKey:        "GENESIS_VOID_REWARD_POOL",
-Inputs:           []UTXOInput{},
-Outputs:          coinbaseOutputs,
-Timestamp:        simulatedTime,
-Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-},
-}
-var txSummaryBuilder strings.Builder
-for _, tx := range candidateTransactions {
-txSummaryBuilder.WriteString(tx.ID + "-")
-}
-txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-// 👑 OPTIMIZED HIGH-SPEED PRE-COMPUTED NONCING BASE LINE
-// We build the constant components of the preimage string outside the loop
-preimagePrefix := fmt.Sprintf("1-%d-%d-%s-%s-%d-%s-",
-nextIndex, simulatedTime, parentBlockTipHash, txHashStr, workerTargetDifficulty, guardMatrixPlaceholder)
-preimageSuffix := "-0000000000000000000000000000000000000000000000000000000000000000-NONE"
-for i := 0; i < 100000; i++ {
-nonce++
-atomic.AddUint64(&globalHashCount, 1)
-StateMutex.RLock()
-actualTipCheck := GetLatestBlockInternal().Index
-StateMutex.RUnlock()
-if actualTipCheck != (nextIndex - 1) {
-break
-}
-// 👑 HIGH-SPEED REGISTER STRING CONCATENATION
-// Zero memory allocation footprint on each hash pass!
-inputStr := preimagePrefix + strconv.FormatInt(nonce, 10) + preimageSuffix
-hashBytes := sha256.Sum256([]byte(inputStr))
-computedHashHex := fmt.Sprintf("%x", hashBytes)
-if strings.HasPrefix(computedHashHex, targetPrefix) {
-StateMutex.RLock()
-latestOnDiskTipHeight := GetLatestBlockInternal().Index
-StateMutex.RUnlock()
-currentLatchValue := atomic.LoadUint64(&GlobalHeightSolverLatch)
-if currentLatchValue >= uint64(nextIndex) || latestOnDiskTipHeight >= nextIndex {
-break
-}
-// 👑 SYNCHRONOUS CONCURRENCY SELECTION WORKFLOW
-if !atomic.CompareAndSwapUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1), uint64(nextIndex)) {
-break
-}
-// Only construct the heavy block template object AFTER a winning hash is found!
-mockTemplateBlock := Block{
-Version:      1,
-Index:        nextIndex,
-Timestamp:    simulatedTime,
-Transactions: candidateTransactions,
-PrevHash:     parentBlockTipHash,
-Hash:         computedHashHex,
-Difficulty:   workerTargetDifficulty,
-Nonce:        nonce,
-GuardMatrix:  guardMatrixPlaceholder,
-UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
-UncleMiner:   "NONE",
-}
-time.Sleep(400 * time.Millisecond)
-fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", mockTemplateBlock.Index, workerID, mockTemplateBlock.Hash[:16])
-// 👑 REAL-TIME DIRECT DISC PERSISTENCE
-if SaveBlockToStorage(mockTemplateBlock) {
-go BroadcastNewBlock(mockTemplateBlock)
-} else {
-atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1))
-}
-break
-}
-}
-}
-}
+
+			coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
+			var coinbaseOutputs []UTXOOutput
+			allowedEmission := CalculateBlockReward(nextIndex)
+			coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission})
+			candidateTransactions := []Transaction{
+				{
+					Version:          1,
+					ID:               coinbaseTxID,
+					Witness:          CustomMinerAddress,
+					PublicKey:        "GENESIS_VOID_REWARD_POOL",
+					Inputs:           []UTXOInput{},
+					Outputs:          coinbaseOutputs,
+					Timestamp:        simulatedTime,
+					Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+				},
+			}
+
+			for i := 0; i < 100000; i++ {
+				nonce++
+				atomic.AddUint64(&globalHashCount, 1)
+
+				StateMutex.RLock()
+				actualTipCheck := GetLatestBlockInternal().Index
+				StateMutex.RUnlock()
+				if actualTipCheck != (nextIndex - 1) {
+					break
+				}
+
+				// Canonical preimage path — identical on Windows and Linux
+				candidate := Block{
+					Version:      1,
+					Index:        nextIndex,
+					Timestamp:    simulatedTime,
+					Transactions: candidateTransactions,
+					PrevHash:     parentBlockTipHash,
+					Difficulty:   workerTargetDifficulty,
+					Nonce:        nonce,
+					GuardMatrix:  "",
+					UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
+					UncleMiner:   "NONE",
+				}
+				computedHashHex := CalculateHash(candidate)
+				if !strings.HasPrefix(computedHashHex, targetPrefix) {
+					continue
+				}
+
+				// Atomic claim of this height
+				if !atomic.CompareAndSwapUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1), uint64(nextIndex)) {
+					break
+				}
+
+				candidate.Hash = computedHashHex
+				// No platform-specific sleep. Both nodes save and broadcast immediately.
+				fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", candidate.Index, workerID, candidate.Hash[:16])
+				if SaveBlockToStorage(candidate) {
+					go BroadcastNewBlock(candidate)
+					SignalMinerReset()
+				} else {
+					atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1))
+				}
+				break
+			}
+		}
+	}
 }
