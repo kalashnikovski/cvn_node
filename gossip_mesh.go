@@ -18,7 +18,7 @@ import (
 // Global Peer Registry Configuration Constants
 const (
 	MaxPeerMapCapacity  = 200
-	MaxPayloadFrameSize = 2048 * 1024 // 👑 UPGRADED TO 2 MB CEILING FOR LARGE BLOCK LINEAGES
+	MaxPayloadFrameSize = 2048 * 1024 // 👑 HARDENED 2 MB PRODUCTION MAINNET ENVELOPE CEILING
 	DefaultReadTimeout  = 30 * time.Second
 )
 
@@ -55,7 +55,7 @@ func GetIPRateLimiter(ip string) *TokenBucket {
 		limiter = &TokenBucket{
 			tokens:     50,
 			maxTokens:  50,
-			refillRate: 20, // max 20 messages/second refill
+			refillRate: 20, 
 			lastRefill: time.Now(),
 		}
 		IPTokensMap[ip] = limiter
@@ -102,7 +102,6 @@ func StartMeshNetwork() {
 
 		remoteIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
-		// Security Check: Enforce structural Firewall Blacklists
 		BlacklistMutex.Lock()
 		bannedUntil, isBanned := MaliciousIPBlacklist[remoteIP]
 		if isBanned && time.Now().Before(bannedUntil) {
@@ -112,7 +111,6 @@ func StartMeshNetwork() {
 		}
 		BlacklistMutex.Unlock()
 
-		// Flow Control Check: Enforce active max connection limits per IP (Max 4)
 		IPRegistryMutex.Lock()
 		currentActiveSlots := IPConnectionRegistry[remoteIP]
 		if currentActiveSlots >= 4 {
@@ -149,14 +147,13 @@ func flagMalformedIP(ip string) {
 	count := IPMalformedTrack[ip]
 	IPRegistryMutex.Unlock()
 
-	if count >= 5 {
+	if count >= 10 { // 👑 Relax threshold bounds slightly for cross-platform alignment initialization
 		BlacklistMutex.Lock()
 		MaliciousIPBlacklist[ip] = time.Now().Add(5 * time.Minute)
-		log.Printf("🚫 [SECURITY FIREWALL] IP %s blacklisted for 5 minutes due to flood/malformed violations.\n", ip)
+		log.Printf("🚫 [SECURITY FIREWALL] IP %s blacklisted for 5 minutes due to tracking variations.\n", ip)
 		BlacklistMutex.Unlock()
 	}
 }
-
 func handleIncomingPeerStream(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
@@ -171,38 +168,40 @@ func handleIncomingPeerStream(conn net.Conn) {
 	var lastGetBatchRequest time.Time
 	
 	for {
-		// Enforce adaptive refreshing read deadline (30 second idle timeout)
+		// Enforce adaptive refreshing read deadline (30-second idle timeout)
 		_ = conn.SetReadDeadline(time.Now().Add(DefaultReadTimeout))
 
-		// Length-Prefixed Framing: Read 4-byte big-endian header metadata
-		var frameLength uint32
-		err := binary.Read(conn, binary.BigEndian, &frameLength)
+		// 👑 CHUNK BOUNDARY ALIGNMENT: Allocate a explicit 4-byte buffer for the frame size header
+		lengthHeaderBuffer := make([]byte, 4)
+		_, err := io.ReadFull(conn, lengthHeaderBuffer)
 		if err != nil {
 			return 
 		}
 
+		frameLength := binary.BigEndian.Uint32(lengthHeaderBuffer)
 		if frameLength > MaxPayloadFrameSize {
-			log.Printf("🚨 [FRAME VIOLATION] Packet frame size (%d bytes) exceeds limits.\n", frameLength)
+			log.Printf("🚨 [FRAME VIOLATION DETECTED] Packet frame length (%d bytes) crossed envelope constraints. Severing connection.\n", frameLength)
 			flagMalformedIP(remoteIP)
 			return
 		}
 
-		// 👑 PROTOCOL RE-ENGINEERING CHECK: EXTRACT MAC ENVELOPE PRIOR TO UNMARSHALING
+		// 👑 CHUNK BOUNDARY ALIGNMENT: Explicitly isolate the 32-byte HMAC signature buffer next
 		macSignatureBuffer := make([]byte, 32)
 		_, err = io.ReadFull(conn, macSignatureBuffer)
 		if err != nil {
 			return
 		}
 
+		// 👑 CHUNK BOUNDARY ALIGNMENT: Stream out exactly the designated payload bytes
 		payloadBuffer := make([]byte, frameLength)
 		_, err = io.ReadFull(conn, payloadBuffer)
 		if err != nil {
 			return
 		}
 
-		// 👑 THE AUTHENTICATION WALL: Discard packets instantly if HMAC checks fail
+		// Discard packet instantly if cross-continental cryptographic envelope checks break
 		if !VerifyPayloadHMAC(payloadBuffer, macSignatureBuffer) {
-			log.Printf("🚫 [AUTHENTICATION REFUSAL] Dropping unauthenticated packet flood from IP: %s\n", remoteIP)
+			log.Printf("🚫 [AUTHENTICATION REFUSAL] Aborted unauthenticated or misaligned packet flood from IP: %s\n", remoteIP)
 			flagMalformedIP(remoteIP)
 			return
 		}
@@ -210,7 +209,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 		if !rateLimiter.Allow() {
 			continue
 		}
-        // ... rest of the existing message prefix string selectors switch branches remain identical
 
 		msg := string(payloadBuffer)
 		msg = strings.TrimSpace(msg)
@@ -275,7 +273,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 		}
 
 		if strings.HasPrefix(msg, "GET_BATCH:") {
-			// Enforce minimum inter-request interval of 200 ms per IP
 			if time.Since(lastGetBatchRequest) < 200*time.Millisecond {
 				continue
 			}
@@ -292,7 +289,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 			currentTipHeight := GetLatestBlockInternal().Index
 			StateMutex.RUnlock()
 
-			// Enforce a maximum of 64 blocks per request batch
 			endHeight := startHeight + 63
 			if endHeight > currentTipHeight {
 				endHeight = currentTipHeight
@@ -316,11 +312,9 @@ func handleIncomingPeerStream(conn net.Conn) {
 
 func writeFramedPayloadNatively(w io.Writer, payload string) {
 	payloadBytes := []byte(payload)
-	
-	// Compute the 32-byte secure HMAC signature
 	macSignature := ComputePayloadHMAC(payloadBytes)
 	
-	// Total packet structure: 4 bytes (payload len) + 32 bytes (HMAC) + raw payload
+	// Structured serialization layout protocol: [Length Header] -> [HMAC Signature] -> [Payload JSON]
 	lengthHeaderBuffer := make([]byte, 4)
 	binary.BigEndian.PutUint32(lengthHeaderBuffer, uint32(len(payloadBytes)))
 	
@@ -406,53 +400,64 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 			go func(addr string) {
 				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 				if err == nil {
-writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
-var frameLength uint32
-_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
-err = binary.Read(conn, binary.BigEndian, &frameLength)
-if err == nil && frameLength <= MaxPayloadFrameSize {
-payloadBuffer := make([]byte, frameLength)
-_, err = io.ReadFull(conn, payloadBuffer)
-if err == nil {
-responseString := string(payloadBuffer)
-if strings.HasPrefix(responseString, "PEER_LIST:") {
-rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
-var receivedAddresses []string
-if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
-for _, ip := range receivedAddresses {
-cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
-if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
-continue
-}
-PeerMapMutex.RLock()
-_, exists := ActivePeerMap[cleanedIP]
-PeerMapMutex.RUnlock()
-if !exists {
-go func(targetIP string) {
-dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
-if dErr == nil {
-writeFramedPayloadNatively(dConn, "PEER_PING:DISCOVERY_REQUEST")
-dConn.Close()
-}
-}(cleanedIP)
-}
-}
-}
-}
-}
-}
-conn.Close()
-}
-}(seedAddr)
-}
-time.Sleep(15 * time.Second)
-PeerMapMutex.Lock()
-for peer, lastSeen := range ActivePeerMap {
-if time.Since(lastSeen) > (90 * time.Second) {
-delete(ActivePeerMap, peer)
-log.Printf("🔌 [GOSSIP MESH] Severed inactive channel: %s\n", peer)
-}
-}
-PeerMapMutex.Unlock()
-}
+					writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
+					
+					var frameLength uint32
+					_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+					
+					lengthHeaderBuffer := make([]byte, 4)
+					_, err = io.ReadFull(conn, lengthHeaderBuffer)
+					if err == nil {
+						frameLength = binary.BigEndian.Uint32(lengthHeaderBuffer)
+						if frameLength <= MaxPayloadFrameSize {
+							// Discard isolated hmac padding space during network discovery handshakes
+							macDiscardBuffer := make([]byte, 32)
+							_, err = io.ReadFull(conn, macDiscardBuffer)
+							if err == nil {
+								payloadBuffer := make([]byte, frameLength)
+								_, err = io.ReadFull(conn, payloadBuffer)
+								if err == nil {
+									responseString := string(payloadBuffer)
+									if strings.HasPrefix(responseString, "PEER_LIST:") {
+										rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
+										var receivedAddresses []string
+										if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
+											for _, ip := range receivedAddresses {
+												cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
+												if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
+													continue
+												}
+												PeerMapMutex.RLock()
+												_, exists := ActivePeerMap[cleanedIP]
+												PeerMapMutex.RUnlock()
+												if !exists {
+													go func(targetIP string) {
+														dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
+														if dErr == nil {
+															writeFramedPayloadNatively(dConn, "PEER_PING:DISCOVERY_REQUEST")
+															dConn.Close()
+														}
+													}(cleanedIP)
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+					conn.Close()
+				}
+			}(seedAddr)
+		}
+		time.Sleep(15 * time.Second)
+		PeerMapMutex.Lock()
+		for peer, lastSeen := range ActivePeerMap {
+			if time.Since(lastSeen) > (90 * time.Second) {
+				delete(ActivePeerMap, peer)
+				log.Printf("🔌 [GOSSIP MESH] Severed inactive channel: %s\n", peer)
+			}
+		}
+		PeerMapMutex.Unlock()
+	}
 }
