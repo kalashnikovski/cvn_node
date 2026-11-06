@@ -210,7 +210,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 	// If a reorg is occurring, resolve the inputs outside the main write execution frame
 	if existingBlockData != nil {
 		var historicalOldBlock Block
-		if json.Unmarshal(existingBlockBytes(existingBlockData), &historicalOldBlock) == nil {
+		if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil {
 			for txIdx, oldTx := range historicalOldBlock.Transactions {
 				if txIdx == 0 { continue }
 				for _, oldIn := range oldTx.Inputs {
@@ -248,7 +248,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 			// Clean stale outputs associated with the old branch path to prevent double inflation
 			var historicalOldBlock Block
-			if json.Unmarshal(existingBlockBytes(existingBlockData), &historicalOldBlock) == nil {
+			if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil {
 				for txIdx, oldTx := range historicalOldBlock.Transactions {
 					if txIdx == 0 { continue }
 					for outIdx := range oldTx.Outputs {
@@ -285,15 +285,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 				_ = bUTXO.Put([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)), utxoData)
 			}
 		}
-
-		if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
-			go func(b Block) {
-				jsonBytes, err := json.Marshal(b)
-				if err == nil {
-					transmitPayloadToNetworkBoundary(fmt.Sprintf("BLOCK_BROADCAST:%s", string(jsonBytes)))
-				}
-			}(block)
-		}
 		return nil
 	})
 
@@ -301,10 +292,19 @@ func SaveBlockToStorageInternal(block Block) bool {
 	if err != nil { return false }
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
-	
-	// 👑 CRITICAL REMEDY 3: INCREMENTAL DELTA MEMORY UPGRADE
-	// Trigger high-performance delta accounting updates instead of full-cursor disk crawling
 	ApplyIncrementalDeltaCacheUpdate(block)
+
+	// 👑 REPAIRED REMEDY 3 LOCK: BROADCAST COMPLETELY OUTSIDE THE EXCLUSIVE WRITE BLOCK
+	// Database locks are cleanly closed and released prior to spinning up network transmission sockets!
+	if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
+		go func(b Block) {
+			jsonBytes, err := json.Marshal(b)
+			if err == nil {
+				transmitPayloadToNetworkBoundary(fmt.Sprintf("BLOCK_BROADCAST:%s", string(jsonBytes)))
+			}
+		}(block)
+	}
+
 	return true
 }
 
