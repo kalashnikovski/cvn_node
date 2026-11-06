@@ -18,7 +18,7 @@ import (
 // Global Peer Registry Configuration Constants
 const (
 	MaxPeerMapCapacity  = 200
-	MaxPayloadFrameSize = 256 * 1024 // 256 KiB Frame Ceiling Guard
+	MaxPayloadFrameSize = 2048 * 1024 // 👑 UPGRADED TO 2 MB CEILING FOR LARGE BLOCK LINEAGES
 	DefaultReadTimeout  = 30 * time.Second
 )
 
