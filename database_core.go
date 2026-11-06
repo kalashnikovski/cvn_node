@@ -162,9 +162,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil { return false }
 
 	expectedDiff := block.Difficulty
-	// 👑 FIXED CORES ALIGNMENT ANCHOR:
-	// Allow block height 10 to be stored at difficulty 2. The moment block 10 
-	// is saved, block 11 hits this gate, forcing the strict difficulty 4 floor.
 	if block.Index <= 10 {
 		expectedDiff = 2
 	} else {
@@ -185,6 +182,42 @@ func SaveBlockToStorageInternal(block Block) bool {
 		bUTXO := tx.Bucket(utxoBucket)
 		if bBlocks == nil || bMeta == nil || bUTXO == nil { return fmt.Errorf("required buckets are missing") }
 
+		// --- 👑 CRITICAL REORG UTXO SELF-HEALING ENGINE ---
+		// Detect if we are overwriting or replacing an existing block tip layout at this height.
+		// If an old block exists here, we must restore its consumed inputs back to the unspent pool
+		// before validating the new competing block to eliminate reorg deadlock conditions!
+		paddedKey := fmt.Sprintf("%016d", block.Index)
+		existingBlockBytes := bBlocks.Get([]byte(paddedKey))
+		
+		if existingBlockBytes != nil {
+			var historicalOldBlock Block
+			if json.Unmarshal(existingBlockBytes, &historicalOldBlock) == nil {
+				for txIdx, oldTx := range historicalOldBlock.Transactions {
+					if txIdx == 0 { continue } // Skip coinbase
+					
+					for _, oldIn := range oldTx.Inputs {
+						parentBlk := GetBlockByHeightFromDB(block.Index - 1)
+						for _, parentTx := range parentBlk.Transactions {
+							if parentTx.ID == oldIn.SourceTxID && oldIn.Index < len(parentTx.Outputs) {
+								outTarget := parentTx.Outputs[oldIn.Index]
+								restoredRecord := UTXORecord{
+									Amount:    outTarget.Amount,
+									Recipient: strings.TrimSpace(outTarget.Recipient),
+								}
+								rebuildBytes, _ := json.Marshal(restoredRecord)
+								compoundInputKey := fmt.Sprintf("%s_%d", oldIn.SourceTxID, oldIn.Index)
+								_ = bUTXO.Put([]byte(compoundInputKey), rebuildBytes)
+							}
+						}
+					}
+					for outIdx := range oldTx.Outputs {
+						staleOutputKey := fmt.Sprintf("%s_%d", oldTx.ID, outIdx)
+						_ = bUTXO.Delete([]byte(staleOutputKey))
+					}
+				}
+			}
+		}
+
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx == 0 { continue }
 			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
@@ -195,7 +228,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 		data, err := json.Marshal(block)
 		if err != nil { return err }
 
-		paddedKey := fmt.Sprintf("%016d", block.Index)
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
 
@@ -208,19 +240,12 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 			for outIdx, output := range txPayload.Outputs {
 				compoundOutputKey := fmt.Sprintf("%s_%d", txPayload.ID, outIdx)
-				
-				// 👑 REQUIREMENT 4: TRIM RECIPIENT CARRIER ON COINBASE SPLITS
 				sanitizedRecipient := strings.TrimSpace(output.Recipient)
 				utxoRecord := UTXORecord{Amount: output.Amount, Recipient: sanitizedRecipient}
 				utxoData, _ := json.Marshal(utxoRecord)
 				_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
 			}
 		}
-
-		// 👑 CRITICAL REMEDY 1: STRIKE OUT SEPARATE UNCLE_ KEY EXTRA WRITES
-		// The legacy standalone UNCLE_ key block is removed completely. 
-		// Uncle rewards are now cleanly committed above as regular transaction outputs,
-		// maintaining absolute ledger consistency and eliminating balance duplication.
 
 		if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
 			go func(b Block) {
