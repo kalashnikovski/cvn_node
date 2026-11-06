@@ -854,42 +854,42 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 }
 
 func ValidateBlockSignatures(b Block) bool {
-if !ValidateBlockByVersion(b) {
-fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d rejected by version dispatcher gateway rule.\n", b.Index)
-return false
-}
-if b.Index > 0 {
-parentBlock := GetBlockByHeightFromDB(b.Index - 1)
-if parentBlock.Hash != "" {
-mtpFloor := GetMedianTimePast(parentBlock)
-if b.Timestamp <= mtpFloor {
-fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d timestamp (%d) is behind historical MTP floor (%d). Exploit blocked.\n", b.Index, b.Timestamp, mtpFloor)
-return false
-}
-if b.Timestamp > time.Now().Unix()+7200 {
-fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d timestamp drifted too far into the future. Exploit blocked.\n", b.Index)
-return false
-}
-}
-}
-var expectedDiff int
-if b.Index <= 10 {
-expectedDiff = 2
-} else {
-parentBlock := GetBlockByHeightFromDB(b.Index - 1)
-if parentBlock.Hash == "" {
-parentBlock = Block{Index: b.Index - 1, Difficulty: b.Difficulty}
-}
-expectedDiff = CalculateNextDifficulty(parentBlock, b.Timestamp)
-}
-if b.Difficulty != expectedDiff {
-fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDiff)
-return false
-}
-targetPrefix := strings.Repeat("0", expectedDiff)
-if !strings.HasPrefix(b.Hash, targetPrefix) || b.Hash != CalculateHash(b) {
-return false
-}
+	if !ValidateBlockByVersion(b) {
+		fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d rejected by version dispatcher gateway rule.\n", b.Index)
+		return false
+	}
+	if b.Index > 0 {
+		parentBlock := GetBlockByHeightFromDB(b.Index - 1)
+		if parentBlock.Hash != "" {
+			mtpFloor := GetMedianTimePast(parentBlock)
+			if b.Timestamp <= mtpFloor {
+				fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d timestamp (%d) is behind historical MTP floor (%d). Exploit blocked.\n", b.Index, b.Timestamp, mtpFloor)
+				return false
+			}
+			if b.Timestamp > time.Now().Unix()+7200 {
+				fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d timestamp drifted too far into the future. Exploit blocked.\n", b.Index)
+				return false
+			}
+		}
+	}
+	var expectedDiff int
+	if b.Index <= 10 {
+		expectedDiff = 2
+	} else {
+		parentBlock := GetBlockByHeightFromDB(b.Index - 1)
+		if parentBlock.Hash == "" {
+			parentBlock = Block{Index: b.Index - 1, Difficulty: b.Difficulty}
+		}
+		expectedDiff = CalculateNextDifficulty(parentBlock, b.Timestamp)
+	}
+	if b.Difficulty != expectedDiff {
+		fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDiff)
+		return false
+	}
+	targetPrefix := strings.Repeat("0", expectedDiff)
+	if !strings.HasPrefix(b.Hash, targetPrefix) || b.Hash != CalculateHash(b) {
+		return false
+	}
 if len(b.Transactions) == 0 {
 return false
 }
