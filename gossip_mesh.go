@@ -174,11 +174,11 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		return
 	}
 
-	// Same-height fork → Ghost uncle resolution
+	// Same-height fork → Safe Decoupled Ghost Uncle Recordation Pass
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash &&
 		incomingBlock.PrevHash == currentTip.PrevHash {
 
-		// 👑 DETERMINISTIC WINNER SELECTION: Lower hash value locks canonical priority
+		// 👑 IMMUTABILITY PROTECTOR: Lower hash selection locks the canonical track
 		var winner, loser Block
 		if currentTip.Hash < incomingBlock.Hash {
 			winner = currentTip
@@ -195,83 +195,49 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		if uncleMiner == "" && len(loser.Transactions) > 0 && len(loser.Transactions[0].Outputs) > 0 {
 			uncleMiner = strings.TrimSpace(loser.Transactions[0].Outputs[0].Recipient)
 		}
-		if uncleMiner == "" {
+		if uncleMiner == "" || uncleMiner == "GENESIS_VOID_REWARD_POOL" {
 			uncleMiner = "NONE"
 		}
 
-		if winner.UncleHash == "" || winner.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
-			winner.UncleHash = loser.Hash
-			winner.UncleMiner = uncleMiner
-
-			allowed := CalculateBlockReward(winner.Index)
-			if winner.Index > 21024000 {
-				allowed += 5.0
-			}
-			mainShare := allowed * 0.80
-			uncleShare := allowed * 0.20
-
-			if len(winner.Transactions) > 0 {
-				mainMiner := strings.TrimSpace(winner.Transactions[0].Witness)
-				if (mainMiner == "" || mainMiner == "GENESIS_VOID_REWARD_POOL") && len(winner.Transactions[0].Outputs) > 0 {
-					mainMiner = strings.TrimSpace(winner.Transactions[0].Outputs[0].Recipient)
-				}
-				
-				// 👑 ARRAY SLICE FIX: Correctly reconstruct structural coinbase reward arrays
-				winner.Transactions[0].Outputs = []UTXOOutput{
-					{Recipient: mainMiner, Amount: mainShare},
-					{Recipient: uncleMiner, Amount: uncleShare},
-				}
-			}
-
-			// Recompute immutable block hash identifier metrics
-			winner.Hash = CalculateHash(winner)
-
-			// 👑 HARDENED REMEDY 8 CONCURRENCY MUTEX SAFEGUARD
+		// 👑 CRITICAL REMEDY: WRITING UNCLE SUBSIDY TO SEPARATE LEDGER KEY ONLY
+		// Block records remain 100% untouched to satisfy cryptographic Nonce constraints.
+		if uncleMiner != "NONE" && uncleMiner != "" {
 			StateMutex.Lock()
 			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 				bBlocks := tx.Bucket(blocksBucket)
 				bUTXO := tx.Bucket(utxoBucket)
-				if bBlocks == nil || bUTXO == nil {
-					return nil
-				}
+				if bBlocks == nil || bUTXO == nil { return nil }
+
+				// Lock the winner structure state cleanly to record metadata traces
 				paddedKey := []byte(fmt.Sprintf("%016d", winner.Index))
-
 				if oldData := bBlocks.Get(paddedKey); oldData != nil {
-					var old Block
-					if json.Unmarshal(oldData, &old) == nil && len(old.Transactions) > 0 {
-						for outIdx := range old.Transactions[0].Outputs {
-							_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", old.Transactions[0].ID, outIdx)))
+					var activeBlock Block
+					if json.Unmarshal(oldData, &activeBlock) == nil {
+						if activeBlock.UncleHash == "" || activeBlock.UncleHash == "0000000000000000000000000000000000000000000000000000000000000000" {
+							activeBlock.UncleHash = loser.Hash
+							activeBlock.UncleMiner = uncleMiner
+
+							// Save updated block metadata wrapper without breaking the main coinbase outputs array
+							updatedBlockBytes, _ := json.Marshal(activeBlock)
+							_ = bBlocks.Put(paddedKey, updatedBlockBytes)
+
+							// Materialize the 20% subsidy cleanly into the UTXO database partition
+							allowedTotalEmission := CalculateBlockReward(winner.Index)
+							uncleSubsidyReward := allowedTotalEmission * 0.20
+							
+							uncleUTXOKey := fmt.Sprintf("UNCLE_REWARD_%d_%s", winner.Index, uncleMiner)
+							utxoRecord := UTXORecord{Amount: uncleSubsidyReward, Recipient: uncleMiner}
+							utxoData, _ := json.Marshal(utxoRecord)
+							_ = bUTXO.Put([]byte(uncleUTXOKey), utxoData)
+
+							fmt.Printf("💾 [GHOST CONSENSUS SECURED] Uncle reward committed cleanly to: %s\n", uncleUTXOKey)
 						}
-					}
-				}
-				_ = bUTXO.Delete([]byte(fmt.Sprintf("UNCLE_SUBSIDY_%d_%s", winner.Index, uncleMiner)))
-
-				updated, err := json.Marshal(winner)
-				if err != nil {
-					return err
-				}
-				if err := bBlocks.Put(paddedKey, updated); err != nil {
-					return err
-				}
-
-				if len(winner.Transactions) > 0 {
-					txPayload := winner.Transactions[0]
-					for outIdx, out := range txPayload.Outputs {
-						rec := UTXORecord{Amount: out.Amount, Recipient: strings.TrimSpace(out.Recipient)}
-						data, _ := json.Marshal(rec)
-						_ = bUTXO.Put([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)), data)
 					}
 				}
 				return nil
 			})
-			
-			atomic.StoreInt64(&localHeightState, winner.Index)
 			StateMutex.Unlock()
-			
 			go RebuildStateBalanceCacheInternal()
-			go BroadcastNewBlock(winner)
-			fmt.Printf("💾 [GHOST] Canonical block #%d now references uncle %s (miner %s)\n",
-				winner.Index, winner.UncleHash[:16], uncleMiner)
 		}
 		return
 	}

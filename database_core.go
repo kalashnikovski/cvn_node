@@ -261,7 +261,6 @@ func RebuildStateBalanceCacheInternal() {
 			for k, v := c.First(); k != nil; k, v = c.Next() {
 				var record UTXORecord
 				if json.Unmarshal(v, &record) == nil {
-					// 👑 REQUIREMENT 5: CANONICALISE MEMORY PROFILE MAP RECIPIENTS KEY BOUNDS
 					sanitizedRecipient := strings.TrimSpace(record.Recipient)
 					StateBalanceCache[sanitizedRecipient] += record.Amount
 				}
@@ -273,18 +272,7 @@ func RebuildStateBalanceCacheInternal() {
 			for k, v := bc.First(); k != nil; k, v = bc.Next() {
 				var blk Block
 				if json.Unmarshal(v, &blk) == nil {
-					canonicalUncleMiner := strings.TrimSpace(blk.UncleMiner)
-					if blk.UncleHash != "" && 
-					   blk.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
-					   canonicalUncleMiner != "NONE" && 
-					   canonicalUncleMiner != "" {
-						
-						// 👑 READ DIRECTLY FROM THE SAFE STATE RECORDS
-						totalBlockEmission := CalculateBlockReward(blk.Index)
-						uncleSubsidy := totalBlockEmission * 0.20
-						StateBalanceCache[canonicalUncleMiner] += uncleSubsidy
-					}
-
+					// 👑 JUBILEE TIMELINE CHECK LOOP TRACER
 					for _, txPayload := range blk.Transactions {
 						for _, output := range txPayload.Outputs {
 							sanitizedRecipient := strings.TrimSpace(output.Recipient)
