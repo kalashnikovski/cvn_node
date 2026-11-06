@@ -718,6 +718,10 @@ func SignalMinerReset() {
 	StartContextMinerEngine()
 }
 
+// 👑 GLOBAL ATOMIC IGNITION SOLVER LATCH
+// Tracks if a block height has already been claimed by a parallel thread context
+var GlobalHeightSolverLatch uint64
+
 func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 	defer miningWg.Done()
 
@@ -740,9 +744,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			nextIndex := currentBlock.Index + 1
 			parentBlockTipHash := currentBlock.Hash
 			
-			// 👑 THE MASTER PACING ANCHOR FIXED:
-			// Explicitly calculate elapsed time against mainnet 45-second rules.
-			// This completely prevents the flash-mining block loop vulnerability.
 			currentUnixTime := time.Now().Unix()
 			elapsedSinceLastTip := currentUnixTime - currentBlock.Timestamp
 			const GlobalTargetBlockTimeFloor = int64(45)
@@ -750,7 +751,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			if currentBlock.Index > 0 && elapsedSinceLastTip < GlobalTargetBlockTimeFloor {
 				deficitSeconds := GlobalTargetBlockTimeFloor - elapsedSinceLastTip
 				if deficitSeconds > 0 && deficitSeconds <= GlobalTargetBlockTimeFloor {
-					// Put the worker thread to sleep for the remaining block delay time window
 					time.Sleep(time.Duration(deficitSeconds) * time.Second)
 				}
 			}
@@ -760,7 +760,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				simulatedTime = currentBlock.Timestamp + 1
 			}
 
-			// UNIFIED INCLUSIVE DIFFICULTY MINING GATEWAY
 			var workerTargetDifficulty int
 			if currentBlock.Index <= 9 {
 				workerTargetDifficulty = 2
@@ -776,18 +775,17 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 
 			targetPrefix := strings.Repeat("0", workerTargetDifficulty)
 			var guardMatrixPlaceholder = ""
-			allowedTotalEmission := CalculateBlockReward(nextIndex)
-			coinbaseTxID := fmt.Sprintf("TX_COINBASE_HEIGHT_%d", nextIndex)
-			coinbaseOutputs := []UTXOOutput{
-				{Recipient: CustomMinerAddress, Amount: allowedTotalEmission},
-			}
-			targetUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
-			targetUncleMiner := "NONE"
 
-			// Locate this block structure inside your mining execution loops:
+			// Build your transaction reward slice containers safely...
+			coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
+			var coinbaseOutputs []UTXOOutput
+			
+			allowedEmission := CalculateBlockReward(nextIndex)
+			coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission})
+
 			candidateTransactions := []Transaction{
 				{
-					Version:          1, // Lock standard default transaction layout format profile version
+					Version:          1,
 					ID:               coinbaseTxID,
 					Witness:          CustomMinerAddress,
 					PublicKey:        "GENESIS_VOID_REWARD_POOL",
@@ -804,7 +802,11 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			}
 			txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 
-			for i := 0; i < 50000; i++ {
+			// High speed noncing computational execution region
+			for i := 0; i < 100000; i++ {
+				nonce++
+				
+				// Fast exit check if the network block tip shifted under our feet
 				StateMutex.RLock()
 				actualTipCheck := GetLatestBlockInternal().Index
 				StateMutex.RUnlock()
@@ -812,10 +814,8 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					break
 				}
 
-				// 👑 CRITICAL LAUNCH FIX: ALIGN PREIMAGE PATTERN TO MATCH CALCULATEHASH
-				// Changed template string to exactly match the 10-token signature verification pattern!
 				inputStr := fmt.Sprintf("%d-%d-%d-%s-%s-%d-%s-%d-%s-%s",
-					1, // Protocol Version
+					1,
 					nextIndex,
 					simulatedTime,
 					parentBlockTipHash,
@@ -823,17 +823,23 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					int64(workerTargetDifficulty),
 					guardMatrixPlaceholder,
 					nonce,
-					targetUncleHash,
-					targetUncleMiner,
+					"0000000000000000000000000000000000000000000000000000000000000000",
+					"NONE",
 				)
 
 				hashBytes := sha256.Sum256([]byte(inputStr))
 				computedHashHex := fmt.Sprintf("%x", hashBytes)
+
 				if strings.HasPrefix(computedHashHex, targetPrefix) {
-					// 👑 CRITICAL LAUNCH FIX: POPULATE EXPLICIT STRUCT VERSION SIGNATURE
-					// This forces the version field to match your mining preimage string exactly!
+					// 👑 CRITICAL ATOMIC SOLVER LOCK LATCH:
+					// Load the current claimed height milestone. If this nextIndex height has already 
+					// been flipped by a winning sibling thread, break instantly and discard duplicate wins!
+					if !atomic.CompareAndSwapUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1), uint64(nextIndex)) {
+						break
+					}
+
 					newBlock := Block{
-						Version:      1, // Crucial protocol version layer mapping
+						Version:      1,
 						Index:        nextIndex,
 						Timestamp:    simulatedTime,
 						Transactions: candidateTransactions,
@@ -842,36 +848,24 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 						Difficulty:   workerTargetDifficulty,
 						Nonce:        nonce,
 						GuardMatrix:  guardMatrixPlaceholder,
-						UncleHash:    targetUncleHash,
-						UncleMiner:   targetUncleMiner,
+						UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
+						UncleMiner:   "NONE",
 					}
 
 					if runtime.GOOS == "windows" {
 						time.Sleep(400 * time.Millisecond)
 					}
 
-					StateMutex.RLock()
-					finalValidationTip := GetLatestBlockInternal().Index
-					StateMutex.RUnlock()
-if finalValidationTip == (nextIndex - 1) {
-if SaveBlockToStorage(newBlock) {
-logMutex.Lock()
-logLine := fmt.Sprintf("[%s] 🟩 [SUCCESS] Block #%-3d Mined by Worker %d | Hash: %s", time.Now().Format("15:04:05"), newBlock.Index, workerID, newBlock.Hash[:16])
-liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
-logMutex.Unlock()
-go SignalMinerReset()
-return
-}
-}
-go SignalMinerReset()
-return
-}
-// 👑 HIGH-SPEED UN-TRUNCATED METRICS COUNTER:
-atomic.AddUint64(&globalHashCount, 1)
-nonce++
-}
-runtime.Gosched()
-}
-}
+					fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", newBlock.Index, workerID, newBlock.Hash[:16])
+					
+					if SaveBlockToStorage(newBlock) {
+						go BroadcastNewBlock(newBlock)
+						SignalMinerReset()
+					}
+					break
+				}
+			}
+		}
+	}
 }
 func osCheckArgs() []string { return os.Args }
