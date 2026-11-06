@@ -29,16 +29,21 @@
         
         async function updateStats() { 
             try { 
-                // ✅ FIXED TARGET ENDPOINT: Pull directly from the live, collision-shielded block gateway route
                 const res = await fetch("/block"); 
                 const blockData = await res.json(); 
                 
                 const trueHeight = blockData.current_height !== undefined ? blockData.current_height : 0;
                 document.getElementById("block-height").innerText = "#" + trueHeight;
                 
-                // Dynamically deduce global macro circulating metrics on the fly based on block rewards
-                const totalMinedVolume = trueHeight * 50.0;
-                document.getElementById("circ-supply").innerText = totalMinedVolume.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
+                // 👑 LIVE SUPPLY FIX: Query /addresses to capture true cumulative coins including uncle bounties!
+                const addrRes = await fetch("/addresses");
+                const activeWallets = await addrRes.json();
+                let combinedCirculatingSupply = 0;
+                for (let wallet in activeWallets) {
+                    combinedCirculatingSupply += activeWallets[wallet];
+                }
+                
+                document.getElementById("circ-supply").innerText = combinedCirculatingSupply.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " CVN"; 
                 document.getElementById("escrow-vol").innerText = "0.00 CVN"; 
                 
                 // Parse history row cleanly using the production layout tags 

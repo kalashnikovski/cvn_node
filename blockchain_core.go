@@ -614,10 +614,17 @@ func GetCurrentCirculatingSupply() float64 {
 }
 
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	if lastBlock.Index <= 10 {
+	// 👑 CRITICAL IGNITION LINE REALIGNMENT:
+	// Use strict less-than to ensure Block 10 (on Parent 9) stays at difficulty 2, 
+	// while Block 11 (on Parent 10) natively evaluates to the mainnet floor of 4+.
+	if lastBlock.Index < 10 {
 		return 2
 	}
 	currentDiff := int(lastBlock.Difficulty)
+	if currentDiff < 4 {
+		return 4
+	}
+	
 	actualTimeElapsed := nextBlockTimestamp - lastBlock.Timestamp
 	if actualTimeElapsed <= 0 {
 		return currentDiff + 1
