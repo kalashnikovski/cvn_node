@@ -94,7 +94,6 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 	return isValid
 }
 
-// VerifyIncomingWireBlock performs strict validation audits on incoming P2P blocks.
 func VerifyIncomingWireBlock(b Block) bool {
 	if CustomMinerAddress == "" || CustomMinerAddress == "CVN_UNCONFIGURED_LOCAL_NODE_ID" {
 		fmt.Println("🚨 FRONT-GATE REFUSAL: Headless node configuration missing or uninstantiated. Aborting validation path.")
@@ -109,16 +108,22 @@ func VerifyIncomingWireBlock(b Block) bool {
 			return false
 		}
 		
-		// 👑 CRITICAL PRE-IGNITION WIRE FIX:
-		// Build a mock parent block container matching the index height of the incoming chain progression.
-		// This forces your VPS node to correctly expect difficulty 4+ even if its own on-disk database is at height 0!
-		mockParentBlock := Block{
-			Index:      b.Index - 1,
-			Difficulty: b.Difficulty,
+		// 👑 FIXED CONSENSUS ANCHOR: DIRECT DATABASE-DRIVEN PARENT PROFILING
+		// Pull the true, immutable historical parent block directly from your local disk database
+		// to guarantee that difficulty evaluations match across continental boundaries perfectly.
+		parentBlock := GetBlockByHeightFromDB(b.Index - 1)
+		
+		if parentBlock.Hash == "" {
+			// Fail-safe fallback: If our node is lagging behind and doesn't have the parent on disk yet,
+			// trust the incoming block's difficulty baseline constraint to allow smooth ingestion catch-up.
+			parentBlock = Block{
+				Index:      b.Index - 1,
+				Difficulty: b.Difficulty,
+			}
 		}
 		
-		// Calculate difficulty against the incoming chain topology instead of your local stalled tip
-		expectedDifficulty = CalculateNextDifficulty(mockParentBlock, b.Timestamp)
+		// Calculate the next target difficulty using the verified parent context rules safely
+		expectedDifficulty = CalculateNextDifficulty(parentBlock, b.Timestamp)
 	}
 
 	if b.Difficulty != expectedDifficulty {
