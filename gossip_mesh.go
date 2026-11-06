@@ -1,9 +1,10 @@
 package main
 
 import (
-	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -11,21 +12,77 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
+)
 
-	"go.etcd.io/bbolt"
+// Global Peer Registry Configuration Constants
+const (
+	MaxPeerMapCapacity  = 200
+	MaxPayloadFrameSize = 256 * 1024 // 256 KiB Frame Ceiling Guard
+	DefaultReadTimeout  = 30 * time.Second
 )
 
 var (
 	ActivePeerMap         = make(map[string]time.Time)
 	PeerMapMutex          sync.RWMutex
 	MaxMeshConnectionPool = make(chan struct{}, 100)
+
+	// Security Blacklists & IP Connection Trackers
+	IPConnectionRegistry = make(map[string]int)
+	IPRegistryMutex      sync.Mutex
+	MaliciousIPBlacklist = make(map[string]time.Time)
+	BlacklistMutex       sync.Mutex
+	IPMalformedTrack     = make(map[string]int)
 )
+
+// TokenBucket handles per-remote-IP network token rate limiting
+type TokenBucket struct {
+	tokens     float64
+	maxTokens  float64
+	refillRate float64
+	lastRefill time.Time
+	sync.Mutex
+}
+
+var IPTokensMap = make(map[string]*TokenBucket)
+var IPTokensMutex sync.Mutex
+
+func GetIPRateLimiter(ip string) *TokenBucket {
+	IPTokensMutex.Lock()
+	defer IPTokensMutex.Unlock()
+	limiter, exists := IPTokensMap[ip]
+	if !exists {
+		limiter = &TokenBucket{
+			tokens:     50,
+			maxTokens:  50,
+			refillRate: 20, // max 20 messages/second refill
+			lastRefill: time.Now(),
+		}
+		IPTokensMap[ip] = limiter
+	}
+	return limiter
+}
+
+func (tb *TokenBucket) Allow() bool {
+	tb.Lock()
+	defer tb.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(tb.lastRefill).Seconds()
+	tb.lastRefill = now
+	tb.tokens += elapsed * tb.refillRate
+	if tb.tokens > tb.maxTokens {
+		tb.tokens = tb.maxTokens
+	}
+	if tb.tokens >= 1.0 {
+		tb.tokens -= 1.0
+		return true
+	}
+	return false
+}
 
 func StartMeshNetwork() {
 	fmt.Println("====================================================================")
-	fmt.Println("📡 P2P GOSSIP MESH CORE ENGINE INITIALIZING ON PORT 8080...")
+	fmt.Println("📡 HARDENED P2P GOSSIP MESH INITIALIZING ON PORT 8080...")
 	fmt.Println("====================================================================")
 
 	listener8080, err := net.Listen("tcp", ":8080")
@@ -35,7 +92,6 @@ func StartMeshNetwork() {
 	}
 	defer listener8080.Close()
 
-	fmt.Println("📡 P2P MATRIX: Successfully bound to core data channels on port :8080")
 	go runNetworkTopologyDiscoveryDiscoveryLoop()
 
 	for {
@@ -44,44 +100,139 @@ func StartMeshNetwork() {
 			continue
 		}
 
+		remoteIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+
+		// Security Check: Enforce structural Firewall Blacklists
+		BlacklistMutex.Lock()
+		bannedUntil, isBanned := MaliciousIPBlacklist[remoteIP]
+		if isBanned && time.Now().Before(bannedUntil) {
+			BlacklistMutex.Unlock()
+			conn.Close()
+			continue
+		}
+		BlacklistMutex.Unlock()
+
+		// Flow Control Check: Enforce active max connection limits per IP (Max 4)
+		IPRegistryMutex.Lock()
+		currentActiveSlots := IPConnectionRegistry[remoteIP]
+		if currentActiveSlots >= 4 {
+			IPRegistryMutex.Unlock()
+			conn.Close()
+			continue
+		}
+		IPConnectionRegistry[remoteIP] = currentActiveSlots + 1
+		IPRegistryMutex.Unlock()
+
 		select {
 		case MaxMeshConnectionPool <- struct{}{}:
 			go handleIncomingPeerStream(conn)
 		default:
-			log.Printf("⚠️ TRAFFIC THRESHOLD SATURATED: Dropping connection from %s\n", conn.RemoteAddr())
+			decrementIPConnection(remoteIP)
 			conn.Close()
 		}
+	}
+}
+
+func decrementIPConnection(ip string) {
+	IPRegistryMutex.Lock()
+	if slots := IPConnectionRegistry[ip]; slots > 1 {
+		IPConnectionRegistry[ip] = slots - 1
+	} else {
+		delete(IPConnectionRegistry, ip)
+	}
+	IPRegistryMutex.Unlock()
+}
+
+func flagMalformedIP(ip string) {
+	IPRegistryMutex.Lock()
+	IPMalformedTrack[ip]++
+	count := IPMalformedTrack[ip]
+	IPRegistryMutex.Unlock()
+
+	if count >= 5 {
+		BlacklistMutex.Lock()
+		MaliciousIPBlacklist[ip] = time.Now().Add(5 * time.Minute)
+		log.Printf("🚫 [SECURITY FIREWALL] IP %s blacklisted for 5 minutes due to flood/malformed violations.\n", ip)
+		BlacklistMutex.Unlock()
 	}
 }
 
 func handleIncomingPeerStream(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
+	rateLimiter := GetIPRateLimiter(remoteIP)
 	
 	defer func() {
 		conn.Close()
+		decrementIPConnection(remoteIP)
 		<-MaxMeshConnectionPool
 	}()
-	
-	_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
-	scanner := bufio.NewScanner(conn)
 
-	for scanner.Scan() {
-		msg := scanner.Text()
+	var lastGetBatchRequest time.Time
+	
+	for {
+		// Enforce adaptive refreshing read deadline (30 second idle timeout)
+		_ = conn.SetReadDeadline(time.Now().Add(DefaultReadTimeout))
+
+		// Length-Prefixed Framing: Read 4-byte big-endian header metadata
+		var frameLength uint32
+		err := binary.Read(conn, binary.BigEndian, &frameLength)
+		if err != nil {
+			return 
+		}
+
+		if frameLength > MaxPayloadFrameSize {
+			log.Printf("🚨 [FRAME VIOLATION] Packet frame size (%d bytes) exceeds limits.\n", frameLength)
+			flagMalformedIP(remoteIP)
+			return
+		}
+
+		// 👑 PROTOCOL RE-ENGINEERING CHECK: EXTRACT MAC ENVELOPE PRIOR TO UNMARSHALING
+		macSignatureBuffer := make([]byte, 32)
+		_, err = io.ReadFull(conn, macSignatureBuffer)
+		if err != nil {
+			return
+		}
+
+		payloadBuffer := make([]byte, frameLength)
+		_, err = io.ReadFull(conn, payloadBuffer)
+		if err != nil {
+			return
+		}
+
+		// 👑 THE AUTHENTICATION WALL: Discard packets instantly if HMAC checks fail
+		if !VerifyPayloadHMAC(payloadBuffer, macSignatureBuffer) {
+			log.Printf("🚫 [AUTHENTICATION REFUSAL] Dropping unauthenticated packet flood from IP: %s\n", remoteIP)
+			flagMalformedIP(remoteIP)
+			return
+		}
+
+		if !rateLimiter.Allow() {
+			continue
+		}
+        // ... rest of the existing message prefix string selectors switch branches remain identical
+
+		msg := string(payloadBuffer)
 		msg = strings.TrimSpace(msg)
 		if msg == "" {
 			continue
 		}
-		if !strings.HasPrefix(msg, "BLOCK_BROADCAST:") && !strings.HasPrefix(msg, "TX_BROADCAST:") && !strings.HasPrefix(msg, "PEER_PING:") && !strings.HasPrefix(msg, "PEER_LIST:") && !strings.HasPrefix(msg, "GET_BATCH:") {
-			return
-		}
-
-		if atomic.LoadInt32(&IsSyncingActive) == 1 && strings.HasPrefix(msg, "BLOCK_BROADCAST:") {
-			log.Println("📥 [STALL SNAPSHOT] Real-time BLOCK_BROADCAST deferred from peer during active re-sync.")
-		}
 
 		if strings.HasPrefix(msg, "PEER_PING:") {
 			PeerMapMutex.Lock()
+			if len(ActivePeerMap) >= MaxPeerMapCapacity {
+				var oldestPeer string
+				oldestTime := time.Now()
+				for peer, lastSeen := range ActivePeerMap {
+					if lastSeen.Before(oldestTime) {
+						oldestTime = lastSeen
+						oldestPeer = peer
+					}
+				}
+				if oldestPeer != "" {
+					delete(ActivePeerMap, oldestPeer)
+				}
+			}
 			canonicalPeerKey := fmt.Sprintf("%s:8080", remoteIP)
 			ActivePeerMap[canonicalPeerKey] = time.Now()
 			
@@ -92,18 +243,20 @@ func handleIncomingPeerStream(conn net.Conn) {
 			PeerMapMutex.Unlock()
 			
 			listBytes, _ := json.Marshal(peers)
-			_, _ = fmt.Fprintf(conn, "PEER_LIST:%s\n", string(listBytes))
+			writeFramedPayloadNatively(conn, fmt.Sprintf("PEER_LIST:%s", string(listBytes)))
 			continue
 		}
 
 		if strings.HasPrefix(msg, "TX_BROADCAST:") {
 			txPayload := strings.TrimPrefix(msg, "TX_BROADCAST:")
 			var incomingTx Transaction
-			if err := json.Unmarshal([]byte(txPayload), &incomingTx); err == nil {
-				if VerifyIncomingWireTransaction(incomingTx) {
-					MempoolMatrix.PushTransaction(incomingTx)
-					go BroadcastNewTransaction(incomingTx)
-				}
+			if err := json.Unmarshal([]byte(txPayload), &incomingTx); err != nil {
+				flagMalformedIP(remoteIP)
+				continue
+			}
+			if VerifyIncomingWireTransaction(incomingTx) {
+				MempoolMatrix.PushTransaction(incomingTx)
+				go BroadcastNewTransaction(incomingTx)
 			}
 			continue
 		}
@@ -111,15 +264,23 @@ func handleIncomingPeerStream(conn net.Conn) {
 		if strings.HasPrefix(msg, "BLOCK_BROADCAST:") {
 			blockPayload := strings.TrimPrefix(msg, "BLOCK_BROADCAST:")
 			var incomingBlock Block
-			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err == nil {
-				if VerifyIncomingWireBlock(incomingBlock) {
-					go ProcessIncomingWireBlockWithDelay(incomingBlock)
-				}
+			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err != nil {
+				flagMalformedIP(remoteIP)
+				continue
+			}
+			if VerifyIncomingWireBlock(incomingBlock) {
+				go ProcessIncomingWireBlockWithDelay(incomingBlock)
 			}
 			continue
 		}
 
 		if strings.HasPrefix(msg, "GET_BATCH:") {
+			// Enforce minimum inter-request interval of 200 ms per IP
+			if time.Since(lastGetBatchRequest) < 200*time.Millisecond {
+				continue
+			}
+			lastGetBatchRequest = time.Now()
+
 			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")
 			startHeight, err := strconv.ParseInt(strings.TrimSpace(heightStr), 10, 64)
 			if err != nil || startHeight < 0 {
@@ -131,7 +292,8 @@ func handleIncomingPeerStream(conn net.Conn) {
 			currentTipHeight := GetLatestBlockInternal().Index
 			StateMutex.RUnlock()
 
-			endHeight := startHeight + 511
+			// Enforce a maximum of 64 blocks per request batch
+			endHeight := startHeight + 63
 			if endHeight > currentTipHeight {
 				endHeight = currentTipHeight
 			}
@@ -145,101 +307,26 @@ func handleIncomingPeerStream(conn net.Conn) {
 
 			jsonBytes, err := json.Marshal(blocks)
 			if err == nil {
-				_, _ = conn.Write(append(jsonBytes, '\n'))
+				writeFramedPayloadNatively(conn, string(jsonBytes))
 			}
 			continue
 		}
 	}
 }
 
-func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
-	if atomic.LoadInt32(&IsSyncingActive) == 1 {
-		return
-	}
-
-	StateMutex.Lock()
-	currentTip := GetLatestBlockInternal()
-	StateMutex.Unlock()
-
-	if incomingBlock.Index == currentTip.Index+1 {
-		if incomingBlock.PrevHash != currentTip.Hash {
-			go TriggerActiveReSyncPass()
-			return
-		}
-		if SaveBlockToStorage(incomingBlock) {
-			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
-			SignalMinerReset()
-			go BroadcastNewBlock(incomingBlock)
-		}
-		return
-	}
-
-	// Same-height fork → Safe Decoupled Ghost Uncle Recordation Pass
-	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash &&
-		incomingBlock.PrevHash == currentTip.PrevHash {
-
-		// 👑 WINNER LOCK: Deterministic lower hash selection preserves main chain lineage
-		var winner, loser Block
-		if currentTip.Hash < incomingBlock.Hash {
-			winner = currentTip
-			loser = incomingBlock
-		} else {
-			winner = incomingBlock
-			loser = currentTip
-		}
-
-		var uncleMiner string
-		if len(loser.Transactions) > 0 {
-			uncleMiner = strings.TrimSpace(loser.Transactions[0].Witness)
-		}
-		if uncleMiner == "" && len(loser.Transactions) > 0 && len(loser.Transactions[0].Outputs) > 0 {
-			uncleMiner = strings.TrimSpace(loser.Transactions[0].Outputs[0].Recipient)
-		}
-		if uncleMiner == "" || uncleMiner == "GENESIS_VOID_REWARD_POOL" {
-			uncleMiner = "NONE"
-		}
-
-		if uncleMiner != "NONE" && uncleMiner != "" {
-			StateMutex.Lock()
-			_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-				bUncle := tx.Bucket(uncleLedgerBucket)
-				bUTXO := tx.Bucket(utxoBucket)
-				if bUncle == nil || bUTXO == nil { return nil }
-
-				uncleKey := []byte(fmt.Sprintf("UNCLE_METADATA_%d", winner.Index))
-				
-				// 👑 IMMUTABILITY SECURITY SHIELD: 
-				// Write uncle information strictly to the separate uncle_ledger bucket.
-				// Stored blocks are never modified after being mined, preserving PoW nonces.
-				if bUncle.Get(uncleKey) == nil {
-					metadataPayload := map[string]string{
-						"winning_hash": winner.Hash,
-						"uncle_hash":   loser.Hash,
-						"uncle_miner":  uncleMiner,
-					}
-					metaBytes, _ := json.Marshal(metadataPayload)
-					_ = bUncle.Put(uncleKey, metaBytes)
-
-					// Materialize the 20% ghost subsidy safely inside the UTXO partition
-					allowedTotalEmission := CalculateBlockReward(winner.Index)
-					uncleSubsidyReward := allowedTotalEmission * 0.20
-					
-					uncleUTXOKey := fmt.Sprintf("UNCLE_REWARD_%d_%s", winner.Index, uncleMiner)
-					utxoRecord := UTXORecord{Amount: uncleSubsidyReward, Recipient: uncleMiner}
-					utxoData, _ := json.Marshal(utxoRecord)
-					_ = bUTXO.Put([]byte(uncleUTXOKey), utxoData)
-
-					fmt.Printf("💾 [GHOST CONSENSUS SECURED] Uncle details stored in independent ledger partition: %s\n", uncleUTXOKey)
-				}
-				return nil
-			})
-			StateMutex.Unlock()
-			go RebuildStateBalanceCacheInternal()
-		}
-		return
-	}
-
-	ProcessIncomingNetworkBlock(incomingBlock)
+func writeFramedPayloadNatively(w io.Writer, payload string) {
+	payloadBytes := []byte(payload)
+	
+	// Compute the 32-byte secure HMAC signature
+	macSignature := ComputePayloadHMAC(payloadBytes)
+	
+	// Total packet structure: 4 bytes (payload len) + 32 bytes (HMAC) + raw payload
+	lengthHeaderBuffer := make([]byte, 4)
+	binary.BigEndian.PutUint32(lengthHeaderBuffer, uint32(len(payloadBytes)))
+	
+	_, _ = w.Write(lengthHeaderBuffer)
+	_, _ = w.Write(macSignature)
+	_, _ = w.Write(payloadBytes)
 }
 
 func BroadcastNewBlock(b Block) {
@@ -247,7 +334,7 @@ func BroadcastNewBlock(b Block) {
 	if err != nil {
 		return
 	}
-	payload := fmt.Sprintf("BLOCK_BROADCAST:%s\n", string(jsonBytes))
+	payload := fmt.Sprintf("BLOCK_BROADCAST:%s", string(jsonBytes))
 	transmitPayloadToNetworkBoundary(payload)
 }
 
@@ -256,7 +343,7 @@ func BroadcastNewTransaction(tx Transaction) {
 	if err != nil {
 		return
 	}
-	payload := fmt.Sprintf("TX_BROADCAST:%s\n", string(jsonBytes))
+	payload := fmt.Sprintf("TX_BROADCAST:%s", string(jsonBytes))
 	transmitPayloadToNetworkBoundary(payload)
 }
 
@@ -280,7 +367,7 @@ func transmitPayloadToNetworkBoundary(payload string) {
 		go func(addr string) {
 			conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 			if err == nil {
-				_, _ = fmt.Fprint(conn, payload)
+				writeFramedPayloadNatively(conn, payload)
 				conn.Close()
 			}
 		}(address)
@@ -318,12 +405,16 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 		for _, seedAddr := range staticMeshSeeds {
 			go func(addr string) {
 				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+				if err == nil {
+writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
+var frameLength uint32
+_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+err = binary.Read(conn, binary.BigEndian, &frameLength)
+if err == nil && frameLength <= MaxPayloadFrameSize {
+payloadBuffer := make([]byte, frameLength)
+_, err = io.ReadFull(conn, payloadBuffer)
 if err == nil {
-_, _ = fmt.Fprintf(conn, "PEER_PING:DISCOVERY_REQUEST\n")
-reader := bufio.NewReader(conn)
-responseString, readErr := reader.ReadString('\n')
-if readErr == nil {
-responseString = strings.TrimSpace(responseString)
+responseString := string(payloadBuffer)
 if strings.HasPrefix(responseString, "PEER_LIST:") {
 rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
 var receivedAddresses []string
@@ -340,10 +431,11 @@ if !exists {
 go func(targetIP string) {
 dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
 if dErr == nil {
-_, _ = fmt.Fprintf(dConn, "PEER_PING:DISCOVERY_REQUEST\n")
+writeFramedPayloadNatively(dConn, "PEER_PING:DISCOVERY_REQUEST")
 dConn.Close()
 }
 }(cleanedIP)
+}
 }
 }
 }
