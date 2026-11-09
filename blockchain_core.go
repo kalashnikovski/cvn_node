@@ -147,9 +147,6 @@ func CalculateHash(b Block) string {
 	}
 	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
 	
-	// 👑 PLATFORM-INDEPENDENT PREIMAGE SANITIZATION HARNESS:
-	// Forcibly clamp structural string reflections into explicitly allocated string blocks 
-	// before executing fmt.Sprintf parameters to completely neutralize Windows/Linux padding drift.
 	uHash := strings.TrimSpace(b.UncleHash)
 	if uHash == "" {
 		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
@@ -345,15 +342,15 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 							localBlock.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
 							cleanAddr(localBlock.UncleMiner) != "NONE" &&
 							cleanAddr(localBlock.UncleMiner) != "" {
-deleteUncleUTXO(bUTXO, localBlock.Index, localBlock.UncleMiner)
-}
-}
-}
-_ = bBlocks.Delete(paddedKey)
-_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%016d", currentTip.Index-1)))
-return nil
-})
-StateMutex.Unlock()
+							deleteUncleUTXO(bUTXO, localBlock.Index, localBlock.UncleMiner)
+						}
+					}
+				}
+				_ = bBlocks.Delete(paddedKey)
+				_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%016d", currentTip.Index-1)))
+				return nil
+			})
+			StateMutex.Unlock()
 atomic.StoreInt64(&localHeightState, currentTip.Index-1)
 RebuildStateBalanceCacheInternal()
 if ValidateBlockSignatures(incomingBlock) && incomingBlock.PrevHash == GetLatestBlockInternal().Hash {
@@ -936,7 +933,7 @@ _, _ = conn.Write(payloadBytes)
 _ = conn.SetReadDeadline(time.Now().Add(6 * time.Second))
 var frameLength uint32
 err = binary.Read(conn, binary.BigEndian, &frameLength)
-if err == nil && frameLength <= (256*1024) {
+if err == nil && frameLength <= MaxPayloadFrameSize { // 👑 CHANNELS EXPANDED PARITY PATCH
 payloadBuffer := make([]byte, frameLength)
 _, err = io.ReadFull(conn, payloadBuffer)
 if err == nil {
@@ -971,7 +968,7 @@ _, _ = conn.Write(payloadBytes)
 _ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 var frameLength uint32
 err = binary.Read(conn, binary.BigEndian, &frameLength)
-if err == nil && frameLength <= (256*1024) {
+if err == nil && frameLength <= MaxPayloadFrameSize { // 👑 CHANNELS EXPANDED PARITY PATCH
 payloadBuffer := make([]byte, frameLength)
 _, err = io.ReadFull(conn, payloadBuffer)
 if err == nil {
