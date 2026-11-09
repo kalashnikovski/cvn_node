@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"embed"
-	"encoding/json" // 👑 CORRECT STANDARD LIBRARY IMPORT RESIDENCY
+	"encoding/json" // 👑 VALID STANDARD PACKAGE ALIGNMENT
 	"fmt"
 	"log"
 	"net/http"
@@ -105,7 +105,7 @@ func main() {
 
 	InitBoltEngine()
 
-	// 👑 SYNC ATOMIC ARCHITECTURE TRACKER TO DATABASE HEIGHT UPON BOOT
+	// 👑 STABLE ARCHITECTURE BASE TIP INITIALIZATION
 	StateMutex.RLock()
 	atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(GetLatestBlockInternal().Index))
 	StateMutex.RUnlock()
@@ -150,7 +150,7 @@ func main() {
 	go func() {
 		winMux := http.NewServeMux()
 
-		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
+		// 👑 VERIFIED: Using pointer *http.Request signature context
 		winMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -211,7 +211,7 @@ func main() {
 			http.NotFound(w, r)
 		})
 
-		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
+		// 👑 VERIFIED: Using pointer *http.Request signature context
 		winMux.HandleFunc("/blocks/batch", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Type", "application/json")
@@ -239,7 +239,7 @@ func main() {
 			json.NewEncoder(w).Encode(blocks)
 		})
 
-		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
+		// 👑 VERIFIED: Using pointer *http.Request signature context
 		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -253,7 +253,7 @@ func main() {
 			json.NewEncoder(w).Encode(payload)
 		})
 
-		// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
+		// 👑 VERIFIED: Using pointer *http.Request signature context
 		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Type", "application/json")
@@ -305,11 +305,12 @@ func main() {
 			localBalanceTrack := StateBalanceCache[CustomMinerAddress]
 			BalanceCacheMutex.RUnlock()
 
-if localBalanceTrack < requiredTotal {
-w.WriteHeader(http.StatusPaymentRequired)
-return
-}
-StateMutex.RLock()
+			if localBalanceTrack < requiredTotal {
+				w.WriteHeader(http.StatusPaymentRequired)
+				return
+			}
+
+			StateMutex.RLock()
 currentHeightIndex := GetLatestBlockInternal().Index
 StateMutex.RUnlock()
 for h := int64(0); h <= currentHeightIndex; h++ {
@@ -375,7 +376,7 @@ return
 }
 w.WriteHeader(http.StatusInternalServerError)
 })
-// 👑 HANDLER COMPLIANCE ASTERISK ENGINE: Verified pointer *http.Request receiver context
+// 👑 VERIFIED: Using pointer *http.Request signature context
 winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Access-Control-Allow-Origin", "")
 w.Header().Set("Content-Type", "application/json")
@@ -709,14 +710,6 @@ Timestamp:        simulatedTime,
 Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
 },
 }
-var txSummaryBuilder strings.Builder
-for _, tx := range candidateTransactions {
-txSummaryBuilder.WriteString(tx.ID + "-")
-}
-// 👑 FIXED PARITY ASSIGNMENT PASS:
-// Keeps txHashStr properly referenced to bypass the 'declared and not used' compiler lock!
-txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
-_ = txHashStr
 for i := 0; i < 100000; i++ {
 nonce++
 atomic.AddUint64(&globalHashCount, 1)
@@ -726,9 +719,6 @@ StateMutex.RUnlock()
 if actualTipCheck != (nextIndex - 1) {
 break
 }
-// 👑 PLATFORM-INDEPENDENT PREIMAGE BLUEPRINT ENFORCEMENT:
-// Pulls fields straight through the canonical verification routine structure template natively.
-// This completely aligns Windows and Linux, clearing the 0 rewards blockage permanently!
 mockTemplateBlock := Block{
 Version:      1,
 Index:        nextIndex,
@@ -742,6 +732,8 @@ GuardMatrix:  guardMatrixPlaceholder,
 UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
 UncleMiner:   "NONE",
 }
+// 👑 EXPLICIT PREIMAGE RESOLUTION HOOK:
+// Passes parameters directly via CalculateHash blueprint method to resolve unused variable blocks!
 computedHashHex := CalculateHash(mockTemplateBlock)
 if strings.HasPrefix(computedHashHex, targetPrefix) {
 StateMutex.RLock()
@@ -761,6 +753,7 @@ fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", mockTem
 // 👑 NON-RACING COMMITTAL CORE: Save block data straight to disk storage boundaries
 if SaveBlockToStorage(mockTemplateBlock) {
 go BroadcastNewBlock(mockTemplateBlock)
+SignalMinerReset()
 } else {
 atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1))
 }
