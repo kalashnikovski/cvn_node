@@ -535,10 +535,20 @@ activeGlobalRecoveryGateways := []string{
 }
 client := &http.Client{Timeout: 3 * time.Second}
 var chosenTargetSeedURL string
-var selectedHighestTargetTip int64
+// Only a peer strictly ahead of us is a sync source. Starting from our own
+// height also stops a node from picking itself: its own public address sits in
+// the seed list, so it can appear in its own peer map.
+selectedHighestTargetTip := GetLatestBlockInternal().Index
 PeerMapMutex.RLock()
+var freshPeerAddresses []string
 for activePeerAddress, lastSeenTimestamp := range ActivePeerMap {
 if time.Since(lastSeenTimestamp) <= 30*time.Second {
+freshPeerAddresses = append(freshPeerAddresses, activePeerAddress)
+}
+}
+PeerMapMutex.RUnlock()
+for _, activePeerAddress := range freshPeerAddresses {
+{
 cleanHostIP, _, _ := net.SplitHostPort(activePeerAddress)
 peerHTTPGateway := fmt.Sprintf("http://%s:8081", cleanHostIP)
 remotePeerHeight := GetGlobalMeshMaxHeight(peerHTTPGateway)
@@ -548,7 +558,6 @@ chosenTargetSeedURL = peerHTTPGateway
 }
 }
 }
-PeerMapMutex.RUnlock()
 if chosenTargetSeedURL == "" {
 for _, endpoint := range activeGlobalRecoveryGateways {
 if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" {
@@ -641,6 +650,10 @@ return nil
 atomic.StoreInt64(&localHeightState, commonAncestorHeight)
 RebuildStateBalanceCacheInternal()
 }
+// Release here and take the lock only around each batch below. Previously the
+// lock was still held on several exits from the loop, and the deferred queue
+// drain then blocked on it forever, freezing the miner, dashboard and API.
+StateMutex.Unlock()
 for {
 currentLocalTip := GetLatestBlockInternal()
 nextNeededBlock := currentLocalTip.Index + 1
@@ -648,14 +661,12 @@ if nextNeededBlock > selectedHighestTargetTip {
 break
 }
 requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
-StateMutex.Unlock()
 resp, err := client.Get(requestURL)
 var incomingBatch []Block
 if err != nil {
 log.Printf("🔌 [HTTP GATEWAY TIMEOUT] Port 8081 inaccessible. Executing emergency block pull via TCP Port 8080 for Block #%d\n", nextNeededBlock)
 incomingBatch = requestBatchOverTCPMeshNatively(nextNeededBlock)
 if len(incomingBatch) == 0 {
-StateMutex.Lock()
 break
 }
 } else {
@@ -664,7 +675,6 @@ _ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
 }
 resp.Body.Close()
 if len(incomingBatch) == 0 {
-StateMutex.Lock()
 break
 }
 }
@@ -689,6 +699,11 @@ break
 }
 StateMutex.Unlock()
 if syncFilterRejected {
+break
+}
+// Stop if the batch moved us nowhere, rather than re-requesting it forever.
+if GetLatestBlockInternal().Index < nextNeededBlock {
+log.Printf("⚠️ [SYNC STALLED] No block applied at height #%d from %s. Ending this pass.\n", nextNeededBlock, chosenTargetSeedURL)
 break
 }
 time.Sleep(10 * time.Millisecond)

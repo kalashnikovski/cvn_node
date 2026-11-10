@@ -628,6 +628,8 @@ func SignalMinerReset() {}
 func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 defer miningWg.Done()
 var nonce int64 = workerID * 100000000
+var floorTipHash string
+var floorTipFirstSeen int64
 for {
 if atomic.LoadInt32(&IsSyncingActive) == 1 {
 time.Sleep(100 * time.Millisecond)
@@ -639,25 +641,29 @@ StateMutex.RUnlock()
 nextIndex := currentBlock.Index + 1
 parentBlockTipHash := currentBlock.Hash
 currentUnixTime := time.Now().Unix()
-elapsedSinceLastTip := currentUnixTime - currentBlock.Timestamp
 const GlobalTargetBlockTimeFloor = int64(45)
-if currentBlock.Index > 0 && elapsedSinceLastTip < GlobalTargetBlockTimeFloor {
-deficitSeconds := GlobalTargetBlockTimeFloor - elapsedSinceLastTip
-if deficitSeconds > 0 && deficitSeconds <= GlobalTargetBlockTimeFloor {
-// Wait in short slices and restart the pass, so the floor is re-checked
-// against whatever the tip is when this worker wakes. Sleeping the whole
-// deficit and then mining let every waking worker stack a block onto a
-// tip another worker had saved a moment earlier (1-second block bursts).
+// 45-second floor. It is measured from the tip's timestamp, or from when this
+// worker first saw the tip if that timestamp is ahead of our clock. A tip dated
+// even one second in the future used to skip the wait entirely; the next block
+// was then dated one second later still, and the miner ran away producing a
+// block per second until difficulty choked the chain.
+if currentBlock.Hash != floorTipHash {
+floorTipHash = currentBlock.Hash
+floorTipFirstSeen = currentUnixTime
+}
+floorReference := currentBlock.Timestamp
+if floorReference > floorTipFirstSeen {
+floorReference = floorTipFirstSeen
+}
+if currentBlock.Index > 0 && currentUnixTime-floorReference < GlobalTargetBlockTimeFloor {
+// Wait in short slices and restart the pass, so the floor is always
+// re-checked against whatever the tip is when this worker wakes.
 time.Sleep(250 * time.Millisecond)
 continue
 }
-}
-// Dynamically realign target milestones following duration lock pauses
-StateMutex.RLock()
-currentBlock = GetLatestBlockInternal()
-StateMutex.RUnlock()
-nextIndex = currentBlock.Index + 1
-parentBlockTipHash = currentBlock.Hash
+// The tip that passed the floor check above is the one we mine on. It is not
+// re-read here: a re-read could pick up a block saved a moment ago and mine
+// on top of it without that block ever being checked against the floor.
 simulatedTime := time.Now().Unix()
 if simulatedTime <= currentBlock.Timestamp {
 simulatedTime = currentBlock.Timestamp + 1

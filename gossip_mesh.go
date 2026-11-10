@@ -419,6 +419,17 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 								if err == nil {
 									responseString := string(payloadBuffer)
 									if strings.HasPrefix(responseString, "PEER_LIST:") {
+										// A seed that answered with a correctly signed peer list is
+										// alive, so register it now. Until this was added a node only
+										// learned a peer when that peer pinged it, so for up to 15
+										// seconds after start its blocks were broadcast to nobody.
+										if VerifyPayloadHMAC(payloadBuffer, macDiscardBuffer) {
+											PeerMapMutex.Lock()
+											if _, known := ActivePeerMap[addr]; known || len(ActivePeerMap) < MaxPeerMapCapacity {
+												ActivePeerMap[addr] = time.Now()
+											}
+											PeerMapMutex.Unlock()
+										}
 										rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
 										var receivedAddresses []string
 										if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
