@@ -105,7 +105,71 @@ func InitBoltEngine() {
 		return nil
 	})
 
+	reindexUTXOFromChainOnce()
 	RebuildStateBalanceCacheInternal()
+}
+
+// reindexUTXOFromChainOnce rebuilds the utxo bucket from the canonical blocks
+// bucket a single time. Earlier builds left behind coinbase outputs of orphaned
+// blocks and locally minted UNCLE_REWARD_* entries; replaying the chain drops
+// both, so every node on the same chain ends up with the same balances.
+func reindexUTXOFromChainOnce() {
+	const reindexFlagKey = "utxo_reindex_v1"
+	tipHeight := atomic.LoadInt64(&localHeightState)
+
+	err := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+		bMeta := tx.Bucket(metaBucket)
+		bBlocks := tx.Bucket(blocksBucket)
+		if bMeta == nil || bBlocks == nil {
+			return fmt.Errorf("required buckets missing")
+		}
+		if bMeta.Get([]byte(reindexFlagKey)) != nil {
+			return nil
+		}
+
+		if tx.Bucket(utxoBucket) != nil {
+			if err := tx.DeleteBucket(utxoBucket); err != nil {
+				return err
+			}
+		}
+		bUTXO, err := tx.CreateBucket(utxoBucket)
+		if err != nil {
+			return err
+		}
+
+		var replayed int64
+		for h := int64(0); h <= tipHeight; h++ {
+			data := bBlocks.Get([]byte(fmt.Sprintf("%016d", h)))
+			if data == nil {
+				continue
+			}
+			var blk Block
+			if err := json.Unmarshal(data, &blk); err != nil {
+				return fmt.Errorf("block #%d unreadable during utxo reindex: %w", h, err)
+			}
+			for txIdx, txPayload := range blk.Transactions {
+				if txIdx != 0 {
+					for _, input := range txPayload.Inputs {
+						_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)))
+					}
+				}
+				for outIdx, output := range txPayload.Outputs {
+					utxoData, _ := json.Marshal(UTXORecord{Amount: output.Amount, Recipient: strings.TrimSpace(output.Recipient)})
+					if err := bUTXO.Put([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)), utxoData); err != nil {
+						return err
+					}
+				}
+			}
+			replayed++
+		}
+
+		fmt.Printf("🧹 [UTXO REINDEX] Rebuilt unspent output set from %d canonical blocks.\n", replayed)
+		return bMeta.Put([]byte(reindexFlagKey), []byte("done"))
+	})
+	if err != nil {
+		// The update rolled back, so the previous utxo bucket is untouched.
+		fmt.Printf("⚠️ [UTXO REINDEX] Skipped, will retry next start: %v\n", err)
+	}
 }
 
 // GetLatestBlockInternal returns the current block tip structure directly from state memory
@@ -207,10 +271,13 @@ func SaveBlockToStorageInternal(block Block) bool {
 	}
 	var restoredInputs []inputHistoryRecord
 
+	replacedCompetingBlock := false
+
 	// If a reorg is occurring, resolve the inputs outside the main write execution frame
 	if existingBlockData != nil {
 		var historicalOldBlock Block
 		if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil {
+			replacedCompetingBlock = historicalOldBlock.Hash != block.Hash
 			for txIdx, oldTx := range historicalOldBlock.Transactions {
 				if txIdx == 0 { continue }
 				for _, oldIn := range oldTx.Inputs {
@@ -246,11 +313,14 @@ func SaveBlockToStorageInternal(block Block) bool {
 				compoundInputKey := fmt.Sprintf("%s_%d", item.SourceTxID, item.Index)
 				_ = bUTXO.Put([]byte(compoundInputKey), rebuildBytes)
 			}
-			// Clean stale outputs associated with the old branch path to prevent double inflation
+		}
+
+		// Replacing a different block at this height: remove every output the old
+		// block created, coinbase included, or its reward stays spendable forever.
+		if replacedCompetingBlock {
 			var historicalOldBlock Block
 			if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil {
-				for txIdx, oldTx := range historicalOldBlock.Transactions {
-					if txIdx == 0 { continue }
+				for _, oldTx := range historicalOldBlock.Transactions {
 					for outIdx := range oldTx.Outputs {
 						_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", oldTx.ID, outIdx)))
 					}
@@ -294,7 +364,13 @@ func SaveBlockToStorageInternal(block Block) bool {
 	}
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
-	ApplyIncrementalDeltaCacheUpdate(block)
+	if existingBlockData != nil {
+		// A block at this height was already counted in the balance cache, so a
+		// delta would double-credit; recompute from the UTXO set instead.
+		RebuildStateBalanceCacheInternal()
+	} else {
+		ApplyIncrementalDeltaCacheUpdate(block)
+	}
 
 	// 👑 PRODUCTION REMEDY: ISOLATED BROADCAST LAYER INTERCEPT
 	// Extract text payload transmissions out of the exclusive BoltDB transaction handles!
@@ -347,17 +423,8 @@ func ApplyIncrementalDeltaCacheUpdate(block Block) {
 		}
 	}
 
-	// Process isolated Ghost Consensus uncle awards if registered in header metadata
-	canonicalUncleMiner := strings.TrimSpace(block.UncleMiner)
-	if block.UncleHash != "" && 
-	   block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && 
-	   canonicalUncleMiner != "NONE" && 
-	   canonicalUncleMiner != "" {
-		
-		totalBlockEmission := CalculateBlockReward(block.Index)
-		uncleSubsidy := totalBlockEmission * 0.20
-		StateBalanceCache[canonicalUncleMiner] += uncleSubsidy
-	}
+	// An uncle named in the header is paid by the second coinbase output, which
+	// the loop above has already credited. Nothing further to add here.
 }
 
 // RebuildStateBalanceCache wraps our core memory map compiler inside global thread hold gates
@@ -378,8 +445,7 @@ func RebuildStateBalanceCacheInternal() {
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		bUTXO := tx.Bucket(utxoBucket)
 		bBlocks := tx.Bucket(blocksBucket)
-		bUncle := tx.Bucket(uncleLedgerBucket)
-		
+
 		if bUTXO != nil {
 			c := bUTXO.Cursor()
 			for k, v := c.First(); k != nil; k, v = c.Next() {
@@ -391,22 +457,8 @@ func RebuildStateBalanceCacheInternal() {
 			}
 		}
 
-		if bUncle != nil {
-			uc := bUncle.Cursor()
-			for k, v := uc.First(); k != nil; k, v = uc.Next() {
-				var meta map[string]string
-				if json.Unmarshal(v, &meta) == nil {
-					uncleMinerAddress := strings.TrimSpace(meta["uncle_miner"])
-					var heightIndex int64
-					_, err := fmt.Sscanf(string(k), "UNCLE_METADATA_%d", &heightIndex)
-					if err == nil && uncleMinerAddress != "" && uncleMinerAddress != "NONE" {
-						totalBlockEmission := CalculateBlockReward(heightIndex)
-						uncleSubsidy := totalBlockEmission * 0.20
-						StateBalanceCache[uncleMinerAddress] += uncleSubsidy
-					}
-				}
-			}
-		}
+		// uncle_ledger is a local record of races this node witnessed. It is not
+		// consensus state, so it must not contribute to balances.
 
 		if bBlocks != nil {
 			bc := bBlocks.Cursor()

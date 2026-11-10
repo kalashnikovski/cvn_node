@@ -395,6 +395,9 @@ if incomingBlock.PrevHash != currentTip.Hash {
 go TriggerActiveReSyncPass()
 return
 }
+if !ValidateBlockSignatures(incomingBlock) {
+return
+}
 if SaveBlockToStorageInternal(incomingBlock) {
 atomic.StoreInt64(&localHeightState, incomingBlock.Index)
 SignalMinerReset()
@@ -412,6 +415,25 @@ loser = incomingBlock
 winner = incomingBlock
 loser = currentTip
 }
+// Deterministic tie-break: every node keeps the lower hash. If the incoming
+// block wins, replace our tip with it now instead of staying on our own
+// block until the next height forces a re-sync.
+if winner.Hash == incomingBlock.Hash {
+StateMutex.Lock()
+liveTip := GetLatestBlockInternal()
+adopted := liveTip.Hash == currentTip.Hash &&
+ValidateBlockSignatures(incomingBlock) &&
+SaveBlockToStorageInternal(incomingBlock)
+StateMutex.Unlock()
+if !adopted {
+return
+}
+fmt.Printf("🔄 [TIP SWITCH] Height %d: adopted competing block %.16s (lower hash) over local %.16s\n", incomingBlock.Index, incomingBlock.Hash, currentTip.Hash)
+} else if !ValidateBlockSignatures(incomingBlock) {
+// The losing block earns its miner the uncle share, so it must be a fully
+// valid block, not just something with the right hash prefix.
+return
+}
 var uncleMiner string
 if len(loser.Transactions) > 0 {
 uncleMiner = strings.TrimSpace(loser.Transactions[0].Witness)
@@ -426,10 +448,15 @@ if uncleMiner != "NONE" && uncleMiner != "" {
 StateMutex.Lock()
 _ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 bUncle := tx.Bucket([]byte("uncle_ledger"))
-bUTXO := tx.Bucket([]byte("utxo"))
-if bUncle == nil || bUTXO == nil { return nil }
+if bUncle == nil { return nil }
 uncleKey := []byte(fmt.Sprintf("UNCLE_METADATA_%d", winner.Index))
-if bUncle.Get(uncleKey) == nil {
+// Keep the first uncle seen for a given winner; replace the record if the
+// winner at this height has changed (a lower hash arrived later).
+var existing map[string]string
+if raw := bUncle.Get(uncleKey); raw != nil {
+_ = json.Unmarshal(raw, &existing)
+}
+if existing["winning_hash"] != winner.Hash {
 metadataPayload := map[string]string{
 "winning_hash": winner.Hash,
 "uncle_hash":   loser.Hash,
@@ -437,22 +464,45 @@ metadataPayload := map[string]string{
 }
 metaBytes, _ := json.Marshal(metadataPayload)
 _ = bUncle.Put(uncleKey, metaBytes)
-allowedTotalEmission := CalculateBlockReward(winner.Index)
-uncleSubsidyReward := allowedTotalEmission * 0.20
-uncleUTXOKey := fmt.Sprintf("UNCLE_REWARD_%d_%s", winner.Index, uncleMiner)
-utxoRecord := UTXORecord{Amount: uncleSubsidyReward, Recipient: uncleMiner}
-utxoData, _ := json.Marshal(utxoRecord)
-_ = bUTXO.Put([]byte(uncleUTXOKey), utxoData)
-fmt.Printf("💾 [GHOST CONSENSUS SECURED] Competing branch Uncle metrics archived: %s\n", uncleUTXOKey)
+// Record only. No coins are credited here; the uncle is paid by the next
+// block's coinbase (see GetPendingUncleForTip), which every node validates.
+fmt.Printf("💾 [UNCLE RECORDED] Height %d: losing block %.16s by %s queued for payout in block #%d\n", winner.Index, loser.Hash, uncleMiner, winner.Index+1)
 }
 return nil
 })
 StateMutex.Unlock()
-go RebuildStateBalanceCacheInternal()
 }
 return
 }
 ProcessIncomingNetworkBlock(incomingBlock)
+}
+// GetPendingUncleForTip returns the losing sibling of the current tip, if this
+// node witnessed one. The miner of the next block names it in the header and
+// pays its miner 20% of the block reward, keeping 80% for itself.
+func GetPendingUncleForTip(tip Block) (uncleHash string, uncleMiner string, found bool) {
+if GlobalBoltEngine == nil || tip.Index <= 0 || tip.Hash == "" {
+return "", "", false
+}
+var meta map[string]string
+_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+bUncle := tx.Bucket(uncleLedgerBucket)
+if bUncle == nil {
+return nil
+}
+if raw := bUncle.Get([]byte(fmt.Sprintf("UNCLE_METADATA_%d", tip.Index))); raw != nil {
+_ = json.Unmarshal(raw, &meta)
+}
+return nil
+})
+uncleHash = strings.TrimSpace(meta["uncle_hash"])
+uncleMiner = cleanAddr(meta["uncle_miner"])
+// Only valid while the recorded winner is still our tip.
+if meta["winning_hash"] != tip.Hash || uncleHash == "" || uncleHash == tip.Hash ||
+uncleHash == "0000000000000000000000000000000000000000000000000000000000000000" ||
+uncleMiner == "" || uncleMiner == "NONE" {
+return "", "", false
+}
+return uncleHash, uncleMiner, true
 }
 func TriggerActiveReSyncPass() {
 if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
@@ -572,7 +622,7 @@ var block Block
 if json.Unmarshal(data, &block) == nil {
 for _, txPayload := range block.Transactions {
 for outIdx := range txPayload.Outputs {
-_ = bUTXO.Delete([]byte(fmt.Sprintf("%s%d", txPayload.ID, outIdx)))
+_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
 }
 }
 if block.UncleHash != "" &&
@@ -887,6 +937,11 @@ allowedTotalEmission += 5.0
 if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
 if len(coinbaseTx[0].Outputs) != 2 {
 fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
+return false
+}
+// An uncle is a sibling of this block's parent, so it can never be the parent itself.
+if strings.TrimSpace(b.UncleHash) == strings.TrimSpace(b.PrevHash) {
+fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash must not equal the parent block hash.")
 return false
 }
 mainMinerPayout := coinbaseTx[0].Outputs[0].Amount

@@ -644,7 +644,12 @@ const GlobalTargetBlockTimeFloor = int64(45)
 if currentBlock.Index > 0 && elapsedSinceLastTip < GlobalTargetBlockTimeFloor {
 deficitSeconds := GlobalTargetBlockTimeFloor - elapsedSinceLastTip
 if deficitSeconds > 0 && deficitSeconds <= GlobalTargetBlockTimeFloor {
-time.Sleep(time.Duration(deficitSeconds) * time.Second)
+// Wait in short slices and restart the pass, so the floor is re-checked
+// against whatever the tip is when this worker wakes. Sleeping the whole
+// deficit and then mining let every waking worker stack a block onto a
+// tip another worker had saved a moment earlier (1-second block bursts).
+time.Sleep(250 * time.Millisecond)
+continue
 }
 }
 // Dynamically realign target milestones following duration lock pauses
@@ -673,7 +678,18 @@ var guardMatrixPlaceholder = ""
 coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
 var coinbaseOutputs []UTXOOutput
 allowedEmission := CalculateBlockReward(nextIndex)
+// If the tip won a same-height race, name the losing block as an uncle and
+// split this block's reward 80/20 with its miner. Total emission is unchanged.
+templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
+templateUncleMiner := "NONE"
+if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle {
+templateUncleHash = pendingUncleHash
+templateUncleMiner = pendingUncleMiner
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission * 0.80})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: allowedEmission * 0.20})
+} else {
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission})
+}
 candidateTransactions := []Transaction{
 {
 Version:          1,
@@ -690,9 +706,11 @@ for i := 0; i < 100000; i++ {
 nonce++
 atomic.AddUint64(&globalHashCount, 1)
 StateMutex.RLock()
-actualTipCheck := GetLatestBlockInternal().Index
+actualTipCheck := GetLatestBlockInternal()
 StateMutex.RUnlock()
-if actualTipCheck != (nextIndex - 1) {
+// Abandon the template if the tip moved or was replaced by a competing
+// block at the same height; otherwise we would mine on a stale parent.
+if actualTipCheck.Index != (nextIndex-1) || actualTipCheck.Hash != parentBlockTipHash {
 break
 }
 mockTemplateBlock := Block{
@@ -705,15 +723,19 @@ Hash:         "",
 Difficulty:   workerTargetDifficulty,
 Nonce:        nonce,
 GuardMatrix:  guardMatrixPlaceholder,
-UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
-UncleMiner:   "NONE",
+UncleHash:    templateUncleHash,
+UncleMiner:   templateUncleMiner,
 }
 // 👑 ABSOLUTE CONGRUENCE PASS: Calculate hash using canonical method blueprint safely
 computedHashHex := CalculateHash(mockTemplateBlock)
 if strings.HasPrefix(computedHashHex, targetPrefix) {
 StateMutex.RLock()
-latestOnDiskTipHeight := GetLatestBlockInternal().Index
+latestOnDiskTip := GetLatestBlockInternal()
 StateMutex.RUnlock()
+latestOnDiskTipHeight := latestOnDiskTip.Index
+if latestOnDiskTipHeight == nextIndex-1 && latestOnDiskTip.Hash != parentBlockTipHash {
+break
+}
 // Raise the latch to the on-disk tip (never lower it) so heights reached via
 // bulk sync, re-sync or gossip count; otherwise the claim CAS below can never
 // succeed on a node that did not mine the previous block itself.
