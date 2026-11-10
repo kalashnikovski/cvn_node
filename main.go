@@ -621,13 +621,10 @@ go executionMiningWorkerThread(miningContext, int64(i))
 }
 }
 // 👑 RESET TRIGGER FORWARD ROUTINE: Maps the missing terminal state wrapper cleanly
-func SignalMinerReset() {
-if !atomic.CompareAndSwapInt32(&isResettingActive, 0, 1) {
-return
-}
-defer atomic.StoreInt32(&isResettingActive, 0)
-StartContextMinerEngine()
-}
+// Intentionally a no-op: workers re-read the chain tip on every pass, so an
+// incoming block needs no restart. Spawning a fresh worker pool here leaked
+// runtime.NumCPU() never-exiting goroutines per accepted wire block.
+func SignalMinerReset() {}
 func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 defer miningWg.Done()
 var nonce int64 = workerID * 100000000
@@ -717,6 +714,18 @@ if strings.HasPrefix(computedHashHex, targetPrefix) {
 StateMutex.RLock()
 latestOnDiskTipHeight := GetLatestBlockInternal().Index
 StateMutex.RUnlock()
+// Raise the latch to the on-disk tip (never lower it) so heights reached via
+// bulk sync, re-sync or gossip count; otherwise the claim CAS below can never
+// succeed on a node that did not mine the previous block itself.
+for {
+cur := atomic.LoadUint64(&GlobalHeightSolverLatch)
+if latestOnDiskTipHeight < 0 || cur >= uint64(latestOnDiskTipHeight) {
+break
+}
+if atomic.CompareAndSwapUint64(&GlobalHeightSolverLatch, cur, uint64(latestOnDiskTipHeight)) {
+break
+}
+}
 currentLatchValue := atomic.LoadUint64(&GlobalHeightSolverLatch)
 if currentLatchValue >= uint64(nextIndex) || latestOnDiskTipHeight >= nextIndex {
 break
@@ -726,7 +735,6 @@ if !atomic.CompareAndSwapUint64(&GlobalHeightSolverLatch, uint64(nextIndex-1), u
 break
 }
 mockTemplateBlock.Hash = computedHashHex
-time.Sleep(400 * time.Millisecond)
 fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", mockTemplateBlock.Index, workerID, mockTemplateBlock.Hash[:16])
 // 👑 FIXED SERIAL SHUTDOWN OVERRIDE: Saves block data safely without context teardowns
 if SaveBlockToStorage(mockTemplateBlock) {
