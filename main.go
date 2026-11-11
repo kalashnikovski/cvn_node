@@ -655,7 +655,9 @@ floorReference := currentBlock.Timestamp
 if floorReference > floorTipFirstSeen {
 floorReference = floorTipFirstSeen
 }
-if currentBlock.Index > 0 && currentUnixTime-floorReference < GlobalTargetBlockTimeFloor {
+// Heartbeat blocks are spaced by proof-of-work, not by waiting, so the floor
+// only applies to heights before the heartbeat activates.
+if !IsHeartbeatHeight(nextIndex) && currentBlock.Index > 0 && currentUnixTime-floorReference < GlobalTargetBlockTimeFloor {
 // Wait in short slices and restart the pass, so the floor is always
 // re-checked against whatever the tip is when this worker wakes.
 time.Sleep(250 * time.Millisecond)
@@ -669,6 +671,20 @@ if simulatedTime <= currentBlock.Timestamp {
 simulatedTime = currentBlock.Timestamp + 1
 }
 var workerTargetDifficulty int
+heartbeatTemplate := IsHeartbeatHeight(nextIndex)
+// Peers reject blocks dated too far ahead of their clock. If the tip is
+// already dated ahead, wait for real time to catch up instead of stacking
+// another future-dated block on it.
+if heartbeatTemplate && simulatedTime > time.Now().Unix()+HeartbeatMaxFutureDriftSeconds/2 {
+time.Sleep(250 * time.Millisecond)
+continue
+}
+heartbeatTargetHex := ""
+targetPrefix := ""
+if heartbeatTemplate {
+workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
+heartbeatTargetHex = HeartbeatTargetHex(workerTargetDifficulty)
+} else {
 if currentBlock.Index <= 9 {
 workerTargetDifficulty = 2
 } else {
@@ -679,7 +695,8 @@ workerTargetDifficulty = 4
 }
 if workerTargetDifficulty < 1 { workerTargetDifficulty = 1 }
 if workerTargetDifficulty > 8 { workerTargetDifficulty = 8 }
-targetPrefix := strings.Repeat("0", workerTargetDifficulty)
+targetPrefix = strings.Repeat("0", workerTargetDifficulty)
+}
 var guardMatrixPlaceholder = ""
 coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
 var coinbaseOutputs []UTXOOutput
@@ -734,7 +751,7 @@ UncleMiner:   templateUncleMiner,
 }
 // 👑 ABSOLUTE CONGRUENCE PASS: Calculate hash using canonical method blueprint safely
 computedHashHex := CalculateHash(mockTemplateBlock)
-if strings.HasPrefix(computedHashHex, targetPrefix) {
+if (heartbeatTemplate && computedHashHex <= heartbeatTargetHex) || (!heartbeatTemplate && strings.HasPrefix(computedHashHex, targetPrefix)) {
 StateMutex.RLock()
 latestOnDiskTip := GetLatestBlockInternal()
 StateMutex.RUnlock()

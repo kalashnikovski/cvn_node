@@ -234,7 +234,10 @@ func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil { return false }
 
 	expectedDiff := block.Difficulty
-	if block.Index <= 10 {
+	if IsHeartbeatHeight(block.Index) {
+		// Heartbeat blocks carry their own numeric difficulty; HashMeetsDifficulty
+		// enforces its floor.
+	} else if block.Index <= 10 {
 		expectedDiff = 2
 	} else {
 		if expectedDiff < 4 {
@@ -242,7 +245,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		}
 	}
 	
-	if !strings.HasPrefix(block.Hash, strings.Repeat("0", expectedDiff)) || block.Hash != CalculateHash(block) {
+	if !HashMeetsDifficulty(block.Hash, block.Index, expectedDiff) || block.Hash != CalculateHash(block) {
 		fmt.Printf("🚨 STORAGE REFUSAL: Block #%d failed strict cryptographic verification filters!\n", block.Index)
 		return false
 	}

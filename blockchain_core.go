@@ -855,6 +855,9 @@ intervals[j], intervals[j+1] = intervals[j+1], intervals[j]
 return intervals[len(intervals)/2]
 }
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
+if IsHeartbeatHeight(lastBlock.Index + 1) {
+return CalculateHeartbeatDifficulty(lastBlock, nextBlockTimestamp)
+}
 if lastBlock.Index < 10 {
 return 2
 }
@@ -897,6 +900,18 @@ if b.Timestamp > time.Now().Unix()+7200 {
 fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d timestamp drifted too far into the future. Exploit blocked.\n", b.Index)
 return false
 }
+if IsHeartbeatHeight(b.Index) {
+// Heartbeat blocks must move time forward, and may not be dated far
+// ahead of the clock: a later date is what eases difficulty.
+if b.Timestamp <= parentBlock.Timestamp {
+fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d is not dated after its parent.\n", b.Index)
+return false
+}
+if b.Timestamp > time.Now().Unix()+HeartbeatMaxFutureDriftSeconds {
+fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d is dated more than %d s ahead of this node's clock.\n", b.Index, HeartbeatMaxFutureDriftSeconds)
+return false
+}
+}
 }
 }
 var expectedDiff int
@@ -905,6 +920,10 @@ expectedDiff = 2
 } else {
 parentBlock := GetBlockByHeightFromDB(b.Index - 1)
 if parentBlock.Hash == "" {
+if IsHeartbeatHeight(b.Index) {
+// Heartbeat difficulty cannot be derived without the parent.
+return false
+}
 parentBlock = Block{Index: b.Index - 1, Difficulty: b.Difficulty}
 }
 expectedDiff = CalculateNextDifficulty(parentBlock, b.Timestamp)
@@ -913,8 +932,7 @@ if b.Difficulty != expectedDiff {
 fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDiff)
 return false
 }
-targetPrefix := strings.Repeat("0", expectedDiff)
-if !strings.HasPrefix(b.Hash, targetPrefix) || b.Hash != CalculateHash(b) {
+if !HashMeetsDifficulty(b.Hash, b.Index, expectedDiff) || b.Hash != CalculateHash(b) {
 return false
 }
 if len(b.Transactions) == 0 {

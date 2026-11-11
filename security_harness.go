@@ -42,6 +42,17 @@ func VerifyIncomingWireTransaction(tx Transaction) bool {
 }
 
 func VerifyIncomingWireBlock(b Block) bool {
+	if IsHeartbeatHeight(b.Index) {
+		// Cheap pre-check only: the hash must carry the work the block claims.
+		// Whether the claimed difficulty is the right one needs the parent and
+		// is decided in ValidateBlockSignatures.
+		if !HashMeetsDifficulty(b.Hash, b.Index, b.Difficulty) {
+			fmt.Printf("🚨 WIRE BLOCK FAULT: Hash signature %s missing difficulty constraints.\n", b.Hash)
+			return false
+		}
+		return true
+	}
+
 	var expectedDifficulty int
 	if b.Index <= 10 {
 		expectedDifficulty = 2
