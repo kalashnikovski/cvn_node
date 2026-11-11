@@ -180,7 +180,19 @@ func handleIncomingPeerStream(conn net.Conn) {
 
 		frameLength := binary.BigEndian.Uint32(lengthHeaderBuffer)
 		if frameLength > MaxPayloadFrameSize {
-			log.Printf("🚨 [FRAME VIOLATION DETECTED] Packet frame length (%d bytes) crossed envelope constraints. Severing connection.\n", frameLength)
+			// Name the sender and say what the first four bytes look like. Port 8080
+			// is scanned constantly, and a web request or TLS hello read as a length
+			// header gives an absurd size; a real peer doing this is a different matter.
+			looksLike := "unknown protocol"
+			switch {
+			case string(lengthHeaderBuffer) == "GET " || string(lengthHeaderBuffer) == "POST" || string(lengthHeaderBuffer) == "HEAD" || string(lengthHeaderBuffer) == "PUT " || string(lengthHeaderBuffer) == "OPTI" || string(lengthHeaderBuffer) == "CONN":
+				looksLike = "an HTTP request, not a CVN peer"
+			case lengthHeaderBuffer[0] == 0x16 && lengthHeaderBuffer[1] == 0x03:
+				looksLike = "a TLS handshake, not a CVN peer"
+			case lengthHeaderBuffer[0] == 'S' && lengthHeaderBuffer[1] == 'S' && lengthHeaderBuffer[2] == 'H':
+				looksLike = "an SSH client, not a CVN peer"
+			}
+			log.Printf("🚨 [FRAME VIOLATION DETECTED] %s sent a %d-byte frame header (%q: %s). Severing connection.\n", remoteIP, frameLength, lengthHeaderBuffer, looksLike)
 			flagMalformedIP(remoteIP)
 			return
 		}
