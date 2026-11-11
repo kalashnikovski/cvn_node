@@ -114,7 +114,7 @@ func InitBoltEngine() {
 // blocks and locally minted UNCLE_REWARD_* entries; replaying the chain drops
 // both, so every node on the same chain ends up with the same balances.
 func reindexUTXOFromChainOnce() {
-	const reindexFlagKey = "utxo_reindex_v1"
+	const reindexFlagKey = "utxo_reindex_v2"
 	tipHeight := atomic.LoadInt64(&localHeightState)
 
 	err := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
@@ -247,58 +247,20 @@ func SaveBlockToStorageInternal(block Block) bool {
 		return false
 	}
 
-	// 👑 CRITICAL REMEDY 3: ISOLATED PRE-READ BOUNDARIES
-	// Gather all context states outside the active database write callback transaction
 	paddedKey := fmt.Sprintf("%016d", block.Index)
-	var existingBlockData []byte
-	
-	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		bBlocks := tx.Bucket(blocksBucket)
-		if bBlocks != nil {
-			existingBlockData = bBlocks.Get([]byte(paddedKey))
-		}
-		return nil
-	})
 
 	// Setup a bounded 5-second context timeout to ensure a hung disk frame never freezes full nodes
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	type inputHistoryRecord struct {
-		SourceTxID string
-		Index      int
-		Record     UTXORecord
-	}
-	var restoredInputs []inputHistoryRecord
-
-	replacedCompetingBlock := false
-
-	// If a reorg is occurring, resolve the inputs outside the main write execution frame
-	if existingBlockData != nil {
-		var historicalOldBlock Block
-		if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil {
-			replacedCompetingBlock = historicalOldBlock.Hash != block.Hash
-			for txIdx, oldTx := range historicalOldBlock.Transactions {
-				if txIdx == 0 { continue }
-				for _, oldIn := range oldTx.Inputs {
-					parentBlk := GetBlockByHeightFromDB(block.Index - 1)
-					for _, parentTx := range parentBlk.Transactions {
-						if parentTx.ID == oldIn.SourceTxID && oldIn.Index < len(parentTx.Outputs) {
-							outTarget := parentTx.Outputs[oldIn.Index]
-							restoredInputs = append(restoredInputs, inputHistoryRecord{
-								SourceTxID: oldIn.SourceTxID,
-								Index:      oldIn.Index,
-								Record: UTXORecord{
-									Amount:    outTarget.Amount,
-									Recipient: strings.TrimSpace(outTarget.Recipient),
-								},
-							})
-						}
-					}
-				}
-			}
-		}
-	}
+	// Everything below is decided inside ONE write transaction. bbolt runs write
+	// transactions one at a time, so two saves at the same height (our own miner
+	// and a peer's block arriving together) can no longer both believe the slot
+	// is empty. That race left the first block's coinbase outputs in the UTXO
+	// set after the second block overwrote it.
+	replacedExistingBlock := false
+	var keptLowerHashSibling *Block
+	var displacedHigherHashSibling *Block
 
 	err := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
@@ -306,25 +268,59 @@ func SaveBlockToStorageInternal(block Block) bool {
 		bUTXO := tx.Bucket(utxoBucket)
 		if bBlocks == nil || bMeta == nil || bUTXO == nil { return fmt.Errorf("required buckets missing") }
 
-		// --- ATOMIC REORG SELF-HEALING ENGINE (WRITES ONLY) ---
-		if len(restoredInputs) > 0 {
-			for _, item := range restoredInputs {
-				rebuildBytes, _ := json.Marshal(item.Record)
-				compoundInputKey := fmt.Sprintf("%s_%d", item.SourceTxID, item.Index)
-				_ = bUTXO.Put([]byte(compoundInputKey), rebuildBytes)
+		// Never move the chain tip backwards through a plain save. Rollbacks lower
+		// the stored height first, so a legitimate reorg is unaffected.
+		if heightBytes := bMeta.Get([]byte("height")); heightBytes != nil {
+			var storedHeight int64
+			if _, scanErr := fmt.Sscanf(string(heightBytes), "%016d", &storedHeight); scanErr == nil && block.Index < storedHeight {
+				return fmt.Errorf("block #%d is below stored tip #%d", block.Index, storedHeight)
 			}
 		}
 
-		// Replacing a different block at this height: remove every output the old
-		// block created, coinbase included, or its reward stays spendable forever.
-		if replacedCompetingBlock {
+		if existingBlockData := bBlocks.Get([]byte(paddedKey)); existingBlockData != nil {
 			var historicalOldBlock Block
-			if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil {
+			if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil && historicalOldBlock.Hash != block.Hash {
+				// Same parent, and the block already stored has the lower hash: it
+				// wins the tie-break, so keep it and report ours as the loser.
+				if historicalOldBlock.PrevHash == block.PrevHash && historicalOldBlock.Hash < block.Hash {
+					keptLowerHashSibling = &historicalOldBlock
+					return fmt.Errorf("lower-hash sibling already stored at #%d", block.Index)
+				}
+
+				replacedExistingBlock = true
+				if historicalOldBlock.PrevHash == block.PrevHash {
+					displacedHigherHashSibling = &historicalOldBlock
+				}
+
+				// Give back whatever the old block's transactions spent.
+				var parentBlk Block
+				if parentData := bBlocks.Get([]byte(fmt.Sprintf("%016d", block.Index-1))); parentData != nil {
+					_ = json.Unmarshal(parentData, &parentBlk)
+				}
+				for txIdx, oldTx := range historicalOldBlock.Transactions {
+					if txIdx == 0 { continue }
+					for _, oldIn := range oldTx.Inputs {
+						for _, parentTx := range parentBlk.Transactions {
+							if parentTx.ID == oldIn.SourceTxID && oldIn.Index < len(parentTx.Outputs) {
+								outTarget := parentTx.Outputs[oldIn.Index]
+								rebuildBytes, _ := json.Marshal(UTXORecord{Amount: outTarget.Amount, Recipient: strings.TrimSpace(outTarget.Recipient)})
+								_ = bUTXO.Put([]byte(fmt.Sprintf("%s_%d", oldIn.SourceTxID, oldIn.Index)), rebuildBytes)
+							}
+						}
+					}
+				}
+
+				// Remove every output the old block created, coinbase included, or
+				// its reward stays in the UTXO set forever.
 				for _, oldTx := range historicalOldBlock.Transactions {
 					for outIdx := range oldTx.Outputs {
 						_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", oldTx.ID, outIdx)))
 					}
 				}
+			} else {
+				// Same block saved twice: nothing to undo, but the balance cache has
+				// already counted it.
+				replacedExistingBlock = true
 			}
 		}
 
@@ -359,12 +355,23 @@ func SaveBlockToStorageInternal(block Block) bool {
 	})
 
 	_ = ctx // Enforced contextual lifetime tracking satisfied natively inside callbacks
-	if err != nil { 
-		return false 
+	if err != nil {
+		if keptLowerHashSibling != nil {
+			// Our block lost a same-height race to one already on disk. It is still
+			// a valid block, so queue it as the uncle and let peers see it too;
+			// the next block's miner pays its 20% share.
+			RecordUncleCandidate(*keptLowerHashSibling, block)
+			go BroadcastNewBlock(block)
+		}
+		return false
 	}
 	
 	atomic.StoreInt64(&localHeightState, block.Index)
-	if existingBlockData != nil {
+	if displacedHigherHashSibling != nil {
+		// We replaced a same-parent block that had the higher hash: it is the uncle.
+		RecordUncleCandidate(block, *displacedHigherHashSibling)
+	}
+	if replacedExistingBlock {
 		// A block at this height was already counted in the balance cache, so a
 		// delta would double-credit; recompute from the UTXO set instead.
 		RebuildStateBalanceCacheInternal()

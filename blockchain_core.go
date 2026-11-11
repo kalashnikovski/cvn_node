@@ -434,6 +434,19 @@ fmt.Printf("🔄 [TIP SWITCH] Height %d: adopted competing block %.16s (lower ha
 // valid block, not just something with the right hash prefix.
 return
 }
+RecordUncleCandidate(winner, loser)
+return
+}
+ProcessIncomingNetworkBlock(incomingBlock)
+}
+// RecordUncleCandidate queues the losing block of a same-height race so the
+// miner of the next block can pay its 20% share. It only writes a local note;
+// no coins move until a block's coinbase says so. It takes no StateMutex,
+// because some callers already hold it.
+func RecordUncleCandidate(winner Block, loser Block) {
+if GlobalBoltEngine == nil || winner.Hash == "" || loser.Hash == "" || winner.Hash == loser.Hash {
+return
+}
 var uncleMiner string
 if len(loser.Transactions) > 0 {
 uncleMiner = strings.TrimSpace(loser.Transactions[0].Witness)
@@ -445,7 +458,6 @@ if uncleMiner == "" || uncleMiner == "GENESIS_VOID_REWARD_POOL" {
 uncleMiner = "NONE"
 }
 if uncleMiner != "NONE" && uncleMiner != "" {
-StateMutex.Lock()
 _ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 bUncle := tx.Bucket([]byte("uncle_ledger"))
 if bUncle == nil { return nil }
@@ -470,11 +482,7 @@ fmt.Printf("💾 [UNCLE RECORDED] Height %d: losing block %.16s by %s queued for
 }
 return nil
 })
-StateMutex.Unlock()
 }
-return
-}
-ProcessIncomingNetworkBlock(incomingBlock)
 }
 // GetPendingUncleForTip returns the losing sibling of the current tip, if this
 // node witnessed one. The miner of the next block names it in the header and
