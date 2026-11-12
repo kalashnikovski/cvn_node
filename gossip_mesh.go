@@ -93,6 +93,8 @@ func StartMeshNetwork() {
 	defer listener8080.Close()
 
 	go runNetworkTopologyDiscoveryDiscoveryLoop()
+	go runRelayUplinkManager()
+	SetupAutomatedPortMapping()
 
 	for {
 		conn, err := listener8080.Accept()
@@ -160,6 +162,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 	rateLimiter := GetIPRateLimiter(remoteIP)
 	
 	defer func() {
+		unregisterRelaySubscriber(conn)
 		conn.Close()
 		decrementIPConnection(remoteIP)
 		<-MaxMeshConnectionPool
@@ -225,6 +228,18 @@ func handleIncomingPeerStream(conn net.Conn) {
 		msg := string(payloadBuffer)
 		msg = strings.TrimSpace(msg)
 		if msg == "" {
+			continue
+		}
+
+		if strings.HasPrefix(msg, "RELAY_SUBSCRIBE:") {
+			// The peer asks us to push new blocks and transactions back down this
+			// connection, which it opened itself. That reaches nodes whose router
+			// accepts no inbound connections. Our own ID means we dialed ourselves.
+			subscriberID := strings.TrimSpace(strings.TrimPrefix(msg, "RELAY_SUBSCRIBE:"))
+			if subscriberID != localNodeInstanceID {
+				registerRelaySubscriber(conn, remoteIP)
+			}
+			writeFramedPayloadNatively(conn, "RELAY_ACK:"+localNodeInstanceID)
 			continue
 		}
 
@@ -330,9 +345,18 @@ func writeFramedPayloadNatively(w io.Writer, payload string) {
 	lengthHeaderBuffer := make([]byte, 4)
 	binary.BigEndian.PutUint32(lengthHeaderBuffer, uint32(len(payloadBytes)))
 	
-	_, _ = w.Write(lengthHeaderBuffer)
-	_, _ = w.Write(macSignature)
-	_, _ = w.Write(payloadBytes)
+	// One Write call per frame. Relay connections are written to by several
+	// goroutines (ping replies, block pushes), and three separate writes could
+	// interleave two frames into garbage.
+	frame := make([]byte, 0, 4+len(macSignature)+len(payloadBytes))
+	frame = append(frame, lengthHeaderBuffer...)
+	frame = append(frame, macSignature...)
+	frame = append(frame, payloadBytes...)
+	if conn, isConn := w.(net.Conn); isConn {
+		// A peer that stops reading must not be able to hang the sender.
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	}
+	_, _ = w.Write(frame)
 }
 
 func BroadcastNewBlock(b Block) {
@@ -366,8 +390,16 @@ func transmitPayloadToNetworkBoundary(payload string) {
 		localBypassIP = "202.137.175.220"
 	}
 
+	// Peers holding a relay connection to us get the payload down that
+	// connection, so dialing them as well would only deliver it twice (or time
+	// out against their firewall).
+	subscribedIPs := pushPayloadToRelaySubscribers(payload)
+
 	for _, address := range targets {
 		if strings.Contains(address, localBypassIP) && runtime.GOOS == "windows" {
+			continue
+		}
+		if host, _, splitErr := net.SplitHostPort(address); splitErr == nil && subscribedIPs[host] {
 			continue
 		}
 		go func(addr string) {
@@ -380,33 +412,38 @@ func transmitPayloadToNetworkBoundary(payload string) {
 	}
 }
 
-func runNetworkTopologyDiscoveryDiscoveryLoop() {
-	for {
-		staticMeshSeeds := []string{
-			"202.137.175.220:8080",
-			"207.148.67.11:8080",
-			"64.177.45.153:8080",
-		}
+func loadStaticMeshSeeds() []string {
+	staticMeshSeeds := []string{
+		"202.137.175.220:8080",
+		"207.148.67.11:8080",
+		"64.177.45.153:8080",
+	}
 
-		configFileBytes, err := os.ReadFile("miner_config.json")
-		if err == nil {
-			var parsedConfig map[string]interface{}
-			if json.Unmarshal(configFileBytes, &parsedConfig) == nil {
-				if seedInterface, exists := parsedConfig["static_mesh_seeds"]; exists {
-					if sliceArray, ok := seedInterface.([]interface{}); ok && len(sliceArray) > 0 {
-						var parsedSeeds []string
-						for _, val := range sliceArray {
-							if strSeed, ok := val.(string); ok && strSeed != "" {
-								parsedSeeds = append(parsedSeeds, strings.TrimSpace(strSeed))
-							}
+	configFileBytes, err := os.ReadFile("miner_config.json")
+	if err == nil {
+		var parsedConfig map[string]interface{}
+		if json.Unmarshal(configFileBytes, &parsedConfig) == nil {
+			if seedInterface, exists := parsedConfig["static_mesh_seeds"]; exists {
+				if sliceArray, ok := seedInterface.([]interface{}); ok && len(sliceArray) > 0 {
+					var parsedSeeds []string
+					for _, val := range sliceArray {
+						if strSeed, ok := val.(string); ok && strSeed != "" {
+							parsedSeeds = append(parsedSeeds, strings.TrimSpace(strSeed))
 						}
-						if len(parsedSeeds) > 0 {
-							staticMeshSeeds = parsedSeeds
-						}
+					}
+					if len(parsedSeeds) > 0 {
+						staticMeshSeeds = parsedSeeds
 					}
 				}
 			}
 		}
+	}
+	return staticMeshSeeds
+}
+
+func runNetworkTopologyDiscoveryDiscoveryLoop() {
+	for {
+		staticMeshSeeds := loadStaticMeshSeeds()
 
 		for _, seedAddr := range staticMeshSeeds {
 			go func(addr string) {
