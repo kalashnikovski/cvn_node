@@ -39,4 +39,4 @@ Connects via cross-continental bootstrap anchors:
 
 ## 🏛️ 5. Long-Horizon Economic Policy
 * **ASIC-Neutral PoD Optimization (Q2 2027):** Software fork splitting rewards (80% memory-hard CPU / 20% SHA-256 ASIC).
-* **Sabbatical & Jubilee Loops:** Automated decay parameters on stationary balances over 7-year and 49-year scales, routing 25% of stagnant wealth to the `jubilee_vault`.
+* **Sabbatical & Jubilee Loops:** Automated decay parameters on stationary balances over 7-year and 49-year scales, routing 20% of stagnant wealth to the `jubilee_vault`.
