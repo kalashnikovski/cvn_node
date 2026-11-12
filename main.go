@@ -437,6 +437,7 @@ seedGateways = []string{customTargetIP}
 }
 }
 lastRenderTime := time.Now()
+startupForkRecoveryAttempts := 0
 for {
 StateMutex.RLock()
 liveBlock := GetLatestBlockInternal()
@@ -473,6 +474,7 @@ _ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
 }
 resp.Body.Close()
 }
+heightBeforeBatch := currentLocalHeight
 StateMutex.Lock()
 for _, block := range incomingBatch {
 if block.Index == int64(GetLatestBlockInternal().Index)+1 {
@@ -489,6 +491,23 @@ currentLocalHeight = block.Index
 }
 }
 StateMutex.Unlock()
+if currentLocalHeight == heightBeforeBatch {
+// Nothing from this batch attached to our chain. The usual cause is that
+// the database ends on a side branch the network abandoned, so the next
+// network block does not fit on top of it. Asking for the same batch again
+// would loop forever; instead find where we parted from the network, roll
+// back to that point and catch up from there.
+startupForkRecoveryAttempts++
+if startupForkRecoveryAttempts > 3 {
+fmt.Println("\n🚨 [BULK SYNC] Could not rejoin the network automatically. Stop the node, delete cvn_mainnet.db and start again to sync from scratch.")
+break
+}
+fmt.Printf("\n🔀 [BULK SYNC] Local chain does not match the network after block #%d. Rolling back to the last shared block and re-syncing...\n", currentLocalHeight)
+atomic.StoreInt32(&IsSyncingActive, 0)
+TriggerActiveReSyncPass()
+continue
+}
+startupForkRecoveryAttempts = 0
 if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
 lastRenderTime = time.Now()
 var syncPercentage float64 = 0.00
