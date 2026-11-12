@@ -34,3 +34,6 @@ vendor/
 # Operating System Cache Files
 .DS_Store
 Thumbs.db
+# Peers this node has reached before (local, rebuilt automatically)
+peers.json
+peers.json.tmp

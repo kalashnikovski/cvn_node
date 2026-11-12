@@ -92,6 +92,7 @@ func StartMeshNetwork() {
 	}
 	defer listener8080.Close()
 
+	StartPeerCache()
 	go runNetworkTopologyDiscoveryDiscoveryLoop()
 	go runRelayUplinkManager()
 	SetupAutomatedPortMapping()
@@ -443,7 +444,7 @@ func loadStaticMeshSeeds() []string {
 
 func runNetworkTopologyDiscoveryDiscoveryLoop() {
 	for {
-		staticMeshSeeds := loadStaticMeshSeeds()
+		staticMeshSeeds := seedsAndCachedPeers()
 
 		for _, seedAddr := range staticMeshSeeds {
 			go func(addr string) {

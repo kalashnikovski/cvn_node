@@ -400,6 +400,7 @@ _ = http.ListenAndServe(":9091", winMux)
 }
 }
 }()
+StartPeerCache()
 go StartMeshNetwork()
 mirrorMux := http.NewServeMux()
 // 👑 FIXED HOOK PLATFORM INTERCEPT PASS: Enforced explicit *http.Request context alignment
@@ -418,6 +419,14 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 go func() { _ = http.ListenAndServe(":8082", mirrorMux) }()
 fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
 seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
+// Peers remembered from earlier runs are extra sync sources, so a node can
+// catch up even when every built-in seed is offline. Only those answering
+// right now are kept, so dead entries do not slow each batch down.
+for _, cachedGateway := range cachedPeerHTTPGateways(seedGateways) {
+if GetGlobalMeshMaxHeight(cachedGateway) > 0 {
+seedGateways = append(seedGateways, cachedGateway)
+}
+}
 for i, arg := range os.Args {
 if arg == "--connect" && i+1 < len(os.Args) {
 customTargetIP := os.Args[i+1]
@@ -502,6 +511,7 @@ os.Stdout.Sync()
 time.Sleep(10 * time.Millisecond)
 }
 atomic.StoreInt32(&IsSyncingActive, 0)
+go runChainLagWatchdog()
 StartContextMinerEngine()
 ticker := time.NewTicker(4 * time.Second)
 defer ticker.Stop()

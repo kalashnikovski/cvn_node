@@ -365,18 +365,25 @@ return
 if incomingBlock.Index < currentTip.Index {
 return
 }
-if !ValidateBlockSignatures(incomingBlock) {
-return
-}
+// A block that does not attach to our tip cannot be fully validated here:
+// its difficulty depends on a parent we do not have (or, on a fork, on a
+// different parent than the one we hold). It has already passed the
+// proof-of-work pre-check on the wire, so treat it as a sign that we are
+// behind or on a side branch and let the re-sync compare chains with peers.
+// Validating first made a node that fell two or more blocks behind reject
+// every later block and stay on its own branch for good.
 if incomingBlock.Index > currentTip.Index+1 {
 go TriggerActiveReSyncPass()
 return
 }
-if incomingBlock.Index == currentTip.Index+1 {
-if incomingBlock.PrevHash != currentTip.Hash {
+if incomingBlock.Index == currentTip.Index+1 && incomingBlock.PrevHash != currentTip.Hash {
 go TriggerActiveReSyncPass()
 return
 }
+if !ValidateBlockSignatures(incomingBlock) {
+return
+}
+if incomingBlock.Index == currentTip.Index+1 {
 if SaveBlockToStorageInternal(incomingBlock) {
 atomic.StoreInt64(&localHeightState, incomingBlock.Index)
 go BroadcastNewBlock(incomingBlock)
@@ -512,6 +519,34 @@ return "", "", false
 }
 return uncleHash, uncleMiner, true
 }
+// runChainLagWatchdog is a safety net for a node that has silently fallen
+// behind or onto a side branch (for example blocks missed while it was
+// starting up). Once a minute it asks a few peers for their height and starts
+// a re-sync if any is well ahead.
+func runChainLagWatchdog() {
+const lagThresholdBlocks = 3
+for {
+time.Sleep(60 * time.Second)
+if atomic.LoadInt32(&IsSyncingActive) == 1 {
+continue
+}
+gateways := []string{"http://64.177.45.153:8081", "http://207.148.67.11:8081"}
+if runtime.GOOS != "windows" {
+gateways = append(gateways, "http://202.137.175.220:8081")
+}
+gateways = append(gateways, cachedPeerHTTPGateways(gateways)...)
+StateMutex.RLock()
+localHeight := GetLatestBlockInternal().Index
+StateMutex.RUnlock()
+for _, gateway := range gateways {
+if remoteHeight := GetGlobalMeshMaxHeight(gateway); remoteHeight >= localHeight+lagThresholdBlocks {
+log.Printf("🩺 [LAG WATCHDOG] %s is at height #%d, we are at #%d. Starting catch-up.\n", gateway, remoteHeight, localHeight)
+go TriggerActiveReSyncPass()
+break
+}
+}
+}
+}
 func TriggerActiveReSyncPass() {
 if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
 return
@@ -541,6 +576,7 @@ activeGlobalRecoveryGateways := []string{
 "http://64.177.45.153:8081",
 "http://202.137.175.220:9091",
 }
+activeGlobalRecoveryGateways = append(activeGlobalRecoveryGateways, cachedPeerHTTPGateways(activeGlobalRecoveryGateways)...)
 client := &http.Client{Timeout: 3 * time.Second}
 var chosenTargetSeedURL string
 // Only a peer strictly ahead of us is a sync source. Starting from our own

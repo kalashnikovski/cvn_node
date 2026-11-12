@@ -126,7 +126,7 @@ func RelayUplinkLiveCount() int {
 
 func runRelayUplinkManager() {
 	for {
-		wanted := loadStaticMeshSeeds()
+		wanted := seedsAndCachedPeers()
 		PeerMapMutex.RLock()
 		for address := range ActivePeerMap {
 			wanted = append(wanted, address)
@@ -234,6 +234,7 @@ func runRelayUplink(address string, announcedID string) {
 				relayUplinkMutex.Lock()
 				relaySelfAddresses[address] = true
 				relayUplinkMutex.Unlock()
+				forgetCachedPeer(address)
 				return
 			}
 			if !wasLive {
@@ -248,6 +249,7 @@ func runRelayUplink(address string, announcedID string) {
 
 		case strings.HasPrefix(msg, "PEER_LIST:"):
 			// The far end answered our ping with a signed list: it is alive.
+			rememberReachablePeer(address)
 			PeerMapMutex.Lock()
 			if _, known := ActivePeerMap[address]; known || len(ActivePeerMap) < MaxPeerMapCapacity {
 				ActivePeerMap[address] = time.Now()

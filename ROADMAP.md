@@ -28,15 +28,13 @@ A box is ticked only when the feature is fully built **and** has been seen worki
 ## Phase 2: Mesh Expansion (in progress)
 
 - [x] **Block and transaction gossip on port 8080:** Live between all nodes.
-- [ ] **Outbound relay (receive blocks without port forwarding):**
-  - *Have:* every node keeps long-lived outbound connections to seeds and public peers and receives blocks down them. Live in both directions between Melbourne and Atlanta.
-  - *Missing:* confirmation from a home miner mining with port forwarding removed.
+- [x] **Outbound relay (receive blocks without port forwarding):** Live. Every node keeps long-lived outbound connections to seeds and public peers and receives blocks down them. Confirmed by a home miner running in relay-only mode with no port forwarding.
 - [ ] **Automatic router port mapping (UPnP):**
-  - *Have:* the node finds the router, maps ports 8080 and 8081, renews the mapping and detects carrier-grade NAT. Worked on the Melbourne router.
-  - *Missing:* confirmation on a second, different router. No NAT-PMP/PCP fallback for routers without UPnP.
+  - *Have:* the node finds the router, maps ports 8080 and 8081, renews the mapping and detects carrier-grade NAT. Confirmed on the Melbourne router and on a tester's home router.
+  - *Missing:* only one machine per router can hold ports 8080-8081; a second machine is refused and falls back to relay mode (it still mines, but nobody can sync from it). No NAT-PMP/PCP fallback for routers without UPnP.
 - [ ] **Peer discovery:**
-  - *Have:* nodes exchange peer lists and connect to peers they learn about. Seeds can be overridden in `miner_config.json`.
-  - *Missing:* first contact still depends on three built-in seed IPs, and known peers are not saved to disk (`peers.json`), so if the seeds are down a restarted node cannot find the network.
+  - *Have:* nodes exchange peer lists and connect to peers they learn about. Peers a node has reached itself are saved to `peers.json` and reused on the next start for discovery, live block feeds and sync, so a restarted node can find the network with every seed offline. Seeds can be overridden in `miner_config.json`.
+  - *Missing:* not yet proven on the live network with the seeds actually down. A brand-new node with no `peers.json` still depends on the three built-in seed IPs.
 - [ ] **Wire protocol optimization:**
   - *Have:* length-prefixed frames with a size limit and an HMAC tag.
   - *Missing:* payloads are uncompressed JSON. The HMAC key is a shared default built into the binary, so it filters noise but does not authenticate peers.
