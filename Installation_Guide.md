@@ -41,29 +41,17 @@ The network requires a foundational, open-source programming runtime environment
 4. Click Next on all prompts, accept the standard license terms, and click Install.
 5. When the installation completes, click Finish. Your operating system is now fully upgraded.
 
-🚀 Step 3: Launch on Autopilot
+🚀 Step 3: Build and Launch Your Miner
+1. Run **`build_clean.bat`** inside `C:\cvn_node` to compile `cvn_miner.exe` and `cvn_node.exe` 
+2. Right-click **`LaunchMiner.bat`** and run as administrator, or double-click **`LaunchWallet.bat`** for the desktop UI.
 
-1. Open your C:\cvn_node folder.
-2. Locate the file named AutoOnboard_And_Mine.ps1.
-3. Right-click the file and choose "Run with PowerShell" (or run inside an Administrator PowerShell terminal window).
+🪪 Step 4: Profile Routing & Consensus Sync
+* **New Users:** Missing configuration triggers automatic wallet generation (`--generate-wallet`) via CSPRNG, displaying your private key directly in the terminal.
+* **Returning Miners:** Existing configurations lock onto your saved public address in `miner_config.json` 
+* **Sync & Mining:** The node handles bulk chain sync (`⏳ [BULK SYNC]`) before starting active CPU Proof-of-Diligence mining.
 
-🪪 Step 4: The Infallible Dual-Profile Routing Rule
-
-The automation script automatically executes a pre-flight identity check to manage your node credentials with absolute state-safety:
-• Scenario A (Brand New Users): If you are joining the ecosystem for the first time, the script will immediately detect that your workspace lacks a configuration profile. It will instantly launch our secure, clock-isolated CSPRNG Elliptic Curve Factory Module. This derives a mathematically unique private key passphrase, constructs your public identity key parameters, and locks your credentials natively onto your hard drive.
-• Scenario B (Returning Alpha Testers / Pre-Existing Wallets): If you are an active miner who already owns a wallet or has a configuration sheet sitting inside your directory, the script automatically recognizes your pre-existing profile variables. It bypasses the generation sequence entirely and safely locks your hardware into your verified public identity. Your accumulated block mining balances can never be accidentally overwritten, dropped, or reset.
-
-⚡ Step 5: Global Consensus Sync and Active Validation
-
-Once your wallet profile is securely aligned, the onboarding script automatically fires up your un-throttled core execution path:
-• Network Alignment Phase: The terminal will instantly load the Master Telemetry Dashboard at the top of your screen.
-	• If your ledger is trailing: The system engages a strict, synchronized multi-seed chunk pipeline. It will display a live ⏳ \[BULK SYNC] loading tracking bar across row 11 while cloning historical blocks from the cross-continental cloud gateways in compressed batch blocks.
-	• If your ledger is aligned: The consensus sync gate automatically disengages. Your processor instantly initiates full bare-metal computational work, solving Proof-of-Diligence block puzzles directly to your wallet address and broadcasting new hashes across our global mesh network on total autopilot.
-🪪 Finding Your Public Address & Backups
-• Inside C:\cvn_node, you will see a text file named cvn_secret_backup.txt. Open it to find your public WALLET ADDRESS (which you use to receive coins) and your secret PRIVATE KEY.
-• ⚠️ WARNING: Never share your Private Key with anyone. It controls your funds.
-
-------------------------
+⚠️ **Security Note:** Store your Secret Private Key offline immediately upon generation; plaintext keys are no longer written to `cvn_secret_backup.txt`
+---
 
 
 🐧 SECTION B: Headless Linux Installation Track
@@ -73,42 +61,43 @@ Once your wallet profile is securely aligned, the onboarding script automaticall
 
 To ensure the network files run securely on your Linux environment, we must provision a clean repository directory.
 1. Open your terminal application window.
-2. Clone the official repository branches directly into your local home space using git, or download the archived tree layout using curl: bash
+2. Clone the official repository branches directly into your local home space using git, or download the archived tree layout using curl:
 cd ~
 git clone https://github.com/kalashnikovski/cvn_node
 
-	cd cvn_node
+cd cvn_node
 
 
 📦 Step 2: Install the Framework Runtime Engine
 
 The compilation mechanics require an active, open-source Go compiler framework on your environment's binary path.
-1. Update your localized package managers and install the foundational runtime utilities: bash
+1. Update your localized package managers and install the foundational runtime utilities:
 sudo apt update
 sudo apt install golang-go git build-essential -y
 
-2. Verify that your runtime profile meets the platform specifications by checking the tool version (should register v1.21 or higher): bash
+2. Verify that your runtime profile meets the platform specifications by checking the tool version (should register v1.21 or higher):
 go version
 
 🚀 Step 3: Initialize Keys and Build Targets
 
-1. Clean out any legacy developer database artifacts or configurations from your directory workspace to prepare for a clean mainnet launch: bash
+1. Clean out any legacy developer database artifacts or configurations from your directory workspace to prepare for a clean mainnet launch:
 rm -f cvn_mainnet.db miner_config.json cvn_secret_backup.txt
 
-2. Fire your secure, clock-isolated CSPRNG Elliptic Curve Factory Module to derive your unique asymmetric cryptography signature parameters natively on your storage card: bash
+2. Fire your secure, clock-isolated CSPRNG Elliptic Curve Factory Module to derive your unique asymmetric cryptography signature parameters natively on your storage card:
 go run . --generate-wallet
 
-3. Compile your high-performance, un-throttled proof-of-work consensus hashing core executable block target: bash
-go build -o cvn_miner main.go app.go blockchain_core.go gossip_mesh.go database_core.go crypto_auth.go security_harness.go backup_vault.go
+3. Compile your high-performance, un-throttled proof-of-work consensus hashing core executable block target:
+go build -o cvn_node .
+
+4. Generate your wallet address and private keys:
+./cvn_node --generate-wallet 
 
 ⚡ Step 4: Core Execution & Multi-Threaded Resource Fencing
 
 1. Launch your compiled validator binary core on autopilot and hook directly into the primary mainnet sync gateways: bash
-./cvn_miner --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
+./cvn_node --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
 
 2. Hardware Micro-Throttling (Optional): By default, the mining thread will process nonces over all available CPU execution frames. To restrict your hardware footprint to a specific thread frame ceiling so your machine stays quiet and cool, prefix your launch sequence with the native resource gate variable (e.g., limiting execution to exactly 4 cores): bash
-GOMAXPROCS=4 ./cvn_miner --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
+GOMAXPROCS=4 ./cvn_node --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
 
-🪪 Finding Your Public Address & Backups
-• Inside your ~/cvn_node folder, locate the file named cvn_secret_backup.txt. Run cat cvn_secret_backup.txt to display your public WALLET ADDRESS and secret PRIVATE KEY passphrase.
-• ⚠️ WARNING: Never share your Private Key with anyone. It controls your funds.
+⚠️ **Security Note:** Store your Secret Private Key offline immediately upon generation; plaintext keys are no longer written to `cvn_secret_backup.txt`
