@@ -280,8 +280,9 @@ func handleIncomingPeerStream(conn net.Conn) {
 				flagMalformedIP(remoteIP)
 				continue
 			}
-			if VerifyIncomingWireTransaction(incomingTx) {
-				MempoolMatrix.PushTransaction(incomingTx)
+			// Only transfers that pass the full checks are stored and passed
+			// on; a transfer we already hold is not relayed again.
+			if AdmitTransactionToMempool(incomingTx) == nil {
 				go BroadcastNewTransaction(incomingTx)
 			}
 			continue

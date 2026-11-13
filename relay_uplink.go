@@ -282,14 +282,7 @@ func runRelayUplink(address string, announcedID string) {
 			if json.Unmarshal([]byte(strings.TrimPrefix(msg, "TX_BROADCAST:")), &incomingTx) != nil {
 				continue
 			}
-			if !VerifyIncomingWireTransaction(incomingTx) {
-				continue
-			}
-			MempoolMatrix.Lock()
-			_, alreadyKnown := MempoolMatrix.Transactions[incomingTx.ID]
-			MempoolMatrix.Unlock()
-			if !alreadyKnown {
-				MempoolMatrix.PushTransaction(incomingTx)
+			if AdmitTransactionToMempool(incomingTx) == nil {
 				go BroadcastNewTransaction(incomingTx)
 			}
 		}

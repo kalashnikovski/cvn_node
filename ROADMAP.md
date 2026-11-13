@@ -10,14 +10,14 @@ A box is ticked only when the feature is fully built **and** has been seen worki
 - [x] **Uncle rewards:** Live. When two miners solve the same height, the lower hash wins and the next block pays the loser 20% of the reward.
 - [x] **Balance cache:** Live. Balances are computed from the on-disk UTXO set and updated per block.
 - [ ] **Transactions (sending CVN between wallets):**
-  - *Have:* wallets build and sign a transaction, nodes accept it into the mempool and gossip it.
-  - *Missing:* the miner never puts mempool transactions into a block, so a transfer is never confirmed. Blocks today carry only the mining reward.
+  - *Have:* built, activates at block 6100 (transaction hard fork). Wallets build and sign a transfer locally; nodes check it before it enters the mempool; miners include waiting transfers in blocks and collect their fees. Passed local tests, including a run of the real mining loop.
+  - *Missing:* not yet seen on the live network (nothing can confirm before block 6100). The desktop and command-line wallets have not been tried by hand against a live node.
 - [ ] **Transaction and block-content validation (consensus):**
-  - *Have:* the mining-reward amount and the 80/20 uncle split are checked. A signature-checking function exists (`VerifyTransactionSignature`).
-  - *Missing:* that function is never called. `VerifyTransactionIntegrity` accepts everything, so a block is not checked for valid signatures, for spending coins that exist, for spending someone else's coins, or for outputs exceeding inputs. The block hash also covers only transaction IDs, not their contents, so the recipient of a mining reward is not locked in by the proof of work. **This must be fixed before the coin carries any value.**
+  - *Have:* built, activates at block 6100. Every transfer must be signed by the owner of the coins it spends, spend only coins that exist, and not pay out more than it takes in. A transfer's ID is the hash of its contents. The block hash covers full transaction contents, so the reward recipient is locked in by the proof of work. The open endpoint that built transfers on a caller's behalf is removed. Local tests reject forged, stolen, double-spent, replayed and inflated transfers.
+  - *Missing:* not yet live. No independent review. Amounts are still floating-point numbers.
 - [ ] **Fork recovery:**
-  - *Have:* a node that falls onto a losing branch finds the common ancestor, rolls back and re-syncs. Seen working on the live network.
-  - *Missing:* the winning chain is chosen by height, not by total work, which is no longer correct now that difficulty varies per block. Rollback does not restore coins that the removed blocks had spent (harmless only while blocks carry no transfers).
+  - *Have:* a node that falls onto a losing branch finds the common ancestor, rolls back and re-syncs, including during startup. Seen working on the live network. From block 6100, removing a block also returns the coins it spent.
+  - *Missing:* the winning chain is chosen by height, not by total work, which is no longer correct now that difficulty varies per block.
 - [ ] **Sabbatical and Jubilee recycling:**
   - *Have:* a standalone simulator, and a 49-year check in the node that only writes a log line.
   - *Missing:* everything in consensus. No coins move and there is no `jubilee_vault`. Design is still open: whether it starts at year 7 or year 30, 20% of the remaining balance or of the original, per coin or per wallet, and how the vault pays miners.

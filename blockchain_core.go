@@ -141,11 +141,13 @@ func ValidateBlockByVersion(b Block) bool {
 }
 
 func CalculateHash(b Block) string {
-	var txSummaryBuilder strings.Builder
-	for _, tx := range b.Transactions {
-		txSummaryBuilder.WriteString(tx.ID + "-")
-	}
-	txHashStr := fmt.Sprintf("%x", sha256.Sum256([]byte(txSummaryBuilder.String())))
+	return CalculateHashWithTxDigest(b, BlockTransactionsDigest(b.Index, b.Transactions))
+}
+
+// CalculateHashWithTxDigest hashes a block header given the digest of its
+// transactions. The miner computes that digest once per template instead of
+// once per nonce.
+func CalculateHashWithTxDigest(b Block, txHashStr string) string {
 	
 	uHash := strings.TrimSpace(b.UncleHash)
 	if uHash == "" {
@@ -309,34 +311,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 				if data := bBlocks.Get(paddedKey); data != nil {
 					var localBlock Block
 					if json.Unmarshal(data, &localBlock) == nil {
-						for _, txPayload := range localBlock.Transactions {
-							for outIdx := range txPayload.Outputs {
-								_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
-							}
-							
-							if !strings.HasPrefix(txPayload.ID, "TX_COINBASE") {
-								for _, input := range txPayload.Inputs {
-									parentTxBlock := GetBlockByHeightFromDB(int64(currentTip.Index - 1))
-									var matchedOutput UTXOOutput
-									var found = false
-									
-									for _, pTx := range parentTxBlock.Transactions {
-										if pTx.ID == input.SourceTxID && input.Index < len(pTx.Outputs) {
-											matchedOutput = pTx.Outputs[input.Index]
-											found = true
-											break
-										}
-									}
-									
-									if found {
-										restoredRecord := UTXORecord{Amount: matchedOutput.Amount, Recipient: strings.TrimSpace(matchedOutput.Recipient)}
-										restoredBytes, _ := json.Marshal(restoredRecord)
-										compoundKey := fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)
-										_ = bUTXO.Put([]byte(compoundKey), restoredBytes)
-									}
-								}
-							}
-						}
+						undoBlockCoinChanges(tx, bUTXO, localBlock)
 						
 						if localBlock.UncleHash != "" &&
 							localBlock.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
@@ -673,11 +648,9 @@ paddedKey := []byte(fmt.Sprintf("%016d", h))
 if data := bBlocks.Get(paddedKey); data != nil {
 var block Block
 if json.Unmarshal(data, &block) == nil {
-for _, txPayload := range block.Transactions {
-for outIdx := range txPayload.Outputs {
-_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)))
-}
-}
+// Newest block first, so coins spent and re-created across the removed
+// blocks unwind in the right order.
+undoBlockCoinChanges(tx, bUTXO, block)
 if block.UncleHash != "" &&
 block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
 cleanAddr(block.UncleMiner) != "NONE" &&
@@ -975,7 +948,42 @@ if len(b.Transactions) == 0 {
 return false
 }
 isBlockValid := true
-if GlobalBoltEngine != nil {
+var forkBlockFees float64
+if IsTxForkHeight(b.Index) {
+// Transfers can only be judged against the coin set just before this
+// block. That is known when the block sits on our tip, or competes with
+// our tip for the same parent; anything else is settled by a re-sync.
+if GlobalBoltEngine == nil {
+return false
+}
+tipBlock := GetLatestBlockInternal()
+_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+bUTXO := dbTx.Bucket(utxoBucket)
+if bUTXO == nil {
+isBlockValid = false
+return nil
+}
+var lookup utxoLookup
+switch {
+case b.Index == tipBlock.Index+1 && b.PrevHash == tipBlock.Hash:
+lookup = bucketLookup(bUTXO)
+case b.Index == tipBlock.Index && b.PrevHash == tipBlock.PrevHash:
+lookup = lookupWithBlockUndone(dbTx, bUTXO, tipBlock)
+default:
+fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d does not attach to the local tip, so its transfers cannot be checked.\n", b.Index)
+isBlockValid = false
+return nil
+}
+fees, _, err := ValidateBlockTransactions(b, lookup)
+if err != nil {
+fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, err)
+isBlockValid = false
+return nil
+}
+forkBlockFees = fees
+return nil
+})
+} else if GlobalBoltEngine != nil {
 _ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 bUTXO := dbTx.Bucket([]byte("utxo"))
 if bUTXO == nil {
@@ -1026,7 +1034,8 @@ uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
 uncleMinerRecipient := cleanAddr(coinbaseTx[0].Outputs[1].Recipient)
 expectedMainSplit := allowedTotalEmission * 0.80
 expectedUncleSplit := allowedTotalEmission * 0.20
-if (mainMinerPayout-expectedMainSplit) > 0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
+// The block's miner may add the transfers' fees to its own share.
+if (mainMinerPayout-expectedMainSplit) > forkBlockFees+0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
 fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
 return false
 }
@@ -1039,7 +1048,7 @@ fmt.Printf("🚨 CONSENSUS REJECTION: Coinbase index recipient %s does not match
 return false
 }
 } else {
-if (totalCoinbasePayout - allowedTotalEmission) > 0.00001 {
+if (totalCoinbasePayout - allowedTotalEmission - forkBlockFees) > 0.00001 {
 fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
 return false
 }

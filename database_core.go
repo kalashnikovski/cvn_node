@@ -37,6 +37,7 @@ func InitBoltEngine() {
 		_, _ = tx.CreateBucketIfNotExists(metaBucket)
 		bUTXO, _ := tx.CreateBucketIfNotExists(utxoBucket)
 		_, _ = tx.CreateBucketIfNotExists(uncleLedgerBucket)
+		_, _ = tx.CreateBucketIfNotExists(undoBucket)
 
 		// 👑 THE DETERMINISTIC GENESIS BOOTSTRAPPER ENGINE: Wiped Clean of Pre-mines
 		if bBlocks.Stats().KeyN == 0 {
@@ -295,31 +296,8 @@ func SaveBlockToStorageInternal(block Block) bool {
 					displacedHigherHashSibling = &historicalOldBlock
 				}
 
-				// Give back whatever the old block's transactions spent.
-				var parentBlk Block
-				if parentData := bBlocks.Get([]byte(fmt.Sprintf("%016d", block.Index-1))); parentData != nil {
-					_ = json.Unmarshal(parentData, &parentBlk)
-				}
-				for txIdx, oldTx := range historicalOldBlock.Transactions {
-					if txIdx == 0 { continue }
-					for _, oldIn := range oldTx.Inputs {
-						for _, parentTx := range parentBlk.Transactions {
-							if parentTx.ID == oldIn.SourceTxID && oldIn.Index < len(parentTx.Outputs) {
-								outTarget := parentTx.Outputs[oldIn.Index]
-								rebuildBytes, _ := json.Marshal(UTXORecord{Amount: outTarget.Amount, Recipient: strings.TrimSpace(outTarget.Recipient)})
-								_ = bUTXO.Put([]byte(fmt.Sprintf("%s_%d", oldIn.SourceTxID, oldIn.Index)), rebuildBytes)
-							}
-						}
-					}
-				}
-
-				// Remove every output the old block created, coinbase included, or
-				// its reward stays in the UTXO set forever.
-				for _, oldTx := range historicalOldBlock.Transactions {
-					for outIdx := range oldTx.Outputs {
-						_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", oldTx.ID, outIdx)))
-					}
-				}
+				// Take back the coins the old block created and return the ones it spent.
+				undoBlockCoinChanges(tx, bUTXO, historicalOldBlock)
 			} else {
 				// Same block saved twice: nothing to undo, but the balance cache has
 				// already counted it.
@@ -327,11 +305,32 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 		}
 
-		// Perform fast structural database transaction verification checks
-		for txIdx, txPayload := range block.Transactions {
-			if txIdx == 0 { continue }
-			if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
-				return fmt.Errorf("transaction verification failed for txID: %s", txPayload.ID)
+		if IsTxForkHeight(block.Index) {
+			// Final gate: check every transfer against the coin set exactly as
+			// it stands inside this write transaction, and remember what the
+			// block spends so a reorg can give it back.
+			if block.Index > 0 {
+				parentData := bBlocks.Get([]byte(fmt.Sprintf("%016d", block.Index-1)))
+				var parentBlock Block
+				if parentData == nil || json.Unmarshal(parentData, &parentBlock) != nil || parentBlock.Hash != block.PrevHash {
+					return fmt.Errorf("block #%d does not attach to the stored parent", block.Index)
+				}
+			}
+			_, consumed, validationErr := ValidateBlockTransactions(block, bucketLookup(bUTXO))
+			if validationErr != nil {
+				fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: %v\n", block.Index, validationErr)
+				return validationErr
+			}
+			if undoErr := storeUndoRecords(tx, block.Index, consumed); undoErr != nil {
+				return undoErr
+			}
+		} else {
+			// Perform fast structural database transaction verification checks
+			for txIdx, txPayload := range block.Transactions {
+				if txIdx == 0 { continue }
+				if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
+					return fmt.Errorf("transaction verification failed for txID: %s", txPayload.ID)
+				}
 			}
 		}
 
@@ -374,9 +373,11 @@ func SaveBlockToStorageInternal(block Block) bool {
 		// We replaced a same-parent block that had the higher hash: it is the uncle.
 		RecordUncleCandidate(block, *displacedHigherHashSibling)
 	}
-	if replacedExistingBlock {
-		// A block at this height was already counted in the balance cache, so a
-		// delta would double-credit; recompute from the UTXO set instead.
+	RemoveConfirmedFromMempool(block)
+	if replacedExistingBlock || len(block.Transactions) > 1 {
+		// A block at this height was already counted in the balance cache, or
+		// the block moves coins between addresses: recompute from the UTXO set
+		// instead of applying a delta.
 		RebuildStateBalanceCacheInternal()
 	} else {
 		ApplyIncrementalDeltaCacheUpdate(block)

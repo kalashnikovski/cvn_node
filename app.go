@@ -1,16 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // App struct
@@ -98,186 +95,43 @@ func (a *App) FetchWalletBalanceQuery(address string) float64 {
 
 // BroadcastLocalTransactionSubmit injects payloads straight over local HTTP ports into your miner's active wire validation lanes
 func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr string) string {
-	amount, _ := strconv.ParseFloat(amountStr, 64)
-	fee, _ := strconv.ParseFloat(feeStr, 64)
-
-	if amount <= 0 || strings.TrimSpace(recipient) == "" || recipient == "1" {
-		return "ALERT: Transaction rejected by Phase 3 address validation firewall filters."
+	amount, err := strconv.ParseFloat(strings.TrimSpace(amountStr), 64)
+	if err != nil || amount <= 0 {
+		return "REJECTED: Enter an amount greater than zero."
+	}
+	fee := 0.0
+	if strings.TrimSpace(feeStr) != "" {
+		fee, err = strconv.ParseFloat(strings.TrimSpace(feeStr), 64)
+		if err != nil || fee < 0 {
+			return "REJECTED: The fee must be zero or a positive number."
+		}
+	}
+	recipient = strings.TrimSpace(recipient)
+	if recipient == "" {
+		return "REJECTED: Enter a recipient address."
 	}
 
-	requiredTotal := amount + fee
-	var gatheredUTXOs []struct {
-		txID  string
-		index int
-		value float64
-	}
-	var totalAvailable float64
-
-	// 👑 THE LIVE UTXO BATCH REALIGNMENT:
-	addrResp, err := http.Get("http://localhost:8081/blocks/batch?start=0")
-	if err != nil {
-		addrResp, _ = http.Get("http://localhost:9091/blocks/batch?start=0")
-	}
-	
-	if addrResp == nil {
-		return "REJECTED: Unable to communicate with your local mining terminal network ports."
-	}
-
-	var masterBlocksBatch []Block
-	if err := json.NewDecoder(addrResp.Body).Decode(&masterBlocksBatch); err != nil {
-		addrResp.Body.Close()
-		return "REJECTED: Failed to decode live blockchain metrics from miner endpoints."
-	}
-	addrResp.Body.Close()
-
-	// Scan through all valid historical mainnet blocks to gather your true unspent coins!
-	for _, b := range masterBlocksBatch {
-		for _, txPayload := range b.Transactions {
-			for outIdx, out := range txPayload.Outputs {
-				if strings.TrimSpace(out.Recipient) == strings.TrimSpace(CustomMinerAddress) {
-					totalAvailable += out.Amount
-					gatheredUTXOs = append(gatheredUTXOs, struct {
-						txID  string
-						index int
-						value float64
-					}{txID: txPayload.ID, index: outIdx, value: out.Amount})
-				}
+	var privateKeyHex, publicKeyHex string
+	if keyBackupBytes, readErr := os.ReadFile("cvn_secret_backup.txt"); readErr == nil {
+		for _, line := range strings.Split(string(keyBackupBytes), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "Public Key:") {
+				publicKeyHex = strings.TrimSpace(strings.TrimPrefix(line, "Public Key:"))
+			}
+			if strings.HasPrefix(line, "Private Key:") {
+				privateKeyHex = strings.TrimSpace(strings.TrimPrefix(line, "Private Key:"))
 			}
 		}
 	}
-
-	// 👑 CRITICAL REMEDY 2: REAL-TIME DOUBLE-SPEND SPENT-CHECK GATEWAY
-	// Before selecting inputs, cross-verify against the active node's live balance cache 
-	// to violently discard any UTXOs that have already been spent in parallel block races.
-	var validatedUTXOs []struct {
-		txID  string
-		index int
-		value float64
+	if privateKeyHex == "" || publicKeyHex == "" {
+		return "REJECTED: Could not read this wallet's keys from cvn_secret_backup.txt."
 	}
-	
-	// Query the local live /addresses state cache to cross-verify the address profile stability
-	balResp, err := http.Get("http://localhost:8081/addresses")
+
+	// The transfer is built and signed here, on this machine. The node only
+	// ever receives the finished, signed transfer.
+	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amount, fee)
 	if err != nil {
-		balResp, _ = http.Get("http://localhost:9091/addresses")
+		return "REJECTED: " + err.Error()
 	}
-	
-	if balResp != nil {
-		var activeBalances map[string]float64
-		if json.NewDecoder(balResp.Body).Decode(&activeBalances) == nil {
-			if cachedLiveAmt, exists := activeBalances[strings.TrimSpace(CustomMinerAddress)]; exists {
-				if cachedLiveAmt < requiredTotal {
-					balResp.Body.Close()
-					return fmt.Sprintf("REJECTED: Real-time spent-check failed. Inputs spent in concurrent block race. Required: %f, Live Available: %f", requiredTotal, cachedLiveAmt)
-				}
-			}
-		}
-		balResp.Body.Close()
-	}
-
-	// Double-spend check passed: commit to the safe inputs pool cleanly
-	for _, utxo := range gatheredUTXOs {
-		validatedUTXOs = append(validatedUTXOs, utxo)
-	}
-	gatheredUTXOs = validatedUTXOs
-
-	if totalAvailable < requiredTotal {
-		return fmt.Sprintf("REJECTED: Insufficient unspent cryptographic utility reserves. Required: %f, Available: %f", requiredTotal, totalAvailable)
-	}
-
-	var selectedInputs []UTXOInput
-	var inputsValueSum float64
-
-	for _, utxo := range gatheredUTXOs {
-		selectedInputs = append(selectedInputs, UTXOInput{
-			SourceTxID: utxo.txID,
-			Index:      utxo.index,
-			Signature:  "",
-		})
-		inputsValueSum += utxo.value
-		if inputsValueSum >= requiredTotal {
-			break
-		}
-	}
-
-	tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
-	txID := fmt.Sprintf("TX_DESKTOP_%x", sha256.Sum256([]byte(tSeed)))
-
-	var localPrivateKeySecret string
-	var localPublicKeyHex string
-
-	keyBackupBytes, err := os.ReadFile("cvn_secret_backup.txt")
-	if err == nil {
-		lines := strings.Split(string(keyBackupBytes), "\n")
-		for _, line := range lines {
-			if strings.HasPrefix(line, "Public Key: ") {
-				localPublicKeyHex = strings.TrimSpace(strings.TrimPrefix(line, "Public Key: "))
-			}
-			if strings.HasPrefix(line, "Private Key: ") {
-				localPrivateKeySecret = strings.TrimSpace(strings.TrimPrefix(line, "Private Key: "))
-			}
-		}
-	}
-
-	if localPrivateKeySecret == "" || localPublicKeyHex == "" {
-		return "REJECTED: Critical systemic error generating localized cryptographic key contexts."
-	}
-
-	// 👑 CRITICAL REMEDY 2: SECURE POST-SELECTION SIGNING PROTOCOL
-	// Sign the transaction message payload strictly AFTER inputs are locked in place.
-	// This ensures signatures are securely bound to the unique input array set.
-	txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
-	rStr, sStr, err := SignTransactionPayload(localPrivateKeySecret, txMessage)
-	if err != nil {
-		return fmt.Sprintf("REJECTED: Asymmetric signature cryptographic compilation breakdown: %v", err)
-	}
-	combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
-
-	for i := range selectedInputs {
-		selectedInputs[i].Signature = combinedSignature
-	}
-
-	var finalOutputs []UTXOOutput
-	finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
-
-	if inputsValueSum > requiredTotal {
-		changeAmount := inputsValueSum - requiredTotal
-		finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
-	}
-
-	tx := Transaction{
-		ID:               txID,
-		Inputs:           selectedInputs,
-		Outputs:          finalOutputs,
-		Signature:        combinedSignature,
-		PublicKey:        localPublicKeyHex,
-		Timestamp:        time.Now().Unix(),
-		FreeWillOffering: fee,
-		DataSizeKB:       1.2,
-		Witness:          CustomMinerAddress,
-	}
-
-	jsonBytes, err := json.Marshal(tx)
-	if err != nil {
-		return "REJECTED: Failed to serialize transaction parameters."
-	}
-
-	targetURL := "http://localhost:8081/transaction"
-	postResp, err := http.Post(targetURL, "application/json", bytes.NewBuffer(jsonBytes))
-	if err != nil {
-		targetURL = "http://localhost:9091/transaction"
-		postResp, err = http.Post(targetURL, "application/json", bytes.NewBuffer(jsonBytes))
-		if err != nil {
-			return "REJECTED: Unable to communicate with your local mining terminal network ports."
-		}
-	}
-	defer postResp.Body.Close()
-
-	var responseBodyMap map[string]interface{}
-	json.NewDecoder(postResp.Body).Decode(&responseBodyMap)
-
-	if postResp.StatusCode == http.StatusCreated || postResp.StatusCode == http.StatusOK {
-		return "SUCCESS: Payload securely committed to local mempool propagation queue!"
-	}
-
-	return fmt.Sprintf("REJECTED: Local network validation gates returned error code: %d", postResp.StatusCode)
+	return "SUCCESS: Transfer " + tx.ID[:19] + "... sent. It will confirm in one of the next blocks."
 }

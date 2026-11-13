@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"embed"
@@ -252,127 +251,42 @@ func main() {
 			json.NewEncoder(w).Encode(payload)
 		})
 
+		// A node only ever relays transfers that arrive already signed by the
+		// owner of the coins. It never builds or signs one on a caller's behalf.
 		winMux.HandleFunc("/transaction", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			w.Header().Set("Content-Type", "application/json")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			if r.Method != http.MethodPost {
 				w.WriteHeader(http.StatusMethodNotAllowed)
 				return
 			}
-
-			var rawBody bytes.Buffer
-			if _, err := rawBody.ReadFrom(r.Body); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
 			var tx Transaction
-			if err := json.Unmarshal(rawBody.Bytes(), &tx); err == nil && tx.ID != "" && len(tx.Outputs) > 0 {
-				if MempoolMatrix.PushTransaction(tx) {
-					w.WriteHeader(http.StatusCreated)
-					return
-				}
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			var guiPayload map[string]string
-			if err := json.Unmarshal(rawBody.Bytes(), &guiPayload); err != nil {
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024)).Decode(&tx); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "transaction is not valid JSON"})
 				return
 			}
-
-			recipient := guiPayload["recipient"]
-			amountStr := guiPayload["amount"]
-			feeStr := guiPayload["fee"]
-
-			amount, _ := strconv.ParseFloat(amountStr, 64)
-			fee, _ := strconv.ParseFloat(feeStr, 64)
-
-			if amount <= 0 || strings.TrimSpace(recipient) == "" {
+			if err := AdmitTransactionToMempool(tx); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
+			go BroadcastNewTransaction(tx)
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]string{"status": "accepted", "tx_id": tx.ID})
+		})
 
-			requiredTotal := amount + fee
-			var spendableInputs []UTXOInput
-			var currentAccumulator float64
-
-			BalanceCacheMutex.RLock()
-			localBalanceTrack := StateBalanceCache[CustomMinerAddress]
-			BalanceCacheMutex.RUnlock()
-
-			if localBalanceTrack < requiredTotal {
-				w.WriteHeader(http.StatusPaymentRequired)
-				return
-			}
-
-			StateMutex.RLock()
-			currentHeightIndex := GetLatestBlockInternal().Index
-			StateMutex.RUnlock()
-
-			for h := int64(0); h <= currentHeightIndex; h++ {
-				historicalBlock := GetBlockByHeightFromDB(h)
-				for _, historicalTx := range historicalBlock.Transactions {
-for outIdx, out := range historicalTx.Outputs {
-if out.Recipient == CustomMinerAddress {
-spendableInputs = append(spendableInputs, UTXOInput{
-SourceTxID: historicalTx.ID,
-Index:      outIdx,
-Signature:  "",
-})
-currentAccumulator += out.Amount
-if currentAccumulator >= requiredTotal {
-break
-}
-}
-}
-if currentAccumulator >= requiredTotal { break }
-}
-if currentAccumulator >= requiredTotal { break }
-}
-tSeed := fmt.Sprintf("%d-%s-%s-%f", time.Now().UnixNano(), CustomMinerAddress, recipient, amount)
-txID := fmt.Sprintf("TX_SYSTEM_%x", sha256.Sum256([]byte(tSeed)))
-localPrivateKey := os.Getenv("CVN_SECRET_SIGNING_KEY")
-localPublicKey := os.Getenv("CVN_PUBLIC_SIGNING_KEY")
-if localPrivateKey == "" || localPublicKey == "" {
-localPrivateKey = "TEST_ENVIRONMENT_LOCAL_DEFAULT_SECRET_KEY"
-localPublicKey = "TEST_ENVIRONMENT_LOCAL_DEFAULT_PUBLIC_KEY"
-}
-txMessage := fmt.Sprintf("%s-%s-%f", txID, CustomMinerAddress, fee)
-rStr, sStr, err := SignTransactionPayload(localPrivateKey, txMessage)
-if err != nil {
-w.WriteHeader(http.StatusInternalServerError)
-return
-}
-combinedSignature := fmt.Sprintf("%s|%s", rStr, sStr)
-for i := range spendableInputs {
-spendableInputs[i].Signature = combinedSignature
-}
-var finalOutputs []UTXOOutput
-finalOutputs = append(finalOutputs, UTXOOutput{Recipient: recipient, Amount: amount})
-if inputsValueSum := currentAccumulator; inputsValueSum > requiredTotal {
-changeAmount := inputsValueSum - requiredTotal
-finalOutputs = append(finalOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: changeAmount})
-}
-tx = Transaction{
-ID:               txID,
-Inputs:           spendableInputs,
-Outputs:          finalOutputs,
-Signature:        combinedSignature,
-PublicKey:        localPublicKey,
-Timestamp:        time.Now().Unix(),
-FreeWillOffering: fee,
-DataSizeKB:       1.0,
-Witness:          CustomMinerAddress,
-}
-if MempoolMatrix.PushTransaction(tx) {
-w.WriteHeader(http.StatusCreated)
-go BroadcastNewBlock(Block{Transactions: []Transaction{tx}, Hash: "MEMPOOL_GOSSIP_WIRE_ROUTE"})
-return
-}
-w.WriteHeader(http.StatusInternalServerError)
-})
+		// Unspent coins of one address, for wallets building a transfer.
+		winMux.HandleFunc("/utxos", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(ListSpendableCoins(r.URL.Query().Get("address")))
+		})
 // Enforced pointer *http.Request context
 winMux.HandleFunc("/audit", func(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Access-Control-Allow-Origin", "")
@@ -730,6 +644,13 @@ var guardMatrixPlaceholder = ""
 coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
 var coinbaseOutputs []UTXOOutput
 allowedEmission := CalculateBlockReward(nextIndex)
+// From the transaction fork on, waiting transfers that are valid on top of
+// this tip go into the block, and their fees are added to the miner's reward.
+var templateTransfers []Transaction
+var templateFees float64
+if IsTxForkHeight(nextIndex) {
+templateTransfers, templateFees = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 1)
+}
 // If the tip won a same-height race, name the losing block as an uncle and
 // split this block's reward 80/20 with its miner. Total emission is unchanged.
 templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
@@ -737,10 +658,10 @@ templateUncleMiner := "NONE"
 if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle {
 templateUncleHash = pendingUncleHash
 templateUncleMiner = pendingUncleMiner
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission * 0.80})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission*0.80 + templateFees})
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: allowedEmission * 0.20})
 } else {
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission + templateFees})
 }
 candidateTransactions := []Transaction{
 {
@@ -754,6 +675,9 @@ Timestamp:        simulatedTime,
 Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
 },
 }
+candidateTransactions = append(candidateTransactions, templateTransfers...)
+// The transactions are fixed for this template, so digest them once.
+templateTxDigest := BlockTransactionsDigest(nextIndex, candidateTransactions)
 for i := 0; i < 100000; i++ {
 nonce++
 atomic.AddUint64(&globalHashCount, 1)
@@ -779,7 +703,7 @@ UncleHash:    templateUncleHash,
 UncleMiner:   templateUncleMiner,
 }
 // 👑 ABSOLUTE CONGRUENCE PASS: Calculate hash using canonical method blueprint safely
-computedHashHex := CalculateHash(mockTemplateBlock)
+computedHashHex := CalculateHashWithTxDigest(mockTemplateBlock, templateTxDigest)
 if (heartbeatTemplate && computedHashHex <= heartbeatTargetHex) || (!heartbeatTemplate && strings.HasPrefix(computedHashHex, targetPrefix)) {
 StateMutex.RLock()
 latestOnDiskTip := GetLatestBlockInternal()
