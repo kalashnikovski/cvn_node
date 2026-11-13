@@ -63,7 +63,12 @@
 		txStatusMessage = "⏳ SIGNING CRYPTOGRAPHIC TRANSIT BLOCKS NATIVELY...";
 
 		try {
-			const resultMessage = await BroadcastLocalTransactionSubmit(txRecipient, txAmount, txFee, txPrivateKey);
+			const resultMessage = await BroadcastLocalTransactionSubmit(
+				String(txRecipient).trim(),
+				String(txAmount),
+				String(txFee ?? ""),
+				String(txPrivateKey).trim()
+			);
 			
 			if (resultMessage.includes("SUCCESS")) {
 				txStatusMessage = `✅ ${resultMessage}`;
@@ -75,7 +80,7 @@
 				txStatusMessage = `🚨 ${resultMessage}`;
 			}
 		} catch (error) {
-			txStatusMessage = `❌ INTERNAL EXCEPTION: Failed to commit payload to P2P network lanes.`;
+			txStatusMessage = `❌ The wallet could not send the transfer: ${error?.message ?? error}`;
 		}
 	}
 
