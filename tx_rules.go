@@ -703,6 +703,7 @@ func walletNodeGateways() []string {
 		"http://localhost:8081",
 		"http://localhost:9091",
 		"http://64.177.45.153:8081",
+		"http://207.148.67.11:8081",
 		"http://202.137.175.220:8081",
 	}
 }
