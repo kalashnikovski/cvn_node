@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"crypto/elliptic"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
-// App struct
+// App is the desktop wallet. It never opens the chain database: everything it
+// shows comes from a node over HTTP, so it can run beside the miner.
 type App struct {
 	ctx context.Context
 }
@@ -20,81 +25,105 @@ func NewApp() *App {
 	return &App{}
 }
 
-// startup is called when the app starts. The context is saved cleanly
+// startup is called when the wallet window opens.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	fmt.Println("🛰️ [WAILS LIFECYCLE] Core context securely mounted into application interface framework.")
 }
 
-// GetLocalNodeTelemetry fetches telemetry straight from your active mining terminal's local API ports
-func (a *App) GetLocalNodeTelemetry() string {
-	// 👑 THE CORE HTTP LINK UPGRADE:
-	// Bypass sandbox disk files completely and query your active miner's local port!
-	resp, err := http.Get("http://localhost:8081/block")
+// walletAddressFromConfig returns the address saved in miner_config.json, the
+// same one the miner on this machine pays its rewards to.
+func walletAddressFromConfig() string {
+	configFileBytes, err := os.ReadFile("miner_config.json")
 	if err != nil {
-		// Fallback to the port-shifted channel if applicable
-		resp, err = http.Get("http://localhost:9091/block")
+		return ""
+	}
+	var parsedConfig map[string]string
+	if json.Unmarshal(configFileBytes, &parsedConfig) != nil {
+		return ""
+	}
+	address := strings.TrimSpace(parsedConfig["miner_address"])
+	if strings.Contains(address, "UNCONFIGURED") {
+		return ""
+	}
+	return address
+}
+
+// walletGetJSON asks each node in turn (this machine first, then the public
+// seeds) and returns the first JSON answer.
+func walletGetJSON(path string) (map[string]interface{}, bool) {
+	client := &http.Client{Timeout: 4 * time.Second}
+	for _, gateway := range walletNodeGateways() {
+		resp, err := client.Get(gateway + path)
 		if err != nil {
-			// Fail-safe graceful offline state placeholder if the miner is initializing
-			telemetry := map[string]interface{}{
-				"current_height": 0,
-				"block_hash":     "0000000000000000000000000000000000000000000000000000000000000000",
-				"miner_address":  "CVN_NODE_CONNECTING...",
-				"difficulty":     4,
-				"is_synced":      false,
-			}
-			data, _ := json.Marshal(telemetry)
-			return string(data)
+			continue
 		}
+		var data map[string]interface{}
+		decodeErr := json.NewDecoder(resp.Body).Decode(&data)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || decodeErr != nil {
+			continue
+		}
+		return data, true
 	}
-	defer resp.Body.Close()
+	return nil, false
+}
 
-	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return "{}"
-	}
-
-	// Capture network variables from our terminal miner's live response payload
-	heightVal, _ := data["current_height"].(float64)
-	hashVal, _ := data["block_hash"].(string)
-
+// GetLocalNodeTelemetry reports the chain tip and this machine's wallet address.
+func (a *App) GetLocalNodeTelemetry() string {
 	telemetry := map[string]interface{}{
-		"current_height": int64(heightVal),
-		"block_hash":     hashVal,
-		"miner_address":  CustomMinerAddress,
-		"difficulty":     4,
-		"is_synced":      heightVal > 0,
+		"current_height": 0,
+		"block_hash":     "",
+		"miner_address":  walletAddressFromConfig(),
+		"difficulty":     0,
+		"is_synced":      false,
 	}
-
+	if data, ok := walletGetJSON("/block"); ok {
+		heightVal, _ := data["current_height"].(float64)
+		hashVal, _ := data["block_hash"].(string)
+		telemetry["current_height"] = int64(heightVal)
+		telemetry["block_hash"] = hashVal
+		telemetry["is_synced"] = heightVal > 0
+	}
 	finalBytes, _ := json.Marshal(telemetry)
 	return string(finalBytes)
 }
 
-// FetchWalletBalanceQuery pulls verified account metrics directly out of the terminal miner's active ledger cache
+// FetchWalletBalanceQuery returns an address's confirmed balance.
 func (a *App) FetchWalletBalanceQuery(address string) float64 {
-	// Query the local live /audit endpoint inside your miner's active network server
-	resp, err := http.Get(fmt.Sprintf("http://localhost:8081/audit?address=%s", address))
-	if err != nil {
-		resp, err = http.Get(fmt.Sprintf("http://localhost:9091/audit?address=%s", address))
-		if err != nil {
-			return 0.0
-		}
-	}
-	defer resp.Body.Close()
-
-	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	address = strings.TrimSpace(address)
+	if address == "" {
 		return 0.0
 	}
-
-	if balanceVal, exists := data["balance"]; exists {
-		return balanceVal.(float64)
+	data, ok := walletGetJSON("/audit?address=" + url.QueryEscape(address))
+	if !ok {
+		return 0.0
 	}
-	return 0.0
+	balance, _ := data["balance"].(float64)
+	return balance
 }
 
-// BroadcastLocalTransactionSubmit injects payloads straight over local HTTP ports into your miner's active wire validation lanes
-func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr string) string {
+// publicKeyFromPrivateKey rebuilds the 128-character public key that belongs
+// to a private key, so the user only ever has to supply the private key.
+func publicKeyFromPrivateKey(privateKeyHex string) (string, error) {
+	privateKeyHex = strings.TrimSpace(privateKeyHex)
+	if len(privateKeyHex)%2 == 1 {
+		privateKeyHex = "0" + privateKeyHex
+	}
+	privBytes, err := hex.DecodeString(privateKeyHex)
+	if err != nil || len(privBytes) == 0 || len(privBytes) > 32 {
+		return "", fmt.Errorf("that is not a valid private key")
+	}
+	x, y := elliptic.P256().ScalarBaseMult(privBytes)
+	if x == nil || y == nil || (x.Sign() == 0 && y.Sign() == 0) {
+		return "", fmt.Errorf("that is not a valid private key")
+	}
+	return fmt.Sprintf("%064x%064x", x, y), nil
+}
+
+// BroadcastLocalTransactionSubmit builds and signs a transfer on this machine
+// and hands the finished transfer to a node. The private key is used for this
+// one transfer only: it is not saved, logged or sent anywhere.
+func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, privateKeyHex string) string {
 	amount, err := strconv.ParseFloat(strings.TrimSpace(amountStr), 64)
 	if err != nil || amount <= 0 {
 		return "REJECTED: Enter an amount greater than zero."
@@ -110,28 +139,25 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr strin
 	if recipient == "" {
 		return "REJECTED: Enter a recipient address."
 	}
-
-	var privateKeyHex, publicKeyHex string
-	if keyBackupBytes, readErr := os.ReadFile("cvn_secret_backup.txt"); readErr == nil {
-		for _, line := range strings.Split(string(keyBackupBytes), "\n") {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "Public Key:") {
-				publicKeyHex = strings.TrimSpace(strings.TrimPrefix(line, "Public Key:"))
-			}
-			if strings.HasPrefix(line, "Private Key:") {
-				privateKeyHex = strings.TrimSpace(strings.TrimPrefix(line, "Private Key:"))
-			}
-		}
+	privateKeyHex = strings.TrimSpace(privateKeyHex)
+	if privateKeyHex == "" {
+		return "REJECTED: Enter the private key of the wallet you are sending from."
 	}
-	if privateKeyHex == "" || publicKeyHex == "" {
-		return "REJECTED: Could not read this wallet's keys from cvn_secret_backup.txt."
-	}
-
-	// The transfer is built and signed here, on this machine. The node only
-	// ever receives the finished, signed transfer.
-	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amount, fee)
+	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
 	if err != nil {
 		return "REJECTED: " + err.Error()
 	}
-	return "SUCCESS: Transfer " + tx.ID[:19] + "... sent. It will confirm in one of the next blocks."
+	if len(privateKeyHex)%2 == 1 {
+		privateKeyHex = "0" + privateKeyHex
+	}
+	senderAddress, err := DeriveAddressFromPublicKey(publicKeyHex)
+	if err != nil {
+		return "REJECTED: " + err.Error()
+	}
+
+	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amount, fee)
+	if err != nil {
+		return "REJECTED: " + err.Error() + " (sending from " + senderAddress + ")"
+	}
+	return "SUCCESS: Transfer " + tx.ID[:19] + "... sent from " + senderAddress + ". It will confirm in one of the next blocks."
 }

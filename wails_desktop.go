@@ -1,50 +1,34 @@
-//go:build !server || windows
+//go:build desktop && windows
 
 package main
 
 import (
-	"fmt"
 	"log"
-	"os"
-	"runtime"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
-// RunDesktopUIFrameworkIfApplicable parses options and launches the graphical interface layout on desktop builds.
-func RunDesktopUIFrameworkIfApplicable() {
-	runDesktopUI := true
-	if runtime.GOOS != "windows" {
-		runDesktopUI = false
-	} else {
-		// Scan execution argument arrays for terminal console miner configurations
-		for _, arg := range os.Args {
-			if arg == "--connect" || arg == "--miner-address" {
-				runDesktopUI = false // Fall through seamlessly to the main.go terminal mining dashboard
-			}
-		}
+// RunWalletWindow opens the desktop wallet and returns true once the window
+// has been closed. This build of the program is the wallet only: it never
+// opens the chain database or mines, so it can run beside the miner. It talks
+// to the miner (or a public seed node) over HTTP.
+func RunWalletWindow() bool {
+	wailsApp := NewApp()
+	err := wails.Run(&options.App{
+		Title:  "Covenant Standard (CVN) Wallet",
+		Width:  1100,
+		Height: 800,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
+		},
+		BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 1},
+		OnStartup:        wailsApp.startup,
+		Bind:             []interface{}{wailsApp},
+	})
+	if err != nil {
+		log.Fatalf("The wallet window could not be opened: %v", err)
 	}
-
-	if runDesktopUI {
-		fmt.Println("🎨 [WAILS ENGINE] Initiating thread-safe graphical matrix windows...")
-		wailsApp := NewApp()
-		
-		err := wails.Run(&options.App{
-			Title:            "💎 COVENANT STANDARD (CVN) MATRIX CORE",
-			Width:            1100,
-			Height:           760,
-			AssetServer: &assetserver.Options{
-				Assets: assets,
-			},
-			BackgroundColour: &options.RGBA{R: 10, G: 10, B: 15, A: 1},
-			OnStartup:        wailsApp.startup,
-			Bind:             []interface{}{wailsApp},
-		})
-		if err != nil {
-			log.Fatalf("Wails execution fault: %v", err)
-		}
-		os.Exit(0) // Safely terminate execution threads once the graphical wrapper environment window closes
-	}
+	return true
 }

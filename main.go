@@ -92,6 +92,11 @@ func main() {
 		}
 	}
 
+	// The desktop wallet build opens its window here and never starts a node.
+	if RunWalletWindow() {
+		return
+	}
+
 	if _, err := os.Stat("miner_config.json"); os.IsNotExist(err) {
 		privHex, pubHex, walletAddress, err := GenerateKeyPair()
 		if err == nil {

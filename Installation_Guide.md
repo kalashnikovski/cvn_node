@@ -45,6 +45,12 @@ The network requires a foundational, open-source programming runtime environment
 1. Run **`build_clean.bat`** inside `C:\cvn_node` to compile `cvn_miner.exe` and `cvn_node.exe` 
 2. Right-click **`LaunchMiner.bat`** and run as administrator, or double-click **`LaunchWallet.bat`** for the desktop UI.
 
+**About the desktop wallet (`LaunchWallet.bat`):**
+* It can run at the same time as the miner. It shows the balance of the address in `miner_config.json`.
+* To send CVN, paste the private key of the sending wallet into the form. The transfer is signed on your computer; the key is not saved or sent anywhere.
+* It needs Microsoft's WebView2 runtime. Windows 11 includes it. On Windows 10, install the "Evergreen" runtime from `https://developer.microsoft.com/microsoft-edge/webview2/` if the wallet window does not open.
+* You do **not** need Node.js. `setup_wallet_deps.bat` is only for developers who want to change the wallet's screens.
+
 🪪 Step 4: Profile Routing & Consensus Sync
 * **New Users:** Missing configuration triggers automatic wallet generation (`--generate-wallet`) via CSPRNG, displaying your private key directly in the terminal.
 * **Returning Miners:** Existing configurations lock onto your saved public address in `miner_config.json` 
