@@ -106,4 +106,17 @@ go build -o cvn_node .
 2. Hardware Micro-Throttling (Optional): By default, the mining thread will process nonces over all available CPU execution frames. To restrict your hardware footprint to a specific thread frame ceiling so your machine stays quiet and cool, prefix your launch sequence with the native resource gate variable (e.g., limiting execution to exactly 4 cores): bash
 GOMAXPROCS=4 ./cvn_node --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
 
+💼 Step 5: Open the Wallet (Linux and Windows)
+
+The text wallet runs in its own terminal while the miner keeps running in another. It shows balances, sends CVN and creates new wallets. It never opens the chain database, so the two do not interfere.
+1. Leave the miner running. Open a second terminal.
+2. On Linux:
+cd ~/cvn_node
+./cvn_node --wallet
+
+3. On Windows (Command Prompt, inside the cvn_node folder):
+cvn_miner.exe --wallet
+
+To send CVN you paste the private key of the sending wallet. On Linux it is not shown while you type. The key is used to sign that one transfer on your computer and is not saved or sent anywhere.
+
 ⚠️ **Security Note:** Store your Secret Private Key offline immediately upon generation; plaintext keys are no longer written to `cvn_secret_backup.txt`

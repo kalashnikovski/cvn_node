@@ -92,6 +92,15 @@ func main() {
 		}
 	}
 
+	// `--wallet` opens the text wallet in this terminal and never starts a
+	// node, so it can run beside the miner.
+	for _, arg := range os.Args {
+		if arg == "--wallet" {
+			RunTextWallet()
+			return
+		}
+	}
+
 	// The desktop wallet build opens its window here and never starts a node.
 	if RunWalletWindow() {
 		return
@@ -252,6 +261,8 @@ func main() {
 				"block_hash":     latest.Hash,
 				"timestamp":      latest.Timestamp,
 				"transactions":   latest.Transactions,
+				// Total mining work in this node's chain; peers compare chains by it.
+				"total_work": chainWorkThrough(latest.Index).String(),
 			}
 			json.NewEncoder(w).Encode(payload)
 		})
@@ -670,7 +681,6 @@ targetPrefix = strings.Repeat("0", workerTargetDifficulty)
 var guardMatrixPlaceholder = ""
 coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
 var coinbaseOutputs []UTXOOutput
-allowedEmission := CalculateBlockReward(nextIndex)
 // From the transaction fork on, waiting transfers that are valid on top of
 // this tip go into the block, and their fees are added to the miner's reward.
 var templateTransfers []Transaction
@@ -680,15 +690,22 @@ templateTransfers, templateFees = SelectMempoolTransactionsForBlock(TxMaxPerBloc
 }
 // If the tip won a same-height race, name the losing block as an uncle and
 // split this block's reward 80/20 with its miner. Total emission is unchanged.
+// Reward and fees as whole units (see units.go), so the amounts written
+// into the block are exact.
+rewardUnits := BlockRewardUnits(nextIndex)
+feeUnits, _ := AmountToUnits(templateFees)
 templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 templateUncleMiner := "NONE"
 if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle {
 templateUncleHash = pendingUncleHash
 templateUncleMiner = pendingUncleMiner
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission*0.80 + templateFees})
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: allowedEmission * 0.20})
+// Whole units: the uncle gets a fifth of the new reward, rounded down, and
+// the miner the rest plus the fees, so the two always add up exactly.
+uncleUnits := rewardUnits / 5
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsToAmount(rewardUnits - uncleUnits + feeUnits)})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsToAmount(uncleUnits)})
 } else {
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: allowedEmission + templateFees})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsToAmount(rewardUnits + feeUnits)})
 }
 candidateTransactions := []Transaction{
 {

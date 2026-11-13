@@ -1,6 +1,7 @@
 package main
 
 import (
+	"math/big"
 	"crypto/sha256"
 	"embed"
 	"encoding/binary" 
@@ -390,14 +391,14 @@ return
 if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash &&
 incomingBlock.PrevHash == currentTip.PrevHash {
 var winner, loser Block
-if currentTip.Hash < incomingBlock.Hash {
+if siblingWins(currentTip, incomingBlock) {
 winner = currentTip
 loser = incomingBlock
 } else {
 winner = incomingBlock
 loser = currentTip
 }
-// Deterministic tie-break: every node keeps the lower hash. If the incoming
+// Deterministic tie-break: more work wins, then the lower hash. If the incoming
 // block wins, replace our tip with it now instead of staying on our own
 // block until the next height forces a re-sync.
 if winner.Hash == incomingBlock.Hash {
@@ -410,7 +411,7 @@ StateMutex.Unlock()
 if !adopted {
 return
 }
-fmt.Printf("🔄 [TIP SWITCH] Height %d: adopted competing block %.16s (lower hash) over local %.16s\n", incomingBlock.Index, incomingBlock.Hash, currentTip.Hash)
+fmt.Printf("🔄 [TIP SWITCH] Height %d: adopted competing block %.16s (more work or lower hash) over local %.16s\n", incomingBlock.Index, incomingBlock.Hash, currentTip.Hash)
 } else if !ValidateBlockSignatures(incomingBlock) {
 // The losing block earns its miner the uncle share, so it must be a fully
 // valid block, not just something with the right hash prefix.
@@ -513,9 +514,18 @@ gateways = append(gateways, cachedPeerHTTPGateways(gateways)...)
 StateMutex.RLock()
 localHeight := GetLatestBlockInternal().Index
 StateMutex.RUnlock()
+localWork := TotalChainWork()
 for _, gateway := range gateways {
-if remoteHeight := GetGlobalMeshMaxHeight(gateway); remoteHeight >= localHeight+lagThresholdBlocks {
+remoteHeight, remoteWork := peerChainStatus(gateway)
+if remoteHeight >= localHeight+lagThresholdBlocks {
 log.Printf("🩺 [LAG WATCHDOG] %s is at height #%d, we are at #%d. Starting catch-up.\n", gateway, remoteHeight, localHeight)
+go TriggerActiveReSyncPass()
+break
+}
+// A chain can hold more work without being longer. A peer one or two
+// blocks ahead is normal propagation and is left to gossip.
+if remoteWork != nil && remoteHeight > 0 && remoteHeight <= localHeight && remoteWork.Cmp(localWork) > 0 {
+log.Printf("🩺 [LAG WATCHDOG] %s holds more total work at height #%d than our chain at #%d. Comparing chains.\n", gateway, remoteHeight, localHeight)
 go TriggerActiveReSyncPass()
 break
 }
@@ -554,10 +564,31 @@ activeGlobalRecoveryGateways := []string{
 activeGlobalRecoveryGateways = append(activeGlobalRecoveryGateways, cachedPeerHTTPGateways(activeGlobalRecoveryGateways)...)
 client := &http.Client{Timeout: 3 * time.Second}
 var chosenTargetSeedURL string
-// Only a peer strictly ahead of us is a sync source. Starting from our own
-// height also stops a node from picking itself: its own public address sits in
-// the seed list, so it can appear in its own peer map.
-selectedHighestTargetTip := GetLatestBlockInternal().Index
+// A peer is a sync source only if its chain is better than ours: more total
+// work when it reports that, otherwise more blocks (older software). Our own
+// address can appear in the peer list; it is never better than itself.
+selectionTip := GetLatestBlockInternal()
+selectionWork := TotalChainWork()
+originalTotalWork := new(big.Int).Set(selectionWork)
+selectedHighestTargetTip := selectionTip.Index
+var bestPeerWork *big.Int
+considerSyncSource := func(gateway string) {
+peerHeight, peerWork := peerChainStatus(gateway)
+if !peerChainIsBetter(peerHeight, peerWork, selectionTip.Index, selectionWork) {
+return
+}
+better := chosenTargetSeedURL == ""
+if peerWork != nil {
+better = better || bestPeerWork == nil || peerWork.Cmp(bestPeerWork) > 0
+} else {
+better = better || (bestPeerWork == nil && peerHeight > selectedHighestTargetTip)
+}
+if better {
+chosenTargetSeedURL = gateway
+selectedHighestTargetTip = peerHeight
+bestPeerWork = peerWork
+}
+}
 PeerMapMutex.RLock()
 var freshPeerAddresses []string
 for activePeerAddress, lastSeenTimestamp := range ActivePeerMap {
@@ -567,26 +598,15 @@ freshPeerAddresses = append(freshPeerAddresses, activePeerAddress)
 }
 PeerMapMutex.RUnlock()
 for _, activePeerAddress := range freshPeerAddresses {
-{
 cleanHostIP, _, _ := net.SplitHostPort(activePeerAddress)
-peerHTTPGateway := fmt.Sprintf("http://%s:8081", cleanHostIP)
-remotePeerHeight := GetGlobalMeshMaxHeight(peerHTTPGateway)
-if remotePeerHeight > selectedHighestTargetTip {
-selectedHighestTargetTip = remotePeerHeight
-chosenTargetSeedURL = peerHTTPGateway
-}
-}
+considerSyncSource(fmt.Sprintf("http://%s:8081", cleanHostIP))
 }
 if chosenTargetSeedURL == "" {
 for _, endpoint := range activeGlobalRecoveryGateways {
 if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" {
 continue
 }
-remotePeerHeight := GetGlobalMeshMaxHeight(endpoint)
-if remotePeerHeight > selectedHighestTargetTip {
-selectedHighestTargetTip = remotePeerHeight
-chosenTargetSeedURL = endpoint
-}
+considerSyncSource(endpoint)
 }
 }
 if chosenTargetSeedURL == "" {
@@ -635,37 +655,38 @@ return
 }
 StateMutex.Lock()
 shadowTip := GetLatestBlockInternal()
+var removedLocalBlocks []Block
 if commonAncestorHeight < shadowTip.Index {
-_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-bBlocks := tx.Bucket(blocksBucket)
-bMeta := tx.Bucket(metaBucket)
-bUTXO := tx.Bucket(utxoBucket)
-if bBlocks == nil || bMeta == nil || bUTXO == nil {
-return nil
+// Switching would discard our blocks above the shared one. Do it only if the
+// peer's branch proves more work than those blocks hold.
+localBranchWork := new(big.Int).Sub(chainWorkThrough(shadowTip.Index), chainWorkThrough(commonAncestorHeight))
+StateMutex.Unlock()
+fetchBatch := func(start int64) []Block {
+var batch []Block
+resp, err := client.Get(fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), start))
+if err != nil {
+return requestBatchOverTCPMeshNatively(start)
 }
-for h := shadowTip.Index; h > commonAncestorHeight; h-- {
-paddedKey := []byte(fmt.Sprintf("%016d", h))
-if data := bBlocks.Get(paddedKey); data != nil {
-var block Block
-if json.Unmarshal(data, &block) == nil {
-// Newest block first, so coins spent and re-created across the removed
-// blocks unwind in the right order.
-undoBlockCoinChanges(tx, bUTXO, block)
-if block.UncleHash != "" &&
-block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
-cleanAddr(block.UncleMiner) != "NONE" &&
-cleanAddr(block.UncleMiner) != "" {
-deleteUncleUTXO(bUTXO, block.Index, block.UncleMiner)
+if resp.StatusCode == http.StatusOK {
+_ = json.NewDecoder(resp.Body).Decode(&batch)
 }
+resp.Body.Close()
+return batch
 }
+candidateWork, candidateWins := measureCandidateBranch(fetchBatch, commonAncestorHeight, localHashesSnapshot[commonAncestorHeight], selectedHighestTargetTip, localBranchWork)
+if !candidateWins {
+log.Printf("⚖️ [CHAIN WORK] Keeping our chain: %s offers work %s above block #%d, ours holds %s.\n", chosenTargetSeedURL, candidateWork.String(), commonAncestorHeight, localBranchWork.String())
+return
 }
-_ = bBlocks.Delete(paddedKey)
+StateMutex.Lock()
+if GetLatestBlockInternal().Hash != shadowTip.Hash {
+// Our tip moved while the peer's branch was being measured; start over
+// on the next pass rather than act on a stale comparison.
+StateMutex.Unlock()
+return
 }
-_ = bMeta.Put([]byte("height"), []byte(fmt.Sprintf("%016d", commonAncestorHeight)))
-return nil
-})
-atomic.StoreInt64(&localHeightState, commonAncestorHeight)
-RebuildStateBalanceCacheInternal()
+log.Printf("⚖️ [CHAIN WORK] Switching to the branch from %s above block #%d: it proves more work than our %d block(s) there.\n", chosenTargetSeedURL, commonAncestorHeight, shadowTip.Index-commonAncestorHeight)
+removedLocalBlocks = rollbackChainToHeightLocked(commonAncestorHeight)
 }
 // Release here and take the lock only around each batch below. Previously the
 // lock was still held on several exits from the loop, and the deferred queue
@@ -724,6 +745,14 @@ log.Printf("⚠️ [SYNC STALLED] No block applied at height #%d from %s. Ending
 break
 }
 time.Sleep(10 * time.Millisecond)
+}
+if len(removedLocalBlocks) > 0 && TotalChainWork().Cmp(originalTotalWork) < 0 {
+// The peer's branch did not hold up under full validation (or the peer
+// went away), and what we have now is worse than what we gave up.
+log.Printf("↩️ [CHAIN WORK] The new branch ended with less work than our previous chain. Restoring our %d block(s) above #%d.\n", len(removedLocalBlocks), commonAncestorHeight)
+StateMutex.Lock()
+restoreChainLocked(commonAncestorHeight, removedLocalBlocks)
+StateMutex.Unlock()
 }
 }
 func drainAndProcessDeferredQueue() {

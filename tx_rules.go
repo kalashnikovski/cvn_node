@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.etcd.io/bbolt"
@@ -231,13 +232,19 @@ func CheckTransferStandalone(tx Transaction) (string, error) {
 // input must exist, be unspent (also within this block or mempool, via
 // alreadySpent) and belong to the signer, and outputs may not exceed inputs.
 // It returns the fee and the coins consumed.
-func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent map[string]bool) (float64, []SpentRecord, error) {
+//
+// With exactUnits set (blocks from the units fork on) the comparison is done
+// in whole units with no tolerance; see units.go.
+func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent map[string]bool, exactUnits bool) (float64, []SpentRecord, error) {
 	senderAddress, err := CheckTransferStandalone(tx)
 	if err != nil {
 		return 0, nil, err
 	}
 	if _, exists := lookup(utxoKey(tx.ID, 0)); exists {
 		return 0, nil, fmt.Errorf("transfer %s is already on the chain", tx.ID)
+	}
+	if exactUnits {
+		return checkTransferAgainstCoinsInUnits(tx, senderAddress, lookup, alreadySpent)
 	}
 	var inputTotal float64
 	consumed := make([]SpentRecord, 0, len(tx.Inputs))
@@ -268,6 +275,50 @@ func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent m
 		fee = 0
 	}
 	return fee, consumed, nil
+}
+
+// checkTransferAgainstCoinsInUnits is the whole-unit form of the check above.
+// The fee it returns is an exact number of units, expressed in CVN.
+func checkTransferAgainstCoinsInUnits(tx Transaction, senderAddress string, lookup utxoLookup, alreadySpent map[string]bool) (float64, []SpentRecord, error) {
+	var inputUnits int64
+	consumed := make([]SpentRecord, 0, len(tx.Inputs))
+	for _, input := range tx.Inputs {
+		key := utxoKey(input.SourceTxID, input.Index)
+		if alreadySpent[key] {
+			return 0, nil, fmt.Errorf("coin %s is already being spent", key)
+		}
+		record, exists := lookup(key)
+		if !exists {
+			return 0, nil, fmt.Errorf("coin %s does not exist or is already spent", key)
+		}
+		if strings.TrimSpace(record.Recipient) != senderAddress {
+			return 0, nil, fmt.Errorf("coin %s does not belong to the signer", key)
+		}
+		coinUnits, ok := AmountToUnits(record.Amount)
+		if !ok {
+			return 0, nil, fmt.Errorf("coin %s has an unusable amount", key)
+		}
+		var addErr error
+		if inputUnits, addErr = addUnits(inputUnits, coinUnits); addErr != nil {
+			return 0, nil, addErr
+		}
+		consumed = append(consumed, SpentRecord{Key: key, Record: record})
+	}
+	var outputUnits int64
+	for _, output := range tx.Outputs {
+		units, ok := AmountToUnits(output.Amount)
+		if !ok || units < 1 {
+			return 0, nil, fmt.Errorf("an output is smaller than the smallest unit (0.00000001 CVN)")
+		}
+		var addErr error
+		if outputUnits, addErr = addUnits(outputUnits, units); addErr != nil {
+			return 0, nil, addErr
+		}
+	}
+	if outputUnits > inputUnits {
+		return 0, nil, fmt.Errorf("transfer pays out %s but only takes in %s", FormatUnits(outputUnits), FormatUnits(inputUnits))
+	}
+	return UnitsToAmount(inputUnits - outputUnits), consumed, nil
 }
 
 // ValidateBlockTransactions applies the fork rules to every transaction in a
@@ -302,16 +353,18 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup) (float64, []SpentReco
 		return 0, nil, fmt.Errorf("reward transaction ID already used")
 	}
 
+	exactUnits := IsUnitsForkHeight(b.Index)
 	seenIDs := map[string]bool{coinbase.ID: true}
 	spentInBlock := make(map[string]bool)
 	var totalFees float64
+	var totalFeeUnits int64
 	var consumed []SpentRecord
 	for _, tx := range b.Transactions[1:] {
 		if seenIDs[tx.ID] {
 			return 0, nil, fmt.Errorf("transaction %s appears twice", tx.ID)
 		}
 		seenIDs[tx.ID] = true
-		fee, spent, err := checkTransferAgainstCoins(tx, lookup, spentInBlock)
+		fee, spent, err := checkTransferAgainstCoins(tx, lookup, spentInBlock, exactUnits)
 		if err != nil {
 			return 0, nil, fmt.Errorf("transfer %.20s rejected: %w", tx.ID, err)
 		}
@@ -319,7 +372,35 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup) (float64, []SpentReco
 			spentInBlock[record.Key] = true
 		}
 		totalFees += fee
+		if exactUnits {
+			feeUnits, _ := AmountToUnits(fee)
+			var addErr error
+			if totalFeeUnits, addErr = addUnits(totalFeeUnits, feeUnits); addErr != nil {
+				return 0, nil, addErr
+			}
+		}
 		consumed = append(consumed, spent...)
+	}
+
+	if exactUnits {
+		// Whole units, no tolerance: the reward outputs may pay at most the
+		// newly issued reward plus the fees of this block's transfers.
+		var coinbaseUnits int64
+		for _, output := range coinbase.Outputs {
+			units, ok := AmountToUnits(output.Amount)
+			if !ok || units < 1 {
+				return 0, nil, fmt.Errorf("a reward output is smaller than the smallest unit")
+			}
+			var addErr error
+			if coinbaseUnits, addErr = addUnits(coinbaseUnits, units); addErr != nil {
+				return 0, nil, addErr
+			}
+		}
+		allowedUnits := BlockRewardUnits(b.Index) + totalFeeUnits
+		if coinbaseUnits > allowedUnits {
+			return 0, nil, fmt.Errorf("reward of %s exceeds the allowed %s", FormatUnits(coinbaseUnits), FormatUnits(allowedUnits))
+		}
+		return UnitsToAmount(totalFeeUnits), consumed, nil
 	}
 
 	allowed := CalculateBlockReward(b.Index) + totalFees
@@ -469,7 +550,7 @@ func AdmitTransactionToMempool(tx Transaction) error {
 			checkErr = fmt.Errorf("coin database missing")
 			return nil
 		}
-		_, _, checkErr = checkTransferAgainstCoins(tx, bucketLookup(bUTXO), pendingSpends)
+		_, _, checkErr = checkTransferAgainstCoins(tx, bucketLookup(bUTXO), pendingSpends, IsUnitsForkHeight(atomic.LoadInt64(&localHeightState)+1))
 		return nil
 	})
 	if checkErr != nil {
@@ -512,6 +593,7 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, float64) {
 		fee   float64
 		spent []SpentRecord
 	}
+	exactUnits := IsUnitsForkHeight(atomic.LoadInt64(&localHeightState) + 1)
 	var candidates []candidate
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		bUTXO := dbTx.Bucket(utxoBucket)
@@ -525,7 +607,7 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, float64) {
 				delete(mempoolArrival, id)
 				continue
 			}
-			fee, spent, err := checkTransferAgainstCoins(tx, lookup, nil)
+			fee, spent, err := checkTransferAgainstCoins(tx, lookup, nil, exactUnits)
 			if err != nil {
 				delete(MempoolMatrix.Transactions, id)
 				delete(mempoolArrival, id)
@@ -544,6 +626,7 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, float64) {
 
 	var selected []Transaction
 	var totalFees float64
+	var totalFeeUnits int64
 	taken := make(map[string]bool)
 	for _, entry := range candidates {
 		if len(selected) >= limit {
@@ -564,6 +647,14 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, float64) {
 		}
 		selected = append(selected, entry.tx)
 		totalFees += entry.fee
+		if feeUnits, ok := AmountToUnits(entry.fee); ok {
+			totalFeeUnits += feeUnits
+		}
+	}
+	if exactUnits {
+		// An exact number of units, so the miner's reward output matches what
+		// every node will compute when it checks the block.
+		return selected, UnitsToAmount(totalFeeUnits)
 	}
 	return selected, totalFees
 }
@@ -654,26 +745,47 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amount, 
 	if err != nil {
 		return Transaction{}, err
 	}
-	required := amount + fee
+	// Everything is worked out in whole units, so the change is exact and the
+	// transfer is valid under the whole-unit rules as well as the older ones.
+	amountUnits, _ := AmountToUnits(amount)
+	feeUnits, feeOK := AmountToUnits(fee)
+	if amountUnits < 1 {
+		return Transaction{}, fmt.Errorf("amount is smaller than the smallest unit (0.00000001 CVN)")
+	}
+	if !feeOK {
+		return Transaction{}, fmt.Errorf("fee is too large")
+	}
+	requiredUnits, err := addUnits(amountUnits, feeUnits)
+	if err != nil {
+		return Transaction{}, err
+	}
 	var inputs []UTXOInput
-	var gathered float64
+	var gatheredUnits int64
 	for _, coin := range coins {
 		if len(inputs) >= TxMaxInputs {
 			break
 		}
+		coinUnits, ok := AmountToUnits(coin.Amount)
+		if !ok || coinUnits < 1 {
+			continue
+		}
 		inputs = append(inputs, UTXOInput{SourceTxID: coin.TxID, Index: coin.Index})
-		gathered += coin.Amount
-		if gathered >= required {
+		gatheredUnits += coinUnits
+		if gatheredUnits >= requiredUnits {
 			break
 		}
 	}
-	if gathered < required {
-		return Transaction{}, fmt.Errorf("insufficient spendable balance: need %s, have %s", formatAmountExact(required), formatAmountExact(gathered))
+	if gatheredUnits < requiredUnits {
+		if len(inputs) >= TxMaxInputs {
+			return Transaction{}, fmt.Errorf("this amount needs more than %d coins in one transfer; the largest %d add up to %s CVN, so send it in smaller parts", TxMaxInputs, TxMaxInputs, FormatUnits(gatheredUnits))
+		}
+		return Transaction{}, fmt.Errorf("insufficient spendable balance: need %s, have %s", FormatUnits(requiredUnits), FormatUnits(gatheredUnits))
 	}
-	outputs := []UTXOOutput{{Recipient: recipient, Amount: amount}}
-	if change := gathered - required; change > TxAmountTolerance {
-		outputs = append(outputs, UTXOOutput{Recipient: senderAddress, Amount: change})
+	outputs := []UTXOOutput{{Recipient: recipient, Amount: UnitsToAmount(amountUnits)}}
+	if changeUnits := gatheredUnits - requiredUnits; changeUnits > 0 {
+		outputs = append(outputs, UTXOOutput{Recipient: senderAddress, Amount: UnitsToAmount(changeUnits)})
 	}
+	fee = UnitsToAmount(feeUnits)
 	tx := Transaction{
 		Version:          1,
 		Inputs:           inputs,

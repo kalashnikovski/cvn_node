@@ -108,6 +108,7 @@ func InitBoltEngine() {
 
 	reindexUTXOFromChainOnce()
 	RebuildStateBalanceCacheInternal()
+	EnsureChainWorkIndex()
 }
 
 // reindexUTXOFromChainOnce rebuilds the utxo bucket from the canonical blocks
@@ -286,7 +287,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil && historicalOldBlock.Hash != block.Hash {
 				// Same parent, and the block already stored has the lower hash: it
 				// wins the tie-break, so keep it and report ours as the loser.
-				if historicalOldBlock.PrevHash == block.PrevHash && historicalOldBlock.Hash < block.Hash {
+				if historicalOldBlock.PrevHash == block.PrevHash && siblingWins(historicalOldBlock, block) {
 					keptLowerHashSibling = &historicalOldBlock
 					return fmt.Errorf("lower-hash sibling already stored at #%d", block.Index)
 				}
@@ -339,6 +340,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
+		if workErr := storeChainWork(tx, block); workErr != nil {
+			return workErr
+		}
 
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx != 0 {
