@@ -450,6 +450,10 @@ time.Sleep(10 * time.Millisecond)
 }
 atomic.StoreInt32(&IsSyncingActive, 0)
 go runChainLagWatchdog()
+// Decide once before the miner starts whether this node is caught up, then
+// keep checking. See mining_readiness.go.
+evaluateMiningReadiness()
+go runMiningReadinessMonitor()
 StartContextMinerEngine()
 ticker := time.NewTicker(4 * time.Second)
 defer ticker.Stop()
@@ -597,7 +601,7 @@ var nonce int64 = workerID * 100000000
 var floorTipHash string
 var floorTipFirstSeen int64
 for {
-if atomic.LoadInt32(&IsSyncingActive) == 1 {
+if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 {
 time.Sleep(100 * time.Millisecond)
 continue
 }
