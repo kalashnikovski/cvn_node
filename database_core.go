@@ -13,6 +13,10 @@ import (
 
 // Global database file handles and structural bucket identifiers
 var GlobalBoltEngine *bbolt.DB
+
+// errBlockAlreadyStored is returned when a save is asked to store a block
+// that is already the stored block at its height.
+var errBlockAlreadyStored = fmt.Errorf("block already stored")
 var localHeightState int64
 
 var blocksBucket      = []byte("blocks")
@@ -300,9 +304,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 				// Take back the coins the old block created and return the ones it spent.
 				undoBlockCoinChanges(tx, bUTXO, historicalOldBlock)
 			} else {
-				// Same block saved twice: nothing to undo, but the balance cache has
-				// already counted it.
-				replacedExistingBlock = true
+				// The very same block is already stored (our own block coming
+				// back from a peer, for example). Nothing to do.
+				return errBlockAlreadyStored
 			}
 		}
 

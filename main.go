@@ -344,6 +344,9 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 "status":   "ONLINE",
 "height":   tip.Index,
 "tip_hash": tip.Hash,
+// The address this node mines to, so a wallet on the same machine can
+// show the right balance by default.
+"miner_address": strings.TrimSpace(CustomMinerAddress),
 })
 })
 go func() { _ = http.ListenAndServe(":8082", mirrorMux) }()

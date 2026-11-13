@@ -30,9 +30,30 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// walletAddressFromConfig returns the address saved in miner_config.json, the
-// same one the miner on this machine pays its rewards to.
+// walletAddressFromConfig returns the address this machine mines to. It asks,
+// in order: a `--miner-address` given on the command line, the miner running
+// on this machine (which knows the address it was started with), and last the
+// miner_config.json file. The file alone is not reliable: a miner started
+// with `--miner-address` ignores it.
 func walletAddressFromConfig() string {
+	for i, arg := range os.Args {
+		if arg == "--miner-address" && i+1 < len(os.Args) {
+			if address := strings.TrimSpace(os.Args[i+1]); address != "" {
+				return address
+			}
+		}
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	if resp, err := client.Get("http://localhost:8082/status"); err == nil {
+		var status map[string]interface{}
+		decodeErr := json.NewDecoder(resp.Body).Decode(&status)
+		resp.Body.Close()
+		if decodeErr == nil {
+			if address, _ := status["miner_address"].(string); strings.HasPrefix(address, "CVN_") {
+				return address
+			}
+		}
+	}
 	configFileBytes, err := os.ReadFile("miner_config.json")
 	if err != nil {
 		return ""
