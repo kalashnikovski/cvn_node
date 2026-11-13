@@ -517,6 +517,23 @@ var avg15m float64
 if len(hashRateHistory15m) > 0 {
 avg15m = sum15m / float64(len(hashRateHistory15m))
 }
+// The longer averages cover only the time since the miner started until
+// their window has filled.
+var avg1h, avg24h float64
+if len(hashRateHistory1h) > 0 {
+var sum1h float64
+for _, v := range hashRateHistory1h {
+sum1h += v
+}
+avg1h = sum1h / float64(len(hashRateHistory1h))
+}
+if len(hashRateHistory24h) > 0 {
+var sum24h float64
+for _, v := range hashRateHistory24h {
+sum24h += v
+}
+avg24h = sum24h / float64(len(hashRateHistory24h))
+}
 hashrateMutex.Unlock()
 if loopCounter%10 == 0 {
 logMutex.Lock()
@@ -536,7 +553,8 @@ fmt.Println("===================================================================
 fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 fmt.Println("================================================================================")
 fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
-fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 🪪 RIG IDENTITY: %-15.15s...\n", actualCvnBalance, CustomMinerAddress)
+fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
+fmt.Printf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
 fmt.Println("================================================================================")
 fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Println("--------------------------------------------------------------------------------")
