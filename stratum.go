@@ -233,8 +233,11 @@ func handleStratumClient(conn net.Conn) {
 	defer func() {
 		close(done)
 		if loggedIn {
-			atomic.AddInt32(&externalMinersConnected, -1)
-			announceNetworkStatus("⛏️ [WORK SERVER] External miner disconnected: " + conn.RemoteAddr().String())
+			noteNetworkEvent("⛏️ [WORK SERVER] External miner disconnected: " + conn.RemoteAddr().String())
+			// The dashboard is told when the last one leaves, not about each.
+			if atomic.AddInt32(&externalMinersConnected, -1) == 0 {
+				announceNetworkStatus("⛏️ [WORK SERVER] No external miner is connected any more. The built-in miner takes over.")
+			}
 		}
 	}()
 
@@ -281,8 +284,12 @@ func handleStratumClient(conn net.Conn) {
 			}
 			if !loggedIn {
 				loggedIn = true
-				atomic.AddInt32(&externalMinersConnected, 1)
-				announceNetworkStatus(fmt.Sprintf("⛏️ [WORK SERVER] External miner connected from %s, paying %s. The built-in miner is paused.", conn.RemoteAddr(), client.address))
+				// The dashboard is told when the first one arrives, not about each.
+				if atomic.AddInt32(&externalMinersConnected, 1) == 1 {
+					announceNetworkStatus(fmt.Sprintf("⛏️ [WORK SERVER] External miner connected from %s, paying %s. The built-in miner is paused.", conn.RemoteAddr(), client.address))
+				} else {
+					noteNetworkEvent(fmt.Sprintf("⛏️ [WORK SERVER] External miner connected from %s, paying %s.", conn.RemoteAddr(), client.address))
+				}
 				go client.pushJobs(done, job.tipHash)
 			}
 		case "submit":

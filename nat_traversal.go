@@ -39,8 +39,18 @@ const (
 	upnpRetryInterval = 30 * time.Minute
 )
 
+// noteNetworkEvent prints a line that the next screen redraw wipes away. It is
+// for things that happen once per peer or per connection: on a busy network
+// there are thousands of them, and they must not crowd the mining lines out
+// of the dashboard's event list.
+func noteNetworkEvent(line string) {
+	log.Println(line)
+}
+
 // announceNetworkStatus prints a line and also places it in the dashboard's
-// event list, where it survives the next screen redraw.
+// event list, where it survives the next screen redraw. It is for things the
+// person at the screen needs to know and that happen rarely: never once per
+// peer (see noteNetworkEvent).
 func announceNetworkStatus(line string) {
 	log.Println(line)
 	logMutex.Lock()

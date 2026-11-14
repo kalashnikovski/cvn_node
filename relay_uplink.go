@@ -11,6 +11,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,6 +43,10 @@ const (
 // localNodeInstanceID is random per process. It lets a node notice that an
 // address it dialed is in fact itself (its own public IP).
 var localNodeInstanceID = newNodeInstanceID()
+
+// relayFeedAnnounced is 1 once the dashboard has been told that a live block
+// feed is open.
+var relayFeedAnnounced int32
 
 func newNodeInstanceID() string {
 	raw := make([]byte, 12)
@@ -244,7 +249,12 @@ func runRelayUplink(address string, announcedID string) {
 					uplink.live = true
 				}
 				relayUplinkMutex.Unlock()
-				announceNetworkStatus(fmt.Sprintf("📡 [RELAY] Live block feed open through %s (no port forwarding needed to receive blocks).", address))
+				// The first feed is news; the hundredth is not.
+				if atomic.CompareAndSwapInt32(&relayFeedAnnounced, 0, 1) {
+					announceNetworkStatus(fmt.Sprintf("📡 [RELAY] Live block feed open through %s (no port forwarding needed to receive blocks).", address))
+				} else {
+					noteNetworkEvent(fmt.Sprintf("📡 [RELAY] Live block feed open through %s.", address))
+				}
 			}
 
 		case strings.HasPrefix(msg, "PEER_LIST:"):
