@@ -13,12 +13,22 @@
 #                                         the development network, which has
 #                                         no seeds of its own and must be
 #                                         given the other machines' addresses
+#   bash install_seed.sh devnet HOST,HOST,... BITCOIN_HEIGHT
+#                                         a rehearsal of a launch on the
+#                                         development network: the seed waits
+#                                         for that Bitcoin block and starts
+#                                         from it. Every machine taking part
+#                                         must be given the same height.
 #
 # Running it again for the same network is safe: it updates and restarts.
+# On the development network, giving a different Bitcoin height from last
+# time (or none, after a rehearsal) starts that network's chain afresh, since
+# a chain begun from one first block is not valid under another.
 set -euo pipefail
 
 NETWORK="${1:-testnet-1}"
 SEEDS="${2:-}"
+HEIGHT="${3:-}"
 DIR=/opt/cvn_node
 REPO=https://github.com/kalashnikovski/cvn_node
 
@@ -28,6 +38,14 @@ case "$NETWORK" in
   devnet)      PORTS=28080:28081 ;;
   *) echo "Unknown network: $NETWORK (use testnet-1, cvn_testnet or devnet)"; exit 1 ;;
 esac
+if [ -n "$HEIGHT" ]; then
+  if [ "$NETWORK" != devnet ]; then
+    echo "A Bitcoin height can only be given for devnet. The other networks' first blocks are fixed in the program."; exit 1
+  fi
+  case "$HEIGHT" in
+    ''|*[!0-9]*|0*) echo "The Bitcoin height must be a whole number, for example 975800. Got: $HEIGHT"; exit 1 ;;
+  esac
+fi
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this as root (or with sudo)."; exit 1
 fi
@@ -62,7 +80,26 @@ if [ -n "$SEEDS" ]; then
   ARGS="$ARGS --seeds $SEEDS"
 fi
 UNIT="cvn-seed-$NETWORK"
-cat > "/etc/systemd/system/$UNIT.service" <<EOF
+UNIT_FILE="/etc/systemd/system/$UNIT.service"
+REHEARSAL=""
+if [ -n "$HEIGHT" ]; then
+  REHEARSAL="Environment=CVN_DEVNET_ANCHOR_HEIGHT=$HEIGHT"
+fi
+if [ "$NETWORK" = devnet ]; then
+  # The Bitcoin height decides the first block. If it is not the one this
+  # server used last time, the chain it holds belongs to another first block
+  # and so does the saved Bitcoin header: both go.
+  PREVIOUS=""
+  if [ -f "$UNIT_FILE" ]; then
+    PREVIOUS=$(sed -n 's/^Environment=CVN_DEVNET_ANCHOR_HEIGHT=//p' "$UNIT_FILE")
+  fi
+  if [ "$PREVIOUS" != "$HEIGHT" ]; then
+    echo "== The first block has changed (Bitcoin height: was '${PREVIOUS:-none}', now '${HEIGHT:-none}'): starting the devnet chain afresh"
+    systemctl stop "$UNIT" 2>/dev/null || true
+    rm -f "$DIR/cvn_devnet.db" "$DIR/genesis_anchor_devnet.txt"
+  fi
+fi
+cat > "$UNIT_FILE" <<EOF
 [Unit]
 Description=Covenant Standard (CVN) seed node, $NETWORK
 After=network-online.target
@@ -71,6 +108,7 @@ Wants=network-online.target
 [Service]
 WorkingDirectory=$DIR
 ExecStart=$DIR/cvn_node $ARGS
+$REHEARSAL
 Restart=always
 RestartSec=10
 # A seed needs little; this stops a fault from taking the whole server down.
@@ -89,6 +127,10 @@ echo
 systemctl --no-pager --lines=8 status "$UNIT" || true
 echo
 echo "Done. The seed for $NETWORK is running and will start by itself after a reboot."
+if [ -n "$HEIGHT" ]; then
+  echo "  It is rehearsing a launch: it waits for Bitcoin block $HEIGHT and starts from it."
+  echo "  Every other machine must be given the same height."
+fi
 echo "  See what it is doing:   journalctl -u $UNIT -f"
 echo "  Stop it:                systemctl stop $UNIT"
 echo "  Update it later:        bash $DIR/deploy/update_seed.sh"

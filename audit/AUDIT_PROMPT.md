@@ -298,6 +298,163 @@ After every reviewer has answered Prompt 3, run Prompt 2 again exactly as before
 
 ---
 
+## Prompt 4: the fair-launch scorecard
+
+Use this before a launch, after the rounds above. It asks a different question from the others. They ask "what is broken?". This one asks "does this project meet every test of a fair launch of a layer-1 coin built from its own code, and if not, exactly what is missing?".
+
+Rebuild the packs first. Start a **new conversation** with each reviewer, send this prompt, and attach `cvn_audit_full.txt` (or send the three parts as described above).
+
+Two things to know before reading the answers:
+
+- **No review can certify "100%".** A reviewer reads code and documents. Some tests of a fair launch are about what the people running the launch do, and no reading of code can prove those. The prompt makes the reviewer keep the two apart: what the code proves, and what the project must publish or do so that others can check. A reviewer who answers "100% fair" without that separation has not done the work.
+- A "Fail" is not a verdict on the project. It is a list of work. The answer is useful exactly as far as each Fail says what would turn it into a Pass.
+
+```text
+You are assessing a proof-of-work cryptocurrency before it launches. The project says of itself: it is a layer-1 chain written from its own code, not a fork of another coin, and it will have a fair launch: no coins made before the public can mine, no share for the founders, no special powers for anyone. Your job is to test those claims against the code and documents you are given, item by item, and to say for every item that falls short exactly what must change. You are not being asked to summarise the project or to say what is good about it.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below (or three parts sent one after another). It starts with a list of what it contains:
+
+- WHITEPAPER.md: what the rules are meant to be. Read this first.
+- README.md, Installation_Guide.md, MINING_GUIDE.md, ROADMAP.md: what the public is told.
+- LICENSE files.
+- audit/FINDINGS_ROUND_1.md, _2.md, _3.md: what three earlier rounds of review found and what was done.
+- Source code in Go, the scripts that set up servers, the build instructions, then the tests.
+
+Read all of it before you answer. The material numbers its files ("FILE n OF N") and ends with the line "END OF PACK". Begin your answer by stating the number of the last file you can see and whether you can see that last line. If you cannot, your copy was cut short: say so plainly, assess only what you have, and mark every item you could not check as "Cannot tell".
+
+WHAT THE PROJECT IS
+
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so that nobody can mine early.
+
+The code runs on more than one network:
+
+- "testnet-1": an older test network with looser rules, being retired. Ignore problems that exist only under its rules.
+- "cvn_testnet" (the CVN Testnet, about to launch) and "devnet" (for development): these run the LAUNCH RULES, the settings StrictFormat, NoUncles, MaxBlockBytes, AmountsAsUnits, ScheduleAnchored, a PowSchedule with RandomX, and an Economics block. The real network ("mainnet") will run these same rules and is not yet defined in the code. Assess the launch rules, and assess the CVN Testnet's launch as the dress rehearsal for mainnet's: whatever would be unfair in one would be unfair in the other.
+
+The project is run by one person, who also runs the seven "seed" computers that new nodes first connect to, and who will mine from the first block like anyone else.
+
+HOW TO JUDGE EACH ITEM
+
+Give every numbered item below one of these, and nothing else:
+
+  PASS           the code and documents you read prove it. Say which file and function proves it.
+  FAIL           the code or documents show it is not so. Give the steps, quote the lines, and say what to change.
+  PARTLY         true with an exception. Name the exception as you would a FAIL.
+  NOT IN CODE    it cannot be proven or disproven by reading code, because it depends on what people do.
+                 Say exactly what the project should publish or do, and when, so that an outsider could check it.
+  CANNOT TELL    you could not determine it from what you have. Say what you would need.
+
+Do not give PASS on the strength of what a document or a comment says. A claim in the design paper is a thing to test, not evidence. Do not give FAIL without being able to say what a person would do to take advantage, or what an honest person would lose.
+
+A. NO COINS BEFORE THE PUBLIC CAN MINE
+
+A1. The first block creates no coin that anyone can spend, on every network that uses the launch rules.
+A2. No coin exists at any height that was not paid out by the reward schedule to the miner of a block, or was not an unspent coin before. Trace where coins come into being and name every place.
+A3. Nobody can make a valid block 1 before the Bitcoin block named for the launch exists. Consider: a node given a made-up header, a header from another Bitcoin block, a header from a Bitcoin fork or a low-difficulty Bitcoin test network, a first block with a chosen timestamp.
+A4. Nobody who learns the Bitcoin block a few seconds before others gains more than those few seconds. Consider what the two websites the program asks could do, and what an operator who supplies the header by hand could do.
+A5. The header a node starts from cannot be made to differ between honest nodes without those nodes noticing. If two groups start from different headers, what happens, and is anyone told?
+A6. The Bitcoin height for the launch must be announced in advance and fixed in the published code, not supplied at the last minute. Is it? (At the time of this pack the CVN Testnet's is deliberately not yet set. Say what the code does in that state, and what must be true of the code on the day.)
+
+B. NO HEAD START AFTER THE FIRST BLOCK
+
+B1. The difficulty of the first blocks: is it set so that the first minutes do not hand out a large share of coins to whoever is fastest off the mark? Work it through with real numbers from the code: the starting difficulty, the rule for the first 20 blocks, the rule for blocks 20 to 60, and how many blocks a miner with far more power than expected could take before the difficulty catches up. Compare the coins paid in the first hour and the first day with the total supply.
+B2. The same, the other way: if far less power turns up than expected, does the chain stall, and can anyone turn that to their advantage?
+B3. Can the miner of early blocks gain by choosing timestamps?
+B4. Is the reward in the early blocks exactly what the published schedule says, with no bonus period, no larger early reward, and no "slow start" that is different from what the paper states?
+B5. Is the fastest mining software available to everyone on equal terms before the launch? The project publishes its own edition of a third-party miner (XMRig). Its source is not in this pack. Say what would have to be published, and by when, for nobody to hold a faster miner than the public.
+B6. Does the published program contain everything needed to mine from the first block, with instructions that work? Read the guides as a newcomer would and name anything that would leave an ordinary person unable to start on time while an insider could.
+
+C. NO SHARE AND NO POWERS FOR THE FOUNDERS
+
+C1. No address, key or account in the code receives any part of any reward, fee, sweep or vault payout. Search for every literal address and every literal key in the source and say what each is for.
+C2. The "vault" is a number kept by the rules and not a coin that a key can spend. Prove that no transaction and no key can move value out of it except the per-block payout to whoever mines the block.
+C3. The seven-year sweep takes from every address by the same rule, with no exemption for any address, and gives to nobody but the vault.
+C4. No key, signature, message or setting lets one party do what others cannot: stop the chain, reverse blocks, freeze or seize coins, change a rule, mint coins, or push an update. Look for checkpoints, alert systems, signed messages, remote configuration, automatic updates, hidden command-line options and environment variables.
+C5. No environment variable, file or option can change a rule on a launch network. Some exist for "devnet" only. Prove they cannot be reached on "cvn_testnet", and say what would stop the same switches being reachable on a future mainnet.
+C6. The seed computers have no power over the rules. The code prefers seeds when choosing where to download the chain from. Can whoever runs the seeds make new nodes follow a chain with less work, keep them off the real chain, or censor blocks or transfers? What does a newcomer do if every seed is offline or lying?
+C7. The program contacts no computer the user was not told about, and sends nothing about the user anywhere. List every outside address it contacts and why.
+C8. Coins or signed transfers from a test network cannot be replayed on another network.
+
+D. THE SUPPLY IS WHAT THE PAPER SAYS
+
+D1. The total that can ever be issued, computed from the code, equals the figure in the design paper. Do the sum.
+D2. Every block pays exactly: the scheduled reward, plus the miner's share of fees, plus the vault payout, and no more. Work one block through by hand with real numbers, including the rounding.
+D3. Coins plus vault never exceeds what has been issued, after a sweep, after a reorganisation, at each halving and after the last one.
+D4. Amounts cannot overflow or lose value through floating-point arithmetic or the way numbers are written and read.
+
+E. BUILT FROM ITS OWN CODE, AND HONEST ABOUT WHAT IS NOT
+
+E1. The chain's own rules (blocks, transfers, difficulty, sync, storage) are original code and not another coin's code renamed. Say what in the source supports or contradicts this. You cannot compare against every project that exists; say what you could and could not check.
+E2. Every part that comes from someone else is named, and its licence allows this use and is kept with it: the RandomX engine, the miner edition, the libraries in go.mod. Name anything used but not credited.
+E3. The changes made to RandomX are stated accurately, and do not give anyone who knows them an advantage over someone who reads the documents.
+E4. Everything a person needs in order to check the launch for themselves is public: all source for what runs, how to build it, and how to get the same program from the same source.
+E5. Every claim of fact in WHITEPAPER.md, README.md and the guides is true of the code. List each claim that is false, overstated, or not yet built, with the line.
+
+F. SOUND ENOUGH TO LAUNCH
+
+The earlier rounds covered this ground; their records are in the pack. Do not repeat them. Check instead:
+
+F1. Every finding the records mark as fixed is in fact fixed in this code. List any that is not.
+F2. Every item the records list as "not changed": is any of them a reason not to launch? Say which, and why.
+F3. The address checksum, which is new since the last round (block_format.go: addressChecksum, looksLikeWalletAddress, completeOlderAddress; tx_rules.go: validRecipient). Can any coin still be made out to something nobody can spend? Can honest nodes disagree about whether an address is valid?
+F4. Anything you find while doing A to E that lets coins be created or taken, lets honest nodes disagree, or lets one participant stop the chain. Report it in full even though it is not a fairness item.
+
+G. WHAT THE CODE CANNOT SHOW
+
+These are part of a fair launch and are decided by conduct, not code. Do not mark them PASS or FAIL. For each, say what the project should publish or do, and how an outsider could check afterwards:
+
+G1. The launch block and time announced publicly, far enough ahead, in a place that can be dated.
+G2. The exact source and the built programs published before that announcement's deadline, with a way to check that the programs match the source.
+G3. The founder mining from the first block with the same software as everyone else, and saying so, including with how much computing power.
+G4. No private agreement, sale, or allocation of coins before or after launch.
+G5. The seed computers: who runs them, and how others can add their own.
+G6. What happens to the test networks' coins (they should be worth nothing and carry over to nothing).
+
+WHAT IS ALREADY KNOWN - do not report these as findings
+
+- A proof-of-work network with little mining power can be attacked by anyone with more.
+- All balances and transfers are public. A lost private key means lost coins.
+- Which transfers a miner includes is the miner's choice and is not a network rule.
+- One person wrote and runs the project. Report what follows from that only where the code gives that person a power others lack.
+- Everything listed under "not changed" in the audit records, unless you can show it bears on fairness.
+- Style, naming, comments, and the wording of messages.
+
+HOW TO ANSWER
+
+1. One line: how much of the material you read, and anything you could not check.
+
+2. THE SCORECARD. A table with one row for every item A1 to F4, in order: the item, your judgement (PASS / FAIL / PARTLY / NOT IN CODE / CANNOT TELL), and one line of reason naming the file and function. No row may be left out.
+
+3. EVERYTHING THAT IS NOT A PASS, most serious first. For each:
+
+  Item: its number and a one-line title.
+  Judgement: FAIL / PARTLY / NOT IN CODE / CANNOT TELL.
+  Seriousness for a fair launch: Blocks the launch / Should be fixed before launch / Can follow launch.
+  What is so: the facts, with the lines quoted. For a FAIL, the exact steps: who does what, and who gains or loses what.
+  What would make it a PASS: the smallest change to the code, the documents, or the launch procedure. Be exact enough that someone could do it without asking you.
+
+4. SECTION G: for each of G1 to G6, what to publish or do, and how it can be checked.
+
+5. THE COUNT: how many items are PASS, FAIL, PARTLY, NOT IN CODE and CANNOT TELL. Do not turn this into a percentage or a score out of ten. Then one sentence: on what you read, is there any item that should stop the CVN Testnet from launching as it stands, and which.
+
+Rules for your answer:
+- Be specific or say nothing. "Consider a third-party audit" is not an answer to any item.
+- Judge what is in front of you. Do not mark an item down because other projects do it differently, and do not mark one up because the documents sound careful.
+- If you are unsure whether the code does what you think, say so and say what you assumed.
+- Do not soften a FAIL, and do not pad the answer with praise or a summary.
+- If you cannot find a way to break an item, say what you tried.
+```
+
+After every reviewer has answered Prompt 4, run Prompt 2 with their answers as before. For the scorecard, add this line at the top of Prompt 2:
+
+```text
+The findings below are answers to a fair-launch scorecard with items numbered A1 to G6. Where two reviewers give the same item different judgements, say which is right and quote the code that settles it.
+```
+
+---
+
 ## After the reviews
 
 Bring the findings back to the development session, with each reviewer's verdicts from Prompt 2. Each one that survives is then:
