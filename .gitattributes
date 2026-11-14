@@ -1,2 +1,7 @@
 # Scripts for Linux servers must keep Unix line endings on every machine.
 *.sh text eol=lf
+
+# The built wallet screens are compiled into the program. They must be the
+# same bytes on every machine, or nobody could rebuild the program and get
+# the published one.
+frontend/dist/** -text

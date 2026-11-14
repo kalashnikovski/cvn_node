@@ -8,10 +8,13 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.etcd.io/bbolt"
 )
 
 // CATCHING UP WITH THE NETWORK
@@ -310,15 +313,9 @@ func trustedSourceClaimsBetter() bool {
 // never deliver and keep this node from ever starting to mine. Whatever
 // remains is caught up in the background once the node is running.
 func runInitialDownload(args []string) {
-	if host := argumentValue(args, "--connect"); host != "" {
-		if !strings.HasPrefix(host, "http://") {
-			host = "http://" + host
-		}
-		operatorSyncSources = []string{strings.TrimSuffix(host, "/")}
-	}
+	operatorSyncSources = operatorSourcesFrom(argumentValue(args, "--connect"))
 	fmt.Println("🚀 Catching up with the network...")
-	heightAtStart := GetLatestBlockInternal().Index
-	defer func() { noteInitialDownload(heightAtStart, GetLatestBlockInternal().Index) }()
+	beginInitialDownload(GetLatestBlockInternal().Index)
 	for pass := 0; pass < initialDownloadMaxPasses; pass++ {
 		before := TotalChainWork()
 		TriggerActiveReSyncPass()
@@ -334,7 +331,6 @@ func runInitialDownload(args []string) {
 	// they gave it, it asks the other nodes it knows of, a few times at most:
 	// a seed is a convenience, not an authority, and if another node proves
 	// more work, that is the chain to follow.
-	noteInitialDownload(heightAtStart, GetLatestBlockInternal().Index)
 	for pass := 0; pass < initialDownloadOtherPasses; pass++ {
 		before := TotalChainWork()
 		TriggerActiveReSyncPass()
@@ -343,7 +339,27 @@ func runInitialDownload(args []string) {
 		}
 		fmt.Printf("⏳ [SYNC] Now at block #%d.\n", GetLatestBlockInternal().Index)
 	}
+	trySettleInitialDownload()
 	fmt.Printf("✅ [SYNC] Starting at block #%d.\n", GetLatestBlockInternal().Index)
+}
+
+// operatorSourcesFrom turns what was given with --connect into the nodes to
+// ask: one host or several, separated by commas. A host given without a port
+// is asked on this network's download port.
+func operatorSourcesFrom(list string) []string {
+	var sources []string
+	for _, host := range strings.Split(list, ",") {
+		host = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(host), "http://"), "/")
+		if host == "" || strings.ContainsAny(host, " /@") {
+			continue
+		}
+		if _, _, err := net.SplitHostPort(host); err != nil {
+			sources = append(sources, Params.syncURL(host))
+		} else {
+			sources = append(sources, "http://"+host)
+		}
+	}
+	return sources
 }
 
 // initialDownloadOtherPasses is how many passes the start-up download gives
@@ -361,28 +377,157 @@ const initialDownloadOtherPasses = 3
 // seed could hand newcomers a chain of its own making, and they would refuse
 // the real chain for ever after.
 //
-// So the blocks downloaded at start-up are not counted against the limit for
-// as long as the program runs. If another node later proves more work, the
-// newcomer follows it, however far back the two chains part within those
-// blocks. Blocks that were already in the database when the program started,
-// and blocks that arrive afterwards, are counted as always.
+// So the blocks a node downloads at start-up, and every block it receives
+// after them, are not counted against the limit until a node that is not a
+// seed has shown that it holds the same chain. Until then the newcomer
+// follows whichever chain proves the most work, however far back the two
+// part above the height it started from. That stays true if the program is
+// stopped and started again: the height is kept in the database.
+//
+// Once a node that is not a seed agrees, the node is on a chain that someone
+// other than the seeds vouches for, and the limit protects it from then on.
+// Blocks that were in the database before the download are counted always.
+//
+// This cannot tell a node run by a stranger from one run by whoever runs the
+// seeds. Nothing in software can. What it ensures is that the seeds alone
+// are never enough to hold a newcomer; the rest is seeds run by more than
+// one person, and --connect, which lets an operator name nodes they trust.
 var initialDownload struct {
 	sync.Mutex
-	from, to int64 // heights above `from`, up to and including `to`
+	from int64 // heights above this are not counted...
+	to   int64 // ...up to and including this one, once settled
+	open bool  // not yet settled: every height above `from` is uncounted
 }
 
-func noteInitialDownload(from, to int64) {
+var unsettledDownloadKey = []byte("unsettled_download_from")
+
+// setInitialDownload puts the bookkeeping in a given state, in memory only.
+func setInitialDownload(from, to int64, open bool) {
 	initialDownload.Lock()
-	initialDownload.from, initialDownload.to = from, to
+	initialDownload.from, initialDownload.to, initialDownload.open = from, to, open
 	initialDownload.Unlock()
 }
+
+// beginInitialDownload is called when the program starts catching up, with
+// the height it has. If an earlier run ended before its download was
+// settled, the height that run started from still stands.
+func beginInitialDownload(height int64) {
+	from := height
+	if GlobalBoltEngine != nil {
+		_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+			bMeta := tx.Bucket(metaBucket)
+			if bMeta == nil {
+				return nil
+			}
+			if stored, err := strconv.ParseInt(string(bMeta.Get(unsettledDownloadKey)), 10, 64); err == nil && stored >= 0 && stored < from {
+				from = stored
+			}
+			return bMeta.Put(unsettledDownloadKey, []byte(strconv.FormatInt(from, 10)))
+		})
+	}
+	setInitialDownload(from, from, true)
+}
+
+// settleInitialDownload ends the exemption for blocks received from now on.
+func settleInitialDownload() {
+	tip := GetLatestBlockInternal().Index
+	initialDownload.Lock()
+	wasOpen := initialDownload.open
+	initialDownload.to, initialDownload.open = tip, false
+	initialDownload.Unlock()
+	if GlobalBoltEngine != nil {
+		_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+			if bMeta := tx.Bucket(metaBucket); bMeta != nil {
+				return bMeta.Delete(unsettledDownloadKey)
+			}
+			return nil
+		})
+	}
+	if wasOpen {
+		log.Printf("🤝 [SYNC] A node that is not a seed holds the same chain as this one, up to block #%d.\n", tip)
+	}
+}
+
+// nodesThatAreNotSeeds lists the nodes this one knows of, other than the
+// seeds: those the operator named, those that have delivered blocks, those
+// remembered from earlier runs, and those connected now.
+func nodesThatAreNotSeeds() []string {
+	isSeed := make(map[string]bool)
+	for _, endpoint := range append(seedSyncURLs(), Params.ExtraSyncURLs...) {
+		isSeed[endpoint] = true
+	}
+	seen := make(map[string]bool)
+	var others []string
+	tiers := syncSourceTiers()
+	for _, tier := range append([][]string{operatorSyncSources}, tiers...) {
+		for _, source := range tier {
+			if !isSeed[source] && !seen[source] {
+				seen[source] = true
+				others = append(others, source)
+			}
+		}
+	}
+	return others
+}
+
+// trySettleInitialDownload asks the nodes that are not seeds whether they
+// hold this node's chain, and settles the download if one does. It asks
+// about a block a little below the tip, so that a block still on its way
+// round the network does not look like a disagreement.
+func trySettleInitialDownload() {
+	initialDownload.Lock()
+	open, from := initialDownload.open, initialDownload.from
+	initialDownload.Unlock()
+	if !open {
+		return
+	}
+	tip := GetLatestBlockInternal().Index
+	if tip <= from {
+		// Nothing was downloaded: there is nothing taken on a seed's word.
+		settleInitialDownload()
+		return
+	}
+	height := tip - 2
+	if height <= from {
+		height = tip
+	}
+	ours := GetBlockByHeightFromDB(height).Hash
+	if ours == "" {
+		return
+	}
+	for _, source := range nodesThatAreNotSeeds() {
+		if theirs, ok := fetchBlockHash(source, height); ok && theirs == ours {
+			settleInitialDownload()
+			return
+		}
+	}
+}
+
+// runDownloadSettler keeps trying until the download is settled.
+func runDownloadSettler() {
+	for {
+		time.Sleep(downloadSettleInterval)
+		trySettleInitialDownload()
+		initialDownload.Lock()
+		open := initialDownload.open
+		initialDownload.Unlock()
+		if !open {
+			return
+		}
+	}
+}
+
+const downloadSettleInterval = 2 * time.Minute
 
 // countedReorgDepth is how many of our blocks above `ancestor` count against
 // the reorganisation limit when our tip is at `tip`.
 func countedReorgDepth(tip, ancestor int64) int64 {
 	initialDownload.Lock()
-	from, to := initialDownload.from, initialDownload.to
+	from, to, open := initialDownload.from, initialDownload.to, initialDownload.open
 	initialDownload.Unlock()
+	if open {
+		to = tip
+	}
 	depth := tip - ancestor
 	low, high := ancestor, tip
 	if from > low {

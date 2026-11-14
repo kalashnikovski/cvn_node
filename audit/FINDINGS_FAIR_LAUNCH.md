@@ -66,3 +66,42 @@ These are for the person running the launch. Each reviewer said the same things 
 | G4 | State that no coins have been sold, promised or set aside. **Done:** in the README. | The list of addresses after the first day. |
 | G5 | Say who runs each seed, and add seeds run by others as they come forward. | Connect without the listed seeds, with `--connect`. |
 | G6 | State that test-network coins carry over to nothing (**done:** in the README). A mainnet needs its own name, message key, ports and database file. | The network's settings in the source. |
+
+---
+
+# Second run of the scorecard
+
+Two reviewers (Claude, Grok) ran the scorecard again on commit `e4d8b89`, with the record above in front of them. Both confirmed every fix above is present. Neither gave any item a FAIL. Both left A6 and B5 as "not in code", which they are until the launch is scheduled. This is what else they did not pass, and what was done.
+
+## Fixed in the code
+
+| Item | Finding | What was wrong | Fix | Test |
+|---|---|---|---|---|
+| A4 | **A Bitcoin block dated ahead of real time gave an altered miner the start to itself** | The first block was dated with the Bitcoin block's own time, which Bitcoin lets run up to two hours ahead. Block 1 must be dated after the first block, and no node takes a block dated more than two minutes ahead, so every honest miner waited for the clock. A miner with that one check removed could work ahead and release its blocks as they became acceptable: about three blocks alone for a five-minute lead, far more for a long one. | The first block is dated two hours before its Bitcoin block's time, so it can never be ahead of the true time and nobody waits. Being early costs nothing: the first 20 blocks take no notice of dates. | `TestAnAnchorDatedAheadIdlesNobody` |
+| A4 | One slow explorer delayed every look-up by up to 30 seconds | The node waited for all five answers. | It stops as soon as one header has two votes and no other could still reach two. | `TestAnchorLookupSurvivesExplorersBeingDown` |
+| A5 | **No rule fixed in advance for two first blocks** | If Bitcoin replaced the anchor block, which network counted was "settled by announcement": the choice of the person who runs the seeds. Nodes that agreed with the seeds were told nothing. | The rule is fixed and is Bitcoin's: the network is the one that begins from the block still in Bitcoin's chain six blocks later. Until then every node asks the explorers again whether its block is still the one at that height, independently of the seeds, and says how to move over if not. | `TestANodeSaysWhenBitcoinReplacesItsAnchor` |
+| C6 | **Lock-in returned after 100 blocks or a restart** | Freedom from the reorganisation limit covered only the blocks downloaded at start-up and only while the program ran. A newcomer kept on a seed's chain for 75 minutes, or restarted, refused the real chain again. `--connect` took one node. | Nothing taken on the seeds' word counts against the limit until a node that is not a seed has shown it holds the same chain. That is kept in the database across restarts. `--connect` takes a list. | `TestANewcomerStaysFreeUntilSomeoneOtherThanASeedAgrees`, `TestConnectTakesSeveralNodes` |
+| F3 | **An address typed into the settings file was completed** | The guide tells people they may edit `miner_config.json`. An older-form address typed there was completed like one the program had saved, so a typing mistake got a valid check. | The program marks an address it saves, and the mark names the address. Only a marked address is completed. | `TestAnAddressTypedIntoTheConfigFileIsNotCompleted` |
+| B6 | `--network testnet` quietly ran the first test network | Someone reading "CVN Testnet" and typing `testnet` would have mined the retired chain while the launch happened elsewhere. | The name is refused, like `mainnet`. | `TestThereIsNoNetworkCalledMainnet` |
+
+## Fixed in the documents and the build
+
+| Item | Finding | Fix |
+|---|---|---|
+| B6 | The Linux build command fails on Ubuntu and Debian, whose Go does not fetch the version the project needs. | Both guides give `GOTOOLCHAIN=auto go build`, and say why. |
+| B6 | The README's quick start said nothing about networks. No single list of what to do before a launch. | The README says its commands run on `testnet-1` and points to the guide, which now has a checklist: release, wallet, optional speed-ups, start and wait. |
+| A4 | Nothing said how much being first is worth. | The guide says: seconds, against a 45-second block at a difficulty that cannot fall for 20 blocks. |
+| E4 | The wallet screens compiled into the program were a prebuilt bundle taken on trust. | Every change and every release now rebuilds them from their source with locked versions and fails unless the result is byte for byte what the repository holds. The stored copy was made exact (one page had different line endings). |
+| E4 | The seed installer built whatever was newest. | `CVN_VERSION=TAG` builds exactly one release. |
+| E4 | Two trial releases had Windows programs that could not be rebuilt to the same sums. | Fixed in `v5.0.0-rc3`: all four programs were rebuilt on a separate machine to exactly the published sums. The guide says so. |
+| E3 | The engine's body was not in the pack, so the claim that only two settings changed could not be checked. | `internal/randomx/DIFFERENCES.md`, written by a script anyone can run, compares every file with the original as Go fetches and checksums it: 71 identical, 3 changed, with every changed line shown. |
+| E2 | The third-party notices were not in the pack. | They are. |
+| E5 | "Any Go from version 1.21 works"; three different speeds for the built-in miner in the roadmap; "a byte limit is not enforced" without saying that is the first test network only; "depends on two libraries" when three are imported. | Each corrected. |
+
+## Not changed, and why
+
+| Item | Finding | Decision |
+|---|---|---|
+| B3 | A miner can claim relief for a late block two minutes early, and whoever mines the first 20 blocks can date them close together, which is repaid as slightly faster blocks for everyone. | Accepted. Both reviewers agree it is bounded and neither could name a change. Any chain that takes its time from its miners gives them some latitude; this one gives two minutes where Bitcoin gives two hours. |
+| C6 | All six seeds are run by one person. A newcomer who reaches only the seeds sees only what they show. | Not a matter of code. Seeds run by others will be added to the list as they are offered; until then `--connect` names any node. The software cannot tell a stranger's node from one run by whoever runs the seeds, and the code says so. |
+| A6, B5 | The launch height is not set; the fast miner's source is in its own repository. | Both are for the scheduling release. The fast miner's source, builds and sums are already public (`cvn-xmrig`, tag `cvn-6.26.0-2`). |

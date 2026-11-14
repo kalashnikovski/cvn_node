@@ -8,6 +8,10 @@
 # started afresh, pass that network's database file to delete first:
 #
 #   bash /opt/cvn_node/deploy/update_seed.sh cvn_devnet.db
+#
+# To move to one particular release and not the newest source, name its tag:
+#
+#   CVN_VERSION=v5.0.0 bash /opt/cvn_node/deploy/update_seed.sh
 set -euo pipefail
 
 DIR=/opt/cvn_node
@@ -20,7 +24,13 @@ UNITS=$(systemctl list-unit-files 'cvn-seed-*.service' --no-legend | awk '{print
 for unit in $UNITS; do systemctl stop "$unit"; done
 
 echo "== Fetching and building"
-git -C "$DIR" pull --ff-only
+git -C "$DIR" fetch --tags --quiet origin
+if [ -n "${CVN_VERSION:-}" ]; then
+  git -C "$DIR" checkout --quiet "refs/tags/$CVN_VERSION"
+else
+  git -C "$DIR" checkout --quiet main
+  git -C "$DIR" pull --ff-only
+fi
 (cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node .)
 
 for database in "$@"; do

@@ -124,24 +124,35 @@ func lookUpAnchor(height int64) (header string, tip int64, agreed bool) {
 			answers <- answer{candidate, sourceTip, found}
 		}(source)
 	}
+	// One header must have the votes it needs, and no other may. If Bitcoin
+	// itself is undecided between two blocks at that height, the sources
+	// will be too, and the node waits for them to settle.
 	votes := make(map[string]int)
-	for range anchorSources {
+	withEnough := 0
+	for waiting := len(anchorSources); waiting > 0; {
 		got := <-answers
+		waiting--
 		if got.tip > tip {
 			tip = got.tip
 		}
 		if got.found {
 			votes[got.header]++
 		}
-	}
-	// One header must have the votes it needs, and no other may. If Bitcoin
-	// itself is undecided between two blocks at that height, the sources
-	// will be too, and the node waits for them to settle.
-	withEnough := 0
-	for candidate, count := range votes {
-		if count >= anchorSourcesNeeded {
-			header = candidate
-			withEnough++
+		withEnough = 0
+		rivalCouldStillReach := false
+		for candidate, count := range votes {
+			if count >= anchorSourcesNeeded {
+				header = candidate
+				withEnough++
+			} else if count+waiting >= anchorSourcesNeeded {
+				rivalCouldStillReach = true
+			}
+		}
+		// Settled early: one header has its votes, and the sources still to
+		// answer could not give any other header as many. A slow source then
+		// delays nobody.
+		if withEnough == 1 && !rivalCouldStillReach && waiting < anchorSourcesNeeded {
+			break
 		}
 	}
 	if withEnough != 1 {
@@ -159,17 +170,23 @@ func anchorFromFile() (string, bool) {
 	return strings.TrimSpace(string(raw)), true
 }
 
+// anchorLookupAllowed reports whether this node may ask Bitcoin block
+// explorers about the anchor: it may unless started with --no-anchor-lookup.
+func anchorLookupAllowed(args []string) bool {
+	for _, arg := range args {
+		if arg == "--no-anchor-lookup" {
+			return false
+		}
+	}
+	return true
+}
+
 // waitForGenesisAnchor blocks until this network's anchor is known, then
 // makes it the anchor. It looks every `nearInterval` once Bitcoin is within
 // a few blocks of the height, and every `farInterval` before that.
 func waitForGenesisAnchor(args []string, nearInterval, farInterval time.Duration) {
 	height := Params.Anchor.BitcoinHeight
-	lookup := true
-	for _, arg := range args {
-		if arg == "--no-anchor-lookup" {
-			lookup = false
-		}
-	}
+	lookup := anchorLookupAllowed(args)
 	fmt.Println("====================================================================")
 	fmt.Printf(" WAITING FOR THE START OF %s\n", strings.ToUpper(Params.Name))
 	fmt.Println("====================================================================")

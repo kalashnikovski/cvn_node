@@ -29,11 +29,22 @@ import (
 //     header, so it decides the genesis identifier and, with it, the RandomX
 //     key for the first blocks: even preparing to mine is impossible before
 //     the anchor exists.
-//   - Its date. The genesis block is dated with the Bitcoin block's own
+//   - Its date. The genesis block is dated from the Bitcoin block's own
 //     timestamp, so the chain's clock starts at the launch and not at some
 //     date written into the software weeks earlier. Without this the first
 //     miner could date the first blocks far in the past, and the difficulty
 //     rule, seeing days pass between blocks, would drop to its minimum.
+//
+//     The date used is the Bitcoin timestamp less two hours. Bitcoin lets a
+//     block carry a time up to two hours ahead of the true time, and some
+//     do. Block 1 must be dated after the genesis block, and no node takes
+//     a block dated more than two minutes ahead of its clock. A genesis
+//     block dated in the future would therefore leave every honest miner
+//     waiting for the clock, while a miner altered to work ahead and hold
+//     its blocks back had the start to itself. Two hours back, the genesis
+//     date can never be ahead of the true time, and nobody has to wait.
+//     Being early costs nothing: for the first blocks the difficulty rule
+//     takes no notice of dates (see heartbeat_difficulty.go).
 //
 // Both come from the Bitcoin block's 80-byte header, which is what an
 // operator supplies. The header proves itself: its hash must meet the
@@ -104,6 +115,10 @@ func (a GenesisAnchor) required() bool { return a.BitcoinHeight > 0 || a.Unsched
 // A variable so tests can stand in other values.
 var bitcoinAnchorEasiestBits uint32 = 0x170859cc
 
+// bitcoinClockAllowance is how far ahead of the true time Bitcoin lets a
+// block's timestamp be, in seconds.
+const bitcoinClockAllowance = int64(2 * 60 * 60)
+
 // compactTarget turns Bitcoin's compact form of a target into the number.
 func compactTarget(bits uint32) (*big.Int, bool) {
 	exponent := uint(bits >> 24)
@@ -165,7 +180,7 @@ func useAnchorHeader(headerHex string) error {
 	}
 	Params.Anchor.BitcoinHeader =strings.ToLower(strings.TrimSpace(headerHex))
 	Params.Anchor.BitcoinHash = hash
-	Params.GenesisTimestamp = timestamp
+	Params.GenesisTimestamp = timestamp - bitcoinClockAllowance
 	return nil
 }
 
@@ -301,6 +316,9 @@ func ShowGenesis() {
 	fmt.Println("--------------------------------------------------------------------")
 	fmt.Printf(" Genesis block identifier: %s\n", genesis.Hash)
 	fmt.Printf(" Genesis block date:       %d (seconds since 1 January 1970, UTC)\n", genesis.Timestamp)
+	if anchor.required() {
+		fmt.Println("                           (the Bitcoin block's own time, less two hours)")
+	}
 	fmt.Printf(" Genesis block pays:       %s CVN\n", FormatUnits(genesis.Transactions[0].Outputs[0].Amount.Units()))
 	if statement := genesisStatement(); statement != "" {
 		fmt.Printf(" Written in its header:    %s\n", statement)

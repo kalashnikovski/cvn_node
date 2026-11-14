@@ -26,3 +26,15 @@ published values and checked against RandomX's official test values:
 
 Without that tag the tests check CVN's own values, and that the low-memory
 (verifying) and full-memory (mining) modes agree.
+
+## Checking this copy against the original
+
+`DIFFERENCES.md` in this folder lists every file as identical to the
+original, changed, added or not copied, and shows every changed line. It is
+written by a script, which anyone can run again:
+
+    go mod download -json git.gammaspectra.live/P2Pool/go-randomx/v4@v4.7.0
+    python audit/compare_randomx.py FOLDER_THAT_COMMAND_PRINTS
+
+71 of the engine's files are byte for byte the original's, apart from line
+endings and the import path. Three are changed, in the ways listed above.

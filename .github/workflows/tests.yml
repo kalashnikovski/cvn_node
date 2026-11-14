@@ -25,6 +25,18 @@ jobs:
       # The RandomX engine, built with the published settings, must give
       # RandomX's own published test values.
       - run: go test -tags randomx_reference ./internal/randomx/
+      # The built wallet screens kept in the repository are compiled into the
+      # program. They must be exactly what their source builds to, so that
+      # nothing in the program is taken on trust.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Check the wallet screens against their source
+        working-directory: frontend
+        run: |
+          npm ci --legacy-peer-deps --no-audit --no-fund
+          npm run build
+          git diff --exit-code -- dist
       - name: Build for Linux
         env:
           CGO_ENABLED: '0'

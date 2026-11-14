@@ -31,7 +31,7 @@ Full step-by-step instructions are in [Installation_Guide.md](Installation_Guide
 ```bash
 git clone https://github.com/kalashnikovski/cvn_node
 cd cvn_node
-go build -o cvn_node .
+GOTOOLCHAIN=auto go build -o cvn_node .
 ./cvn_node --generate-wallet
 ./cvn_node --miner-address YOUR_CVN_ADDRESS
 ```
@@ -57,6 +57,8 @@ While the miner runs in one terminal, open another:
 On Windows: `cvn_miner.exe --wallet`, or `LaunchWallet.bat` for the desktop version.
 
 A miner receives a separate coin for every block won, and one transfer can spend at most 200 coins. **Combine my coins**, in both wallets, merges them into a few large coins in your own address.
+
+**These commands run on `testnet-1`.** For another network add `--network NAME` to every command, including the one that creates the wallet. For the CVN Testnet that is `--network cvn_testnet`; what to do before and on the day it starts is in [Installation_Guide.md](Installation_Guide.md), section 7.
 
 ## Network
 
@@ -116,7 +118,7 @@ Where things are:
 | `internal/randomx/` | The RandomX engine: a published Go implementation with CVN's two settings and large-page memory on Windows (see its `README_CVN.md`) |
 | `frontend/` | The screens of the Windows desktop wallet |
 
-The project depends on two libraries: [bbolt](https://github.com/etcd-io/bbolt) for storage and [Wails](https://wails.io) for the desktop wallet window. Everything that comes from someone else, and its licence, is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The project depends on three libraries: [bbolt](https://github.com/etcd-io/bbolt) for storage, [Wails](https://wails.io) for the desktop wallet window, and [golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys), the Go project's own package for talking to the operating system. Everything that comes from someone else, and its licence, is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Reporting problems
 

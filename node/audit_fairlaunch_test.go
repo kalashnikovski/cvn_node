@@ -3,6 +3,7 @@ package node
 import (
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -91,10 +92,10 @@ func TestTheReorgLimitStillCountsBlocksThatWereNotJustDownloaded(t *testing.T) {
 	if lowest := lowestReplaceableAncestor(500); lowest != 400 {
 		t.Errorf("with nothing downloaded the furthest back is #400, got #%d", lowest)
 	}
-	// A node that had 200 blocks, downloaded up to 450, and has since
-	// received 50 more.
-	noteInitialDownload(200, 450)
-	t.Cleanup(func() { noteInitialDownload(0, 0) })
+	// A node that had 200 blocks, downloaded up to 450, was then confirmed
+	// by a node that is not a seed, and has since received 50 more.
+	setInitialDownload(200, 450, false)
+	t.Cleanup(func() { setInitialDownload(0, 0, false) })
 	for _, check := range []struct{ ancestor, want int64 }{
 		{480, 20},  // only blocks received since
 		{450, 50},  // all of those
@@ -185,8 +186,12 @@ func TestANodeSaysWhenSeedsHoldAnotherFirstBlock(t *testing.T) {
 func TestThereIsNoNetworkCalledMainnet(t *testing.T) {
 	saved := Params
 	t.Cleanup(func() { Params = saved; applyParams() })
-	if err := SelectNetwork("mainnet"); err == nil {
-		t.Errorf("\"mainnet\" was accepted and chose %s", Params.Name)
+	// Nor "testnet": someone who reads "CVN Testnet" and types that must not
+	// find themselves on the first test network without a word.
+	for _, name := range []string{"mainnet", "testnet"} {
+		if err := SelectNetwork(name); err == nil {
+			t.Errorf("%q was accepted and chose %s", name, Params.Name)
+		}
 	}
 }
 
@@ -220,5 +225,199 @@ func TestATypedMiningAddressIsNeverCompleted(t *testing.T) {
 
 // writeMinerConfigForTest saves a mining address the way the program does.
 func writeMinerConfigForTest(address string) error {
-	return os.WriteFile("miner_config.json", []byte(`{"miner_address": "`+address+`"}`), 0644)
+	return saveMinerAddress(address)
+}
+
+// Second review: an older-style address typed into miner_config.json was
+// completed as if the program had saved it. The guide tells people they may
+// edit that file.
+func TestAnAddressTypedIntoTheConfigFileIsNotCompleted(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("CVN_MINER_ADDRESS", "")
+	onNetwork(t, "devnet")
+	_, _, full, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	older := full[:len("CVN_")+40]
+	// Written by hand: no mark.
+	if err := os.WriteFile("miner_config.json", []byte(`{"miner_address": "`+older+`"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveMinerAddress([]string{"cvn_node"}); err == nil {
+		t.Error("an older-style address typed into miner_config.json was completed")
+	}
+	// Saved by the program, then changed by hand: the mark names another
+	// address and no longer counts.
+	if err := saveMinerAddress(older); err != nil {
+		t.Fatal(err)
+	}
+	changed := older[:len(older)-1] + map[bool]string{true: "0", false: "1"}[older[len(older)-1] != '0']
+	raw, _ := os.ReadFile("miner_config.json")
+	edited := strings.Replace(string(raw), `"miner_address": "`+older+`"`, `"miner_address": "`+changed+`"`, 1)
+	if edited == string(raw) {
+		t.Fatal("the test could not edit the saved address")
+	}
+	if err := os.WriteFile("miner_config.json", []byte(edited), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveMinerAddress([]string{"cvn_node"}); err == nil {
+		t.Error("an address changed by hand after the program saved it was completed")
+	}
+	// A full address typed into the file is fine: its own check vouches for it.
+	if err := os.WriteFile("miner_config.json", []byte(`{"miner_address": "`+full+`"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if address, err := resolveMinerAddress([]string{"cvn_node"}); err != nil || address != full {
+		t.Errorf("a full address typed into the file was refused: %v", err)
+	}
+}
+
+// Second review: Bitcoin lets a block carry a time up to two hours ahead of
+// the true time. Dated by such a block, the genesis block was in the future,
+// every honest miner waited for the clock, and an altered miner mined alone.
+func TestAnAnchorDatedAheadIdlesNobody(t *testing.T) {
+	onNetwork(t, "devnet")
+	asLaunchNetwork()
+	t.Chdir(t.TempDir())
+	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderA}); err != nil {
+		t.Fatal(err)
+	}
+	// The worst case Bitcoin allows: the anchor's own time is two hours
+	// ahead, so the true time is two hours before it.
+	trueTime := testHeaderTime - bitcoinClockAllowance
+	firstBlockDate := Params.GenesisTimestamp + 1
+	if firstBlockDate < trueTime {
+		firstBlockDate = trueTime
+	}
+	if mustWaitForClock(firstBlockDate, trueTime) {
+		t.Errorf("with the anchor dated two hours ahead, a miner still has to wait %d seconds before block 1", firstBlockDate-trueTime)
+	}
+	if Params.GenesisTimestamp > trueTime {
+		t.Error("the genesis block is dated ahead of the true time")
+	}
+}
+
+// Second review: nobody was told if Bitcoin replaced the anchor block, and
+// which first block then counts was left to an announcement. The rule is
+// Bitcoin's own chain, and a node checks it for itself.
+func TestANodeSaysWhenBitcoinReplacesItsAnchor(t *testing.T) {
+	onNetwork(t, "devnet")
+	asLaunchNetwork()
+	t.Chdir(t.TempDir())
+	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderA}); err != nil {
+		t.Fatal(err)
+	}
+	same := func() *standInExplorer {
+		explorer := newStandInExplorer(t, testHeaderHash, testHeaderA)
+		atomic.StoreInt32(&explorer.mined, 1)
+		return explorer
+	}
+	first, second := same(), same()
+	useStandInExplorers(t, first, second)
+	// Still the same block, but not yet deep: keep watching, say nothing.
+	if settled, warning := anchorWarning(); settled || warning != "" {
+		t.Errorf("one block deep: settled %v, warning %q", settled, warning)
+	}
+	atomic.StoreInt32(&first.laterBlocks, anchorSettledDepth)
+	atomic.StoreInt32(&second.laterBlocks, anchorSettledDepth)
+	if settled, warning := anchorWarning(); !settled || warning != "" {
+		t.Errorf("six blocks deep: settled %v, warning %q", settled, warning)
+	}
+	// Bitcoin now has another block at that height.
+	replaced := func() *standInExplorer {
+		explorer := newStandInExplorer(t, testHeaderBHash, testHeaderB)
+		atomic.StoreInt32(&explorer.mined, 1)
+		return explorer
+	}
+	useStandInExplorers(t, replaced(), replaced())
+	settled, warning := anchorWarning()
+	if settled || !strings.Contains(warning, testHeaderHash) || !strings.Contains(warning, testHeaderBHash) || !strings.Contains(warning, genesisAnchorFileName()) {
+		t.Errorf("after Bitcoin replaced the block: settled %v, warning %q", settled, warning)
+	}
+}
+
+// Second review: the freedom from the reorganisation limit lasted only while
+// the program ran and only for the blocks downloaded at start. A newcomer
+// kept on a seed's chain for an hour, or restarted, was locked in again.
+func TestANewcomerStaysFreeUntilSomeoneOtherThanASeedAgrees(t *testing.T) {
+	t.Chdir(t.TempDir())
+	startTestChain(t, "devnet", withReorgLimit(3))
+	clearSyncMemory(t)
+	chain := buildTestChain(t, 12)
+	StateMutex.Lock()
+	rollbackChainToHeightLocked(0)
+	StateMutex.Unlock()
+	newStandInPeer(t, chain[:9]).asOnlySeed(t)
+
+	runInitialDownload([]string{"cvn_node"})
+	if GetLatestBlockInternal().Index != 8 {
+		t.Fatalf("the newcomer should be at #8, is at #%d", GetLatestBlockInternal().Index)
+	}
+	// Blocks that arrive afterwards do not start the limit either: nobody
+	// but the seed has vouched for any of this yet.
+	StateMutex.Lock()
+	for _, block := range chain[9:] {
+		SaveBlockToStorageInternal(block)
+	}
+	StateMutex.Unlock()
+	if depth := countedReorgDepth(12, 1); depth != 0 {
+		t.Errorf("before anyone but a seed agrees, %d blocks count against the limit", depth)
+	}
+	// Stopped and started again: still free, from the same height.
+	setInitialDownload(0, 0, false)
+	beginInitialDownload(GetLatestBlockInternal().Index)
+	if depth := countedReorgDepth(12, 1); depth != 0 {
+		t.Errorf("after a restart, %d blocks count against the limit", depth)
+	}
+	// A node that is not a seed, holding the same chain, settles it.
+	other := newStandInPeer(t, chain)
+	other.alsoServeOn(t, "127.0.0.2", Params.SyncPort)
+	operatorSyncSources = operatorSourcesFrom("127.0.0.2")
+	t.Cleanup(func() { operatorSyncSources = nil })
+	trySettleInitialDownload()
+	if depth := countedReorgDepth(12, 1); depth != 0 {
+		t.Errorf("the blocks held when it was settled should stay uncounted, %d count", depth)
+	}
+	if depth := countedReorgDepth(20, 1); depth != 8 {
+		t.Errorf("blocks received after it was settled should count: 8 expected, %d counted", depth)
+	}
+	// And that survives a restart: every block now in the database counts.
+	setInitialDownload(0, 0, false)
+	beginInitialDownload(12)
+	if depth := countedReorgDepth(12, 1); depth != 11 {
+		t.Errorf("after settling and a restart all 11 blocks should count, %d do", depth)
+	}
+}
+
+// --connect takes one node or several.
+func TestConnectTakesSeveralNodes(t *testing.T) {
+	onNetwork(t, "devnet")
+	got := operatorSourcesFrom(" 10.0.0.5, http://example.org:9000/ ,,bad host, 10.0.0.6:1234 ")
+	want := []string{Params.syncURL("10.0.0.5"), "http://example.org:9000", "http://10.0.0.6:1234"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// An address for one network given on another is the commonest slip, and
+// the program says so instead of calling it no address at all.
+func TestAnAddressForAnotherNetworkIsNamedAsSuch(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("CVN_MINER_ADDRESS", "")
+	onNetwork(t, "devnet")
+	_, _, full, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	onNetwork(t, "testnet-1")
+	_, err = resolveMinerAddress([]string{"cvn_node", "--miner-address", full})
+	if err == nil || !strings.Contains(err.Error(), "--network") || !strings.Contains(err.Error(), "launch networks") {
+		t.Errorf("a launch-network address on testnet-1 should point to --network: %v", err)
+	}
+	// Something that is an address nowhere still gets the plain answer.
+	_, err = resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_my_wallet"})
+	if err == nil || strings.Contains(err.Error(), "--network NAME") {
+		t.Errorf("text that is no address anywhere was blamed on the network: %v", err)
+	}
 }

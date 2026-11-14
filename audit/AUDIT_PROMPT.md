@@ -318,9 +318,10 @@ One file, attached or pasted below (or three parts sent one after another). It s
 
 - WHITEPAPER.md: what the rules are meant to be. Read this first.
 - README.md, Installation_Guide.md, MINING_GUIDE.md, ROADMAP.md: what the public is told.
-- LICENSE files.
+- LICENSE files and THIRD_PARTY_NOTICES.md.
+- internal/randomx/DIFFERENCES.md: the RandomX engine compared file by file with the original it was copied from, with every changed line, and audit/compare_randomx.py, the script that wrote it. The engine's unchanged files are not in the pack.
 - audit/FINDINGS_ROUND_1.md, _2.md, _3.md: what three earlier rounds of review found and what was done.
-- audit/FINDINGS_FAIR_LAUNCH.md: what an earlier run of this same scorecard found and what was done. Do not take its word: for each item it says was fixed, check the code, and for each claim it says was mistaken, decide for yourself.
+- audit/FINDINGS_FAIR_LAUNCH.md: what two earlier runs of this same scorecard found and what was done. Do not take its word: for each item it says was fixed, check the code, and for each claim it says was mistaken, decide for yourself.
 - Source code in Go, the scripts that set up servers, the build instructions, then the tests.
 
 Read all of it before you answer. The material numbers its files ("FILE n OF N") and ends with the line "END OF PACK". Begin your answer by stating the number of the last file you can see and whether you can see that last line. If you cannot, your copy was cut short: say so plainly, assess only what you have, and mark every item you could not check as "Cannot tell".
@@ -334,7 +335,7 @@ The code runs on more than one network:
 - "testnet-1": an older test network with looser rules, being retired. Ignore problems that exist only under its rules.
 - "cvn_testnet" (the CVN Testnet, about to launch) and "devnet" (for development): these run the LAUNCH RULES, the settings StrictFormat, NoUncles, MaxBlockBytes, AmountsAsUnits, ScheduleAnchored, a PowSchedule with RandomX, and an Economics block. The real network ("mainnet") will run these same rules and is not yet defined in the code. Assess the launch rules, and assess the CVN Testnet's launch as the dress rehearsal for mainnet's: whatever would be unfair in one would be unfair in the other.
 
-The project is run by one person, who also runs the seven "seed" computers that new nodes first connect to, and who will mine from the first block like anyone else.
+The project is run by one person, who also runs the six "seed" computers that new nodes first connect to. The seeds do not mine. That person will mine from the first block like anyone else, with one computer that is not a seed, and has published a statement to that effect in README.md.
 
 HOW TO JUDGE EACH ITEM
 
@@ -354,7 +355,7 @@ A. NO COINS BEFORE THE PUBLIC CAN MINE
 A1. The first block creates no coin that anyone can spend, on every network that uses the launch rules.
 A2. No coin exists at any height that was not paid out by the reward schedule to the miner of a block, or was not an unspent coin before. Trace where coins come into being and name every place.
 A3. Nobody can make a valid block 1 before the Bitcoin block named for the launch exists. Consider: a node given a made-up header, a header from another Bitcoin block, a header from a Bitcoin fork or a low-difficulty Bitcoin test network, a first block with a chosen timestamp.
-A4. Nobody who learns the Bitcoin block a few seconds before others gains more than those few seconds. Consider what the two websites the program asks could do, and what an operator who supplies the header by hand could do.
+A4. Nobody who learns the Bitcoin block a few seconds before others gains more than those few seconds. Consider what the websites the program asks could do, and what an operator who supplies the header by hand could do.
 A5. The header a node starts from cannot be made to differ between honest nodes without those nodes noticing. If two groups start from different headers, what happens, and is anyone told?
 A6. The Bitcoin height for the launch must be announced in advance and fixed in the published code, not supplied at the last minute. Is it? (At the time of this pack the CVN Testnet's is deliberately not yet set. Say what the code does in that state, and what must be true of the code on the day.)
 
@@ -364,7 +365,7 @@ B1. The difficulty of the first blocks: is it set so that the first minutes do n
 B2. The same, the other way: if far less power turns up than expected, does the chain stall, and can anyone turn that to their advantage?
 B3. Can the miner of early blocks gain by choosing timestamps?
 B4. Is the reward in the early blocks exactly what the published schedule says, with no bonus period, no larger early reward, and no "slow start" that is different from what the paper states?
-B5. Is the fastest mining software available to everyone on equal terms before the launch? The project publishes its own edition of a third-party miner (XMRig). Its source is not in this pack. Say what would have to be published, and by when, for nobody to hold a faster miner than the public.
+B5. Is the fastest mining software available to everyone on equal terms before the launch? The project publishes its own edition of a third-party miner (XMRig). Its source is not in this pack; MINING_GUIDE.md says where it is published. Say what would have to be published, and by when, for nobody to hold a faster miner than the public.
 B6. Does the published program contain everything needed to mine from the first block, with instructions that work? Read the guides as a newcomer would and name anything that would leave an ordinary person unable to start on time while an insider could.
 
 C. NO SHARE AND NO POWERS FOR THE FOUNDERS

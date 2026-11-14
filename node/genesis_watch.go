@@ -14,10 +14,24 @@ import (
 // some from the other: two networks with the same name, each unable to hear
 // the other, each looking healthy to the people on it.
 //
-// A node therefore compares its first block with the seeds' from time to
-// time and says so, plainly and repeatedly, if they differ. It does not stop
-// mining or change anything by itself: a seed can be wrong, and which first
-// block is the network's is for people to settle, not for one node to guess.
+// Which of the two is the network is not for anyone to choose. The rule is
+// fixed in advance: THE NETWORK IS THE ONE WHOSE FIRST BLOCK COMES FROM THE
+// BITCOIN BLOCK THAT IS STILL IN BITCOIN'S CHAIN SIX BLOCKS LATER. Blocks
+// mined on the other are void. Bitcoin decides, not the seeds and not the
+// people who run them.
+//
+// A node therefore does two things from time to time:
+//
+//   - Until the anchor is six Bitcoin blocks deep, it asks the Bitcoin block
+//     explorers again whether the block it started from is still the one at
+//     that height. If Bitcoin has replaced it, the node says so and says how
+//     to move over. This does not depend on the seeds.
+//   - It compares its first block with the seeds' and says so, plainly and
+//     repeatedly, if they differ.
+//
+// It does not stop mining or change anything by itself. A warning can be
+// wrong (a seed, or two explorers, can be), and deleting a chain is for the
+// operator to do.
 
 const genesisWatchInterval = 5 * time.Minute
 
@@ -53,13 +67,52 @@ func genesisWarning() string {
 	ours := GetBlockByHeightFromDB(0).Hash
 	return fmt.Sprintf("🚨 [FIRST BLOCK] %d of the %d seeds that answered started from a different first block than this node. "+
 		"This node: %s. Theirs: %s. This node and they are on separate networks and will never share a block. "+
-		"Check the project page for which is right before mining further; run with --show-genesis to see what this node started from.",
+		"The network is the one that begins from the Bitcoin block still in Bitcoin's chain: run with --show-genesis to see which Bitcoin block this node started from, and compare it with a Bitcoin block explorer before mining further.",
 		different, same+different, ours, theirs)
 }
 
-// runGenesisWatch repeats the comparison for as long as the node runs.
-func runGenesisWatch() {
+// anchorSettledDepth is how many Bitcoin blocks must follow the anchor
+// before it counts as settled.
+const anchorSettledDepth = 6
+
+// anchorWarning asks the Bitcoin block explorers whether the block this
+// network started from is still the one at its height. settled is true once
+// they agree it is and it is anchorSettledDepth blocks deep: there is then
+// nothing more to watch. warning is the line to show if Bitcoin now has
+// another block there.
+func anchorWarning() (settled bool, warning string) {
+	anchor := Params.Anchor
+	if anchor.BitcoinHeight <= 0 || anchor.BitcoinHeader == "" {
+		return true, ""
+	}
+	header, tip, agreed := lookUpAnchor(anchor.BitcoinHeight)
+	if !agreed {
+		return false, ""
+	}
+	if header == anchor.BitcoinHeader {
+		return tip >= anchor.BitcoinHeight+anchorSettledDepth, ""
+	}
+	hash, _, err := parseBitcoinHeader(header)
+	if err != nil {
+		return false, ""
+	}
+	return false, fmt.Sprintf("🚨 [FIRST BLOCK] Bitcoin has replaced block %d. This node started from %s; Bitcoin's chain now has %s there. "+
+		"By the rule fixed before the start, the network is the one that begins from the block still in Bitcoin's chain six blocks later, and blocks mined on the other are void. "+
+		"Check block %d on a Bitcoin block explorer. If it has changed for good: stop this node, delete %s and %s, and start again.",
+		anchor.BitcoinHeight, anchor.BitcoinHash, hash, anchor.BitcoinHeight, genesisAnchorFileName(), Params.DatabaseFile)
+}
+
+// runGenesisWatch repeats both checks for as long as the node runs.
+func runGenesisWatch(lookUpAnchors bool) {
+	anchorSettled := !lookUpAnchors
 	for {
+		if !anchorSettled {
+			settled, warning := anchorWarning()
+			anchorSettled = settled
+			if warning != "" {
+				announceNetworkStatus(warning)
+			}
+		}
 		if warning := genesisWarning(); warning != "" {
 			announceNetworkStatus(warning)
 		}

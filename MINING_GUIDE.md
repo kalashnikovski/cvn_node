@@ -39,6 +39,8 @@ The built-in miner is what runs unless you ask for the other one. Both pay the s
    }
    ```
 
+   If you type an address into that file yourself, write it in full, exactly as your wallet shows it. On the launch networks an address ends with 8 check characters, and the program refuses a typed address without them: it cannot otherwise tell a typing mistake from an address.
+
 The CVN program starts the fast miner, gives it work, shows its speed on the usual dashboard and stops it when you close the program. You never run or configure XMRig yourself.
 
 Things to know:

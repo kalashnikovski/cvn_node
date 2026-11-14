@@ -20,6 +20,10 @@
 #                                         from it. Every machine taking part
 #                                         must be given the same height.
 #
+# To build one particular release and not the newest source, name its tag:
+#
+#   CVN_VERSION=v5.0.0 bash install_seed.sh cvn_testnet
+#
 # Running it again for the same network is safe: it updates and restarts.
 # On the development network, giving a different Bitcoin height from last
 # time (or none, after a rehearsal) starts that network's chain afresh, since
@@ -56,10 +60,18 @@ apt-get update -y
 apt-get install -y git golang-go ufw
 
 echo "== Getting the source"
-if [ -d "$DIR/.git" ]; then
-  git -C "$DIR" pull --ff-only
-else
+if [ ! -d "$DIR/.git" ]; then
   git clone "$REPO" "$DIR"
+fi
+git -C "$DIR" fetch --tags --quiet origin
+if [ -n "${CVN_VERSION:-}" ]; then
+  # A named release: exactly that source, which anyone can check against
+  # the release's published sums.
+  git -C "$DIR" checkout --quiet "refs/tags/$CVN_VERSION"
+  echo "   Building release $CVN_VERSION"
+else
+  git -C "$DIR" checkout --quiet main
+  git -C "$DIR" pull --ff-only
 fi
 
 echo "== Building"

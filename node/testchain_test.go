@@ -41,7 +41,7 @@ func startTestChain(t *testing.T, network string, prepare ...func()) {
 	}
 	BlockchainFile = filepath.Join(t.TempDir(), "chain.db")
 	InitBoltEngine()
-	noteInitialDownload(0, 0)
+	setInitialDownload(0, 0, false)
 	t.Cleanup(func() {
 		if GlobalBoltEngine != nil {
 			GlobalBoltEngine.Close()

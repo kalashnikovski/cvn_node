@@ -20,6 +20,8 @@ type standInExplorer struct {
 	mined  int32
 	hash   string
 	header string
+	// laterBlocks is how many Bitcoin blocks it reports after block 800,000.
+	laterBlocks int32
 }
 
 func newStandInExplorer(t *testing.T, hash, header string) *standInExplorer {
@@ -30,7 +32,7 @@ func newStandInExplorer(t *testing.T, hash, header string) *standInExplorer {
 		switch {
 		case r.URL.Path == "/blocks/tip/height":
 			if mined {
-				fmt.Fprint(w, "800000")
+				fmt.Fprint(w, 800000+int(atomic.LoadInt32(&explorer.laterBlocks)))
 			} else {
 				fmt.Fprint(w, "799998")
 			}
@@ -135,7 +137,7 @@ func TestNodeWaitsForItsAnchorAndStartsByItself(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the node did not start after the Bitcoin block appeared")
 	}
-	if Params.Anchor.BitcoinHash != testHeaderHash || Params.GenesisTimestamp != testHeaderTime {
+	if Params.Anchor.BitcoinHash != testHeaderHash || Params.GenesisTimestamp != testGenesisTime {
 		t.Errorf("the node started from %s dated %d", Params.Anchor.BitcoinHash, Params.GenesisTimestamp)
 	}
 	// The anchor is kept, so the next start needs no explorer.
@@ -214,7 +216,7 @@ func TestDevnetCanRehearseALaunch(t *testing.T) {
 	if err := resolveGenesisAnchor([]string{"cvn_node"}); !errors.Is(err, errAnchorNotYetKnown) {
 		t.Errorf("a rehearsal without its anchor should be waited for: %v", err)
 	}
-	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderA}); err != nil || buildGenesisBlock().Timestamp != testHeaderTime {
+	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderA}); err != nil || buildGenesisBlock().Timestamp != testGenesisTime {
 		t.Errorf("the rehearsal did not start from its anchor: %v", err)
 	}
 	t.Setenv("CVN_DEVNET_ANCHOR_HEIGHT", "")

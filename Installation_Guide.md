@@ -69,14 +69,14 @@ The wallet runs alongside the miner; leave the miner running.
 sudo apt update && sudo apt install -y git golang-go
 ```
 
-Any Go from version 1.21 works; it fetches the exact version the project needs the first time you build. If your system's Go is older than that, install a current one from https://go.dev/dl/ instead.
+The project needs one exact version of Go, named in its file `go.mod`. The Go that Ubuntu and Debian install is usually older, and is set up not to fetch another version by itself. The build command below therefore starts with `GOTOOLCHAIN=auto`, which lets it fetch the right one the first time you build (this needs Go 1.21 or newer to begin with). If your system's Go is older than 1.21, install a current one from https://go.dev/dl/ instead.
 
 ```bash
 git clone https://github.com/kalashnikovski/cvn_node
 ```
 
 ```bash
-cd cvn_node && go build -o cvn_node .
+cd cvn_node && GOTOOLCHAIN=auto go build -o cvn_node .
 ```
 
 ### Create a wallet
@@ -163,7 +163,7 @@ Stop the miner first.
 **Linux:**
 
 ```bash
-cd cvn_node && git pull && go build -o cvn_node .
+cd cvn_node && git pull && GOTOOLCHAIN=auto go build -o cvn_node .
 ```
 
 Then start the miner again.
@@ -182,30 +182,48 @@ The program runs on one network at a time.
 
 The same option works for the wallet, for example `./cvn_node --network devnet --wallet` or `LaunchWallet.bat --network devnet`. Each network keeps its own database file and uses its own ports, so they do not interfere.
 
-**Give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on `testnet-1`. Addresses are written differently on the launch networks (they end with 8 check characters), so a wallet for `cvn_testnet` must be created with `--network cvn_testnet`: `LaunchMiner.bat --network cvn_testnet`, or `./cvn_node --network cvn_testnet --generate-wallet`. There is no network called `mainnet` yet, and the program refuses the name.
+**Give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on `testnet-1`. Addresses are written differently on the launch networks (they end with 8 check characters), so a wallet for `cvn_testnet` must be created with `--network cvn_testnet`: `LaunchMiner.bat --network cvn_testnet`, or `./cvn_node --network cvn_testnet --generate-wallet`. The program refuses a network name it does not know. In particular there is no network called `mainnet` or `testnet`: the CVN Testnet is `cvn_testnet`.
 
 ### On the day a network starts
 
 A launch network starts when one particular Bitcoin block is mined. Its height is announced in advance and written into the program.
 
-1. **Before that day:** update the program, create your wallet for that network, and start the miner on it. It shows how many Bitcoin blocks are left and waits.
-2. **At the moment itself:** nothing to do. The program asks several public Bitcoin block explorers for the block at that height, and starts as soon as two of them give the same one. Everyone who is waiting starts within seconds of each other.
-3. **If you would rather not depend on those websites,** supply the block's header yourself. It is 160 characters, public the instant the block is mined. With your own Bitcoin node:
+**Checklist, to finish before that day** (`NETWORK` is the network's name, for example `cvn_testnet`):
 
-   ```bash
-   bitcoin-cli getblockheader $(bitcoin-cli getblockhash HEIGHT) false
-   ```
+1. **Get the release that names the height.** Download its package, or build from its tag, and check it against the published sums (section 10).
+2. **Create a wallet for that network** and write its private key down on paper:
+   - Windows: `LaunchMiner.bat --network NETWORK` and choose "Create a new wallet".
+   - Linux: `./cvn_node --network NETWORK --generate-wallet`
+3. **Optional, for more speed:** switch on large pages and add the fast miner. Both are in [MINING_GUIDE.md](MINING_GUIDE.md), and both can be done later without losing anything.
+4. **Start the miner** on that network and leave it running:
+   - Windows: `LaunchMiner.bat --network NETWORK`
+   - Linux: `./cvn_node --network NETWORK`
 
-   or from any block explorer: find the block, copy its hash, and open `https://mempool.space/api/block/HASH/header`. Then either put the header in a file named `genesis_anchor_NETWORK.txt` beside the program (a waiting node picks it up within a minute), or start with `--genesis-anchor HEADER`. Add `--no-anchor-lookup` if the program should ask no website at all.
+   It shows how many Bitcoin blocks are left and waits.
 
-   The program checks the header whoever supplies it: it must carry the work of a real, current Bitcoin block. A wrong header cannot cost you coins. It would start your node on a network of its own, and the program warns you if the seed nodes started from a different first block than you did.
+**At the moment itself** there is nothing to do. The program asks several public Bitcoin block explorers for the block at that height, and starts as soon as two of them give the same one. Everyone who is waiting starts within seconds of each other.
+
+**If you would rather not depend on those websites,** supply the block's header yourself. It is 160 characters, public the instant the block is mined. With your own Bitcoin node:
+
+```bash
+bitcoin-cli getblockheader $(bitcoin-cli getblockhash HEIGHT) false
+```
+
+or from any block explorer: find the block, copy its hash, and open `https://mempool.space/api/block/HASH/header`. Then either put the header in a file named `genesis_anchor_NETWORK.txt` beside the program (a waiting node picks it up within a minute), or start with `--genesis-anchor HEADER`. Add `--no-anchor-lookup` if the program should ask no website at all.
+
+The program checks the header whoever supplies it: it must carry the work of a real, current Bitcoin block. A wrong header cannot cost you coins. It would start your node on a network of its own, and the program warns you if that has happened.
+
+**What being first is worth.** A node that asks the explorers starts within about ten to twenty seconds of the Bitcoin block appearing. Someone who supplies the header from their own Bitcoin node starts those seconds earlier. A block takes about 45 seconds for the whole network at the starting difficulty, and for the first 20 blocks that difficulty cannot fall, so a lead of that size is worth a fraction of one block's chance. Nobody has to wait for the clock at the start either: the first block is dated two hours before its Bitcoin block's own time, because Bitcoin allows a block's time to run up to two hours ahead.
+
+**If Bitcoin replaces that block.** About one Bitcoin block in several hundred is replaced by another moments after it appears. Nodes could then have started from two different blocks and be on two networks. The rule is fixed in advance and is nobody's to decide: **the network is the one that begins from the Bitcoin block still in Bitcoin's chain six blocks later. Blocks mined on the other are void.** For the first hour or so the program keeps asking the explorers whether its Bitcoin block is still the one at that height, and it also compares its first block with the seed nodes'. If either check fails it says so, repeatedly. To move over to the right network: stop the program, delete `genesis_anchor_NETWORK.txt` and that network's chain database, and start again. Your wallet is not in those files.
 
 ### If the seed nodes cannot be reached, or you do not trust them
 
 Seed nodes are only where a new node looks first. They have no say over the rules: your node checks every block itself and follows whichever chain proves the most work, wherever it came from.
 
-- To start from a node you choose, add `--connect HOST` (for example a friend's node, or your own second machine). It is asked alongside the seeds.
+- To start from nodes you choose, add `--connect HOST` or `--connect HOST,HOST,...` (for example a friend's node, or your own second machine). They are asked alongside the seeds.
 - A node remembers the nodes it has met and uses them when the seeds are silent.
+- A node will not normally replace more than 100 of its own blocks. For a new node that limit does not apply to anything it has taken on the seeds' word: until some node that is not a seed has shown it holds the same chain, a newcomer follows whichever chain proves the most work, however far back the two part, and stopping and starting the program does not change that. So the seeds alone can never hold a newcomer on a chain of their own.
 - If a seed tells your miner the network is ahead and then does not deliver the blocks, your miner waits two minutes at most.
 
 ### What the program contacts
@@ -278,7 +296,20 @@ GOOS=windows GOARCH=amd64 go build -trimpath -tags "desktop,production" -ldflags
 sha256sum cvn_node_amd64 cvn_node_arm64 cvn_miner.exe cvn_node.exe
 ```
 
-Each fingerprint should equal the one published for that program. The Linux programs of `v5.0.0-rc1` and `v5.0.0-rc2` have been rebuilt this way on a separate machine and matched exactly. The Windows programs of those two trial releases do not match when built this way: `rc1` was built with a setting that tied the result to the build machine, and `rc2` was built from files whose line endings git had rewritten (its Windows programs do match if you clone with `core.autocrlf=true` instead). Releases after `rc2` are built exactly as above.
+Each fingerprint should equal the one published for that program. All four programs of `v5.0.0-rc3` have been rebuilt this way on a separate machine and matched exactly. Of the two trial releases before it, the Linux programs match and the Windows programs do not: `rc1` was built with a setting that tied the result to the build machine, and `rc2` from files whose line endings git had rewritten (its Windows programs do match if you clone with `core.autocrlf=true` instead).
+
+**The wallet screens.** The screens of the desktop wallet are kept in the repository already built (`frontend/dist`), so that building the program does not need Node.js. They are compiled into the program, so they matter. Every change to the repository and every release is checked automatically: the screens are built again from their source (`frontend/src`) with the versions fixed in `frontend/package-lock.json`, and the check fails unless the result is byte for byte what the repository holds. To do the same yourself, with Node.js 26:
+
+```bash
+cd frontend
+npm ci --legacy-peer-deps
+npm run build
+git diff --exit-code -- dist
+```
+
+No output from the last command means they are identical.
+
+**Seed servers.** The script that sets up a seed server builds from the newest source unless told otherwise. To run exactly one release, name its tag: `CVN_VERSION=v5.0.0 bash install_seed.sh NETWORK`.
 
 If a fingerprint does not match, first check the Go version and that you built from the tag with the clone command above. If it still does not match, please report it.
 

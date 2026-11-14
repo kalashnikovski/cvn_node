@@ -109,12 +109,21 @@ func readMinerConfig() map[string]string {
 func saveMinerAddress(address string) error {
 	settings := readMinerConfig()
 	settings["miner_address"] = address
+	// Marks the address as one the program wrote itself, letter for letter,
+	// and not one a person typed into the file.
+	settings[addressSavedByKey] = addressSavedByProgram(address)
 	configBytes, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile("miner_config.json", configBytes, 0644)
 }
+
+// The mark saveMinerAddress leaves beside an address it wrote. It names the
+// address, so that changing the address by hand makes the mark stale.
+const addressSavedByKey = "address_saved_by"
+
+func addressSavedByProgram(address string) string { return "cvn program: " + address }
 
 // resolveMinerAddress returns the address mining rewards are paid to: the
 // CVN_MINER_ADDRESS environment variable, then `--miner-address`, then
@@ -124,10 +133,14 @@ func resolveMinerAddress(args []string) (string, error) {
 	if address == "" {
 		address = argumentValue(args, "--miner-address")
 	}
-	fromSavedFile := false
+	// savedByProgram: the address comes from miner_config.json and carries
+	// the mark the program leaves when it writes one. The guide tells people
+	// they may edit that file, so being in the file is not enough.
+	savedByProgram := false
 	if address == "" {
-		address = readMinerConfig()["miner_address"]
-		fromSavedFile = true
+		settings := readMinerConfig()
+		address = settings["miner_address"]
+		savedByProgram = address != "" && settings[addressSavedByKey] == addressSavedByProgram(address)
 	}
 	if address == "" || strings.Contains(address, "UNCONFIGURED") {
 		return "", fmt.Errorf("this machine has no mining address.\n" +
@@ -140,15 +153,24 @@ func resolveMinerAddress(args []string) (string, error) {
 	// the point: completing a mistyped address would give it a valid check,
 	// and every coin mined would go to an address nobody holds a key for.
 	if full, completed := completeOlderAddress(address); completed {
-		if !fromSavedFile {
+		if !savedByProgram {
 			return "", fmt.Errorf("%q is written the older way, without the 8 check characters that addresses on this network end with.\n"+
-				"   The program will not add them to an address that was typed, because it could not then catch a typing mistake.\n"+
+				"   The program adds them only to an address it saved itself. It will not add them to one that was typed, on the\n"+
+				"   command line or into miner_config.json, because it could not then catch a typing mistake.\n"+
 				"   Open your wallet on this network (--wallet, or the desktop wallet) and copy the address it shows: %s", address, addressFormDescription())
 		}
 		fmt.Printf("🪪 Addresses on this network end with a check on the rest. Yours is now written %s\n", full)
 		address = full
 	}
 	if !looksLikeWalletAddress(address) {
+		// The commonest cause is not a bad address but the wrong network:
+		// addresses are written differently on the launch networks, and a
+		// program started without --network runs on the first test network.
+		if other := networkThisAddressBelongsTo(address); other != "" {
+			return "", fmt.Errorf("%q is an address in the form used on %s, and this program was started on %s, where addresses are written differently.\n"+
+				"   If you meant to mine on another network, start with --network NAME (for example: --network devnet).\n"+
+				"   On %s an address is %s", address, other, Params.Name, Params.Name, addressFormDescription())
+		}
 		return "", fmt.Errorf("%q is not a CVN wallet address. Nobody holds a key for it, so coins mined to it could never be spent.\n"+
 			"   Create a wallet with --generate-wallet (or --wallet), or start with --miner-address CVN_...", address)
 	}
@@ -466,4 +488,22 @@ func runFastMinerOnce(path string, arguments []string) error {
 		err = fmt.Errorf("it never connected to this node")
 	}
 	return err
+}
+
+// networkThisAddressBelongsTo says, in words, which networks write addresses
+// the way this one is written, if it is well formed for some network but not
+// for the one in use. It returns nothing if the text is no address anywhere.
+func networkThisAddressBelongsTo(address string) string {
+	if !strings.HasPrefix(address, addressPrefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(address, addressPrefix)
+	switch {
+	case !Params.StrictFormat && isLowerHex(rest, addressBodyDigits+addressSumDigits) &&
+		rest[addressBodyDigits:] == addressChecksum(rest[:addressBodyDigits]):
+		return "the launch networks (devnet and the CVN Testnet)"
+	case Params.StrictFormat && isLowerHex(rest, addressBodyDigits):
+		return "the first test network (testnet-1)"
+	}
+	return ""
 }

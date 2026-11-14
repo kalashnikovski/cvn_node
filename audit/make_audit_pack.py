@@ -63,6 +63,7 @@ RULES = [
     "node/security_harness.go",
     "internal/randomx/LICENSE",
     "internal/randomx/README_CVN.md",
+    "internal/randomx/DIFFERENCES.md",
     "internal/randomx/config_cvn.go",
     "internal/randomx/config_reference.go",
 ]
@@ -107,6 +108,8 @@ PROGRAM = [
     ".github/workflows/tests.yml",
     ".github/workflows/release.yml",
     "go.mod",
+    "audit/compare_randomx.py",
+    "THIRD_PARTY_NOTICES.md",
 ]
 
 
@@ -163,6 +166,7 @@ def main():
     listed = set(RULES + PROGRAM)
     tests = sorted("node/" + name for name in os.listdir(os.path.join(ROOT, "node")) if name.endswith("_test.go"))
     tests.append("internal/randomx/cvn_test.go")
+    tests.append("internal/randomx/reference_test.go")
 
     # Nothing in node/ may be forgotten: a file missing from the lists above
     # would silently go unaudited.

@@ -13,6 +13,8 @@ const (
 	testHeaderA    = "00601d3455bb9fbd966b3ea2dc42d0c22722e4c0c1729fad17210100000000000000000055087fab0c8f3f89f8bcfd4df26c504d81b0a88e04907161838c0c53001af09135edbd64943805175e955e06"
 	testHeaderHash = "00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054"
 	testHeaderTime = int64(1690168629)
+	// The genesis block is dated two hours before its Bitcoin block.
+	testGenesisTime = testHeaderTime - bitcoinClockAllowance
 	// Bitcoin block 800,001.
 	testHeaderB     = "00a0012054a02827d7a8b75601275a160279a3c5768de4c1c4a702000000000000000000394ddc6a5de035874cfa22167bfe923953187b5a19fbb84e186dea3c78fd871c9bedbd6494380517f5c93c8c"
 	testHeaderBHash = "00000000000000000000e26b239cf19ec7ace5edd9694d51a3f6933247720947"
@@ -78,7 +80,7 @@ func TestLaunchNetworkWillNotStartWithoutItsAnchor(t *testing.T) {
 	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderHash}); err == nil {
 		t.Error("a bare block hash was accepted; the header is needed for the date")
 	}
-	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", strings.ToUpper(testHeaderA)}); err != nil || Params.Anchor.BitcoinHash != testHeaderHash || Params.GenesisTimestamp != testHeaderTime {
+	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", strings.ToUpper(testHeaderA)}); err != nil || Params.Anchor.BitcoinHash != testHeaderHash || Params.GenesisTimestamp != testGenesisTime {
 		t.Errorf("an anchor given on the command line was not taken: %v", err)
 	}
 
@@ -140,8 +142,8 @@ func TestAnchorDecidesTheGenesisBlockAndTheFirstKey(t *testing.T) {
 		t.Errorf("the anchor is not written in the genesis header: %q", genesisA.GuardMatrix)
 	}
 	// The genesis block is dated by the Bitcoin block, not by the software.
-	if genesisA.Timestamp != testHeaderTime || genesisA.Transactions[0].Timestamp != testHeaderTime {
-		t.Errorf("the genesis block is dated %d; the anchor block is dated %d", genesisA.Timestamp, testHeaderTime)
+	if genesisA.Timestamp != testGenesisTime || genesisA.Transactions[0].Timestamp != testGenesisTime {
+		t.Errorf("the genesis block is dated %d; the anchor block less two hours is %d", genesisA.Timestamp, testGenesisTime)
 	}
 	if genesisA.Hash != CalculateHash(genesisA) {
 		t.Error("the genesis identifier does not cover its header")
@@ -176,7 +178,7 @@ func TestChainOnAnAnchoredNetwork(t *testing.T) {
 		}
 	})
 	genesis := GetBlockByHeightFromDB(0)
-	if !strings.Contains(genesis.GuardMatrix, testHeaderHash) || genesis.Hash != buildGenesisBlock().Hash || genesis.Timestamp != testHeaderTime {
+	if !strings.Contains(genesis.GuardMatrix, testHeaderHash) || genesis.Hash != buildGenesisBlock().Hash || genesis.Timestamp != testGenesisTime {
 		t.Fatalf("the stored genesis block does not carry the anchor: %q", genesis.GuardMatrix)
 	}
 	if err := checkStoredGenesis(); err != nil {
@@ -185,9 +187,9 @@ func TestChainOnAnAnchoredNetwork(t *testing.T) {
 
 	// Nobody can date a block at or before the anchor block: the chain's
 	// clock starts at the launch, and its first blocks cannot be backdated.
-	for _, early := range []int64{testHeaderTime, testHeaderTime - 1, testHeaderTime - 7*24*3600} {
+	for _, early := range []int64{testGenesisTime, testGenesisTime - 1, testGenesisTime - 7*24*3600} {
 		if ValidateBlockSignatures(mineTestBlock(t, early, testAddress("miner"), nil, 0)) {
-			t.Errorf("a block dated %d seconds before the anchor block was accepted", testHeaderTime-early)
+			t.Errorf("a block dated %d seconds before the genesis block was accepted", testGenesisTime-early)
 		}
 	}
 	block := extendTestChain(t, testHeaderTime+60, testAddress("miner"), nil)
