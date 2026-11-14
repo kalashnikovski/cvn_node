@@ -37,10 +37,17 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # CGO_ENABLED=0 for both: neither program uses C code, and with it
+      # switched on the result depends on the machine that builds it, so
+      # nobody could rebuild the programs and compare them with these.
       - name: Build the miner
+        env:
+          CGO_ENABLED: '0'
         run: go build -trimpath -tags server -ldflags="-s -w" -o cvn_miner.exe .
 
       - name: Build the desktop wallet
+        env:
+          CGO_ENABLED: '0'
         run: go build -trimpath -tags "desktop,production" -ldflags="-s -w -H windowsgui" -o cvn_node.exe .
 
       - name: Package

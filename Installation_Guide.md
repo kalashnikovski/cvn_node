@@ -6,7 +6,7 @@ How to run a Covenant Standard (CVN) node, mine, and use the wallet, on Windows 
 
 One program does everything: it is the node, the miner and the text wallet. On Windows there is also a desktop wallet with a window.
 
-**Build from source for now.** The packages on the GitHub Releases page date from October 2026 and are too old to follow the current chain. New packages will be published with the public test network.
+**Build from source for now.** The packages on the GitHub Releases page from October 2026 are too old to follow the current chain. Trial packages of the current program are published as pre-releases (names ending in `-rc`); the packages meant for general use will be published with the public test network. Section 10 shows how to check any package you download.
 
 ---
 
@@ -240,5 +240,48 @@ That is the port on `testnet-1`. On the CVN Testnet it is 18081, and on `devnet`
 | The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_mainnet.db` on `testnet-1`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
 | The desktop wallet shows no balance | Check that the miner is running and that both were started on the same network. |
+
+---
+
+## 10. Checking a download, and building the same program yourself
+
+Every release on GitHub comes with two small files, `SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt`. They list the SHA-256 of each package and of each program inside it. A SHA-256 is a fingerprint: if one byte of a file differs, so does its fingerprint.
+
+### Check that a download arrived whole
+
+Work out the fingerprint of the file you downloaded and compare it with the line for that file in the sums file.
+
+- Windows: `certutil -hashfile cvn_node_windows.zip SHA256`
+- Linux: `sha256sum cvn_node_linux_amd64.tar.gz`
+
+### Check that the programs were built from the published source
+
+This is the stronger check. It shows that the packaged programs contain exactly what is in the source and nothing else. You build the programs yourself from the release's tag and compare their fingerprints with the published ones.
+
+You need git and the Go version named in the file `go.mod` (the same version: a different one gives a different program). Replace `TAG` with the release's name, for example `v5.0.0-rc1`.
+
+```bash
+git clone -c core.autocrlf=false --branch TAG https://github.com/kalashnikovski/cvn_node
+cd cvn_node
+```
+
+The option `-c core.autocrlf=false` matters on Windows. Without it git rewrites the line endings of the text files, some of which are built into the program, and the result differs.
+
+Then build, on Linux, macOS or Windows alike. These lines are for a Linux or macOS terminal, or Git Bash on Windows:
+
+```bash
+export CGO_ENABLED=0
+GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o cvn_node_amd64 .
+GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o cvn_node_arm64 .
+GOOS=windows GOARCH=amd64 go build -trimpath -tags server -ldflags="-s -w" -o cvn_miner.exe .
+GOOS=windows GOARCH=amd64 go build -trimpath -tags "desktop,production" -ldflags="-s -w -H windowsgui" -o cvn_node.exe .
+sha256sum cvn_node_amd64 cvn_node_arm64 cvn_miner.exe cvn_node.exe
+```
+
+Each fingerprint should equal the one published for that program. The two Linux programs of `v5.0.0-rc1` have been rebuilt this way on a separate machine and matched exactly. The Windows programs of that release were built with a setting that made them depend on the machine that built them, so they do not match; releases after it are built with the setting above and should.
+
+If a fingerprint does not match, first check the Go version and that you built from the tag with the clone command above. If it still does not match, please report it.
+
+---
 
 To report a problem, open an issue on GitHub with a picture of the miner window and what `http://localhost:8081/block` shows. If the problem could let someone take or create coins, contact the maintainer privately first.
