@@ -6,6 +6,10 @@ export function BroadcastLocalTransactionSubmit(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['BroadcastLocalTransactionSubmit'](arg1, arg2, arg3, arg4);
 }
 
+export function CombineCoinsSubmit(arg1, arg2) {
+  return window['go']['main']['App']['CombineCoinsSubmit'](arg1, arg2);
+}
+
 export function FetchWalletBalanceQuery(arg1) {
   return window['go']['main']['App']['FetchWalletBalanceQuery'](arg1);
 }

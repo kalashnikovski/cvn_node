@@ -42,8 +42,10 @@ go build -o cvn_node .
 To limit how many processor threads the miner uses:
 
 ```bash
-GOMAXPROCS=4 ./cvn_node --miner-address YOUR_CVN_ADDRESS
+./cvn_node --miner-address YOUR_CVN_ADDRESS --threads 4
 ```
+
+On networks that mine with RandomX you can choose between the built-in miner and a faster separate one, and a one-time system setting (large pages) makes either of them about a quarter faster. See [MINING_GUIDE.md](MINING_GUIDE.md).
 
 ### The wallet
 
@@ -54,6 +56,8 @@ While the miner runs in one terminal, open another:
 ```
 
 On Windows: `cvn_miner.exe --wallet`, or `LaunchWallet.bat` for the desktop version.
+
+A miner receives a separate coin for every block won, and one transfer can spend at most 200 coins. **Combine my coins**, in both wallets, merges them into a few large coins in your own address.
 
 ## Network
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -46,18 +45,21 @@ func RunTextWallet() {
 		fmt.Println("--------------------------------------------------------------------")
 		fmt.Println(" 1. Show a balance")
 		fmt.Println(" 2. Send CVN")
-		fmt.Println(" 3. Create a new wallet")
-		fmt.Println(" 4. Exit")
+		fmt.Println(" 3. Combine my coins")
+		fmt.Println(" 4. Create a new wallet")
+		fmt.Println(" 5. Exit")
 		fmt.Println("====================================================================")
 
-		switch ask("Choose 1-4: ") {
+		switch ask("Choose 1-5: ") {
 		case "1":
 			textWalletShowBalance(ask, ownAddress)
 		case "2":
 			textWalletSend(ask, reader)
 		case "3":
+			textWalletCombine(ask, reader)
+		case "4":
 			textWalletCreate(ask, ownAddress)
-		case "4", "q", "exit":
+		case "5", "q", "exit":
 			fmt.Println("Wallet closed.")
 			return
 		}
@@ -102,6 +104,9 @@ func textWalletShowBalance(ask func(string) string, ownAddress string) {
 			}
 		}
 		fmt.Printf("   Ready to spend now: %s CVN in %d coin(s)\n", FormatUnits(spendable), len(coins))
+		if len(coins) > TxMaxInputs {
+			fmt.Printf("   One transfer can spend at most %d coins. \"Combine my coins\" in the menu merges them into fewer, larger coins.\n", TxMaxInputs)
+		}
 		if earliestSweep > 0 {
 			fmt.Printf("   Oldest coin: a fifth of it moves to the vault at the end of block #%d unless it is spent before then.\n", earliestSweep)
 		}
@@ -161,6 +166,70 @@ func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 	fmt.Printf("✅ Sent. Transfer ID: %s\n   It will confirm in one of the next blocks.\n", tx.ID)
 }
 
+// textWalletCombine merges a wallet's many coins into a few large ones.
+func textWalletCombine(ask func(string) string, reader *bufio.Reader) {
+	fmt.Println()
+	fmt.Println(" A wallet holds its balance as separate coins: a miner receives one for")
+	fmt.Printf(" every block won. One transfer can spend at most %d of them. Combining\n", TxMaxInputs)
+	fmt.Println(" sends your coins back to your own address as a few large coins. Your")
+	fmt.Println(" balance does not change, apart from any fee you choose to pay.")
+	fmt.Println()
+
+	privateKeyHex := readSecretLine(reader, "Private key of the wallet (not shown while typing): ")
+	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	if err != nil {
+		fmt.Println("❌ " + err.Error())
+		return
+	}
+	if len(privateKeyHex)%2 == 1 {
+		privateKeyHex = "0" + privateKeyHex
+	}
+	address, err := DeriveAddressFromPublicKey(publicKeyHex)
+	if err != nil {
+		fmt.Println("❌ " + err.Error())
+		return
+	}
+	coins, _, err := FetchSpendableCoinsOverHTTP(address)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		return
+	}
+	groups := planCombine(coins)
+	if len(groups) == 0 {
+		fmt.Printf("\n %s holds %d coin(s) ready to spend. There is nothing to combine.\n", address, len(coins))
+		return
+	}
+	feeUnits := int64(0)
+	if feeText := ask("Voluntary fee per transfer (press Enter for 0): "); feeText != "" {
+		if feeUnits, err = ParseCVN(feeText); err != nil {
+			fmt.Println("❌ The fee must be zero or a positive number, with at most 8 decimal places.")
+			return
+		}
+	}
+	combining := 0
+	for _, group := range groups {
+		combining += len(group)
+	}
+	fmt.Println("\n--------------------------------------------------------------------")
+	fmt.Printf(" Wallet:        %s\n", address)
+	fmt.Printf(" Coins now:     %d\n", len(coins))
+	fmt.Printf(" Coins after:   %d\n", len(coins)-combining+len(groups))
+	fmt.Printf(" Transfers:     %d, each back to this same address\n", len(groups))
+	fmt.Printf(" Total fee:     %s CVN\n", FormatUnits(feeUnits*int64(len(groups))))
+	fmt.Println("--------------------------------------------------------------------")
+	if answer := strings.ToLower(ask("Combine these coins? (y/n): ")); answer != "y" && answer != "yes" {
+		fmt.Println("Nothing was sent.")
+		return
+	}
+	result, err := CombineCoinsFromWallet(privateKeyHex, publicKeyHex, feeUnits)
+	if len(result.Transfers) > 0 {
+		fmt.Printf("✅ %s\n", result.Summary())
+	}
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+	}
+}
+
 func textWalletCreate(ask func(string) string, ownAddress string) {
 	privateKeyHex, publicKeyHex, address, err := GenerateKeyPair()
 	if err != nil {
@@ -187,8 +256,7 @@ func textWalletCreate(ask func(string) string, ownAddress string) {
 		fmt.Println("miner_config.json was left as it is.")
 		return
 	}
-	configBytes, _ := json.MarshalIndent(map[string]string{"miner_address": address}, "", "  ")
-	if err := os.WriteFile("miner_config.json", configBytes, 0644); err != nil {
+	if err := saveMinerAddress(address); err != nil {
 		fmt.Printf("❌ Could not write miner_config.json: %v\n", err)
 		return
 	}

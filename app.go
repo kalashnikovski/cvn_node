@@ -180,3 +180,36 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, priv
 	}
 	return "SUCCESS: Transfer " + tx.ID[:19] + "... sent from " + senderAddress + ". It will confirm in one of the next blocks."
 }
+
+// CombineCoinsSubmit merges the many coins of a wallet into a few large ones
+// by sending them back to the wallet's own address. Like a transfer, it is
+// signed on this machine and the private key is not kept.
+func (a *App) CombineCoinsSubmit(feeStr, privateKeyHex string) string {
+	feeUnits := int64(0)
+	var err error
+	if strings.TrimSpace(feeStr) != "" {
+		if feeUnits, err = ParseCVN(feeStr); err != nil {
+			return "REJECTED: The fee must be zero or a positive number, with at most 8 decimal places."
+		}
+	}
+	privateKeyHex = strings.TrimSpace(privateKeyHex)
+	if privateKeyHex == "" {
+		return "REJECTED: Enter the private key of the wallet whose coins you want to combine."
+	}
+	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	if err != nil {
+		return "REJECTED: " + err.Error()
+	}
+	if len(privateKeyHex)%2 == 1 {
+		privateKeyHex = "0" + privateKeyHex
+	}
+	result, err := CombineCoinsFromWallet(privateKeyHex, publicKeyHex, feeUnits)
+	if err != nil && len(result.Transfers) == 0 {
+		return "REJECTED: " + err.Error()
+	}
+	message := "SUCCESS: " + result.Summary()
+	if err != nil {
+		message += " Then it stopped: " + err.Error()
+	}
+	return message
+}

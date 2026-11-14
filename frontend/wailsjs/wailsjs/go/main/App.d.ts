@@ -3,6 +3,8 @@
 
 export function BroadcastLocalTransactionSubmit(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
+export function CombineCoinsSubmit(arg1:string,arg2:string):Promise<string>;
+
 export function FetchWalletBalanceQuery(arg1:string):Promise<number>;
 
 export function GetLocalNodeTelemetry():Promise<string>;

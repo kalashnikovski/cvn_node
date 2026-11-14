@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit } from '../wailsjs/wailsjs/go/main/App.js';
+	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit, CombineCoinsSubmit } from '../wailsjs/wailsjs/go/main/App.js';
 
 	let localHeight = $state(0);
 	let globalTip = $state(0); 
@@ -81,6 +81,29 @@
 			}
 		} catch (error) {
 			txStatusMessage = `❌ The wallet could not send the transfer: ${error?.message ?? error}`;
+		}
+	}
+
+	// Merges the wallet's many coins into a few large ones. It uses the
+	// private key and fee typed in the form; the recipient and amount are
+	// not needed, because the coins go back to their own address.
+	async function handleCombineCoins() {
+		if (!txPrivateKey) {
+			txStatusMessage = "❌ ERROR: Enter the private key of the wallet whose coins you want to combine.";
+			return;
+		}
+		txStatusMessage = "⏳ Combining coins...";
+		try {
+			const resultMessage = await CombineCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim());
+			if (resultMessage.includes("SUCCESS")) {
+				txStatusMessage = `✅ ${resultMessage}`;
+				txPrivateKey = "";
+				updateNodeTelemetry();
+			} else {
+				txStatusMessage = `🚨 ${resultMessage}`;
+			}
+		} catch (error) {
+			txStatusMessage = `❌ The wallet could not combine the coins: ${error?.message ?? error}`;
 		}
 	}
 
@@ -177,6 +200,13 @@
 					<button type="submit" style="background: #00ffff; color: #000; border: none; padding: 0.8rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; margin-top: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">
 						🚀 Sign and Broadcast Transaction
 					</button>
+
+					<button type="button" onclick={handleCombineCoins} title="A miner receives one coin per block won, and one transfer can spend at most 200 coins. This sends your coins back to your own address as a few large coins. It needs only your private key and, if you wish, a fee." style="background: #161624; color: #00ff66; border: 1px solid #00ff66; padding: 0.6rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; text-transform: uppercase; letter-spacing: 1px;">
+						🧩 Combine My Coins
+					</button>
+					<div style="color: #8a8a9e; font-size: 0.72rem; line-height: 1.3;">
+						Combine merges many small coins (one per block mined) into a few large ones in your own wallet. It uses the private key and fee above; your balance stays the same apart from the fee.
+					</div>
 
 					{#if txStatusMessage}
 						<div style="background: #06060a; padding: 0.8rem; border-radius: 3px; font-size: 0.85rem; text-align: center; border: 1px dashed #333; color: #00ffff; margin-top: 0.5rem;">

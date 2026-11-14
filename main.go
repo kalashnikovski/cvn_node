@@ -89,13 +89,8 @@ func main() {
 			fmt.Println("❌ IT IS NO LONGER SAVED AS A PLANTEXT SECRETS REPOSITORY FILE ON DISK. ")
 			fmt.Println("====================================================================")
 
-			configMap := map[string]string{"miner_address": walletAddress}
-			configMapBytes, err := json.MarshalIndent(configMap, "", "  ")
-			if err == nil {
-				err = os.WriteFile("miner_config.json", configMapBytes, 0644)
-				if err != nil {
-					log.Printf("🚨 FILE FAULT: Unable to write public configuration to disk: %v\n", err)
-				}
+			if err := saveMinerAddress(walletAddress); err != nil {
+				log.Printf("🚨 FILE FAULT: Unable to write public configuration to disk: %v\n", err)
 			}
 			os.Exit(0)
 		}
@@ -104,6 +99,11 @@ func main() {
 	// A launch network's genesis block needs its anchor before anything else
 	// can happen (see genesis.go).
 	if err := resolveGenesisAnchor(os.Args); err != nil {
+		fmt.Println("🚨 " + err.Error())
+		os.Exit(1)
+	}
+	// A mistyped miner choice is better refused now than discovered later.
+	if _, err := chosenMiner(os.Args); err != nil {
 		fmt.Println("🚨 " + err.Error())
 		os.Exit(1)
 	}
@@ -508,7 +508,9 @@ go runChainLagWatchdog()
 evaluateMiningReadiness()
 go runMiningReadinessMonitor()
 // On a RandomX network, also offer work to external mining software.
-StartMiningWorkServer()
+// If the fast miner was chosen, start it; the built-in miner below then
+// stays idle unless the fast miner cannot run (see fast_miner.go).
+StartChosenMiner(StartMiningWorkServer())
 StartContextMinerEngine()
 ticker := time.NewTicker(4 * time.Second)
 defer ticker.Stop()
@@ -554,6 +556,10 @@ logMutex.Unlock()
 }
 hashesComputedSnapshot := atomic.SwapUint64(&globalHashCount, 0)
 realHashrateMH := (float64(hashesComputedSnapshot) / 4.0) / 1000000.0
+// While the fast miner does the work, show the speed it reports.
+if externalSpeed, ok := fastMinerHashrate(); ok {
+realHashrateMH = externalSpeed / 1000000.0
+}
 currentLiveHashrateTrack = realHashrateMH
 hashrateMutex.Lock()
 hashRateHistory15m = append(hashRateHistory15m, realHashrateMH)
@@ -636,10 +642,7 @@ func StartContextMinerEngine() {
 miningMutex.Lock()
 miningContext = context.Background()
 miningMutex.Unlock()
-coresToAllocate := runtime.NumCPU()
-if coresToAllocate < 1 {
-coresToAllocate = 1
-}
+coresToAllocate := miningThreads(os.Args)
 for i := 0; i < coresToAllocate; i++ {
 miningWg.Add(1)
 go executionMiningWorkerThread(miningContext, int64(i))
@@ -657,7 +660,7 @@ pinned := false
 var floorTipHash string
 var floorTipFirstSeen int64
 for {
-if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 || atomic.LoadInt32(&externalMinersConnected) > 0 {
+if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 || atomic.LoadInt32(&externalMinersConnected) > 0 || atomic.LoadInt32(&fastMinerActive) == 1 {
 time.Sleep(100 * time.Millisecond)
 continue
 }

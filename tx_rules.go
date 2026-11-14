@@ -711,6 +711,11 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 	} else {
 		feeUnits += changeUnits
 	}
+	return signTransfer(privateKeyHex, publicKeyHex, senderAddress, inputs, outputs, feeUnits)
+}
+
+// signTransfer turns chosen inputs and outputs into a signed transfer.
+func signTransfer(privateKeyHex, publicKeyHex, senderAddress string, inputs []UTXOInput, outputs []UTXOOutput, feeUnits int64) (Transaction, error) {
 	tx := Transaction{
 		Version:          1,
 		Inputs:           inputs,
