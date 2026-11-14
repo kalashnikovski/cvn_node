@@ -278,7 +278,7 @@ GOOS=windows GOARCH=amd64 go build -trimpath -tags "desktop,production" -ldflags
 sha256sum cvn_node_amd64 cvn_node_arm64 cvn_miner.exe cvn_node.exe
 ```
 
-Each fingerprint should equal the one published for that program. The two Linux programs of `v5.0.0-rc1` have been rebuilt this way on a separate machine and matched exactly. The Windows programs of that release were built with a setting that made them depend on the machine that built them, so they do not match; releases after it are built with the setting above and should.
+Each fingerprint should equal the one published for that program. The Linux programs of `v5.0.0-rc1` and `v5.0.0-rc2` have been rebuilt this way on a separate machine and matched exactly. The Windows programs of those two trial releases do not match when built this way: `rc1` was built with a setting that tied the result to the build machine, and `rc2` was built from files whose line endings git had rewritten (its Windows programs do match if you clone with `core.autocrlf=true` instead). Releases after `rc2` are built exactly as above.
 
 If a fingerprint does not match, first check the Go version and that you built from the tag with the clone command above. If it still does not match, please report it.
 

@@ -32,6 +32,11 @@ jobs:
     needs: test
     runs-on: windows-latest
     steps:
+      # Git on Windows rewrites the line endings of text files as it fetches
+      # them, and some of those files are built into the programs. Switched
+      # off, so that the programs are built from the same bytes everywhere
+      # and anyone can rebuild them and get the same result.
+      - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
