@@ -4,7 +4,7 @@
 
 November 2026. This paper describes the rules Covenant Standard is intended to launch with.
 
-**Status.** These rules are built and run on a development network. They have not been independently audited and have not yet run as a public network. The public test network running today (`testnet-1`) uses an earlier, simpler rule set and will be reset. Nothing here is an offer or a promise of value. [ROADMAP.md](ROADMAP.md) records what is finished and what is not.
+**Status.** These rules are built and run on a development network. They have been reviewed in several rounds by AI models, whose findings and what was done about each are recorded in the repository's `audit` folder. They have not been audited by an independent firm or person, and have not yet run as a public network. The public test network running today (`testnet-1`) uses an earlier, simpler rule set and will be reset. Nothing here is an offer or a promise of value. [ROADMAP.md](ROADMAP.md) records what is finished and what is not.
 
 ---
 
@@ -91,7 +91,7 @@ The vault's share is deliberately small. A miner can avoid it by including their
 
 ## 8. Transfers and blocks
 
-**Ownership.** A coin belongs to an address. An address is `CVN_`, then the first 20 bytes of the SHA-256 hash of a public key, then a 4-byte check on those 20, all in hex: 52 characters in all. The check means a mistyped address is not an address at all, and the rules refuse to make a coin out to anything that is not one. So a slip of the hand cannot send coins where nobody can spend them; about one mistake in four billion would still pass. A transfer is signed with the matching private key (ECDSA on the P-256 curve).
+**Ownership.** A coin belongs to an address. An address is `CVN_`, then the first 20 bytes of the SHA-256 hash of a public key (the key as it is written in a transfer: 128 lower-case hex characters), then a 4-byte check on those 20, all in hex: 52 characters in all. The check means a mistyped address is not an address at all, and the rules refuse to make a coin out to anything that is not one. So a slip of the hand cannot send coins where nobody can spend them; about one mistake in four billion would still pass. A transfer is signed with the matching private key (ECDSA on the P-256 curve).
 
 **A transfer** spends up to 200 coins and creates up to 50. It carries nothing its sender did not sign, and what is signed includes the name of the network, so a transfer made for one CVN network is invalid on any other.
 
@@ -118,11 +118,11 @@ Covenant Standard uses RandomX with two of its settings changed, so that softwar
 
 Everything that makes RandomX resistant to specialised hardware, and everything its security reviews covered, is unchanged: the memory size, the program size and the instruction mix.
 
-The engine is kept inside the project's repository and, built with the standard settings, reproduces RandomX's published test values.
+The engine is kept inside the project's repository. It is a published Go implementation of RandomX with those two settings changed and with two additions that do not affect what it computes: it can place its memory in large pages on Windows as well as Linux, and it does the same for each mining thread's working memory. Built with the standard settings it reproduces RandomX's published test values, and the project's automatic tests check that on every change.
 
-**The key.** RandomX is seeded by a key that changes once a day. For a block at height *h*, the key is the identifier of the block at height ⌊(h − 101) ÷ 1,920⌋ × 1,920; for the first 101 blocks it is the genesis block. The key block is always more than 100 blocks deep, beyond the reach of any reorganisation (section 10).
+**The key.** RandomX is seeded by a key that changes once a day. For a block at height *h*, the key is the identifier of the block at height ⌊(h − 101) ÷ 1,920⌋ × 1,920. That is the genesis block for every block up to height 2,020, the first day or so; the key first changes at block 2,021. The key block is always more than 100 blocks deep, beyond the reach of any reorganisation (section 10).
 
-**The proof.** A block is valid when the RandomX hash of its identifier, read as a number, is at most (2²⁵⁶ − 1) ÷ difficulty.
+**The proof.** What RandomX hashes is a 43-byte message made from the block: one byte with the value 1, six zero bytes, the block's identifier as it would be with the nonce set to zero (32 bytes), and the nonce as four bytes, lowest first. A block is valid when the RandomX hash of that message, read as a number with its last byte the most significant, is at most (2²⁵⁶ − 1) ÷ difficulty. This is the layout that widely used RandomX mining software expects.
 
 ### 9.2 Replacing the algorithm
 
@@ -132,9 +132,10 @@ The mining algorithm is chosen by block height from a schedule. If RandomX is ev
 
 Difficulty is adjusted on every block.
 
-- Each block's difficulty moves up or down a little according to how long the previous block took compared with 45 seconds.
+- Each block's difficulty moves according to how long the previous block took compared with 45 seconds: up by at most 5% for a fast block, and down by more for a slow one, to at most a halving for a block that took eight minutes or longer.
 - It also leans against how far the whole chain is ahead of or behind its schedule since the first block, by at most 1% per block. Without this term blocks arrive a few percent fast and the seven-year periods would end early; with it, the long-run average is 45 seconds. In a simulation of 300,000 blocks, including large swings in mining power, the average was 45.00 seconds.
 - If no block arrives for six minutes, difficulty halves, and halves again every three minutes after that. A chain that loses most of its miners overnight recovers within minutes, not days.
+- The first blocks are treated differently, so that the start cannot be gamed. For the first 20 blocks the difficulty never goes below its starting value and there is no relief for a late block. Over the next 40 blocks that relief returns one halving at a time. The chain's schedule is counted from block 20. Without this, whoever mined the first blocks could date them to make the following ones nearly free.
 
 ### 9.4 Mining software
 
@@ -166,15 +167,17 @@ The Bitcoin block gives the first block two things:
 - **Its identity.** The Bitcoin block's hash is written into the first block, so it decides the first block's identifier. The first RandomX key is that identifier, so nobody can even prepare to mine early.
 - **Its date.** The first block is dated with the Bitcoin block's own timestamp. The chain's clock therefore starts at the launch, not at a date written into the software weeks before. Without this, the first miner could date the first blocks far in the past; the difficulty rule would see days passing between blocks and fall to its minimum, handing that miner a long run of easy blocks.
 
-Both come from the Bitcoin block's 80-byte header, which is what a miner supplies at the start. The header proves itself: its hash has to meet the difficulty it states, which nobody can fake without Bitcoin's own mining power.
+Both come from the Bitcoin block's 80-byte header, which is what a miner supplies at the start. The header proves itself: its hash has to meet the difficulty it states, and that difficulty has to be at least a quarter of Bitcoin's at the time the software was written. Nobody can produce such a header without a large part of Bitcoin's own mining power, and no smaller chain that shares Bitcoin's header format comes near it. A header names its block by hash, not by height, so a network can also fix the earliest date the block may carry, which rules out any block mined before the announcement.
 
-The software is published with the Bitcoin height fixed and the header still unknown. A node started before that block exists waits for it. When the block appears, every waiting node, including those of the people who wrote the software, takes its header from the public Bitcoin chain and starts within seconds of the others. A node finds the header by asking public Bitcoin block explorers and uses it only when two independent ones agree; an operator who prefers not to rely on them can supply it by hand.
+The software is published with the Bitcoin height fixed and the header still unknown. A node started before that block exists waits for it. When the block appears, every waiting node, including those of the people who wrote the software, takes its header from the public Bitcoin chain and starts within seconds of the others. A node finds the header by asking several public Bitcoin block explorers and uses it only when two of them give the same one; a node that has itself watched Bitcoin approach the height takes only a block dated about now. An operator who prefers not to rely on explorers can supply the header by hand, from their own Bitcoin node or anywhere else, and gains little by it: getting the header a few seconds early is worth a few seconds of mining.
+
+About one Bitcoin block in several hundred is replaced moments after it appears. If that happened to the anchor block, nodes could start from two different headers and form two networks. Every node therefore compares its first block with the seeds' and says so plainly if they differ; which of the two is the network is then settled in public, by announcement.
 
 Anyone can check the anchor against Bitcoin afterwards: `--show-genesis` prints it.
 
 ## 12. The network
 
-A node keeps the whole chain, checks every block and transfer itself, and relays what it accepts. Nodes find each other through a short list of seed addresses and by exchanging the addresses of nodes they know. A node behind a home router needs no configuration: it opens its own ports where the router allows, and otherwise receives blocks over connections it makes outward.
+A node keeps the whole chain, checks every block and transfer itself, and relays what it accepts. Nodes find each other through a short list of seed addresses and by exchanging the addresses of nodes they know. A seed is a convenience and has no authority: it is asked first because it is likely to be online, every block it sends is checked like any other, and a node follows whichever chain proves the most work, whoever it came from. The blocks a new node downloads when it first starts are not protected by the limit on replacing one's own blocks (section 10) while the program runs, so a seed cannot hold newcomers on a chain of its own. An operator can name another node to start from with `--connect`. A node behind a home router needs no configuration: it opens its own ports where the router allows, and otherwise receives blocks over connections it makes outward.
 
 A node never signs anything on a user's behalf. Wallets build and sign transfers on the user's own computer and hand the finished transfer to a node.
 

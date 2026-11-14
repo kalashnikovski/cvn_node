@@ -103,7 +103,7 @@ func TestSelectNetwork(t *testing.T) {
 	if err := SelectNetwork("no-such-network"); err == nil {
 		t.Error("an unknown network name was accepted")
 	}
-	for _, name := range []string{"", "testnet-1", "mainnet", " Testnet-1 "} {
+	for _, name := range []string{"", "testnet-1", "testnet", " Testnet-1 "} {
 		if err := SelectNetwork(name); err != nil || Params.Name != "testnet-1" {
 			t.Errorf("%q should select testnet-1 (got %q, %v)", name, Params.Name, err)
 		}

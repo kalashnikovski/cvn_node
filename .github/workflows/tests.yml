@@ -22,6 +22,9 @@ jobs:
       # The project's own code is vetted; internal/randomx is third-party code kept as published.
       - run: go vet . ./node
       - run: go test ./...
+      # The RandomX engine, built with the published settings, must give
+      # RandomX's own published test values.
+      - run: go test -tags randomx_reference ./internal/randomx/
       - name: Build for Linux
         env:
           CGO_ENABLED: '0'

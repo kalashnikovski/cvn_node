@@ -71,7 +71,9 @@ if errorlevel 2 exit /b 0
 
 :CREATE_WALLET
 echo.
-"%MINER%" --generate-wallet
+rem The options are passed on here too: an address is written differently on
+rem different networks, so the wallet must be made for the one being mined.
+"%MINER%" %* --generate-wallet
 if errorlevel 1 (
     pause
     exit /b 1

@@ -66,7 +66,7 @@ A miner receives a separate coin for every block won, and one transfer can spend
 | Sync and wallet | 8081 | Block download, balances, sending transfers |
 | Status | 8082 | Height and tip of this node |
 
-Seed nodes: Melbourne `202.137.175.220`, Singapore `207.148.67.11`, Atlanta `64.177.44.185`, Los Angeles `149.28.69.173`, Toronto `149.248.54.9`, Amsterdam `95.179.179.191`, Mumbai `65.20.67.25`.
+Seed nodes (all run by the project's maintainer; they are where a new node looks first and have no say over the rules): Melbourne `202.137.175.220`, Singapore `207.148.67.11`, Atlanta `64.177.44.185`, Los Angeles `149.28.69.173`, Toronto `149.248.54.9`, Amsterdam `95.179.179.191`, Mumbai `65.20.67.25`.
 
 Any node answers these in a browser:
 
@@ -101,10 +101,10 @@ Where things are:
 |---|---|
 | the main folder | The guides, the launcher scripts, and one small start-up file (`main.go`) |
 | `node/` | The program itself: node, miner and wallets, with its tests beside the code they check |
-| `internal/randomx/` | The RandomX engine, kept as published apart from CVN's two settings |
+| `internal/randomx/` | The RandomX engine: a published Go implementation with CVN's two settings and large-page memory on Windows (see its `README_CVN.md`) |
 | `frontend/` | The screens of the Windows desktop wallet |
 
-The project depends on two libraries: [bbolt](https://github.com/etcd-io/bbolt) for storage and [Wails](https://wails.io) for the desktop wallet window.
+The project depends on two libraries: [bbolt](https://github.com/etcd-io/bbolt) for storage and [Wails](https://wails.io) for the desktop wallet window. Everything that comes from someone else, and its licence, is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Reporting problems
 

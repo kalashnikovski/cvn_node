@@ -66,6 +66,12 @@ type GenesisAnchor struct {
 	// block had not been mined when this software was released, and the
 	// header must be supplied at first start.
 	BitcoinHeader string
+	// NotBefore is the earliest date the Bitcoin block may carry, in seconds
+	// since 1970: the moment the height was announced. A header only names
+	// its block by hash, not by height, so without this an operator (or the
+	// websites a node asks) could pass off an older Bitcoin block as the
+	// anchor. Zero means no such limit.
+	NotBefore int64
 	// Unscheduled marks a launch network whose Bitcoin height has not been
 	// announced yet. Such a network cannot be started at all.
 	Unscheduled bool
@@ -81,10 +87,32 @@ type GenesisAnchor struct {
 // required reports whether this network needs a real anchor.
 func (a GenesisAnchor) required() bool { return a.BitcoinHeight > 0 || a.Unscheduled }
 
-// bitcoinAnchorMinZeroDigits is how many zero hex digits a Bitcoin block hash
-// must begin with to be accepted as an anchor. Every Bitcoin block for many
-// years has had more; a header with less cannot be a current Bitcoin block.
-const bitcoinAnchorMinZeroDigits = 16
+// bitcoinAnchorEasiestBits is the easiest target a Bitcoin header may state
+// and still be accepted as an anchor, in Bitcoin's own compact form. It is
+// four times the target Bitcoin had in November 2026, which is to say a
+// quarter of that difficulty.
+//
+// A header has to meet the target it states itself, so without a limit on
+// that target anyone could make up a "Bitcoin header" with rented hardware,
+// or use a block from one of the smaller chains that share Bitcoin's header
+// format. Meeting this limit takes a quarter of the whole Bitcoin network's
+// effort for ten minutes, which only a real Bitcoin block has behind it.
+// Bitcoin's difficulty has never fallen to a quarter of an earlier level; if
+// it ever did, a new version of this software would be needed to start a new
+// network, and running networks would not be affected.
+//
+// A variable so tests can stand in other values.
+var bitcoinAnchorEasiestBits uint32 = 0x170859cc
+
+// compactTarget turns Bitcoin's compact form of a target into the number.
+func compactTarget(bits uint32) (*big.Int, bool) {
+	exponent := uint(bits >> 24)
+	mantissa := new(big.Int).SetUint64(uint64(bits & 0x007fffff))
+	if bits&0x00800000 != 0 || mantissa.Sign() == 0 || exponent < 3 || exponent > 32 {
+		return nil, false
+	}
+	return mantissa.Lsh(mantissa, 8*(exponent-3)), true
+}
 
 // parseBitcoinHeader checks an 80-byte Bitcoin block header given as hex and
 // returns the block's hash, as Bitcoin explorers show it, and its timestamp.
@@ -108,18 +136,15 @@ func parseBitcoinHeader(headerHex string) (hash string, timestamp int64, err err
 
 	// The header states its own target in a compact form; the hash, read as
 	// a number, must not exceed it.
-	bits := binary.LittleEndian.Uint32(header[72:76])
-	exponent := uint(bits >> 24)
-	mantissa := new(big.Int).SetUint64(uint64(bits & 0x007fffff))
-	if bits&0x00800000 != 0 || mantissa.Sign() == 0 || exponent < 3 || exponent > 32 {
+	target, ok := compactTarget(binary.LittleEndian.Uint32(header[72:76]))
+	if !ok {
 		return "", 0, fmt.Errorf("this is not a valid Bitcoin block header")
 	}
-	target := mantissa.Lsh(mantissa, 8*(exponent-3))
 	if new(big.Int).SetBytes(reversed).Cmp(target) > 0 {
 		return "", 0, fmt.Errorf("this header does not carry the proof of work it claims, so it is not a Bitcoin block header (check for a copying error)")
 	}
-	if !strings.HasPrefix(hash, strings.Repeat("0", bitcoinAnchorMinZeroDigits)) {
-		return "", 0, fmt.Errorf("this header carries far less work than a current Bitcoin block (its hash is %s)", hash)
+	if easiest, _ := compactTarget(bitcoinAnchorEasiestBits); target.Cmp(easiest) > 0 {
+		return "", 0, fmt.Errorf("this header carries far less work than a current Bitcoin block, so it is not one (its hash is %s)", hash)
 	}
 	return hash, int64(binary.LittleEndian.Uint32(header[68:72])), nil
 }
@@ -135,7 +160,10 @@ func useAnchorHeader(headerHex string) error {
 	if err != nil {
 		return err
 	}
-	Params.Anchor.BitcoinHeader = strings.ToLower(strings.TrimSpace(headerHex))
+	if earliest := Params.Anchor.NotBefore; earliest > 0 && timestamp < earliest {
+		return fmt.Errorf("this is the header of a Bitcoin block mined before this network's start was announced, so it cannot be block %d (its hash is %s)", Params.Anchor.BitcoinHeight, hash)
+	}
+	Params.Anchor.BitcoinHeader =strings.ToLower(strings.TrimSpace(headerHex))
 	Params.Anchor.BitcoinHash = hash
 	Params.GenesisTimestamp = timestamp
 	return nil
@@ -166,9 +194,10 @@ func resolveGenesisAnchor(args []string) error {
 		return fmt.Errorf("%w: the %s network starts from Bitcoin block %d, and this software was released before that block was mined.\n"+
 			"   Once it exists, get its header (160 hex digits). Find the block on a Bitcoin block explorer,\n"+
 			"   copy its hash, and open  https://mempool.space/api/block/HASH/header  with that hash.\n"+
+			"   With your own Bitcoin node:  bitcoin-cli getblockheader $(bitcoin-cli getblockhash %d) false\n"+
 			"   Then start with:\n"+
 			"       --network %s --genesis-anchor HEADER\n"+
-			"   or put the header in a file named %s", errAnchorNotYetKnown, Params.Name, anchor.BitcoinHeight, Params.Name, genesisAnchorFileName())
+			"   or put the header in a file named %s", errAnchorNotYetKnown, Params.Name, anchor.BitcoinHeight, anchor.BitcoinHeight, Params.Name, genesisAnchorFileName())
 	}
 	if err := useAnchorHeader(supplied); err != nil {
 		return fmt.Errorf("the anchor for Bitcoin block %d was not accepted: %v", anchor.BitcoinHeight, err)

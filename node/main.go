@@ -406,6 +406,7 @@ func Run(frontendAssets embed.FS) {
 	// keep checking. See mining_readiness.go.
 	evaluateMiningReadiness()
 	go runMiningReadinessMonitor()
+	go runGenesisWatch()
 	// On a RandomX network, also offer work to external mining software.
 	// If the fast miner was chosen, start it; the built-in miner below then
 	// stays idle unless the fast miner cannot run (see fast_miner.go).

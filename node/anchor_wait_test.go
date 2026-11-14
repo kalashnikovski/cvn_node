@@ -112,6 +112,7 @@ func TestNodeWaitsForItsAnchorAndStartsByItself(t *testing.T) {
 	first := newStandInExplorer(t, testHeaderHash, testHeaderA)
 	second := newStandInExplorer(t, testHeaderHash, testHeaderA)
 	useStandInExplorers(t, first, second)
+	treatOldBlocksAsNew(t)
 
 	// Scheduled but not yet mined: the node can wait for this.
 	if err := resolveGenesisAnchor([]string{"cvn_node"}); !errors.Is(err, errAnchorNotYetKnown) {
@@ -220,5 +221,126 @@ func TestDevnetCanRehearseALaunch(t *testing.T) {
 	onNetwork(t, "devnet")
 	if Params.Anchor.required() {
 		t.Error("devnet needs no anchor unless a rehearsal is asked for")
+	}
+}
+
+// treatOldBlocksAsNew lets a test stand in a Bitcoin block from years ago for
+// one that has just been mined.
+func treatOldBlocksAsNew(t *testing.T) {
+	t.Helper()
+	saved := anchorFreshness
+	anchorFreshness = 100 * 365 * 24 * time.Hour
+	t.Cleanup(func() { anchorFreshness = saved })
+}
+
+// One explorer out of reach, or several, delays nobody as long as two answer.
+func TestAnchorLookupSurvivesExplorersBeingDown(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "try later", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(down.Close)
+	good := func() *standInExplorer {
+		explorer := newStandInExplorer(t, testHeaderHash, testHeaderA)
+		atomic.StoreInt32(&explorer.mined, 1)
+		return explorer
+	}
+	other := func() *standInExplorer {
+		explorer := newStandInExplorer(t, testHeaderBHash, testHeaderB)
+		atomic.StoreInt32(&explorer.mined, 1)
+		return explorer
+	}
+	saved := anchorSources
+	t.Cleanup(func() { anchorSources = saved })
+
+	anchorSources = []string{down.URL, good().server.URL, down.URL, good().server.URL, down.URL}
+	if header, _, agreed := lookUpAnchor(800000); !agreed || header != testHeaderA {
+		t.Error("two explorers agreed and three were down, and the header was not taken")
+	}
+	// One explorer naming another block does not stop two that agree.
+	anchorSources = []string{good().server.URL, other().server.URL, good().server.URL}
+	if header, _, agreed := lookUpAnchor(800000); !agreed || header != testHeaderA {
+		t.Error("two explorers agreed against one, and the header was not taken")
+	}
+	// Two against two: Bitcoin itself is undecided, and so is the node.
+	anchorSources = []string{good().server.URL, other().server.URL, good().server.URL, other().server.URL}
+	if _, _, agreed := lookUpAnchor(800000); agreed {
+		t.Error("a header was taken although two explorers named each of two blocks")
+	}
+}
+
+// A node that has itself seen Bitcoin short of the height takes only a block
+// dated about now: the explorers cannot hand it an older block and call it
+// the one it was waiting for.
+func TestWaitingNodeRefusesAnOldBlock(t *testing.T) {
+	onNetwork(t, "devnet")
+	asLaunchNetwork()
+	t.Chdir(t.TempDir())
+	first := newStandInExplorer(t, testHeaderHash, testHeaderA)
+	second := newStandInExplorer(t, testHeaderHash, testHeaderA)
+	useStandInExplorers(t, first, second)
+
+	started := make(chan struct{})
+	go func() {
+		waitForGenesisAnchor([]string{"cvn_node"}, 20*time.Millisecond, 20*time.Millisecond)
+		close(started)
+	}()
+	time.Sleep(200 * time.Millisecond) // it sees Bitcoin at 799,998
+	atomic.StoreInt32(&first.mined, 1)
+	atomic.StoreInt32(&second.mined, 1)
+	select {
+	case <-started:
+		t.Fatal("a node that watched Bitcoin reach the height started from a block dated in 2023")
+	case <-time.After(600 * time.Millisecond):
+	}
+	if _, err := os.Stat(genesisAnchorFileName()); err == nil {
+		t.Error("the old block was saved as the anchor")
+	}
+	// The operator's file still starts it, so the test's waiting node ends.
+	treatOldBlocksAsNew(t)
+	if err := os.WriteFile(genesisAnchorFileName(), []byte(testHeaderA), 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the node did not start from the operator's file")
+	}
+}
+
+// A header must carry about as much work as a current Bitcoin block: one
+// that merely meets an easy target it states itself is not a Bitcoin block.
+func TestAnchorHeaderMustCarryBitcoinsWork(t *testing.T) {
+	if bitcoinAnchorEasiestBits != 0x170859cc {
+		t.Fatalf("the easiest accepted Bitcoin target changed: %#x", bitcoinAnchorEasiestBits)
+	}
+	// Both test headers are real Bitcoin blocks of July 2023, within the limit.
+	if _, _, err := parseBitcoinHeader(testHeaderA); err != nil {
+		t.Fatalf("a real Bitcoin header was refused: %v", err)
+	}
+	// With the limit set where Bitcoin stood later, the same headers state a
+	// target that is too easy, exactly as a smaller chain's header would.
+	saved := bitcoinAnchorEasiestBits
+	bitcoinAnchorEasiestBits = 0x17021673
+	t.Cleanup(func() { bitcoinAnchorEasiestBits = saved })
+	if _, _, err := parseBitcoinHeader(testHeaderA); err == nil || !strings.Contains(err.Error(), "far less work") {
+		t.Errorf("a header stating too easy a target was accepted: %v", err)
+	}
+}
+
+// A network can name the earliest date its Bitcoin block may carry, so that
+// no block mined before the announcement can be passed off as the anchor.
+func TestAnchorCannotBeABlockFromBeforeTheAnnouncement(t *testing.T) {
+	onNetwork(t, "devnet")
+	asLaunchNetwork()
+	t.Chdir(t.TempDir())
+	Params.Anchor.NotBefore = testHeaderTime + 1
+	err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderA})
+	if err == nil || !strings.Contains(err.Error(), "before this network's start was announced") {
+		t.Errorf("a block from before the announcement was accepted: %v", err)
+	}
+	asLaunchNetwork()
+	Params.Anchor.NotBefore = testHeaderTime
+	if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderA}); err != nil {
+		t.Errorf("a block from after the announcement was refused: %v", err)
 	}
 }

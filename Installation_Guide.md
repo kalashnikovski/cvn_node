@@ -109,6 +109,8 @@ While the miner runs in one terminal, open a second one:
 cd cvn_node && ./cvn_node --wallet
 ```
 
+The desktop wallet with a window exists on Windows only. On Linux the text wallet does everything it does.
+
 ### Running a node that does not mine
 
 A node does not have to mine. Started with `--no-mining` it keeps the whole chain, checks every block and transfer, and passes them on to other nodes, and that is all. It needs no wallet and no mining address, and very little memory.
@@ -180,6 +182,41 @@ The program runs on one network at a time.
 
 The same option works for the wallet, for example `./cvn_node --network devnet --wallet` or `LaunchWallet.bat --network devnet`. Each network keeps its own database file and uses its own ports, so they do not interfere.
 
+**Give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on `testnet-1`. Addresses are written differently on the launch networks (they end with 8 check characters), so a wallet for `cvn_testnet` must be created with `--network cvn_testnet`: `LaunchMiner.bat --network cvn_testnet`, or `./cvn_node --network cvn_testnet --generate-wallet`. There is no network called `mainnet` yet, and the program refuses the name.
+
+### On the day a network starts
+
+A launch network starts when one particular Bitcoin block is mined. Its height is announced in advance and written into the program.
+
+1. **Before that day:** update the program, create your wallet for that network, and start the miner on it. It shows how many Bitcoin blocks are left and waits.
+2. **At the moment itself:** nothing to do. The program asks several public Bitcoin block explorers for the block at that height, and starts as soon as two of them give the same one. Everyone who is waiting starts within seconds of each other.
+3. **If you would rather not depend on those websites,** supply the block's header yourself. It is 160 characters, public the instant the block is mined. With your own Bitcoin node:
+
+   ```bash
+   bitcoin-cli getblockheader $(bitcoin-cli getblockhash HEIGHT) false
+   ```
+
+   or from any block explorer: find the block, copy its hash, and open `https://mempool.space/api/block/HASH/header`. Then either put the header in a file named `genesis_anchor_NETWORK.txt` beside the program (a waiting node picks it up within a minute), or start with `--genesis-anchor HEADER`. Add `--no-anchor-lookup` if the program should ask no website at all.
+
+   The program checks the header whoever supplies it: it must carry the work of a real, current Bitcoin block. A wrong header cannot cost you coins. It would start your node on a network of its own, and the program warns you if the seed nodes started from a different first block than you did.
+
+### If the seed nodes cannot be reached, or you do not trust them
+
+Seed nodes are only where a new node looks first. They have no say over the rules: your node checks every block itself and follows whichever chain proves the most work, wherever it came from.
+
+- To start from a node you choose, add `--connect HOST` (for example a friend's node, or your own second machine). It is asked alongside the seeds.
+- A node remembers the nodes it has met and uses them when the seeds are silent.
+- If a seed tells your miner the network is ahead and then does not deliver the blocks, your miner waits two minutes at most.
+
+### What the program contacts
+
+- The seed nodes of the network you chose (listed in [README.md](README.md)), and other nodes it learns of from them.
+- Your own router, to ask it to open the network's ports (switch off with the environment variable `CVN_DISABLE_UPNP`).
+- On a launch network that has not started yet, and only then: the Bitcoin block explorers mempool.space, blockstream.info, mempool.emzy.de, btcscan.org and mempool.ninja, to ask for one Bitcoin block. `--no-anchor-lookup` switches this off.
+- Nothing else. It sends no usage reports and checks for no updates.
+
+Two things to know about privacy. A wallet asks a node for your balance and coins: the node on your own machine if one is running, otherwise a seed node, which then sees your address and the address your computer connects from. And any node shows its own mining address at `http://NODE:8082/status`. Balances and transfers are public on this chain in any case.
+
 ---
 
 ## 8. Looking at the chain
@@ -199,7 +236,7 @@ That is the port on `testnet-1`. On the CVN Testnet it is 18081, and on `devnet`
 | What you see | What to do |
 |---|---|
 | "this machine has no mining address" | Create a wallet (`LaunchMiner.bat`, or `--generate-wallet` on Linux), or start with `--miner-address CVN_...` |
-| "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within five minutes if no other node can be reached, within ten if another node is ahead and this one is catching up. |
+| "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within two minutes if no other node can be reached, or if another node says it is ahead and then does not deliver. |
 | The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_mainnet.db` on `testnet-1`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
 | The desktop wallet shows no balance | Check that the miner is running and that both were started on the same network. |

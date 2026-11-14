@@ -320,6 +320,7 @@ One file, attached or pasted below (or three parts sent one after another). It s
 - README.md, Installation_Guide.md, MINING_GUIDE.md, ROADMAP.md: what the public is told.
 - LICENSE files.
 - audit/FINDINGS_ROUND_1.md, _2.md, _3.md: what three earlier rounds of review found and what was done.
+- audit/FINDINGS_FAIR_LAUNCH.md: what an earlier run of this same scorecard found and what was done. Do not take its word: for each item it says was fixed, check the code, and for each claim it says was mistaken, decide for yourself.
 - Source code in Go, the scripts that set up servers, the build instructions, then the tests.
 
 Read all of it before you answer. The material numbers its files ("FILE n OF N") and ends with the line "END OF PACK". Begin your answer by stating the number of the last file you can see and whether you can see that last line. If you cannot, your copy was cut short: say so plainly, assess only what you have, and mark every item you could not check as "Cannot tell".

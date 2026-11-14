@@ -252,7 +252,7 @@ func KnownNetworks() []string {
 // before the database is opened or any connection is made.
 func SelectNetwork(name string) error {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "", testnet1Params.Name, "testnet", "mainnet":
+	case "", testnet1Params.Name, "testnet":
 		Params = testnet1Params
 	case cvnTestnetParams.Name, "cvn-testnet", "cvn testnet", "cvntestnet":
 		Params = cvnTestnetParams

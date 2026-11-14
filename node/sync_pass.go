@@ -317,6 +317,8 @@ func runInitialDownload(args []string) {
 		operatorSyncSources = []string{strings.TrimSuffix(host, "/")}
 	}
 	fmt.Println("🚀 Catching up with the network...")
+	heightAtStart := GetLatestBlockInternal().Index
+	defer func() { noteInitialDownload(heightAtStart, GetLatestBlockInternal().Index) }()
 	for pass := 0; pass < initialDownloadMaxPasses; pass++ {
 		before := TotalChainWork()
 		TriggerActiveReSyncPass()
@@ -328,7 +330,92 @@ func runInitialDownload(args []string) {
 			break
 		}
 	}
+	// The seeds have nothing more to give. Before this node settles on what
+	// they gave it, it asks the other nodes it knows of, a few times at most:
+	// a seed is a convenience, not an authority, and if another node proves
+	// more work, that is the chain to follow.
+	noteInitialDownload(heightAtStart, GetLatestBlockInternal().Index)
+	for pass := 0; pass < initialDownloadOtherPasses; pass++ {
+		before := TotalChainWork()
+		TriggerActiveReSyncPass()
+		if TotalChainWork().Cmp(before) <= 0 {
+			break
+		}
+		fmt.Printf("⏳ [SYNC] Now at block #%d.\n", GetLatestBlockInternal().Index)
+	}
 	fmt.Printf("✅ [SYNC] Starting at block #%d.\n", GetLatestBlockInternal().Index)
+}
+
+// initialDownloadOtherPasses is how many passes the start-up download gives
+// to nodes other than the seeds once the seeds have nothing more.
+const initialDownloadOtherPasses = 3
+
+// BLOCKS TAKEN ON ONE NODE'S WORD
+//
+// A node does not replace more than a set number of its own blocks, however
+// much work a competing branch shows, so that settled history cannot be
+// rewritten. That rule is right for blocks a node watched arrive, one by
+// one, with the whole network looking on. It is wrong for the blocks a node
+// downloaded when it started: those came from one source, usually a seed,
+// and nobody else has vouched for them yet. If the limit protected them, a
+// seed could hand newcomers a chain of its own making, and they would refuse
+// the real chain for ever after.
+//
+// So the blocks downloaded at start-up are not counted against the limit for
+// as long as the program runs. If another node later proves more work, the
+// newcomer follows it, however far back the two chains part within those
+// blocks. Blocks that were already in the database when the program started,
+// and blocks that arrive afterwards, are counted as always.
+var initialDownload struct {
+	sync.Mutex
+	from, to int64 // heights above `from`, up to and including `to`
+}
+
+func noteInitialDownload(from, to int64) {
+	initialDownload.Lock()
+	initialDownload.from, initialDownload.to = from, to
+	initialDownload.Unlock()
+}
+
+// countedReorgDepth is how many of our blocks above `ancestor` count against
+// the reorganisation limit when our tip is at `tip`.
+func countedReorgDepth(tip, ancestor int64) int64 {
+	initialDownload.Lock()
+	from, to := initialDownload.from, initialDownload.to
+	initialDownload.Unlock()
+	depth := tip - ancestor
+	low, high := ancestor, tip
+	if from > low {
+		low = from
+	}
+	if to < high {
+		high = to
+	}
+	if high > low {
+		depth -= high - low
+	}
+	return depth
+}
+
+// lowestReplaceableAncestor is the lowest height at which our chain may part
+// from another's and still be replaced: the furthest back a pass needs to
+// look.
+func lowestReplaceableAncestor(tip int64) int64 {
+	if Params.Economics == nil || Params.Economics.ReorgLimitBlocks <= 0 {
+		return 0
+	}
+	// The counted depth only grows as the ancestor moves down, so the lowest
+	// allowed height is found by halving the range.
+	low, high := int64(0), tip
+	for low < high {
+		middle := low + (high-low)/2
+		if reorgDepthAllowed(countedReorgDepth(tip, middle)) {
+			high = middle
+		} else {
+			low = middle + 1
+		}
+	}
+	return low
 }
 
 // initialDownloadMaxPasses bounds the start-up download. A pass lasts at
@@ -447,12 +534,7 @@ func TriggerActiveReSyncPass() {
 	// How far back to look for the point where the chains part. A node never
 	// replaces more of its own blocks than the reorganisation limit, so
 	// there is no reason to look further back than that.
-	lowest := int64(0)
-	if Params.Economics != nil && Params.Economics.ReorgLimitBlocks > 0 {
-		if lowest = startTip.Index - Params.Economics.ReorgLimitBlocks; lowest < 0 {
-			lowest = 0
-		}
-	}
+	lowest := lowestReplaceableAncestor(startTip.Index)
 	ancestor, answered := findCommonAncestor(source, lowest, startTip.Index)
 	if !answered {
 		// A lost request proves nothing about the source's chain. The pass
@@ -474,7 +556,7 @@ func TriggerActiveReSyncPass() {
 	tip := GetLatestBlockInternal()
 	var removed []Block
 	if ancestor < tip.Index {
-		if depth := tip.Index - ancestor; !reorgDepthAllowed(depth) {
+		if depth := countedReorgDepth(tip.Index, ancestor); !reorgDepthAllowed(depth) {
 			StateMutex.Unlock()
 			log.Printf("🛑 [REORG LIMIT] %s offers a chain that parts from ours %d blocks back. This node does not replace more than %d of its own blocks, so it keeps its chain.\n", source, depth, Params.Economics.ReorgLimitBlocks)
 			return

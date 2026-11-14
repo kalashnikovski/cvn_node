@@ -23,6 +23,9 @@ jobs:
       # The node itself is vetted; internal/randomx is third-party code kept as published.
       - run: go vet . ./node
       - run: go test ./...
+      # The RandomX engine, built with the published settings, must give
+      # RandomX's own published test values.
+      - run: go test -tags randomx_reference ./internal/randomx/
 
   windows:
     name: Windows package
@@ -35,20 +38,27 @@ jobs:
           go-version-file: go.mod
 
       - name: Build the miner
-        run: go build -tags server -ldflags="-s -w" -o cvn_miner.exe .
+        run: go build -trimpath -tags server -ldflags="-s -w" -o cvn_miner.exe .
 
       - name: Build the desktop wallet
-        run: go build -tags "desktop,production" -ldflags="-s -w -H windowsgui" -o cvn_node.exe .
+        run: go build -trimpath -tags "desktop,production" -ldflags="-s -w -H windowsgui" -o cvn_node.exe .
 
       - name: Package
         run: |
           New-Item -ItemType Directory -Force -Path package/cvn_node | Out-Null
-          Copy-Item cvn_miner.exe, cvn_node.exe, LaunchMiner.bat, LaunchWallet.bat, explorer.html, README.md, Installation_Guide.md, MINING_GUIDE.md, WHITEPAPER.md, LICENSE -Destination package/cvn_node
+          Copy-Item cvn_miner.exe, cvn_node.exe, LaunchMiner.bat, LaunchWallet.bat, explorer.html, README.md, Installation_Guide.md, MINING_GUIDE.md, WHITEPAPER.md, LICENSE, THIRD_PARTY_NOTICES.md -Destination package/cvn_node
           Compress-Archive -Path package/cvn_node -DestinationPath cvn_node_windows.zip
+          # The SHA-256 of the package and of each program in it, so that
+          # anyone can check a download, or a build of their own, against it.
+          Get-FileHash -Algorithm SHA256 cvn_node_windows.zip, cvn_miner.exe, cvn_node.exe |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content -Encoding ascii SHA256SUMS_windows.txt
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: cvn_node_windows.zip
+          files: |
+            cvn_node_windows.zip
+            SHA256SUMS_windows.txt
 
   linux:
     name: Linux package
@@ -65,18 +75,23 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           mkdir -p package/cvn_node_linux_amd64 package/cvn_node_linux_arm64
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o package/cvn_node_linux_amd64/cvn_node .
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o package/cvn_node_linux_arm64/cvn_node .
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o package/cvn_node_linux_amd64/cvn_node .
+          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o package/cvn_node_linux_arm64/cvn_node .
 
       - name: Package
         run: |
           for arch in amd64 arm64; do
-            cp explorer.html README.md Installation_Guide.md MINING_GUIDE.md WHITEPAPER.md LICENSE package/cvn_node_linux_$arch/
+            cp explorer.html README.md Installation_Guide.md MINING_GUIDE.md WHITEPAPER.md LICENSE THIRD_PARTY_NOTICES.md package/cvn_node_linux_$arch/
             tar -C package -czf cvn_node_linux_$arch.tar.gz cvn_node_linux_$arch
           done
+          # The SHA-256 of each package and of the program in it, so that
+          # anyone can check a download, or a build of their own, against it.
+          sha256sum cvn_node_linux_amd64.tar.gz cvn_node_linux_arm64.tar.gz > SHA256SUMS_linux.txt
+          (cd package && sha256sum cvn_node_linux_amd64/cvn_node cvn_node_linux_arm64/cvn_node) >> SHA256SUMS_linux.txt
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             cvn_node_linux_amd64.tar.gz
             cvn_node_linux_arm64.tar.gz
+            SHA256SUMS_linux.txt

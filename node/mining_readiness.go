@@ -37,10 +37,13 @@ const (
 	// heartbeat rule starts easing difficulty.
 	miningStaleTipSeconds = HeartbeatStallAfterSeconds
 	// How long to hold with no peer answering before mining anyway.
-	miningHoldUnreachableLimit = int64(300)
+	miningHoldUnreachableLimit = int64(120)
 	// How long to hold behind a peer that claims to be ahead while our own
-	// height does not move.
-	miningHoldBehindLimit = int64(600)
+	// height does not move. A node that really is ahead delivers blocks
+	// within seconds of being asked, and each one starts this count again.
+	// One that only says so, seed or not, costs a miner two minutes and no
+	// more: nobody should be able to keep others from mining by claiming.
+	miningHoldBehindLimit = int64(120)
 )
 
 var (
@@ -54,6 +57,13 @@ var (
 func decideMiningHold(tipHeight, tipAgeSeconds, bestPeerHeight int64, anyPeerAnswered bool, heldSeconds int64) (hold bool, resync bool, reason string) {
 	if tipAgeSeconds < miningStaleTipSeconds {
 		return false, false, ""
+	}
+	// In the first blocks of a chain the difficulty does not fall when
+	// blocks are slow (see heartbeat_difficulty.go), so there is no flood of
+	// cheap blocks to guard against, and a slow start is exactly when holding
+	// miners back on anyone's word would matter most.
+	if Params.ScheduleAnchored && tipHeight < HeartbeatLaunchBlocks {
+		return false, anyPeerAnswered && bestPeerHeight > tipHeight, ""
 	}
 	if anyPeerAnswered {
 		if bestPeerHeight <= tipHeight {

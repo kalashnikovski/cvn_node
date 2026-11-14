@@ -124,17 +124,27 @@ func resolveMinerAddress(args []string) (string, error) {
 	if address == "" {
 		address = argumentValue(args, "--miner-address")
 	}
+	fromSavedFile := false
 	if address == "" {
 		address = readMinerConfig()["miner_address"]
+		fromSavedFile = true
 	}
 	if address == "" || strings.Contains(address, "UNCONFIGURED") {
 		return "", fmt.Errorf("this machine has no mining address.\n" +
 			"   Create a wallet with --generate-wallet (or --wallet) and write its private key down,\n" +
 			"   or start with --miner-address CVN_... to mine to a wallet you already have")
 	}
-	// An address saved before addresses had a checksum is completed, not
-	// refused: the checksum follows from the rest of it.
+	// An address the program itself saved before addresses had a checksum is
+	// completed, not refused: the checksum follows from the rest of it. An
+	// address a person has just typed is never completed. There the check is
+	// the point: completing a mistyped address would give it a valid check,
+	// and every coin mined would go to an address nobody holds a key for.
 	if full, completed := completeOlderAddress(address); completed {
+		if !fromSavedFile {
+			return "", fmt.Errorf("%q is written the older way, without the 8 check characters that addresses on this network end with.\n"+
+				"   The program will not add them to an address that was typed, because it could not then catch a typing mistake.\n"+
+				"   Open your wallet on this network (--wallet, or the desktop wallet) and copy the address it shows: %s", address, addressFormDescription())
+		}
 		fmt.Printf("🪪 Addresses on this network end with a check on the rest. Yours is now written %s\n", full)
 		address = full
 	}

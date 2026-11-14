@@ -109,9 +109,9 @@ func TestCoinsCanOnlyBeMadeOutToAnAddress(t *testing.T) {
 	}
 }
 
-// An address a miner saved before the check existed is completed, since the
-// check follows from the rest. An address someone types is not: there the
-// check is the point.
+// An address the program saved before the check existed is completed, since
+// the check follows from the rest. An address someone types is not: there
+// the check is the point.
 func TestAnOlderMiningAddressIsCompleted(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("CVN_MINER_ADDRESS", "")
@@ -121,8 +121,11 @@ func TestAnOlderMiningAddressIsCompleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	older := full[:len("CVN_")+40]
-	if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", older}); err != nil || address != full {
-		t.Errorf("an address without its check was not completed: %q %v", address, err)
+	if err := writeMinerConfigForTest(older); err != nil {
+		t.Fatal(err)
+	}
+	if address, err := resolveMinerAddress([]string{"cvn_node"}); err != nil || address != full {
+		t.Errorf("a saved address without its check was not completed: %q %v", address, err)
 	}
 	if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", full}); err != nil || address != full {
 		t.Errorf("a full address was changed or refused: %q %v", address, err)

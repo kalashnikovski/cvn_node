@@ -339,8 +339,14 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return err
 		}
 
-		_ = bBlocks.Put([]byte(paddedKey), data)
-		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
+		// A write that fails ends the whole transaction, so that nothing of
+		// a block is kept unless all of it is.
+		if putErr := bBlocks.Put([]byte(paddedKey), data); putErr != nil {
+			return putErr
+		}
+		if putErr := bMeta.Put([]byte("height"), []byte(paddedKey)); putErr != nil {
+			return putErr
+		}
 		if workErr := storeChainWork(tx, block); workErr != nil {
 			return workErr
 		}
@@ -348,7 +354,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 		for txIdx, txPayload := range block.Transactions {
 			if txIdx != 0 {
 				for _, input := range txPayload.Inputs {
-					_ = bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", input.SourceTxID, input.Index)))
+					if deleteErr := bUTXO.Delete([]byte(fmt.Sprintf("%s_%d", input.SourceTxID, input.Index))); deleteErr != nil {
+						return deleteErr
+					}
 				}
 			}
 			for outIdx, output := range txPayload.Outputs {
@@ -357,8 +365,13 @@ func SaveBlockToStorageInternal(block Block) bool {
 				if sweepEnabled() {
 					utxoRecord.Age = block.Index
 				}
-				utxoData, _ := json.Marshal(utxoRecord)
-				_ = bUTXO.Put([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)), utxoData)
+				utxoData, marshalErr := json.Marshal(utxoRecord)
+				if marshalErr != nil {
+					return marshalErr
+				}
+				if putErr := bUTXO.Put([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)), utxoData); putErr != nil {
+					return putErr
+				}
 			}
 		}
 
