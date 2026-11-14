@@ -90,7 +90,7 @@ func HashMeetsDifficulty(hashHex string, height int64, difficulty int) bool {
 func CalculateHeartbeatDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 	gapSeconds := nextBlockTimestamp - lastBlock.Timestamp
 	if !inLaunchWindow(lastBlock.Index + 1) {
-		return heartbeatDifficultyWithGap(lastBlock, gapSeconds)
+		return heartbeatDifficultyWithGap(lastBlock, launchRampGap(lastBlock.Index+1, gapSeconds))
 	}
 	// The launch window. The dates of the first blocks cannot be trusted to
 	// say how hard they were to find: the genesis block is dated by a
@@ -118,6 +118,33 @@ func launchFloorAt(height int64) int64 {
 // HeartbeatLaunchBlocks is the length of the launch window, in blocks: about
 // fifteen minutes.
 const HeartbeatLaunchBlocks = 20
+
+// HeartbeatRampBlocks is how many blocks after the launch window relief for
+// a late block takes to return in full.
+const HeartbeatRampBlocks = 40
+
+// launchRampGap limits how late a block just after the launch window may be
+// counted as being. Relief for a late block halves the difficulty once for
+// six minutes and again for every three after that. If all of it came back
+// on the first block after the window, whoever mined the window's blocks
+// could date them close together, let the real clock run on, and have the
+// next block read as hours late: the very burst the window prevents, one
+// block later. So the halvings allowed grow by one per block: one for the
+// first block after the window, two for the second, and so on, until after
+// HeartbeatRampBlocks blocks the rule is the ordinary one.
+func launchRampGap(height, gapSeconds int64) int64 {
+	if !Params.ScheduleAnchored {
+		return gapSeconds
+	}
+	allowed := height - HeartbeatLaunchBlocks
+	if allowed < 1 || allowed >= HeartbeatRampBlocks {
+		return gapSeconds
+	}
+	if limit := HeartbeatStallAfterSeconds + allowed*HeartbeatStallStepSeconds - 1; gapSeconds > limit {
+		return limit
+	}
+	return gapSeconds
+}
 
 // inLaunchWindow reports whether a block at this height is one of the first
 // blocks of a network that starts the launch way.

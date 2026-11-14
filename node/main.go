@@ -256,6 +256,21 @@ func Run(frontendAssets embed.FS) {
 			json.NewEncoder(w).Encode(blocks)
 		})
 
+		// Height, identifier and total work of the newest block, without its
+		// transactions: what a node comparing chains needs, at a fraction of
+		// the size of /block.
+		winMux.HandleFunc("/tip", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
+			latest := GetLatestBlockInternal()
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"current_height": latest.Index,
+				"block_hash":     latest.Hash,
+				"timestamp":      latest.Timestamp,
+				"total_work":     chainWorkThrough(latest.Index).String(),
+			})
+		})
+
 		// The identifier of the block at one height: a small answer for a
 		// node working out where its chain parts from this one.
 		winMux.HandleFunc("/blockhash", func(w http.ResponseWriter, r *http.Request) {
@@ -376,106 +391,8 @@ func Run(frontendAssets embed.FS) {
 		})
 	})
 	go func() { _ = serveHTTP(fmt.Sprintf(":%d", Params.StatusPort), mirrorMux) }()
-	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
-	seedGateways := seedSyncURLs()
-	// Peers remembered from earlier runs are extra sync sources, so a node can
-	// catch up even when every built-in seed is offline. Only those answering
-	// right now are kept, so dead entries do not slow each batch down.
-	for _, cachedGateway := range cachedPeerHTTPGateways(seedGateways) {
-		if GetGlobalMeshMaxHeight(cachedGateway) > 0 {
-			seedGateways = append(seedGateways, cachedGateway)
-		}
-	}
-	for i, arg := range os.Args {
-		if arg == "--connect" && i+1 < len(os.Args) {
-			customTargetIP := os.Args[i+1]
-			if !strings.HasPrefix(customTargetIP, "http://") {
-				customTargetIP = "http://" + customTargetIP
-			}
-			seedGateways = []string{customTargetIP}
-		}
-	}
-	lastRenderTime := time.Now()
-	startupForkRecoveryAttempts := 0
-	for {
-		StateMutex.RLock()
-		liveBlock := GetLatestBlockInternal()
-		StateMutex.RUnlock()
-		currentLocalHeight := int64(liveBlock.Index)
-		var targetGlobalTip int64 = 0
-		var activeSyncSeed string = ""
-		for _, endpoint := range seedGateways {
-			if skipSeedOnThisMachine(endpoint) {
-				continue
-			}
-			remoteHeight := GetGlobalMeshMaxHeight(endpoint)
-			if remoteHeight > targetGlobalTip {
-				targetGlobalTip = remoteHeight
-				activeSyncSeed = endpoint
-			}
-		}
-		if targetGlobalTip <= 0 || currentLocalHeight >= targetGlobalTip || activeSyncSeed == "" {
-			break
-		}
-		atomic.StoreInt32(&IsSyncingActive, 1)
-		nextBlockNeed := currentLocalHeight + 1
-		incomingBatch := fetchBlockBatch(activeSyncSeed, nextBlockNeed)
-		heightBeforeBatch := currentLocalHeight
-		StateMutex.Lock()
-		for _, block := range incomingBatch {
-			if block.Index == int64(GetLatestBlockInternal().Index)+1 {
-				if ValidateBlockSignatures(block) {
-					if block.UncleHash == "" {
-						block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
-					}
-					if block.UncleMiner == "" {
-						block.UncleMiner = "NONE"
-					}
-					SaveBlockToStorageInternal(block)
-					currentLocalHeight = block.Index
-				}
-			}
-		}
-		StateMutex.Unlock()
-		if currentLocalHeight == heightBeforeBatch {
-			// Nothing from this batch attached to our chain. The usual cause is that
-			// the database ends on a side branch the network abandoned, so the next
-			// network block does not fit on top of it. Asking for the same batch again
-			// would loop forever; instead find where we parted from the network, roll
-			// back to that point and catch up from there.
-			startupForkRecoveryAttempts++
-			if startupForkRecoveryAttempts > 3 {
-				fmt.Printf("\n🚨 [BULK SYNC] Could not rejoin the network automatically. Stop the node, delete %s and start again to sync from scratch.\n", Params.DatabaseFile)
-				break
-			}
-			fmt.Printf("\n🔀 [BULK SYNC] Local chain does not match the network after block #%d. Rolling back to the last shared block and re-syncing...\n", currentLocalHeight)
-			atomic.StoreInt32(&IsSyncingActive, 0)
-			TriggerActiveReSyncPass()
-			continue
-		}
-		startupForkRecoveryAttempts = 0
-		if time.Since(lastRenderTime) >= 200*time.Millisecond || currentLocalHeight >= targetGlobalTip {
-			lastRenderTime = time.Now()
-			var syncPercentage float64 = 0.00
-			if targetGlobalTip > 0 {
-				syncPercentage = (float64(currentLocalHeight) / float64(targetGlobalTip)) * 100.00
-			}
-			barWidth := 20
-			filledChars := int((syncPercentage / 100.0) * float64(barWidth))
-			progressBar := ""
-			for i := 0; i < barWidth; i++ {
-				if i < filledChars {
-					progressBar += "█"
-				} else {
-					progressBar += "░"
-				}
-			}
-			fmt.Printf("\r⏳ [BULK SYNC] Progress: [%s] %.2f%% Aligned // Height: #%d of #%d", progressBar, syncPercentage, currentLocalHeight, targetGlobalTip)
-			os.Stdout.Sync()
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	atomic.StoreInt32(&IsSyncingActive, 0)
+	// Catch up with the network before mining starts (see sync_pass.go).
+	runInitialDownload(os.Args)
 	go runChainLagWatchdog()
 	// Decide once before the miner starts whether this node is caught up, then
 	// keep checking. See mining_readiness.go.
@@ -732,7 +649,14 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				UncleHash: templateUncleHash, UncleMiner: templateUncleMiner,
 			}, templateTxDigest)
 		}
+		templateBuilt := time.Now()
 		for i := 0; i < 100000; i++ {
+			// A RandomX hash takes milliseconds, so a hundred thousand of
+			// them is minutes. The block's date, and the transfers in it,
+			// are renewed at least this often.
+			if randomXTemplate && i%64 == 0 && time.Since(templateBuilt) > minerTemplateLife {
+				break
+			}
 			nonce++
 			atomic.AddUint64(&globalHashCount, 1)
 			// Abandon the template if the tip moved or was replaced by a competing
@@ -849,7 +773,7 @@ func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniquen
 	var templateTransfers []Transaction
 	var feeUnits int64
 	if IsTxForkHeight(nextIndex) {
-		templateTransfers, feeUnits = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 1)
+		templateTransfers, feeUnits = selectionForTip(tip.Hash, TxMaxPerBlock-1)
 	}
 	// If the tip won a same-height race, name the losing block as an uncle and
 	// split this block's reward 80/20 with its miner. Total emission is unchanged.

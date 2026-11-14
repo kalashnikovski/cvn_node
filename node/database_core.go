@@ -424,7 +424,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 	// 👑 PRODUCTION REMEDY: ISOLATED BROADCAST LAYER INTERCEPT
 	// Extract text payload transmissions out of the exclusive BoltDB transaction handles!
 	// This isolates network streaming operations and opens up full block win parities.
-	if block.Hash != "MEMPOOL_GOSSIP_WIRE_ROUTE" && len(block.Transactions) > 0 {
+	// A block stored while catching up is one the network already has;
+	// announcing each of them would be noise, hundreds of times over.
+	if atomic.LoadInt32(&IsSyncingActive) == 0 && len(block.Transactions) > 0 {
 		go func(b Block) {
 			// Cleanly forward headers straight through the structured packet marshalling pipeline
 			BroadcastNewBlock(b)

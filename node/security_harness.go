@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -101,6 +102,12 @@ const peerBanDuration = 10 * time.Minute
 // attach to our tip, or stand beside it on the same parent, cannot be judged
 // here and is never held against a peer.
 func blockCarriesBadWork(b Block) bool {
+	// While the chain is being changed, what this reads from it may be
+	// half-way between two states, and nothing is certain enough to hold
+	// against a peer.
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		return false
+	}
 	tip := GetLatestBlockInternal()
 	if tip.Hash == "" || !IsHeartbeatHeight(b.Index) {
 		return false

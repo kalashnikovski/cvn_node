@@ -19,15 +19,20 @@ rem A mining address given on the command line needs no saved wallet.
 echo %* | findstr /i /c:"--miner-address" >nul
 if not errorlevel 1 goto START_MINER
 
-rem Once you have confirmed the saved address is yours, you are not asked again.
-if exist "%CONFIRMED%" goto START_MINER
+rem Once you have confirmed the saved address is yours, you are not asked
+rem again, unless the saved address has changed since: the confirmation holds
+rem a copy of what was confirmed, and is only good for exactly that.
+if exist "%CONFIRMED%" if exist "miner_config.json" (
+    fc /b "%CONFIRMED%" "miner_config.json" >nul 2>nul
+    if not errorlevel 1 goto START_MINER
+)
 
 if not exist "miner_config.json" goto NO_WALLET
 findstr /c:"CVN_" "miner_config.json" >nul
 if errorlevel 1 goto NO_WALLET
 
-rem A mining address is already saved here. It may have come with the
-rem download and belong to someone else, so ask before mining to it.
+rem A mining address is saved here that has not been confirmed on this
+rem machine, or has changed since it was. Ask before mining to it.
 cls
 echo ====================================================================
 echo  COVENANT STANDARD (CVN) - CHECK YOUR MINING ADDRESS
@@ -78,7 +83,7 @@ echo.
 pause
 
 :CONFIRM
-echo The mining address in miner_config.json was confirmed on this machine.> "%CONFIRMED%"
+copy /y "miner_config.json" "%CONFIRMED%" >nul
 
 :START_MINER
 "%MINER%" %*

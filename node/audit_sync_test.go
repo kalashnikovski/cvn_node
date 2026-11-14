@@ -19,7 +19,10 @@ type standInPeer struct {
 	claimedHeight int64
 	claimedWork   string
 	hasBlockHash  bool // false: an older node without the small request
-	requests      int32
+	// silentAboutBlocks makes it report its height and then fail every
+	// request about its blocks, like a node that has stopped answering.
+	silentAboutBlocks bool
+	requests          int32
 }
 
 func newStandInPeer(t *testing.T, blocks []Block) *standInPeer {
@@ -29,8 +32,12 @@ func newStandInPeer(t *testing.T, blocks []Block) *standInPeer {
 	peer.claimedWork = sumBlockWork(blocks).String()
 	peer.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&peer.requests, 1)
+		if peer.silentAboutBlocks && r.URL.Path != "/block" && r.URL.Path != "/tip" {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		switch r.URL.Path {
-		case "/block":
+		case "/block", "/tip":
 			json.NewEncoder(w).Encode(map[string]interface{}{"current_height": peer.claimedHeight, "total_work": peer.claimedWork})
 		case "/blockhash":
 			height, _ := strconv.ParseInt(r.URL.Query().Get("height"), 10, 64)
@@ -102,22 +109,22 @@ func TestCommonAncestorIsFoundQuickly(t *testing.T) {
 		theirs[h].Hash = fmt.Sprintf("%064x", h)
 	}
 	peer := newStandInPeer(t, theirs)
-	if got := findCommonAncestor(peer.server.URL, 0, 40); got != 23 {
+	if got, _ := findCommonAncestor(peer.server.URL, 0, 40); got != 23 {
 		t.Errorf("the chains part after block 23; found %d", got)
 	}
 	if used := atomic.LoadInt32(&peer.requests); used > 12 {
 		t.Errorf("finding the point took %d requests on a 40-block chain", used)
 	}
-	if got := findCommonAncestor(newStandInPeer(t, ours).server.URL, 0, 40); got != 40 {
+	if got, _ := findCommonAncestor(newStandInPeer(t, ours).server.URL, 0, 40); got != 40 {
 		t.Errorf("identical chains: found %d, want 40", got)
 	}
-	if got := findCommonAncestor(peer.server.URL, 30, 40); got != -1 {
+	if got, _ := findCommonAncestor(peer.server.URL, 30, 40); got != -1 {
 		t.Errorf("chains that already differ at the lowest height looked at: found %d, want -1", got)
 	}
 	// An older node, without the small request, is asked the older way.
 	older := newStandInPeer(t, theirs)
 	older.hasBlockHash = false
-	if got := findCommonAncestor(older.server.URL, 0, 40); got != 23 {
+	if got, _ := findCommonAncestor(older.server.URL, 0, 40); got != 23 {
 		t.Errorf("against an older node: found %d, want 23", got)
 	}
 }

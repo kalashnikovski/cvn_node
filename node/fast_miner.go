@@ -187,7 +187,9 @@ func locateFastMiner(args []string) (string, error) {
 	if program, err := os.Executable(); err == nil {
 		folders = append(folders, filepath.Dir(program))
 	}
-	folders = append(folders, ".")
+	// Only beside the program itself. Looking in the folder the program was
+	// started from as well would run whatever file of that name happened to
+	// be there.
 	for _, folder := range folders {
 		for _, candidate := range []string{filepath.Join(folder, "xmrig-cvn", name), filepath.Join(folder, name)} {
 			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {

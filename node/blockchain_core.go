@@ -210,7 +210,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	// follow is decided by total work, in the re-sync, never by which block
 	// arrived or was dated first; our own tip is not touched here.
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash {
-		go TriggerActiveReSyncPass()
+		requestSyncPassForBlock()
 		return
 	}
 	if incomingBlock.Index < currentTip.Index {
@@ -224,11 +224,11 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	// Validating first made a node that fell two or more blocks behind reject
 	// every later block and stay on its own branch for good.
 	if incomingBlock.Index > currentTip.Index+1 {
-		go TriggerActiveReSyncPass()
+		requestSyncPassForBlock()
 		return
 	}
 	if incomingBlock.Index == currentTip.Index+1 && incomingBlock.PrevHash != currentTip.Hash {
-		go TriggerActiveReSyncPass()
+		requestSyncPassForBlock()
 		return
 	}
 	if !ValidateBlockSignatures(incomingBlock) {
@@ -252,7 +252,7 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	StateMutex.Unlock()
 	if incomingBlock.Index == currentTip.Index+1 {
 		if incomingBlock.PrevHash != currentTip.Hash {
-			go TriggerActiveReSyncPass()
+			requestSyncPassForBlock()
 			return
 		}
 		if !ValidateBlockSignatures(incomingBlock) {

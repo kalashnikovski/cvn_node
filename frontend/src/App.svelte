@@ -10,7 +10,7 @@
 
 	let txRecipient = $state("");
 	let txAmount = $state("");
-	let txFee = $state("0.01");
+	let txFee = $state("0");
 	let txPrivateKey = $state("");
 	let txStatusMessage = $state("");
 
@@ -60,6 +60,13 @@
 			return;
 		}
 		
+		// A transfer cannot be undone, so the user sees exactly what will be
+		// sent, to whom and at what fee, and has to agree to it.
+		if (!window.confirm(`Send ${String(txAmount)} CVN\nto ${String(txRecipient).trim()}\nwith a fee of ${String(txFee || "0")} CVN?\n\nThis cannot be undone.`)) {
+			txStatusMessage = "Nothing was sent.";
+			return;
+		}
+
 		txStatusMessage = "⏳ SIGNING CRYPTOGRAPHIC TRANSIT BLOCKS NATIVELY...";
 
 		try {
@@ -90,6 +97,10 @@
 	async function handleCombineCoins() {
 		if (!txPrivateKey) {
 			txStatusMessage = "❌ ERROR: Enter the private key of the wallet whose coins you want to combine.";
+			return;
+		}
+		if (!window.confirm(`Combine the coins of this wallet into a few large ones?\n\nThey are sent back to the wallet's own address in up to 25 transfers. The fee above (${String(txFee || "0")} CVN) is paid for EACH transfer, so up to 25 times.`)) {
+			txStatusMessage = "Nothing was sent.";
 			return;
 		}
 		txStatusMessage = "⏳ Combining coins...";

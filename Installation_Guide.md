@@ -37,7 +37,7 @@ Double-click **`LaunchMiner.bat`**.
 The first time, it asks about your mining address:
 
 - If the folder has no address yet, it offers to create a wallet.
-- If the folder already has one saved (the download currently includes a file with the maintainer's address), it shows that address and asks whether it is yours. **Unless you put it there, choose "Create a new wallet"**, or everything you mine is paid to someone else.
+- If the folder has an address saved that you have not confirmed on this machine, or that has changed since you confirmed it, it shows that address and asks whether it is yours. **Unless you put it there, choose "Create a new wallet"**, or everything you mine is paid to someone else.
 
 Creating a wallet prints your address and your private key. **Write the private key down**, then press a key to start mining. You are not asked again.
 
@@ -117,12 +117,12 @@ Both wallets do the same things.
 
 | Action | What it does |
 |---|---|
-| Show a balance | The balance of any address, how many separate coins it is held in, and, where it applies, when the oldest coin is due to be swept |
+| Show a balance | The balance of any address. The text wallet also shows how many separate coins it is held in and, where it applies, when the oldest coin is due to be swept. |
 | Send CVN | Sends an amount to an address, with an optional fee |
 | Combine my coins | Merges many small coins into a few large ones in your own address |
 | Create a new wallet | Makes a new address and private key (text wallet) |
 
-**Sending.** You enter the recipient's address, the amount, an optional fee, and the private key of the wallet you are sending from. The transfer is signed on your own computer. The key is used for that one transfer and is not saved or sent anywhere. A transfer normally confirms in the next block.
+**Sending.** You enter the recipient's address, the amount, an optional fee, and the private key of the wallet you are sending from. In the text wallet on Windows the key is visible on screen as you type or paste it, so make sure nobody is watching and close the window afterwards; on Linux it is hidden. The transfer is signed on your own computer. The key is used for that one transfer and is not saved or sent anywhere. A transfer normally confirms in the next block.
 
 **Why combine?** A miner receives one separate coin for every block won, and one transfer can spend at most 200 coins. A wallet holding hundreds of mining rewards therefore cannot send them all at once. Combining sends them back to your own address as a few large coins. Your balance does not change, apart from any fee you choose to pay.
 
@@ -138,7 +138,7 @@ On networks that mine with RandomX, two things make a large difference: a one-ti
 
 Stop the miner first.
 
-**Windows:** download the ZIP again, unpack it over your folder, and run `build_clean.bat`. Your `miner_config.json` and the chain database are kept.
+**Windows:** download the ZIP again, unpack it over your folder, and run `build_clean.bat`. The download does not contain a `miner_config.json` or a chain database, so yours are kept. If `LaunchMiner.bat` then shows you a mining address and asks whether it is yours, check it before answering: it asks whenever the saved address is not the one you confirmed.
 
 **Linux:**
 
@@ -172,6 +172,8 @@ Any node answers in a web browser. On the machine running it:
 - `http://localhost:8081/block` — the newest block
 - `http://localhost:8081/addresses` — every address with a balance
 
+That is the port on `testnet-1`. On the CVN Testnet it is 18081, and on `devnet` 28081.
+
 ---
 
 ## 9. If something goes wrong
@@ -179,7 +181,7 @@ Any node answers in a web browser. On the machine running it:
 | What you see | What to do |
 |---|---|
 | "this machine has no mining address" | Create a wallet (`LaunchMiner.bat`, or `--generate-wallet` on Linux), or start with `--miner-address CVN_...` |
-| "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself, within five minutes at most. |
+| "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within five minutes if no other node can be reached, within ten if another node is ahead and this one is catching up. |
 | The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_mainnet.db` on `testnet-1`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
 | The desktop wallet shows no balance | Check that the miner is running and that both were started on the same network. |

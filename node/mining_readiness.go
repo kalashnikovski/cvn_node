@@ -72,8 +72,14 @@ func decideMiningHold(tipHeight, tipAgeSeconds, bestPeerHeight int64, anyPeerAns
 
 // miningReadinessGateways lists the nodes asked for their height.
 func miningReadinessGateways() []string {
-	gateways := reachableSeedSyncURLs()
-	return append(gateways, cachedPeerHTTPGateways(gateways)...)
+	// Whether to hold the miner back is decided on the word of the seeds
+	// alone. A node that has merely been reached before could otherwise
+	// stop this one mining by claiming to be ahead. Only a network with no
+	// seeds falls back on remembered nodes.
+	if gateways := reachableSeedSyncURLs(); len(gateways) > 0 {
+		return gateways
+	}
+	return cachedPeerHTTPGateways(nil)
 }
 
 // probePeerHeights asks every gateway at once and returns the highest height
@@ -82,11 +88,17 @@ func probePeerHeights() (best int64, answered bool) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	for _, gateway := range miningReadinessGateways() {
+		if syncSourceIsSetAside(gateway) {
+			continue
+		}
 		wg.Add(1)
 		go func(gateway string) {
 			defer wg.Done()
-			height := GetGlobalMeshMaxHeight(gateway)
-			if height <= 0 {
+			height, work := probeChain(gateway)
+			// A node at height 0 has answered. At a launch every node is
+			// there, and reading that as silence held every miner back for
+			// five minutes.
+			if height <= 0 && work == nil {
 				return
 			}
 			mu.Lock()
@@ -174,3 +186,7 @@ const minerClockMargin = int64(10)
 func mustWaitForClock(blockTimestamp, now int64) bool {
 	return blockTimestamp > now+HeartbeatMaxFutureDriftSeconds-minerClockMargin
 }
+
+// minerTemplateLife is how long the built-in miner works on one block
+// template before building a fresh one with the current date and transfers.
+const minerTemplateLife = 10 * time.Second

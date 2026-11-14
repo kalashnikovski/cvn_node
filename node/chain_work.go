@@ -3,6 +3,7 @@ package node
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net/http"
@@ -229,27 +230,39 @@ func TotalChainWork() *big.Int {
 // the node did not answer.
 func peerChainStatus(gateway string) (height int64, work *big.Int) {
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(strings.TrimSuffix(gateway, "/") + "/block")
-	if err != nil {
-		return 0, nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return 0, nil
-	}
-	var data map[string]interface{}
-	if json.NewDecoder(resp.Body).Decode(&data) != nil {
-		return 0, nil
-	}
-	if h, ok := data["current_height"].(float64); ok {
-		height = int64(h)
-	}
-	if text, ok := data["total_work"].(string); ok && len(text) > 0 && len(text) <= 80 {
-		if parsed, valid := new(big.Int).SetString(text, 10); valid && parsed.Sign() > 0 {
-			work = parsed
+	base := strings.TrimSuffix(gateway, "/")
+	// The small answer first; nodes that predate it are asked the old way,
+	// which sends their whole newest block.
+	for _, path := range []string{"/tip", "/block"} {
+		resp, err := client.Get(base + path)
+		if err != nil {
+			return 0, nil
 		}
+		if resp.StatusCode == http.StatusNotFound && path == "/tip" {
+			resp.Body.Close()
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return 0, nil
+		}
+		var data map[string]interface{}
+		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&data)
+		resp.Body.Close()
+		if decodeErr != nil {
+			return 0, nil
+		}
+		if h, ok := data["current_height"].(float64); ok {
+			height = int64(h)
+		}
+		if text, ok := data["total_work"].(string); ok && len(text) > 0 && len(text) <= 80 {
+			if parsed, valid := new(big.Int).SetString(text, 10); valid && parsed.Sign() > 0 {
+				work = parsed
+			}
+		}
+		return height, work
 	}
-	return height, work
+	return 0, nil
 }
 
 // peerChainIsBetter decides whether a peer's chain should be preferred to
@@ -332,12 +345,12 @@ func rollbackChainToHeightLocked(target int64) []Block {
 	if GlobalBoltEngine == nil || target >= tip.Index {
 		return removed
 	}
-	_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
+	updateErr := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
 		bMeta := tx.Bucket(metaBucket)
 		bUTXO := tx.Bucket(utxoBucket)
 		if bBlocks == nil || bMeta == nil || bUTXO == nil {
-			return nil
+			return fmt.Errorf("required buckets missing")
 		}
 		for h := tip.Index; h > target; h-- {
 			paddedKey := chainWorkKey(h)
@@ -360,12 +373,31 @@ func rollbackChainToHeightLocked(target int64) []Block {
 		}
 		return bMeta.Put([]byte("height"), chainWorkKey(target))
 	})
+	if updateErr != nil {
+		// Nothing was removed: the database undid the whole attempt, so the
+		// tip is where it was.
+		log.Printf("🚨 [CHAIN WORK] Could not roll the chain back to block #%d: %v\n", target, updateErr)
+		return nil
+	}
 	atomic.StoreInt64(&localHeightState, target)
 	RebuildStateBalanceCacheInternal()
 	// Collected newest first; hand them back oldest first.
 	for i, j := 0, len(removed)-1; i < j; i, j = i+1, j-1 {
 		removed[i], removed[j] = removed[j], removed[i]
 	}
+	// The transfers in the removed blocks go back to waiting. Their senders
+	// were told they were sent, and unless the blocks that replace these
+	// carry them too, they would otherwise be silently lost. Any that the
+	// new blocks do carry are dropped again when a miner next fills a block.
+	go func(blocks []Block) {
+		for _, block := range blocks {
+			if len(block.Transactions) > 1 {
+				for _, transfer := range block.Transactions[1:] {
+					_ = AdmitTransactionToMempool(transfer)
+				}
+			}
+		}
+	}(removed)
 	return removed
 }
 

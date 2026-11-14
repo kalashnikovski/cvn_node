@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.etcd.io/bbolt"
@@ -497,48 +498,6 @@ const MempoolMaxAge = 2 * time.Hour
 
 var mempoolArrival = make(map[string]time.Time) // guarded by MempoolMatrix's lock
 
-// mempoolFees holds the fee of each waiting transfer, in units. Guarded by
-// MempoolMatrix's lock. An entry may outlive its transfer; it is only ever
-// read for transfers still waiting, and the leftovers are swept out in
-// makeRoomInMempool.
-var mempoolFees = make(map[string]int64)
-
-// makeRoomInMempool removes one waiting transfer to make room for one paying
-// feeUnits, and reports whether it did. Transfers that have waited too long
-// go first; otherwise the lowest fee goes, and among equals the one that
-// arrived last. Nothing is removed for a transfer that pays no more than the
-// lowest fee waiting. The caller holds MempoolMatrix's lock.
-func makeRoomInMempool(feeUnits int64) bool {
-	if len(mempoolFees) > 2*len(MempoolMatrix.Transactions)+1000 {
-		for id := range mempoolFees {
-			if _, waiting := MempoolMatrix.Transactions[id]; !waiting {
-				delete(mempoolFees, id)
-			}
-		}
-	}
-	victim, found := "", false
-	var victimFee int64
-	var victimArrived time.Time
-	for id := range MempoolMatrix.Transactions {
-		arrived := mempoolArrival[id]
-		if time.Since(arrived) > MempoolMaxAge {
-			victim, victimFee, found = id, -1, true
-			break
-		}
-		fee := mempoolFees[id]
-		if !found || fee < victimFee || (fee == victimFee && (arrived.After(victimArrived) || (arrived.Equal(victimArrived) && id > victim))) {
-			victim, victimFee, victimArrived, found = id, fee, arrived, true
-		}
-	}
-	if !found || victimFee >= feeUnits {
-		return false
-	}
-	delete(MempoolMatrix.Transactions, victim)
-	delete(mempoolArrival, victim)
-	delete(mempoolFees, victim)
-	return true
-}
-
 // AdmitTransactionToMempool is the only way a transfer enters the mempool.
 // It applies the same checks a block would, against the current coin set and
 // against transfers already waiting, so junk never gets stored or gossiped.
@@ -549,6 +508,7 @@ func AdmitTransactionToMempool(tx Transaction) error {
 	if GlobalBoltEngine == nil {
 		return fmt.Errorf("node is not ready")
 	}
+	nextHeight := GetLatestBlockInternal().Index + 1
 
 	MempoolMatrix.Lock()
 	defer MempoolMatrix.Unlock()
@@ -561,38 +521,171 @@ func AdmitTransactionToMempool(tx Transaction) error {
 	if budget := blockTransferBudgetBytes(); budget > 0 && transactionSizeBytes(tx) > budget {
 		return fmt.Errorf("transfer is %d bytes, more than a block can hold (%d)", transactionSizeBytes(tx), budget)
 	}
+	// Which waiting transfers spend a coin this one spends? Coins belong to
+	// one key, so any such transfer is the same owner's.
+	wanted := make(map[string]bool, len(tx.Inputs))
+	for _, input := range tx.Inputs {
+		wanted[utxoKey(input.SourceTxID, input.Index)] = true
+	}
+	replaced := make(map[string]bool)
 	pendingSpends := make(map[string]bool)
-	for _, waiting := range MempoolMatrix.Transactions {
+	for id, waiting := range MempoolMatrix.Transactions {
+		conflicts := false
+		for _, input := range waiting.Inputs {
+			if wanted[utxoKey(input.SourceTxID, input.Index)] {
+				conflicts = true
+				break
+			}
+		}
+		if conflicts {
+			replaced[id] = true
+			continue
+		}
 		for _, input := range waiting.Inputs {
 			pendingSpends[utxoKey(input.SourceTxID, input.Index)] = true
 		}
 	}
 	var checkErr error
 	var feeUnits int64
+	var spent []SpentRecord
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		bUTXO := dbTx.Bucket(utxoBucket)
 		if bUTXO == nil {
 			checkErr = fmt.Errorf("coin database missing")
 			return nil
 		}
-		feeUnits, _, checkErr = checkTransferAgainstCoins(tx, bucketLookup(bUTXO), pendingSpends)
+		feeUnits, spent, checkErr = checkTransferAgainstCoins(tx, bucketLookup(bUTXO), pendingSpends)
 		return nil
 	})
 	if checkErr != nil {
 		return checkErr
 	}
-	// A full pool does not turn everything away: that would let anyone keep
-	// it full of fee-less transfers and shut everyone else out for nothing.
-	// A transfer that pays more than the cheapest one waiting takes its place.
-	if len(MempoolMatrix.Transactions) >= MempoolMaxTransactions {
-		if !makeRoomInMempool(feeUnits) {
-			return fmt.Errorf("mempool is full; a transfer paying a higher fee than the lowest one waiting would be taken")
+	// An owner may replace their own waiting transfer with one that pays
+	// more. Without this, someone whose transfer is stuck, or was dropped by
+	// other nodes, could not offer a higher fee: their own node would still
+	// hold the old one and refuse the new one as a double spend.
+	if len(replaced) > 0 {
+		var replacedFees int64
+		for id := range replaced {
+			replacedFees += mempoolEntries[id].fee
+		}
+		if feeUnits <= replacedFees {
+			return fmt.Errorf("these coins are already being spent by a waiting transfer; to replace it, pay a higher fee than its %s CVN", FormatUnits(replacedFees))
+		}
+		for id := range replaced {
+			removeFromMempoolLocked(id)
 		}
 	}
-	mempoolFees[tx.ID] = feeUnits
+	entry := mempoolEntry{fee: feeUnits}
+	if feeUnits == 0 && sweepEnabled() {
+		entry.settled = mempoolCandidate{spent: spent}.spendsOnlySettledCoins(nextHeight)
+	}
+	if len(MempoolMatrix.Transactions) >= MempoolMaxTransactions && !makeRoomInMempool(entry) {
+		return fmt.Errorf("mempool is full; a transfer paying a higher fee than the lowest one waiting would be taken")
+	}
 	MempoolMatrix.Transactions[tx.ID] = tx
 	mempoolArrival[tx.ID] = time.Now()
+	mempoolEntries[tx.ID] = entry
 	return nil
+}
+
+// mempoolEntry is what the pool remembers about a waiting transfer besides
+// the transfer itself.
+type mempoolEntry struct {
+	fee int64
+	// settled is true for a fee-less transfer whose coins are all old enough
+	// for a miner's free lane (see freeLaneMinAgeBlocks).
+	settled bool
+}
+
+// mempoolEntries is guarded by MempoolMatrix's lock.
+var mempoolEntries = make(map[string]mempoolEntry)
+
+// mempoolFreeShare is the part of the pool kept for fee-less transfers of
+// settled coins: one place in this many, matching the miner's free lane.
+const mempoolFreeShare = 5
+
+// removeFromMempoolLocked forgets a waiting transfer. The caller holds
+// MempoolMatrix's lock.
+func removeFromMempoolLocked(id string) {
+	delete(MempoolMatrix.Transactions, id)
+	delete(mempoolArrival, id)
+	delete(mempoolEntries, id)
+}
+
+// makeRoomInMempool removes one waiting transfer to make room for a new one,
+// and reports whether it did. The caller holds MempoolMatrix's lock.
+//
+// A full pool must not turn everything away, or anyone could keep it full of
+// fee-less transfers and shut everyone else out for nothing. Nor may the
+// smallest possible fee sweep every fee-less transfer out, or "zero is
+// allowed" would mean nothing. So:
+//
+//   - A transfer that has waited too long goes first, whatever arrives.
+//   - A fee-less transfer of young coins has no claim: it never pushes
+//     anything out, and is the first to go.
+//   - A fifth of the pool is kept for fee-less transfers of settled coins.
+//     While they hold less than that, one of them takes the place of the
+//     cheapest paying transfer; while they hold more, a paying transfer
+//     takes the place of the newest of them.
+//   - Otherwise a paying transfer takes the place of a cheaper paying one.
+func makeRoomInMempool(incoming mempoolEntry) bool {
+	type pick struct {
+		id      string
+		arrived time.Time
+		fee     int64
+		found   bool
+	}
+	var expired, newestYoung, newestSettled, cheapestPaid pick
+	settledCount := 0
+	for id := range MempoolMatrix.Transactions {
+		entry, arrived := mempoolEntries[id], mempoolArrival[id]
+		if time.Since(arrived) > MempoolMaxAge {
+			expired = pick{id: id, found: true}
+			break
+		}
+		later := func(p pick) bool {
+			return !p.found || arrived.After(p.arrived) || (arrived.Equal(p.arrived) && id > p.id)
+		}
+		switch {
+		case entry.fee > 0:
+			if !cheapestPaid.found || entry.fee < cheapestPaid.fee || (entry.fee == cheapestPaid.fee && later(cheapestPaid)) {
+				cheapestPaid = pick{id, arrived, entry.fee, true}
+			}
+		case entry.settled:
+			settledCount++
+			if later(newestSettled) {
+				newestSettled = pick{id, arrived, 0, true}
+			}
+		default:
+			if later(newestYoung) {
+				newestYoung = pick{id, arrived, 0, true}
+			}
+		}
+	}
+	reserved := MempoolMaxTransactions / mempoolFreeShare
+	var victim pick
+	switch {
+	case expired.found:
+		victim = expired
+	case incoming.fee == 0 && !incoming.settled:
+		// no claim on anyone's place
+	case newestYoung.found:
+		victim = newestYoung
+	case incoming.fee == 0:
+		if settledCount < reserved {
+			victim = cheapestPaid
+		}
+	case newestSettled.found && settledCount > reserved:
+		victim = newestSettled
+	case cheapestPaid.found && cheapestPaid.fee < incoming.fee:
+		victim = cheapestPaid
+	}
+	if !victim.found {
+		return false
+	}
+	removeFromMempoolLocked(victim.id)
+	return true
 }
 
 // MempoolPendingSpends lists coins that waiting transfers are about to spend.
@@ -684,14 +777,14 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, int64) {
 			if time.Since(mempoolArrival[id]) > MempoolMaxAge {
 				delete(MempoolMatrix.Transactions, id)
 				delete(mempoolArrival, id)
-				delete(mempoolFees, id)
+				delete(mempoolEntries, id)
 				continue
 			}
 			fee, spent, err := checkTransferAgainstCoins(tx, lookup, nil)
 			if err != nil {
 				delete(MempoolMatrix.Transactions, id)
 				delete(mempoolArrival, id)
-				delete(mempoolFees, id)
+				delete(mempoolEntries, id)
 				continue
 			}
 			candidates = append(candidates, mempoolCandidate{tx: tx, fee: fee, spent: spent, arrived: mempoolArrival[id], size: transactionSizeBytes(tx)})
@@ -699,6 +792,35 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, int64) {
 		return nil
 	})
 	return fillBlockFromCandidates(candidates, limit, blockTransferBudgetBytes(), nextHeight, sweepEnabled())
+}
+
+// selectionLife is how long one choice of transfers is reused for the same
+// tip.
+const selectionLife = 5 * time.Second
+
+var selectionCache struct {
+	sync.Mutex
+	tipHash string
+	limit   int
+	made    time.Time
+	chosen  []Transaction
+	fee     int64
+}
+
+// selectionForTip returns the transfers to put in a block on top of the
+// given tip. Choosing them means checking every waiting transfer against the
+// coin set, so it is done once per tip (and again every few seconds, to pick
+// up new arrivals) and shared: every mining thread used to do it for itself,
+// one after another, and with a full pool the last thread had barely started
+// hashing before the next block arrived.
+func selectionForTip(tipHash string, limit int) ([]Transaction, int64) {
+	selectionCache.Lock()
+	defer selectionCache.Unlock()
+	if selectionCache.tipHash != tipHash || selectionCache.limit != limit || time.Since(selectionCache.made) > selectionLife {
+		selectionCache.chosen, selectionCache.fee = SelectMempoolTransactionsForBlock(limit)
+		selectionCache.tipHash, selectionCache.limit, selectionCache.made = tipHash, limit, time.Now()
+	}
+	return append([]Transaction(nil), selectionCache.chosen...), selectionCache.fee
 }
 
 // fillBlockFromCandidates chooses which of the valid waiting transfers go
@@ -788,7 +910,7 @@ func RemoveConfirmedFromMempool(block Block) {
 	for _, tx := range block.Transactions[1:] {
 		delete(MempoolMatrix.Transactions, tx.ID)
 		delete(mempoolArrival, tx.ID)
-		delete(mempoolFees, tx.ID)
+		delete(mempoolEntries, tx.ID)
 	}
 	MempoolMatrix.Unlock()
 }

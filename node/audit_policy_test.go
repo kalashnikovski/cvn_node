@@ -62,7 +62,7 @@ func TestAFeeGetsIntoAFullMempool(t *testing.T) {
 	// A transfer paying less than everything waiting does not push one out.
 	MempoolMatrix.Lock()
 	for id := range MempoolMatrix.Transactions {
-		mempoolFees[id] = cvn("1")
+		mempoolEntries[id] = mempoolEntry{fee: cvn("1")}
 	}
 	MempoolMatrix.Unlock()
 	if err := AdmitTransactionToMempool(transfer(coins[5], "0.5")); err == nil {

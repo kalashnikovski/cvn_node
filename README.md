@@ -31,7 +31,6 @@ Full step-by-step instructions are in [Installation_Guide.md](Installation_Guide
 ```bash
 git clone https://github.com/kalashnikovski/cvn_node
 cd cvn_node
-rm -f miner_config.json
 go build -o cvn_node .
 ./cvn_node --generate-wallet
 ./cvn_node --miner-address YOUR_CVN_ADDRESS

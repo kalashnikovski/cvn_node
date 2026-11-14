@@ -53,12 +53,12 @@ func TestLaunchDifficultyCannotBeTalkedDown(t *testing.T) {
 		t.Fatalf("block %d has difficulty %d; fast blocks should have raised it above %d", tip.Index, tip.Difficulty, start)
 	}
 
-	// After the window the ordinary rule is back, including relief for a
-	// block that is truly late: without it a chain that lost its miners
-	// would never recover.
-	afterWindow := CalculateNextDifficulty(tip, tip.Timestamp+HeartbeatStallAfterSeconds+HeartbeatStallStepSeconds)
-	if afterWindow >= tip.Difficulty/2 {
-		t.Errorf("after the launch window a block nine minutes late needs difficulty %d; the parent had %d and it should have halved twice", afterWindow, tip.Difficulty)
+	// After the window relief for a late block comes back, one halving more
+	// per block (see TestReliefReturnsGraduallyAfterTheLaunchWindow): the
+	// first block after it, however late, earns one.
+	afterWindow := CalculateNextDifficulty(tip, tip.Timestamp+3*3600)
+	if afterWindow >= tip.Difficulty || afterWindow < tip.Difficulty/5 {
+		t.Errorf("the first block after the launch window, hours late, needs difficulty %d; the parent had %d, and it should have fallen by about half and no more", afterWindow, tip.Difficulty)
 	}
 }
 

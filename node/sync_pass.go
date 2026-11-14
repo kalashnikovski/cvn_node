@@ -106,20 +106,27 @@ func blocksForBatch(start, tipHeight int64) []Block {
 // fetchBlockBatch downloads blocks from `start` onward from a source. It
 // returns nothing if the source does not answer in time or sends too much.
 func fetchBlockBatch(source string, start int64) []Block {
+	batch, _ := fetchBlockBatchChecked(source, start)
+	return batch
+}
+
+// fetchBlockBatchChecked is fetchBlockBatch that also says whether the
+// source answered at all, so that "no blocks from there on" can be told from
+// "no answer".
+func fetchBlockBatchChecked(source string, start int64) (batch []Block, answered bool) {
 	client := &http.Client{Timeout: syncBatchTimeout}
 	resp, err := client.Get(fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(source, "/"), start))
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		return nil, false
 	}
-	var batch []Block
 	if json.NewDecoder(io.LimitReader(resp.Body, syncReplyLimitBytes)).Decode(&batch) != nil {
-		return nil
+		return nil, false
 	}
-	return batch
+	return batch, true
 }
 
 // fetchBlockHash asks a source for the identifier of its block at a height.
@@ -145,41 +152,76 @@ func fetchBlockHash(source string, height int64) (string, bool) {
 		// 404: either it has no block there, or it is an older node without
 		// this request. Fall through and ask the older way.
 	}
-	for _, block := range fetchBlockBatch(source, height) {
+	batch, delivered := fetchBlockBatchChecked(source, height)
+	if !delivered {
+		return "", false
+	}
+	for _, block := range batch {
 		if block.Index == height {
 			return block.Hash, true
 		}
 	}
-	return "", false
+	// It answered, and has no block at that height: a real answer, and one
+	// that differs from any block of ours.
+	return "none", true
 }
+
+// What a source says about its block at one height, compared with ours.
+const (
+	chainsAgree = iota
+	chainsDiffer
+	chainSilent // it did not answer; this says nothing about its chain
+)
 
 // findCommonAncestor returns the highest height in [lowest, highest] at
 // which the source's block is our own. The chains agree up to the point
 // where they part and differ after it, so the point is found by halving the
 // range: a dozen small requests on a chain of thousands of blocks. It
-// returns -1 if they already differ at `lowest`.
-func findCommonAncestor(source string, lowest, highest int64) int64 {
-	agrees := func(height int64) bool {
+// returns -1 if they already differ at `lowest`. answered is false if the
+// source failed to answer along the way, in which case nothing has been
+// learned and the height returned means nothing.
+func findCommonAncestor(source string, lowest, highest int64) (ancestor int64, answered bool) {
+	compare := func(height int64) int {
 		local := GetBlockByHeightFromDB(height).Hash
 		remote, ok := fetchBlockHash(source, height)
-		return ok && local != "" && local == remote
+		switch {
+		case !ok:
+			// A second try before giving up: one lost request should not
+			// end a pass.
+			if remote, ok = fetchBlockHash(source, height); !ok {
+				return chainSilent
+			}
+		}
+		if local != "" && local == remote {
+			return chainsAgree
+		}
+		return chainsDiffer
 	}
-	if !agrees(lowest) {
-		return -1
+	switch compare(lowest) {
+	case chainSilent:
+		return 0, false
+	case chainsDiffer:
+		return -1, true
 	}
-	if agrees(highest) {
-		return highest
+	switch compare(highest) {
+	case chainSilent:
+		return 0, false
+	case chainsAgree:
+		return highest, true
 	}
 	low, high := lowest, highest // agrees at low, differs at high
 	for high-low > 1 {
 		middle := low + (high-low)/2
-		if agrees(middle) {
+		switch compare(middle) {
+		case chainSilent:
+			return 0, false
+		case chainsAgree:
 			low = middle
-		} else {
+		default:
 			high = middle
 		}
 	}
-	return low
+	return low, true
 }
 
 // probeChain asks a node for its height and total work. A variable so tests
@@ -207,7 +249,7 @@ var syncDelivered = struct {
 // few strangers, each claiming enormous work, could take turns being asked
 // and keep this node from ever asking a seed.
 func syncSourceTiers() [][]string {
-	var seeds []string
+	seeds := append([]string{}, operatorSyncSources...)
 	for _, endpoint := range append(seedSyncURLs(), Params.ExtraSyncURLs...) {
 		if skipSeedOnThisMachine(endpoint) && strings.HasSuffix(endpoint, ":"+Params.syncPortText()) {
 			continue
@@ -233,6 +275,82 @@ func syncSourceTiers() [][]string {
 	}
 	PeerMapMutex.RUnlock()
 	return [][]string{seeds, proven, strangers}
+}
+
+// operatorSyncSources are nodes the operator named with --connect. They are
+// asked alongside the seeds.
+var operatorSyncSources []string
+
+// trustedSourceClaimsBetter reports whether a seed, or a node the operator
+// named, claims a chain better than ours.
+func trustedSourceClaimsBetter() bool {
+	tiers := syncSourceTiers()
+	if len(tiers) == 0 {
+		return false
+	}
+	ourHeight, ourWork := GetLatestBlockInternal().Index, TotalChainWork()
+	for _, gateway := range tiers[0] {
+		if syncSourceIsSetAside(gateway) {
+			continue
+		}
+		if height, work := probeChain(gateway); peerChainIsBetter(height, work, ourHeight, ourWork) {
+			return true
+		}
+	}
+	return false
+}
+
+// runInitialDownload catches up with the network when the program starts,
+// before mining begins. It is a series of ordinary passes, so everything a
+// pass does to avoid being misled applies here too.
+//
+// It carries on for as long as a seed (or a node the operator named) claims
+// a better chain and each pass brings this node closer. It does not wait on
+// the claims of any other node: one of those could claim a height it will
+// never deliver and keep this node from ever starting to mine. Whatever
+// remains is caught up in the background once the node is running.
+func runInitialDownload(args []string) {
+	if host := argumentValue(args, "--connect"); host != "" {
+		if !strings.HasPrefix(host, "http://") {
+			host = "http://" + host
+		}
+		operatorSyncSources = []string{strings.TrimSuffix(host, "/")}
+	}
+	fmt.Println("🚀 Catching up with the network...")
+	for pass := 0; pass < initialDownloadMaxPasses; pass++ {
+		before := TotalChainWork()
+		TriggerActiveReSyncPass()
+		if TotalChainWork().Cmp(before) <= 0 {
+			break // nothing gained: nobody had anything better, or it did not hold up
+		}
+		fmt.Printf("⏳ [SYNC] Now at block #%d.\n", GetLatestBlockInternal().Index)
+		if !trustedSourceClaimsBetter() {
+			break
+		}
+	}
+	fmt.Printf("✅ [SYNC] Starting at block #%d.\n", GetLatestBlockInternal().Index)
+}
+
+// initialDownloadMaxPasses bounds the start-up download. A pass lasts at
+// most syncPassLimit, so this is many hours of downloading.
+const initialDownloadMaxPasses = 500
+
+// syncPassFromBlockInterval is the least time between passes started by a
+// block that arrived and could not be placed. Such a block costs its sender
+// nothing to make, so it must not be able to start passes without limit.
+const syncPassFromBlockInterval = 30 * time.Second
+
+var lastPassFromBlock int64 // unix seconds, read and written atomically
+
+// requestSyncPassForBlock starts a pass because a block arrived that does
+// not fit on our chain, unless one was started that way a moment ago.
+func requestSyncPassForBlock() {
+	now := time.Now().Unix()
+	last := atomic.LoadInt64(&lastPassFromBlock)
+	if now-last < int64(syncPassFromBlockInterval/time.Second) || !atomic.CompareAndSwapInt64(&lastPassFromBlock, last, now) {
+		return
+	}
+	go TriggerActiveReSyncPass()
 }
 
 // chooseSyncSource picks the node to catch up from: in the first tier where
@@ -297,9 +415,6 @@ func TriggerActiveReSyncPass() {
 		return
 	}
 	defer atomic.StoreInt32(&syncPassRunning, 0)
-	if atomic.LoadInt32(&IsSyncingActive) == 1 {
-		return // the first download at start-up is still running
-	}
 	// Whatever this pass pauses, this pass resumes.
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 	deadline := time.Now().Add(syncPassLimit)
@@ -338,7 +453,14 @@ func TriggerActiveReSyncPass() {
 			lowest = 0
 		}
 	}
-	ancestor := findCommonAncestor(source, lowest, startTip.Index)
+	ancestor, answered := findCommonAncestor(source, lowest, startTip.Index)
+	if !answered {
+		// A lost request proves nothing about the source's chain. The pass
+		// ends without a verdict, and the source is not blamed for it.
+		log.Printf("🔌 [SYNC] %s stopped answering while our chains were being compared. Trying again later.\n", source)
+		blameless = true
+		return
+	}
 	if ancestor < 0 {
 		if lowest > 0 {
 			log.Printf("🛑 [REORG LIMIT] %s offers a chain that parts from ours more than %d blocks back. This node does not replace more than that many of its own blocks, so it keeps its chain. If this node was left behind on a dead branch, stop it, delete %s and start again.\n", source, Params.Economics.ReorgLimitBlocks, Params.DatabaseFile)
@@ -389,6 +511,9 @@ func TriggerActiveReSyncPass() {
 		batch := fetchBlockBatch(source, next)
 		if len(batch) == 0 {
 			break
+		}
+		if claimedHeight-next > 100 {
+			log.Printf("⏳ [SYNC] Downloading: block #%d of #%d.\n", next, claimedHeight)
 		}
 		// Only now, with blocks in hand to add, is the rest of the node
 		// asked to stand still.

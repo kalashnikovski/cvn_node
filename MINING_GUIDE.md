@@ -36,7 +36,8 @@ The CVN program starts the fast miner, gives it work, shows its speed on the usu
 
 Things to know:
 
-- **Only the CVN edition works.** The standard XMRig computes a different RandomX, so the CVN program refuses to start it.
+- **Only the CVN edition works.** The standard XMRig computes a different RandomX. The CVN program asks the miner for its name before using it and will not use one that does not say it is the CVN edition. That check is against mistakes, not against a forged program: only put a miner there that you downloaded from the project page yourself.
+- **It is looked for beside the CVN program only**, never in whatever folder you happen to start the program from.
 - **If the fast miner is missing or keeps failing, the built-in miner takes over** and the dashboard says so. Your machine does not sit idle.
 - **A different location:** `--xmrig-path FOLDER_OR_FILE`, or `"xmrig_path"` in `miner_config.json`.
 - **Fewer threads:** `--threads N` limits either miner to N processor threads.

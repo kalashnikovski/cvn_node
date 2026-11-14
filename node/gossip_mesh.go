@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +24,7 @@ const (
 var (
 	ActivePeerMap         = make(map[string]time.Time)
 	PeerMapMutex          sync.RWMutex
-	MaxMeshConnectionPool = make(chan struct{}, 100)
+	MaxMeshConnectionPool = make(chan struct{}, 200)
 
 	// Security Blacklists & IP Connection Trackers
 	IPConnectionRegistry = make(map[string]int)
@@ -116,7 +115,7 @@ func StartMeshNetwork() {
 
 		IPRegistryMutex.Lock()
 		currentActiveSlots := IPConnectionRegistry[remoteIP]
-		if currentActiveSlots >= 4 {
+		if currentActiveSlots >= maxConnectionsPerAddress {
 			IPRegistryMutex.Unlock()
 			conn.Close()
 			continue
@@ -124,9 +123,16 @@ func StartMeshNetwork() {
 		IPConnectionRegistry[remoteIP] = currentActiveSlots + 1
 		IPRegistryMutex.Unlock()
 
+		// A seed is always let in. The other places are first come, first
+		// kept, and anyone can hold them for as long as they keep talking,
+		// so the seeds must not depend on finding one free.
+		if isSeedHost(remoteIP) {
+			go handleIncomingPeerStream(conn, false)
+			continue
+		}
 		select {
 		case MaxMeshConnectionPool <- struct{}{}:
-			go handleIncomingPeerStream(conn)
+			go handleIncomingPeerStream(conn, true)
 		default:
 			decrementIPConnection(remoteIP)
 			conn.Close()
@@ -157,7 +163,23 @@ func flagMalformedIP(ip string) {
 		BlacklistMutex.Unlock()
 	}
 }
-func handleIncomingPeerStream(conn net.Conn) {
+
+// maxConnectionsPerAddress is how many connections one address may hold.
+const maxConnectionsPerAddress = 2
+
+// isSeedHost reports whether an address is one of this network's seeds.
+func isSeedHost(host string) bool {
+	for _, seed := range Params.SeedHosts {
+		if seed == host {
+			return true
+		}
+	}
+	return false
+}
+
+// handleIncomingPeerStream serves one inbound connection. pooled says
+// whether it holds one of the shared places, which it gives back at the end.
+func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
 	rateLimiter := GetIPRateLimiter(remoteIP)
@@ -166,10 +188,10 @@ func handleIncomingPeerStream(conn net.Conn) {
 		unregisterRelaySubscriber(conn)
 		conn.Close()
 		decrementIPConnection(remoteIP)
-		<-MaxMeshConnectionPool
+		if pooled {
+			<-MaxMeshConnectionPool
+		}
 	}()
-
-	var lastGetBatchRequest time.Time
 
 	for {
 		// Enforce adaptive refreshing read deadline (30-second idle timeout)
@@ -315,41 +337,6 @@ func handleIncomingPeerStream(conn net.Conn) {
 			continue
 		}
 
-		if strings.HasPrefix(msg, "GET_BATCH:") {
-			if time.Since(lastGetBatchRequest) < 200*time.Millisecond {
-				continue
-			}
-			lastGetBatchRequest = time.Now()
-
-			heightStr := strings.TrimPrefix(msg, "GET_BATCH:")
-			startHeight, err := strconv.ParseInt(strings.TrimSpace(heightStr), 10, 64)
-			if err != nil || startHeight < 0 {
-				continue
-			}
-
-			var blocks []Block
-			StateMutex.RLock()
-			currentTipHeight := GetLatestBlockInternal().Index
-			StateMutex.RUnlock()
-
-			endHeight := startHeight + 63
-			if endHeight > currentTipHeight {
-				endHeight = currentTipHeight
-			}
-
-			for h := startHeight; h <= endHeight; h++ {
-				loadedBlk := GetBlockByHeightFromDB(h)
-				if loadedBlk.Hash != "" {
-					blocks = append(blocks, loadedBlk)
-				}
-			}
-
-			jsonBytes, err := json.Marshal(blocks)
-			if err == nil {
-				writeFramedPayloadNatively(conn, string(jsonBytes))
-			}
-			continue
-		}
 	}
 }
 
