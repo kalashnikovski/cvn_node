@@ -5,3 +5,8 @@
 # same bytes on every machine, or nobody could rebuild the program and get
 # the published one.
 frontend/dist/** -text
+
+# Windows batch files must keep Windows line endings on every machine and in
+# every download: the command interpreter can lose its place in a batch file
+# that has Unix line endings.
+*.bat text eol=crlf
