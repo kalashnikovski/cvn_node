@@ -684,12 +684,14 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, int64) {
 			if time.Since(mempoolArrival[id]) > MempoolMaxAge {
 				delete(MempoolMatrix.Transactions, id)
 				delete(mempoolArrival, id)
+				delete(mempoolFees, id)
 				continue
 			}
 			fee, spent, err := checkTransferAgainstCoins(tx, lookup, nil)
 			if err != nil {
 				delete(MempoolMatrix.Transactions, id)
 				delete(mempoolArrival, id)
+				delete(mempoolFees, id)
 				continue
 			}
 			candidates = append(candidates, mempoolCandidate{tx: tx, fee: fee, spent: spent, arrived: mempoolArrival[id], size: transactionSizeBytes(tx)})
@@ -786,6 +788,7 @@ func RemoveConfirmedFromMempool(block Block) {
 	for _, tx := range block.Transactions[1:] {
 		delete(MempoolMatrix.Transactions, tx.ID)
 		delete(mempoolArrival, tx.ID)
+		delete(mempoolFees, tx.ID)
 	}
 	MempoolMatrix.Unlock()
 }

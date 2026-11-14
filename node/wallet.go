@@ -115,7 +115,7 @@ func textWalletShowBalance(ask func(string) string, ownAddress string) {
 
 func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 	recipient := ask("\nRecipient address (CVN_...): ")
-	if !validRecipient(recipient) || !strings.HasPrefix(recipient, "CVN_") {
+	if !looksLikeWalletAddress(recipient) {
 		fmt.Println("❌ That is not a valid CVN address.")
 		return
 	}

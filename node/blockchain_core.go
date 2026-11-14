@@ -236,7 +236,6 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	}
 	if incomingBlock.Index == currentTip.Index+1 {
 		if SaveBlockToStorageInternal(incomingBlock) {
-			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
 			go BroadcastNewBlock(incomingBlock)
 		}
 	}
@@ -260,7 +259,6 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 			return
 		}
 		if SaveBlockToStorageInternal(incomingBlock) {
-			atomic.StoreInt64(&localHeightState, incomingBlock.Index)
 			SignalMinerReset()
 			go BroadcastNewBlock(incomingBlock)
 		}

@@ -132,7 +132,7 @@ func resolveMinerAddress(args []string) (string, error) {
 			"   Create a wallet with --generate-wallet (or --wallet) and write its private key down,\n" +
 			"   or start with --miner-address CVN_... to mine to a wallet you already have")
 	}
-	if !strings.HasPrefix(address, "CVN_") || !validRecipient(address) || strings.HasPrefix(address, "CVN_FALLBACK_") {
+	if !looksLikeWalletAddress(address) {
 		return "", fmt.Errorf("%q is not a CVN wallet address. Nobody holds a key for it, so coins mined to it could never be spent.\n"+
 			"   Create a wallet with --generate-wallet (or --wallet), or start with --miner-address CVN_...", address)
 	}

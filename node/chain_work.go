@@ -326,6 +326,8 @@ func measureCandidateBranch(fetchBatch func(start int64) []Block, ancestorHeight
 // put back if the replacement turns out to be worse.
 func rollbackChainToHeightLocked(target int64) []Block {
 	var removed []Block
+	chainWriteMutex.Lock()
+	defer chainWriteMutex.Unlock()
 	tip := GetLatestBlockInternal()
 	if GlobalBoltEngine == nil || target >= tip.Index {
 		return removed

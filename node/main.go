@@ -486,6 +486,7 @@ func Run(frontendAssets embed.FS) {
 	// stays idle unless the fast miner cannot run (see fast_miner.go).
 	StartChosenMiner(StartMiningWorkServer())
 	go runVerifyKeyWarmer()
+	go runTableJanitor()
 	StartContextMinerEngine()
 	ticker := time.NewTicker(4 * time.Second)
 	defer ticker.Stop()
@@ -855,7 +856,7 @@ func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniquen
 	// Everything is whole units, so the amounts written into the block are
 	// exact. rewardUnits is the new reward plus the vault's payout for this
 	// block; feeUnits becomes the miner's share of the fees.
-	accounting := accountForBlock(nextIndex, feeUnits, VaultBalanceUnits())
+	accounting := accountForBlock(nextIndex, feeUnits, vaultUnitsAfter(tip))
 	rewardUnits := accounting.SubsidyUnits()
 	feeUnits = accounting.MinerFeeUnits
 	templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"

@@ -12,7 +12,7 @@ import (
 // minimum. During the launch window dates give no relief and difficulty
 // does not go below the starting value.
 func TestLaunchDifficultyCannotBeTalkedDown(t *testing.T) {
-	const start = 4 * HeartbeatMinDifficulty
+	const start = 2 * HeartbeatMinDifficulty
 	startTestChain(t, "devnet", func() {
 		Params.HeartbeatInitialDifficulty = start
 		// Dated three days back, so that the late blocks below are still in

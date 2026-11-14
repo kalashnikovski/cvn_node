@@ -284,6 +284,13 @@ func runRelayUplink(address string, announcedID string) {
 				continue
 			}
 			if !VerifyIncomingWireBlock(incomingBlock) {
+				// Malformed, as judged by a check every node applies alike:
+				// it counts against the sender, as on an inbound connection.
+				if IsHeartbeatHeight(incomingBlock.Index) {
+					if host, _, err := net.SplitHostPort(address); err == nil {
+						flagMalformedIP(host)
+					}
+				}
 				continue
 			}
 			if blockCarriesBadWork(incomingBlock) {

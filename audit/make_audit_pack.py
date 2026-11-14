@@ -43,6 +43,7 @@ RULES = [
     "MINING_GUIDE.md",
     "ROADMAP.md",
     "audit/FINDINGS_ROUND_1.md",
+    "audit/FINDINGS_ROUND_2.md",
     "node/chain_params.go",
     "node/amount.go",
     "node/block_format.go",

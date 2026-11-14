@@ -172,22 +172,25 @@ func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
 }
 
 // scheduleDriftSeconds says how far the chain is from its schedule at
-// lastBlock: the time actually taken since block 1, minus the time the blocks
-// since block 1 should have taken. Negative means the chain is ahead (blocks
-// have come too fast); positive means it is behind.
+// lastBlock: the time actually taken since the schedule's first block, minus
+// the time the blocks since then should have taken. Negative means the chain
+// is ahead (blocks have come too fast); positive means it is behind.
 //
-// The schedule is counted from block 1, not from the genesis block, so it
-// starts when mining starts.
+// The schedule is counted from the last block of the launch window. The
+// dates of the blocks before that cannot be trusted (see
+// CalculateHeartbeatDifficulty), and counting from one of them would carry
+// whatever was written on it into every later difficulty.
 func scheduleDriftSeconds(lastBlock Block) int64 {
-	if lastBlock.Index <= 1 {
+	const origin = int64(HeartbeatLaunchBlocks)
+	if lastBlock.Index <= origin {
 		return 0
 	}
-	firstBlock := GetBlockByHeightFromDB(1)
+	firstBlock := GetBlockByHeightFromDB(origin)
 	if firstBlock.Hash == "" {
 		return 0
 	}
 	elapsed := lastBlock.Timestamp - firstBlock.Timestamp
-	scheduled := (lastBlock.Index - 1) * HeartbeatTargetSeconds
+	scheduled := (lastBlock.Index - origin) * HeartbeatTargetSeconds
 	return elapsed - scheduled
 }
 

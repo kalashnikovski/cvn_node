@@ -162,7 +162,7 @@ func TestFastMinerStandIn(t *testing.T) {
 		if err != nil {
 			os.Exit(4)
 		}
-		fmt.Fprintln(conn, `{"id":1,"jsonrpc":"2.0","method":"login","params":{"login":"CVN_standin","pass":"x"}}`)
+		fmt.Fprintln(conn, `{"id":1,"jsonrpc":"2.0","method":"login","params":{"login":"CVN_5555555555555555555555555555555555555555","pass":"x"}}`)
 		if _, err := bufio.NewReader(conn).ReadString(10); err != nil { // 10 is the line ending
 			os.Exit(5)
 		}
@@ -282,20 +282,20 @@ func TestMiningAddressMustBeARealWallet(t *testing.T) {
 			t.Errorf("%q was accepted as a mining address (%q)", bad, address)
 		}
 	}
-	if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_abc123"}); err != nil || address != "CVN_abc123" {
+	if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}); err != nil || address != "CVN_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
 		t.Errorf("an address on the command line: %q %v", address, err)
 	}
-	if err := saveMinerAddress("CVN_fromfile"); err != nil {
+	if err := saveMinerAddress("CVN_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"); err != nil {
 		t.Fatal(err)
 	}
-	if address, _ := resolveMinerAddress([]string{"cvn_node"}); address != "CVN_fromfile" {
+	if address, _ := resolveMinerAddress([]string{"cvn_node"}); address != "CVN_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
 		t.Errorf("the address in miner_config.json was not used: %q", address)
 	}
-	if address, _ := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_cmdline"}); address != "CVN_cmdline" {
+	if address, _ := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_cccccccccccccccccccccccccccccccccccccccc"}); address != "CVN_cccccccccccccccccccccccccccccccccccccccc" {
 		t.Errorf("the command line should win over the file: %q", address)
 	}
-	t.Setenv("CVN_MINER_ADDRESS", "CVN_fromenv")
-	if address, _ := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_cmdline"}); address != "CVN_fromenv" {
+	t.Setenv("CVN_MINER_ADDRESS", "CVN_dddddddddddddddddddddddddddddddddddddddd")
+	if address, _ := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_cccccccccccccccccccccccccccccccccccccccc"}); address != "CVN_dddddddddddddddddddddddddddddddddddddddd" {
 		t.Errorf("CVN_MINER_ADDRESS should win, as it always has: %q", address)
 	}
 }

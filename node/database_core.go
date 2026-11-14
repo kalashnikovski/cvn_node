@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +19,14 @@ var GlobalBoltEngine *bbolt.DB
 // that is already the stored block at its height.
 var errBlockAlreadyStored = fmt.Errorf("block already stored")
 var localHeightState int64
+
+// chainWriteMutex is held by anything that changes which block is the tip:
+// storing a block, or rolling the chain back. The database already takes
+// such changes one at a time, but the height kept in memory is updated just
+// after each change, and without this two changes finishing together could
+// record their heights in the wrong order, leaving the node believing its
+// tip is a block below the real one.
+var chainWriteMutex sync.Mutex
 
 var blocksBucket = []byte("blocks")
 var metaBucket = []byte("meta")
@@ -220,6 +229,8 @@ func SaveBlockToStorageInternal(block Block) bool {
 	if block.Index <= 0 {
 		return false
 	}
+	chainWriteMutex.Lock()
+	defer chainWriteMutex.Unlock()
 
 	expectedDiff := block.Difficulty
 	if IsHeartbeatHeight(block.Index) {

@@ -50,8 +50,7 @@ func VerifyIncomingWireBlock(b Block) bool {
 			// been shown to attach and to claim the right difficulty.
 			return b.Hash == CalculateHash(b) && int64(b.Difficulty) >= minDifficultyAt(b.Index)
 		}
-		if !HashMeetsDifficulty(b.Hash, b.Index, b.Difficulty) {
-			fmt.Printf("🚨 WIRE BLOCK FAULT: Hash signature %s missing difficulty constraints.\n", b.Hash)
+		if b.Hash != CalculateHash(b) || !HashMeetsDifficulty(b.Hash, b.Index, b.Difficulty) {
 			return false
 		}
 		return true
@@ -141,4 +140,51 @@ func peerIsBanned(ip string) bool {
 	defer BlacklistMutex.Unlock()
 	until, banned := MaliciousIPBlacklist[ip]
 	return banned && time.Now().Before(until)
+}
+
+// pruneNetworkTables forgets what no longer matters about addresses that
+// connected to this node: expired refusals, counts of malformed messages,
+// rate limits not used for a while, and sync sources whose time set aside is
+// over. Without it these tables grow for as long as the node runs.
+func pruneNetworkTables(now time.Time) {
+	BlacklistMutex.Lock()
+	for ip, until := range MaliciousIPBlacklist {
+		if now.After(until) {
+			delete(MaliciousIPBlacklist, ip)
+		}
+	}
+	BlacklistMutex.Unlock()
+
+	IPRegistryMutex.Lock()
+	for ip := range IPMalformedTrack {
+		delete(IPMalformedTrack, ip)
+	}
+	IPRegistryMutex.Unlock()
+
+	IPTokensMutex.Lock()
+	for ip, limiter := range IPTokensMap {
+		limiter.Lock()
+		idle := now.Sub(limiter.lastRefill) > 30*time.Minute
+		limiter.Unlock()
+		if idle {
+			delete(IPTokensMap, ip)
+		}
+	}
+	IPTokensMutex.Unlock()
+
+	syncSetAside.Lock()
+	for source, until := range syncSetAside.until {
+		if now.After(until) {
+			delete(syncSetAside.until, source)
+		}
+	}
+	syncSetAside.Unlock()
+}
+
+// runTableJanitor prunes those tables every ten minutes.
+func runTableJanitor() {
+	for {
+		time.Sleep(10 * time.Minute)
+		pruneNetworkTables(time.Now())
+	}
 }

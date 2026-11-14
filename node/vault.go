@@ -151,3 +151,19 @@ func VaultBalanceUnits() int64 {
 	})
 	return units
 }
+
+// vaultUnitsAfter returns what the vault held after a given block. A miner
+// building on that block uses this, and not the vault of whatever the tip
+// has become since, so that the payout it writes into its block is the one
+// every node will work out for that parent.
+func vaultUnitsAfter(block Block) int64 {
+	if GlobalBoltEngine == nil || !vaultEnabled() {
+		return 0
+	}
+	var units int64
+	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+		units, _ = readVaultUnits(dbTx, block.Index, block.Hash)
+		return nil
+	})
+	return units
+}

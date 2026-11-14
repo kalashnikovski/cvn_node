@@ -272,13 +272,15 @@ func handleStratumClient(conn net.Conn) {
 			if cut := strings.IndexAny(login, ".+"); cut > 0 {
 				login = login[:cut]
 			}
-			if strings.HasPrefix(login, "CVN_") && validRecipient(login) {
-				client.address = login
-			}
-			if !strings.HasPrefix(client.address, "CVN_") {
-				client.reply(request.ID, nil, "log in with a CVN address")
+			// The login is the wallet the work is paid to. Anything that is
+			// not a wallet address is refused outright: paying this node's
+			// own address instead would take the miner's work without
+			// telling them, and paying the text as given would burn it.
+			if !looksLikeWalletAddress(login) {
+				client.reply(request.ID, nil, "log in with a CVN wallet address: CVN_ followed by 40 hex digits")
 				return
 			}
+			client.address = login
 			job, ok := client.newJob()
 			if !ok {
 				client.reply(request.ID, nil, "the node is not ready to hand out work yet")
@@ -377,6 +379,12 @@ func (c *stratumClient) pushJobs(done <-chan struct{}, lastTip string) {
 // submit checks a nonce an external miner found and, if it makes a valid
 // block, adds that block to the chain. It returns "" on success.
 func (c *stratumClient) submit(jobID, nonceHex string) string {
+	// While the node is replacing or extending its chain from another node,
+	// the tip is not settled, and the built-in miner is paused for the same
+	// reason.
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		return "stale job: the node is catching up with the network"
+	}
 	job := c.findJob(jobID)
 	if job == nil {
 		return "unknown or expired job"

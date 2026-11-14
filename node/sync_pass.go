@@ -182,62 +182,125 @@ func findCommonAncestor(source string, lowest, highest int64) int64 {
 	return low
 }
 
-// chooseSyncSource picks the node to catch up from: the one claiming the
-// best chain, if it is better than ours. Nodes we are in touch with are
-// asked first, then the seeds and remembered peers. Sources set aside after
-// failing to deliver are skipped.
-func chooseSyncSource(ourHeight int64, ourWork *big.Int) (source string, claimedHeight int64) {
-	var bestWork *big.Int
-	claimedHeight = ourHeight
-	consider := func(gateway string) {
-		if syncSourceIsSetAside(gateway) {
-			return
+// probeChain asks a node for its height and total work. A variable so tests
+// can stand in for the network.
+var probeChain = peerChainStatus
+
+// syncDelivered remembers the sources that have delivered a better chain
+// when they said they had one.
+var syncDelivered = struct {
+	sync.Mutex
+	at map[string]time.Time
+}{at: make(map[string]time.Time)}
+
+// syncSourceTiers lists the nodes a pass may catch up from, most trusted
+// first:
+//
+//  1. the seeds, which are named in the software;
+//  2. nodes that have delivered a better chain before, and nodes this one
+//     has reached in earlier runs;
+//  3. nodes that have merely connected to this one.
+//
+// Anyone can be in the third tier by connecting, and what a node says about
+// its own chain costs it nothing to say. So a node from a later tier is only
+// asked when no node in an earlier tier claims a better chain. Otherwise a
+// few strangers, each claiming enormous work, could take turns being asked
+// and keep this node from ever asking a seed.
+func syncSourceTiers() [][]string {
+	var seeds []string
+	for _, endpoint := range append(seedSyncURLs(), Params.ExtraSyncURLs...) {
+		if skipSeedOnThisMachine(endpoint) && strings.HasSuffix(endpoint, ":"+Params.syncPortText()) {
+			continue
 		}
-		peerHeight, peerWork := peerChainStatus(gateway)
-		if !peerChainIsBetter(peerHeight, peerWork, ourHeight, ourWork) {
-			return
-		}
-		better := source == ""
-		if peerWork != nil {
-			better = better || bestWork == nil || peerWork.Cmp(bestWork) > 0
-		} else {
-			better = better || (bestWork == nil && peerHeight > claimedHeight)
-		}
-		if better {
-			source, claimedHeight, bestWork = gateway, peerHeight, peerWork
-		}
+		seeds = append(seeds, endpoint)
 	}
+	var proven []string
+	syncDelivered.Lock()
+	for source := range syncDelivered.at {
+		proven = append(proven, source)
+	}
+	syncDelivered.Unlock()
+	proven = append(proven, cachedPeerHTTPGateways(seeds)...)
+
+	var strangers []string
 	PeerMapMutex.RLock()
-	var freshPeers []string
 	for address, lastSeen := range ActivePeerMap {
 		if time.Since(lastSeen) <= 30*time.Second {
-			freshPeers = append(freshPeers, address)
+			if host, _, err := net.SplitHostPort(address); err == nil {
+				strangers = append(strangers, Params.syncURL(host))
+			}
 		}
 	}
 	PeerMapMutex.RUnlock()
-	for _, address := range freshPeers {
-		host, _, _ := net.SplitHostPort(address)
-		consider(Params.syncURL(host))
-	}
-	if source == "" {
-		gateways := append(seedSyncURLs(), Params.ExtraSyncURLs...)
-		gateways = append(gateways, cachedPeerHTTPGateways(gateways)...)
-		for _, endpoint := range gateways {
-			if skipSeedOnThisMachine(endpoint) && strings.HasSuffix(endpoint, ":"+Params.syncPortText()) {
+	return [][]string{seeds, proven, strangers}
+}
+
+// chooseSyncSource picks the node to catch up from: in the first tier where
+// any node claims a chain better than ours, the one claiming the best.
+// Sources set aside after failing to deliver are skipped.
+func chooseSyncSource(ourHeight int64, ourWork *big.Int) (source string, claimedHeight int64) {
+	asked := make(map[string]bool)
+	for _, tier := range syncSourceTiers() {
+		var bestWork *big.Int
+		claimedHeight = ourHeight
+		for _, gateway := range tier {
+			if asked[gateway] || syncSourceIsSetAside(gateway) {
 				continue
 			}
-			consider(endpoint)
+			asked[gateway] = true
+			peerHeight, peerWork := probeChain(gateway)
+			if !peerChainIsBetter(peerHeight, peerWork, ourHeight, ourWork) {
+				continue
+			}
+			better := source == ""
+			if peerWork != nil {
+				better = better || bestWork == nil || peerWork.Cmp(bestWork) > 0
+			} else {
+				better = better || (bestWork == nil && peerHeight > claimedHeight)
+			}
+			if better {
+				source, claimedHeight, bestWork = gateway, peerHeight, peerWork
+			}
+		}
+		if source != "" {
+			return source, claimedHeight
 		}
 	}
-	return source, claimedHeight
+	return "", ourHeight
+}
+
+// chainChangePauses counts how often a pass has asked the node to stand
+// still. Tests read it.
+var chainChangePauses int64
+
+// syncPassRunning is 1 while a pass is in progress, so that only one runs at
+// a time.
+var syncPassRunning int32
+
+// pauseForChainChange tells the rest of the node that the chain is about to
+// change under it: miners stop, and blocks arriving from peers are left for
+// the pass to fetch. A pass sets it only once it is actually about to remove
+// or add blocks. Comparing chains, which is all a pass does when the other
+// node turns out to have nothing better, disturbs nothing: otherwise anyone
+// could idle a node's miner, and deafen it to new blocks, just by claiming a
+// better chain again and again.
+func pauseForChainChange() {
+	atomic.AddInt64(&chainChangePauses, 1)
+	if atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
+		log.Println("⏳ [SYNC] Changing our chain. Mining is paused until it is done.")
+	}
 }
 
 // TriggerActiveReSyncPass runs one pass, unless one is already running.
 func TriggerActiveReSyncPass() {
-	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&syncPassRunning, 0, 1) {
 		return
 	}
-	// This pass alone set the flag and this pass alone clears it.
+	defer atomic.StoreInt32(&syncPassRunning, 0)
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		return // the first download at start-up is still running
+	}
+	// Whatever this pass pauses, this pass resumes.
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 	deadline := time.Now().Add(syncPassLimit)
 
@@ -247,13 +310,21 @@ func TriggerActiveReSyncPass() {
 	if source == "" {
 		return
 	}
-	log.Printf("⏳ [SYNC] Comparing our chain with %s, which reports block #%d. Mining is paused meanwhile.\n", source, claimedHeight)
+	log.Printf("🔎 [SYNC] Comparing our chain with %s, which reports block #%d.\n", source, claimedHeight)
 
 	// A source that claimed a better chain owes us one. If the pass ends
 	// with our chain no better and the fault was not ours, it is set aside.
 	blameless := false
 	defer func() {
-		if !blameless && TotalChainWork().Cmp(startWork) <= 0 {
+		switch {
+		case TotalChainWork().Cmp(startWork) > 0:
+			syncDelivered.Lock()
+			syncDelivered.at[source] = time.Now()
+			syncDelivered.Unlock()
+		case !blameless:
+			syncDelivered.Lock()
+			delete(syncDelivered.at, source)
+			syncDelivered.Unlock()
 			setSyncSourceAside(source, "claimed a better chain and did not deliver one")
 		}
 	}()
@@ -305,6 +376,7 @@ func TriggerActiveReSyncPass() {
 			return
 		}
 		log.Printf("⚖️ [CHAIN WORK] Switching to the branch from %s above block #%d: it proves more work than our %d block(s) there.\n", source, ancestor, tip.Index-ancestor)
+		pauseForChainChange()
 		removed = rollbackChainToHeightLocked(ancestor)
 	}
 	StateMutex.Unlock()
@@ -318,6 +390,9 @@ func TriggerActiveReSyncPass() {
 		if len(batch) == 0 {
 			break
 		}
+		// Only now, with blocks in hand to add, is the rest of the node
+		// asked to stand still.
+		pauseForChainChange()
 		StateMutex.Lock()
 		refused := false
 		for _, block := range batch {
@@ -352,7 +427,7 @@ func TriggerActiveReSyncPass() {
 		restoreChainLocked(ancestor, removed)
 		StateMutex.Unlock()
 	}
-	log.Printf("🟩 [SYNC] Pass finished at block #%d. Mining resumes.\n", GetLatestBlockInternal().Index)
+	log.Printf("🟩 [SYNC] Pass finished at block #%d.\n", GetLatestBlockInternal().Index)
 }
 
 // serveHTTP answers requests on an address with limits on how long a caller
