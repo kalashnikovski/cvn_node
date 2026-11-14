@@ -12,13 +12,15 @@ How to get an independent review of the Covenant Standard (CVN) code from severa
 
    They appear in `audit/out/`. Every pack names its commit at the top. Give every reviewer packs made from the **same commit**, or their findings cannot be compared.
 
-2. Choose what to give each reviewer by how much it can read at once:
+2. Choose how to give it to each reviewer:
 
-   | Reviewer can read | Give it |
+   | Reviewer | Give it |
    |---|---|
-   | The whole thing (about 160,000 tokens) | `cvn_audit_full.txt` with Prompt 1, or Prompt 3 for a later round |
-   | About 60,000 tokens at a time | `cvn_audit_1_rules.txt` with the prompt. Then, in a **new** conversation, `cvn_audit_2_program.txt` with the prompt. The tests are optional. |
-   | Less than that | It cannot review this code usefully. A model that only sees part of a file will invent the rest. |
+   | Takes a file of 650,000 characters whole | `cvn_audit_full.txt`, attached, with the prompt |
+   | Cuts a long file or paste short | The three parts, one message each, as described under "Sending the pack in parts" below |
+   | Cannot read about 60,000 tokens at once | It cannot review this code usefully. A model that only sees part of a file will invent the rest. |
+
+   **Check every time that the reviewer saw all of it.** Each pack numbers its files and ends with the line `END OF PACK`, and the prompts ask the reviewer to say which file it saw last. If its answer does not name the last file, or says the copy was cut short, its review covers only part of the code: start again, in parts.
 
 3. Start each review in a **new conversation** with nothing else in it.
 
@@ -27,6 +29,38 @@ How to get an independent review of the Covenant Standard (CVN) code from severa
 5. When all have answered, run Prompt 2 with each reviewer: it shows them the others' findings and asks which are real. A finding that survives being attacked by another reviewer is worth far more than one nobody checked.
 
 Treat every finding as a claim to be checked against the code, not as a fact. Reviewers of this kind are good at reading widely and bad at being sure: some findings will be wrong, and some real problems will be missed by all of them.
+
+---
+
+## Sending the pack in parts
+
+Some tools cut a long file or paste short without saying so. One reviewer reported its copy stopped part-way through the sixth file and resumed among the tests. When that happens, send the three parts one after another **in the same conversation**:
+
+1. `cvn_audit_1_rules.txt` with the first message below.
+2. `cvn_audit_2_program.txt` with the second message below.
+3. `cvn_audit_3_tests.txt` together with the review prompt itself (Prompt 1 or Prompt 3).
+
+Attach each file if the tool allows it; paste it only if it does not. Wait for the reply before sending the next.
+
+First message, with part 1:
+
+```text
+I am going to give you the source code of a software project to review, in three parts, one message each. This is part 1 of 3. Do not review anything yet. Read it, then reply with exactly: the number of files in this part, the name of the last file you can see, and whether you can see the line "END OF PACK" at the end. Nothing else.
+```
+
+Second message, with part 2:
+
+```text
+This is part 2 of 3. As before: do not review anything yet. Reply with the number of files in this part, the name of the last file you can see, and whether you can see the line "END OF PACK" at the end. Nothing else.
+```
+
+Third message: the review prompt, with part 3 attached, and this line added at the very top of the prompt:
+
+```text
+This is part 3 of 3, the tests. With it you now have everything: parts 1, 2 and 3 together are the material this prompt describes.
+```
+
+If any reply says the last line was not visible, that part was cut short too. That tool cannot take this code; use another reviewer.
 
 ---
 
@@ -41,7 +75,7 @@ WHAT YOU HAVE
 
 One file, attached or pasted below. It starts with a list of what it contains: a design paper (WHITEPAPER.md) saying what the rules are meant to be, then source code in Go. Read the design paper first. The code is supposed to do what the paper says; where it does not, that is a finding.
 
-Read all of it before you answer. If your copy is cut off, or you could not read part of it, say so at the very top of your answer and name the last file you saw complete. Do not guess at code you did not see.
+Read all of it before you answer. The material numbers its files ("FILE n OF N") and ends with the line "END OF PACK". Begin your answer by stating the number of the last file you can see and whether you can see that last line. If you cannot, your copy was cut short: say so plainly, review only what you have, and do not guess at code you did not see.
 
 WHAT THE PROJECT IS
 
@@ -165,7 +199,7 @@ One file, attached or pasted below. It starts with a list of what it contains:
 - audit/FINDINGS_ROUND_1.md: what the first round found, and what the authors say they did about each finding.
 - Source code in Go, then its tests.
 
-Read all of it before you answer. If your copy is cut off, or you could not read part of it, say so at the very top of your answer and name the last file you saw complete. Do not guess at code you did not see.
+Read all of it before you answer. The material numbers its files ("FILE n OF N") and ends with the line "END OF PACK". Begin your answer by stating the number of the last file you can see and whether you can see that last line. If you cannot, your copy was cut short: say so plainly, review only what you have, and do not guess at code you did not see.
 
 WHAT THE PROJECT IS
 
