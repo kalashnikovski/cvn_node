@@ -156,3 +156,21 @@ func runMiningReadinessMonitor() {
 		evaluateMiningReadiness()
 	}
 }
+
+// minerClockMargin is how close to the limit on future-dated blocks a miner
+// will go. Other nodes refuse a block dated more than
+// HeartbeatMaxFutureDriftSeconds ahead of their own clock, and clocks differ
+// by a few seconds, so a miner stays this far inside the limit.
+const minerClockMargin = int64(10)
+
+// mustWaitForClock reports whether a block with this date would be refused
+// by other nodes as too far ahead, so that a miner has to wait before
+// working on it. A block has to be dated after its parent, so this happens
+// when the parent itself was dated ahead.
+//
+// A miner waits only as long as it must. It used to wait whenever the date
+// was more than a minute ahead, which let anyone who dated a block two
+// minutes ahead idle every honest miner for a minute and mine alone.
+func mustWaitForClock(blockTimestamp, now int64) bool {
+	return blockTimestamp > now+HeartbeatMaxFutureDriftSeconds-minerClockMargin
+}

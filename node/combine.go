@@ -104,7 +104,7 @@ func BuildSignedCombine(privateKeyHex, publicKeyHex string, feeUnits int64, coin
 		if totalUnits, err = addUnits(totalUnits, coin.Amount.Units()); err != nil {
 			return Transaction{}, err
 		}
-		inputs = append(inputs, UTXOInput{SourceTxID: coin.TxID, Index: coin.Index})
+		inputs = append(inputs, walletInput(coin))
 	}
 	if totalUnits-feeUnits < minimumOutputUnits() {
 		return Transaction{}, fmt.Errorf("these coins add up to %s CVN, which is not enough to pay a fee of %s CVN and leave a coin", FormatUnits(totalUnits), FormatUnits(feeUnits))

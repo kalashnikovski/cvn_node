@@ -53,7 +53,15 @@ type stratumJob struct {
 	tipHash    string
 }
 
+// stratumBadWork is the answer to a submission whose proof does not meet the
+// target, and stratumBadWorkLimit how many of them one connection may send.
+const (
+	stratumBadWork      = "low difficulty share"
+	stratumBadWorkLimit = 30
+)
+
 type stratumClient struct {
+	badWork int
 	conn    net.Conn
 	writeMu sync.Mutex
 	session string
@@ -127,7 +135,7 @@ func buildStratumJob(address string) (*stratumJob, bool) {
 	if timestamp <= tip.Timestamp {
 		timestamp = tip.Timestamp + 1
 	}
-	if timestamp > time.Now().Unix()+HeartbeatMaxFutureDriftSeconds/2 {
+	if mustWaitForClock(timestamp, time.Now().Unix()) {
 		return nil, false // the tip is dated ahead; wait for the clock to catch up
 	}
 	key, ok := powKeyFor(nextIndex)
@@ -306,6 +314,16 @@ func handleStratumClient(conn net.Conn) {
 				if !client.reply(request.ID, nil, errorText) {
 					return
 				}
+				// Every answer that does not carry the work costs this node
+				// a proof check. A miner that keeps sending them is faulty
+				// or hostile, and is disconnected. Answers that were good
+				// but arrived after the chain moved on are not counted.
+				if errorText == stratumBadWork {
+					if client.badWork++; client.badWork >= stratumBadWorkLimit {
+						noteNetworkEvent("⛏️ [WORK SERVER] Disconnecting " + conn.RemoteAddr().String() + ": too many answers without the work.")
+						return
+					}
+				}
 			} else if !client.reply(request.ID, map[string]string{"status": "OK"}, "") {
 				return
 			}
@@ -374,7 +392,7 @@ func (c *stratumClient) submit(jobID, nonceHex string) string {
 	block.Nonce = int64(nonce)
 	block.Hash = CalculateHashWithTxDigest(block, job.txDigest)
 	if !BlockProofValid(block, block.Difficulty) {
-		return "low difficulty share"
+		return stratumBadWork
 	}
 	StateMutex.RLock()
 	tip := GetLatestBlockInternal()

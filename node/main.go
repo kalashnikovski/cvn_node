@@ -188,7 +188,11 @@ func Run(frontendAssets embed.FS) {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 
-				RebuildStateBalanceCacheInternal()
+				// A full recount reads every coin. Anyone can ask for this
+				// page, as often as they like, so it is recounted at most
+				// every few seconds; the running totals are kept up to date
+				// between recounts as blocks arrive.
+				recountBalancesIfStale()
 
 				BalanceCacheMutex.RLock()
 				activeWallets := make(map[string]float64)
@@ -245,20 +249,29 @@ func Run(frontendAssets embed.FS) {
 				return
 			}
 
-			var blocks []Block
 			StateMutex.RLock()
 			currentTip := GetLatestBlockInternal().Index
 			StateMutex.RUnlock()
-
-			endHeight := startHeight + 511
-			if endHeight > currentTip {
-				endHeight = currentTip
-			}
-
-			for h := startHeight; h <= endHeight; h++ {
-				blocks = append(blocks, GetBlockByHeightFromDB(h))
-			}
+			blocks := blocksForBatch(startHeight, currentTip)
 			json.NewEncoder(w).Encode(blocks)
+		})
+
+		// The identifier of the block at one height: a small answer for a
+		// node working out where its chain parts from this one.
+		winMux.HandleFunc("/blockhash", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "application/json")
+			height, err := strconv.ParseInt(r.URL.Query().Get("height"), 10, 64)
+			if err != nil || height < 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			block := GetBlockByHeightFromDB(height)
+			if block.Hash == "" || block.Index != height {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"height": height, "hash": block.Hash})
 		})
 
 		winMux.HandleFunc("/block", func(w http.ResponseWriter, r *http.Request) {
@@ -337,9 +350,9 @@ func Run(frontendAssets embed.FS) {
 			json.NewEncoder(w).Encode(payload)
 		})
 		fmt.Printf("📡 [PORT %d] Initializing HTTP Bulk Sync api channels...\n", Params.SyncPort)
-		if err := http.ListenAndServe(fmt.Sprintf(":%d", Params.SyncPort), winMux); err != nil {
+		if err := serveHTTP(fmt.Sprintf(":%d", Params.SyncPort), winMux); err != nil {
 			if runtime.GOOS == "windows" {
-				_ = http.ListenAndServe(fmt.Sprintf(":%d", Params.SyncFallbackPort), winMux)
+				_ = serveHTTP(fmt.Sprintf(":%d", Params.SyncFallbackPort), winMux)
 			}
 		}
 	}()
@@ -362,7 +375,7 @@ func Run(frontendAssets embed.FS) {
 			"miner_address": strings.TrimSpace(CustomMinerAddress),
 		})
 	})
-	go func() { _ = http.ListenAndServe(fmt.Sprintf(":%d", Params.StatusPort), mirrorMux) }()
+	go func() { _ = serveHTTP(fmt.Sprintf(":%d", Params.StatusPort), mirrorMux) }()
 	fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
 	seedGateways := seedSyncURLs()
 	// Peers remembered from earlier runs are extra sync sources, so a node can
@@ -406,20 +419,7 @@ func Run(frontendAssets embed.FS) {
 		}
 		atomic.StoreInt32(&IsSyncingActive, 1)
 		nextBlockNeed := currentLocalHeight + 1
-		client := &http.Client{Timeout: 3 * time.Second}
-		resp, err := client.Get(fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(activeSyncSeed, "/"), nextBlockNeed))
-		var incomingBatch []Block
-		if err != nil {
-			incomingBatch = requestBatchOverTCPMeshNatively(nextBlockNeed)
-			if len(incomingBatch) == 0 {
-				break
-			}
-		} else {
-			if resp.StatusCode == http.StatusOK {
-				_ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
-			}
-			resp.Body.Close()
-		}
+		incomingBatch := fetchBlockBatch(activeSyncSeed, nextBlockNeed)
 		heightBeforeBatch := currentLocalHeight
 		StateMutex.Lock()
 		for _, block := range incomingBatch {
@@ -680,7 +680,7 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 		// Peers reject blocks dated too far ahead of their clock. If the tip is
 		// already dated ahead, wait for real time to catch up instead of stacking
 		// another future-dated block on it.
-		if heartbeatTemplate && simulatedTime > time.Now().Unix()+HeartbeatMaxFutureDriftSeconds/2 {
+		if heartbeatTemplate && mustWaitForClock(simulatedTime, time.Now().Unix()) {
 			time.Sleep(250 * time.Millisecond)
 			continue
 		}

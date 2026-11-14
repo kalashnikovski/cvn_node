@@ -57,3 +57,6 @@ genesis_anchor_*.txt
 /bundle_source.bat
 /release_package/
 /cvn_node_vault_backups/
+
+# Source packs and reviewers' answers (made by audit/make_audit_pack.py)
+/audit/out/

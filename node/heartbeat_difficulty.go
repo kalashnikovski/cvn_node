@@ -89,6 +89,54 @@ func HashMeetsDifficulty(hashHex string, height int64, difficulty int) bool {
 // follows lastBlock and is dated nextBlockTimestamp.
 func CalculateHeartbeatDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 	gapSeconds := nextBlockTimestamp - lastBlock.Timestamp
+	if !inLaunchWindow(lastBlock.Index + 1) {
+		return heartbeatDifficultyWithGap(lastBlock, gapSeconds)
+	}
+	// The launch window. The dates of the first blocks cannot be trusted to
+	// say how hard they were to find: the genesis block is dated by a
+	// Bitcoin miner's clock, which may be well off, and whoever mines the
+	// first blocks may date them early so that the next ones look late. So
+	// during these blocks no relief is given for a late block, and
+	// difficulty does not go below the starting value. It can still rise.
+	difficulty := heartbeatDifficultyWithGap(lastBlock, 0)
+	if floor := launchFloorAt(lastBlock.Index + 1); int64(difficulty) < floor {
+		return int(floor)
+	}
+	return difficulty
+}
+
+// launchFloorAt is the lowest difficulty allowed at a height inside the
+// launch window: the starting difficulty of the mining algorithm in force
+// there. (Only a test network changes algorithm this early.)
+func launchFloorAt(height int64) int64 {
+	if era := powEraAt(height); era != nil && era.FromHeight > 1 {
+		return era.StartDifficulty
+	}
+	return launchDifficulty()
+}
+
+// HeartbeatLaunchBlocks is the length of the launch window, in blocks: about
+// fifteen minutes.
+const HeartbeatLaunchBlocks = 20
+
+// inLaunchWindow reports whether a block at this height is one of the first
+// blocks of a network that starts the launch way.
+func inLaunchWindow(height int64) bool {
+	return Params.ScheduleAnchored && height >= 1 && height <= HeartbeatLaunchBlocks
+}
+
+// launchDifficulty is the network's starting difficulty.
+func launchDifficulty() int64 {
+	if Params.HeartbeatInitialDifficulty >= 1 {
+		return Params.HeartbeatInitialDifficulty
+	}
+	return HeartbeatInitialDifficulty
+}
+
+// heartbeatDifficultyWithGap is the difficulty rule proper. gapSeconds is how
+// long after lastBlock the next block is dated, as counted for late-block
+// relief.
+func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
 	if !IsHeartbeatHeight(lastBlock.Index) {
 		// lastBlock is not a heartbeat block (the genesis block, or one that
 		// still carries an old leading-zeros difficulty): start from the

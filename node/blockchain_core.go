@@ -2,14 +2,10 @@ package node
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"math/big"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -51,6 +47,12 @@ type UTXOInput struct {
 	SourceTxID string `json:"source_tx_id"`
 	Index      int    `json:"output_index"`
 	Signature  string `json:"signature"`
+	// AmountUnits is the amount of the coin being spent, as the sender
+	// believed it to be when signing. On the launch rules it is part of what
+	// is signed and must match the coin exactly, so a wallet that was told
+	// the wrong amount cannot be made to sign away the difference as a fee.
+	// The first test network does not have this field.
+	AmountUnits int64 `json:"amount_units,omitempty"`
 }
 
 type UTXOOutput struct {
@@ -175,8 +177,6 @@ func GetGlobalMeshMaxHeight(seedURL string) int64 {
 	return 0
 }
 
-var DeferredBlockQueue = make(chan Block, 32)
-
 func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 	trimmed := cleanAddr(uncleMiner)
 	if trimmed == "" || trimmed == "NONE" {
@@ -187,17 +187,16 @@ func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 }
 
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
+	if incomingBlock.Index <= 0 {
+		return // the genesis block is never taken from the network
+	}
 	StateMutex.Lock()
 	currentTip := GetLatestBlockInternal()
 	StateMutex.Unlock()
 
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
-		select {
-		case DeferredBlockQueue <- incomingBlock:
-			log.Printf("📥 [DEFERRED QUEUE] Cached block #%d into bounded memory channel during active re-sync pass.\n", incomingBlock.Index)
-		default:
-			log.Printf("⚠️ [QUEUE SATURATED] Deferred block buffer capacity (32 slots) reached. Dropping block #%d.\n", incomingBlock.Index)
-		}
+		// A pass is comparing chains; it will fetch whatever this block
+		// belongs to.
 		return
 	}
 
@@ -243,6 +242,9 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	}
 }
 func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
+	if incomingBlock.Index <= 0 {
+		return // the genesis block is never taken from the network
+	}
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		return
 	}
@@ -410,256 +412,6 @@ func runChainLagWatchdog() {
 		}
 	}
 }
-func TriggerActiveReSyncPass() {
-	if !atomic.CompareAndSwapInt32(&IsSyncingActive, 0, 1) {
-		return
-	}
-	log.Println("⏳ [SYNC GATEWAY ACTIVE] Consensus engine flag set: TRUE. Local mining loops safely PAUSED.")
-	syncWatchdogTimer := time.NewTimer(90 * time.Second)
-	watchdogDoneChannel := make(chan struct{})
-	go func() {
-		select {
-		case <-syncWatchdogTimer.C:
-			log.Println("🚨 [SYNC WATCHDOG TIMEOUT] Catch-up pass exceeded 90-second allocation limit! Enforcing fallback breakout.")
-			atomic.StoreInt32(&IsSyncingActive, 0)
-			drainAndProcessDeferredQueue()
-		case <-watchdogDoneChannel:
-			syncWatchdogTimer.Stop()
-		}
-	}()
-	defer func() {
-		close(watchdogDoneChannel)
-		atomic.StoreInt32(&IsSyncingActive, 0)
-		log.Println("🟩 [SYNC GATEWAY RELEASED] Consensus engine flag cleared: FALSE. Mining worker pool RESUMED.")
-		drainAndProcessDeferredQueue()
-	}()
-	activeGlobalRecoveryGateways := append(seedSyncURLs(), Params.ExtraSyncURLs...)
-	activeGlobalRecoveryGateways = append(activeGlobalRecoveryGateways, cachedPeerHTTPGateways(activeGlobalRecoveryGateways)...)
-	client := &http.Client{Timeout: 3 * time.Second}
-	var chosenTargetSeedURL string
-	// A peer is a sync source only if its chain is better than ours: more total
-	// work when it reports that, otherwise more blocks (older software). Our own
-	// address can appear in the peer list; it is never better than itself.
-	selectionTip := GetLatestBlockInternal()
-	selectionWork := TotalChainWork()
-	originalTotalWork := new(big.Int).Set(selectionWork)
-	selectedHighestTargetTip := selectionTip.Index
-	var bestPeerWork *big.Int
-	considerSyncSource := func(gateway string) {
-		peerHeight, peerWork := peerChainStatus(gateway)
-		if !peerChainIsBetter(peerHeight, peerWork, selectionTip.Index, selectionWork) {
-			return
-		}
-		better := chosenTargetSeedURL == ""
-		if peerWork != nil {
-			better = better || bestPeerWork == nil || peerWork.Cmp(bestPeerWork) > 0
-		} else {
-			better = better || (bestPeerWork == nil && peerHeight > selectedHighestTargetTip)
-		}
-		if better {
-			chosenTargetSeedURL = gateway
-			selectedHighestTargetTip = peerHeight
-			bestPeerWork = peerWork
-		}
-	}
-	PeerMapMutex.RLock()
-	var freshPeerAddresses []string
-	for activePeerAddress, lastSeenTimestamp := range ActivePeerMap {
-		if time.Since(lastSeenTimestamp) <= 30*time.Second {
-			freshPeerAddresses = append(freshPeerAddresses, activePeerAddress)
-		}
-	}
-	PeerMapMutex.RUnlock()
-	for _, activePeerAddress := range freshPeerAddresses {
-		cleanHostIP, _, _ := net.SplitHostPort(activePeerAddress)
-		considerSyncSource(Params.syncURL(cleanHostIP))
-	}
-	if chosenTargetSeedURL == "" {
-		for _, endpoint := range activeGlobalRecoveryGateways {
-			if skipSeedOnThisMachine(endpoint) && strings.HasSuffix(endpoint, ":"+Params.syncPortText()) {
-				continue
-			}
-			considerSyncSource(endpoint)
-		}
-	}
-	if chosenTargetSeedURL == "" {
-		return
-	}
-	StateMutex.Lock()
-	localTip := GetLatestBlockInternal()
-	localHashesSnapshot := make(map[int64]string)
-	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		bBlocks := tx.Bucket(blocksBucket)
-		if bBlocks == nil {
-			return nil
-		}
-		for h := localTip.Index; h >= 0; h-- {
-			paddedKey := []byte(fmt.Sprintf("%016d", h))
-			if data := bBlocks.Get(paddedKey); data != nil {
-				var blk Block
-				if json.Unmarshal(data, &blk) == nil {
-					localHashesSnapshot[h] = blk.Hash
-				}
-			}
-		}
-		return nil
-	})
-	StateMutex.Unlock()
-	scanHeight := localTip.Index
-	var commonAncestorHeight int64 = -1
-	for scanHeight >= 0 {
-		localHash := localHashesSnapshot[scanHeight]
-		remoteHash, remoteErr := fetchRemoteBlockHeader(client, chosenTargetSeedURL, scanHeight)
-		if remoteErr != nil {
-			remoteHash = fetchRemoteBlockHeaderViaP2P(scanHeight)
-			if remoteHash != "" {
-				remoteErr = nil
-			}
-		}
-		if remoteErr == nil && localHash != "" && localHash == remoteHash {
-			commonAncestorHeight = scanHeight
-			break
-		}
-		scanHeight--
-	}
-	if commonAncestorHeight == -1 {
-		log.Println("🚨 [SYNC FAULT] Unable to establish common ancestor over HTTP or P2P Mesh channels.")
-		return
-	}
-	StateMutex.Lock()
-	shadowTip := GetLatestBlockInternal()
-	var removedLocalBlocks []Block
-	if commonAncestorHeight < shadowTip.Index {
-		if depth := shadowTip.Index - commonAncestorHeight; !reorgDepthAllowed(depth) {
-			StateMutex.Unlock()
-			log.Printf("🛑 [REORG LIMIT] %s offers a chain that parts from ours %d blocks back. This node does not replace more than %d of its own blocks, so it keeps its chain. If this node was left behind on a dead branch, stop it, delete %s and start again.\n", chosenTargetSeedURL, depth, Params.Economics.ReorgLimitBlocks, Params.DatabaseFile)
-			return
-		}
-		// Switching would discard our blocks above the shared one. Do it only if the
-		// peer's branch proves more work than those blocks hold.
-		localBranchWork := new(big.Int).Sub(chainWorkThrough(shadowTip.Index), chainWorkThrough(commonAncestorHeight))
-		StateMutex.Unlock()
-		fetchBatch := func(start int64) []Block {
-			var batch []Block
-			resp, err := client.Get(fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), start))
-			if err != nil {
-				return requestBatchOverTCPMeshNatively(start)
-			}
-			if resp.StatusCode == http.StatusOK {
-				_ = json.NewDecoder(resp.Body).Decode(&batch)
-			}
-			resp.Body.Close()
-			return batch
-		}
-		candidateWork, candidateWins := measureCandidateBranch(fetchBatch, commonAncestorHeight, localHashesSnapshot[commonAncestorHeight], selectedHighestTargetTip, localBranchWork)
-		if !candidateWins {
-			log.Printf("⚖️ [CHAIN WORK] Keeping our chain: %s offers work %s above block #%d, ours holds %s.\n", chosenTargetSeedURL, candidateWork.String(), commonAncestorHeight, localBranchWork.String())
-			return
-		}
-		StateMutex.Lock()
-		if GetLatestBlockInternal().Hash != shadowTip.Hash {
-			// Our tip moved while the peer's branch was being measured; start over
-			// on the next pass rather than act on a stale comparison.
-			StateMutex.Unlock()
-			return
-		}
-		log.Printf("⚖️ [CHAIN WORK] Switching to the branch from %s above block #%d: it proves more work than our %d block(s) there.\n", chosenTargetSeedURL, commonAncestorHeight, shadowTip.Index-commonAncestorHeight)
-		removedLocalBlocks = rollbackChainToHeightLocked(commonAncestorHeight)
-	}
-	// Release here and take the lock only around each batch below. Previously the
-	// lock was still held on several exits from the loop, and the deferred queue
-	// drain then blocked on it forever, freezing the miner, dashboard and API.
-	StateMutex.Unlock()
-	for {
-		currentLocalTip := GetLatestBlockInternal()
-		nextNeededBlock := currentLocalTip.Index + 1
-		if nextNeededBlock > selectedHighestTargetTip {
-			break
-		}
-		requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(chosenTargetSeedURL, "/"), nextNeededBlock)
-		resp, err := client.Get(requestURL)
-		var incomingBatch []Block
-		if err != nil {
-			log.Printf("🔌 [SYNC] Block download from %s failed. Asking connected nodes for block #%d instead.\n", chosenTargetSeedURL, nextNeededBlock)
-			incomingBatch = requestBatchOverTCPMeshNatively(nextNeededBlock)
-			if len(incomingBatch) == 0 {
-				break
-			}
-		} else {
-			if resp.StatusCode == http.StatusOK {
-				_ = json.NewDecoder(resp.Body).Decode(&incomingBatch)
-			}
-			resp.Body.Close()
-			if len(incomingBatch) == 0 {
-				break
-			}
-		}
-		StateMutex.Lock()
-		syncFilterRejected := false
-		for _, block := range incomingBatch {
-			if block.Index == GetLatestBlockInternal().Index+1 {
-				if ValidateBlockSignatures(block) {
-					if block.UncleHash == "" {
-						block.UncleHash = "0000000000000000000000000000000000000000000000000000000000000000"
-					}
-					if block.UncleMiner == "" {
-						block.UncleMiner = "NONE"
-					}
-					SaveBlockToStorageInternal(block)
-				} else {
-					log.Printf("⚠️ [SYNC EXCLUSION FILTER] Rejected invalid block layout sequence at height #%d\n", block.Index)
-					syncFilterRejected = true
-					break
-				}
-			}
-		}
-		StateMutex.Unlock()
-		if syncFilterRejected {
-			break
-		}
-		// Stop if the batch moved us nowhere, rather than re-requesting it forever.
-		if GetLatestBlockInternal().Index < nextNeededBlock {
-			log.Printf("⚠️ [SYNC STALLED] No block applied at height #%d from %s. Ending this pass.\n", nextNeededBlock, chosenTargetSeedURL)
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if len(removedLocalBlocks) > 0 && TotalChainWork().Cmp(originalTotalWork) < 0 {
-		// The peer's branch did not hold up under full validation (or the peer
-		// went away), and what we have now is worse than what we gave up.
-		log.Printf("↩️ [CHAIN WORK] The new branch ended with less work than our previous chain. Restoring our %d block(s) above #%d.\n", len(removedLocalBlocks), commonAncestorHeight)
-		StateMutex.Lock()
-		restoreChainLocked(commonAncestorHeight, removedLocalBlocks)
-		StateMutex.Unlock()
-	}
-}
-func drainAndProcessDeferredQueue() {
-	if atomic.LoadInt32(&IsSyncingActive) == 1 {
-		log.Println("⚠️ [RE-ENTRY BLOCK] Sync engine remains active. Deferring block channel queue drainage pass.")
-		return
-	}
-	StateMutex.Lock()
-	defer StateMutex.Unlock()
-	log.Println("🔄 [DRAIN PHASE INITIALIZED] Sequential block deployment pass streaming from cached memory channel...")
-	queueLength := len(DeferredBlockQueue)
-	for i := 0; i < queueLength; i++ {
-		select {
-		case cachedBlock := <-DeferredBlockQueue:
-			currentTip := GetLatestBlockInternal()
-			if cachedBlock.Index == currentTip.Index+1 {
-				if ValidateBlockSignatures(cachedBlock) && cachedBlock.PrevHash == currentTip.Hash {
-					if SaveBlockToStorageInternal(cachedBlock) {
-						log.Printf("🟩 [QUEUE RECOVERY SUCCESS] Sequentially applied buffered block #%d to disk map storage.\n", cachedBlock.Index)
-						atomic.StoreInt64(&localHeightState, cachedBlock.Index)
-						go BroadcastNewBlock(cachedBlock)
-					}
-				}
-			}
-		default:
-			return
-		}
-	}
-}
 func GetMedianTimePast(lastBlock Block) int64 {
 	var timestamps []int64
 	currentScanBlock := lastBlock
@@ -751,6 +503,13 @@ func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
 	return currentDiff
 }
 func ValidateBlockSignatures(b Block) bool {
+	// There is exactly one genesis block, and the program builds it itself
+	// (see genesis.go). Nothing else at height 0, or below it, is a block.
+	// Without this, a block at height 0 was judged by the rules for the
+	// first test network's earliest blocks, which check almost nothing.
+	if b.Index <= 0 {
+		return b.Index == 0 && b.Hash == buildGenesisBlock().Hash && b.Hash == CalculateHash(b)
+	}
 	if !ValidateBlockByVersion(b) {
 		fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d rejected by version dispatcher gateway rule.\n", b.Index)
 		return false
@@ -921,95 +680,4 @@ func ValidateBlockSignatures(b Block) bool {
 		}
 	}
 	return true
-}
-func requestBatchOverTCPMeshNatively(height int64) []Block {
-	PeerMapMutex.RLock()
-	var fallbackTargets []string
-	for targetIP := range ActivePeerMap {
-		fallbackTargets = append(fallbackTargets, targetIP)
-	}
-	PeerMapMutex.RUnlock()
-	for _, endpointHost := range fallbackTargets {
-		conn, err := net.DialTimeout("tcp", endpointHost, 3*time.Second)
-		if err == nil {
-			lengthBuf := make([]byte, 4)
-			payloadCommand := fmt.Sprintf("GET_BATCH:%d", height)
-			payloadBytes := []byte(payloadCommand)
-			binary.BigEndian.PutUint32(lengthBuf, uint32(len(payloadBytes)))
-			_, _ = conn.Write(lengthBuf)
-			_, _ = conn.Write(payloadBytes)
-			_ = conn.SetReadDeadline(time.Now().Add(6 * time.Second))
-			var frameLength uint32
-			err = binary.Read(conn, binary.BigEndian, &frameLength)
-			if err == nil && frameLength <= MaxPayloadFrameSize { // 👑 CHANNELS EXPANDED PARITY PATCH
-				payloadBuffer := make([]byte, frameLength)
-				_, err = io.ReadFull(conn, payloadBuffer)
-				if err == nil {
-					var blocks []Block
-					if json.Unmarshal(payloadBuffer, &blocks) == nil && len(blocks) > 0 {
-						conn.Close()
-						return blocks
-					}
-				}
-			}
-			conn.Close()
-		}
-	}
-	return nil
-}
-func fetchRemoteBlockHeaderViaP2P(height int64) string {
-	PeerMapMutex.RLock()
-	var fallbackTargets []string
-	for targetIP := range ActivePeerMap {
-		fallbackTargets = append(fallbackTargets, targetIP)
-	}
-	PeerMapMutex.RUnlock()
-	for _, endpointHost := range fallbackTargets {
-		conn, err := net.DialTimeout("tcp", endpointHost, 2*time.Second)
-		if err == nil {
-			lengthBuf := make([]byte, 4)
-			payloadCommand := fmt.Sprintf("GET_BATCH:%d", height)
-			payloadBytes := []byte(payloadCommand)
-			binary.BigEndian.PutUint32(lengthBuf, uint32(len(payloadBytes)))
-			_, _ = conn.Write(lengthBuf)
-			_, _ = conn.Write(payloadBytes)
-			_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-			var frameLength uint32
-			err = binary.Read(conn, binary.BigEndian, &frameLength)
-			if err == nil && frameLength <= MaxPayloadFrameSize { // 👑 CHANNELS EXPANDED PARITY PATCH
-				payloadBuffer := make([]byte, frameLength)
-				_, err = io.ReadFull(conn, payloadBuffer)
-				if err == nil {
-					var blocks []Block
-					if json.Unmarshal(payloadBuffer, &blocks) == nil && len(blocks) > 0 {
-						conn.Close()
-						return blocks[len(blocks)-1].Hash
-					}
-				}
-			}
-			conn.Close()
-		}
-	}
-	return ""
-}
-func fetchRemoteBlockHeader(client *http.Client, seedURL string, height int64) (string, error) {
-	requestURL := fmt.Sprintf("%s/blocks/batch?start=%d", strings.TrimSuffix(seedURL, "/"), height)
-	resp, err := client.Get(requestURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid response code: %d", resp.StatusCode)
-	}
-	var batch []Block
-	if err := json.NewDecoder(resp.Body).Decode(&batch); err != nil {
-		return "", err
-	}
-	for _, block := range batch {
-		if block.Index == height {
-			return block.Hash, nil
-		}
-	}
-	return "", fmt.Errorf("block missing")
 }

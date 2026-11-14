@@ -36,6 +36,9 @@ func VerifyPayloadHMAC(payload []byte, receivedMac []byte) bool {
 }
 
 func VerifyIncomingWireBlock(b Block) bool {
+	if b.Index <= 0 {
+		return false // the genesis block is never taken from the network
+	}
 	if IsHeartbeatHeight(b.Index) {
 		// Cheap pre-check only: the hash must carry the work the block claims.
 		// Whether the claimed difficulty is the right one needs the parent and
@@ -96,13 +99,28 @@ const peerBanDuration = 10 * time.Minute
 // proof of work does not meet that difficulty. All three follow from the
 // block and its parent alone, never from this node's clock, and honest nodes
 // only pass on blocks they have checked and stored. A block that does not
-// attach to our tip cannot be judged here and is never held against a peer.
+// attach to our tip, or stand beside it on the same parent, cannot be judged
+// here and is never held against a peer.
 func blockCarriesBadWork(b Block) bool {
 	tip := GetLatestBlockInternal()
-	if tip.Hash == "" || b.Index != tip.Index+1 || b.PrevHash != tip.Hash || !IsHeartbeatHeight(b.Index) {
+	if tip.Hash == "" || !IsHeartbeatHeight(b.Index) {
 		return false
 	}
-	expected := CalculateNextDifficulty(tip, b.Timestamp)
+	// The block this one builds on, if we hold it: our tip, or our tip's
+	// parent when the block is a rival to our tip.
+	var parent Block
+	switch {
+	case b.Index == tip.Index+1 && b.PrevHash == tip.Hash:
+		parent = tip
+	case b.Index == tip.Index && b.PrevHash == tip.PrevHash && b.Hash != tip.Hash && tip.Index > 0:
+		parent = GetBlockByHeightFromDB(tip.Index - 1)
+		if parent.Hash != b.PrevHash {
+			return false
+		}
+	default:
+		return false
+	}
+	expected := CalculateNextDifficulty(parent, b.Timestamp)
 	return b.Difficulty != expected || b.Hash != CalculateHash(b) || !BlockProofValid(b, expected)
 }
 

@@ -1,8 +1,10 @@
 package node
 
 import (
+	"crypto/elliptic"
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -116,7 +118,31 @@ func checkTransferFormat(tx Transaction) error {
 			return fmt.Errorf("transfer carries fields that are not part of the format")
 		}
 	}
+	// One way to write a key and a signature, so that nobody can rewrite a
+	// signed transfer into a different-looking one that is just as valid.
+	if !isLowerHex(tx.PublicKey, 128) {
+		return fmt.Errorf("public key must be 128 lower-case hex digits")
+	}
+	parts := strings.Split(tx.Signature, "|")
+	if len(parts) != 2 || !isLowerHex(parts[0], 64) || !isLowerHex(parts[1], 64) {
+		return fmt.Errorf("signature must be two numbers of 64 lower-case hex digits each")
+	}
+	s, _ := new(big.Int).SetString(parts[1], 16)
+	if s.Cmp(signatureHalfOrder) > 0 {
+		return fmt.Errorf("signature is not in its lower form")
+	}
 	return nil
+}
+
+// signatureHalfOrder is half the order of the signing curve. Every signature
+// has a mirror image that is equally valid; only the one whose second number
+// is at most this is accepted on the launch rules, and wallets always
+// produce that one.
+var signatureHalfOrder = new(big.Int).Rsh(elliptic.P256().Params().N, 1)
+
+// padHex64 writes a number as exactly 64 lower-case hex digits.
+func padHex64(n *big.Int) string {
+	return fmt.Sprintf("%064x", n)
 }
 
 // rewardTransactionID builds the identifier of a block's reward transaction.

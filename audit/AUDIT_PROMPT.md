@@ -16,8 +16,8 @@ How to get an independent review of the Covenant Standard (CVN) code from severa
 
    | Reviewer can read | Give it |
    |---|---|
-   | The whole thing (about 140,000 tokens) | `cvn_audit_full.txt` with Prompt 1 |
-   | About 60,000 tokens at a time | `cvn_audit_1_rules.txt` with Prompt 1. Then, in a **new** conversation, `cvn_audit_2_program.txt` with Prompt 1. The tests are optional. |
+   | The whole thing (about 160,000 tokens) | `cvn_audit_full.txt` with Prompt 1, or Prompt 3 for a later round |
+   | About 60,000 tokens at a time | `cvn_audit_1_rules.txt` with the prompt. Then, in a **new** conversation, `cvn_audit_2_program.txt` with the prompt. The tests are optional. |
    | Less than that | It cannot review this code usefully. A model that only sees part of a file will invent the rest. |
 
 3. Start each review in a **new conversation** with nothing else in it.
@@ -142,6 +142,125 @@ Rules:
 
 THE OTHER REVIEWERS' FINDINGS FOLLOW.
 ```
+
+---
+
+## Prompt 3: a second round, after fixes
+
+Use this when a round of findings has been fixed and you want the fixed code reviewed. Rebuild the packs first, so they name the new commit. Start a **new conversation** with each reviewer, send this prompt, and attach `cvn_audit_full.txt`.
+
+The pack now contains `audit/FINDINGS_ROUND_1.md`, the record of what the last round found and what was done about it. This prompt tells the reviewer to check those fixes and then to look where nobody has looked yet.
+
+```text
+You are reviewing the source code of a proof-of-work blockchain before it launches. Real people will mine it on their own computers. Your job is to find what is wrong with it. You are not being asked to summarise it, explain it, or say what is good about it.
+
+This is the SECOND round of review. A first round found real problems, including one that let any peer replace the first block and create coins. The authors have changed the code since. Your job has three parts, in this order.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below. It starts with a list of what it contains:
+
+- WHITEPAPER.md: what the rules are meant to be. Read this first.
+- README.md, Installation_Guide.md, MINING_GUIDE.md: what users are told. If the code does not do what users are told, that is a finding.
+- audit/FINDINGS_ROUND_1.md: what the first round found, and what the authors say they did about each finding.
+- Source code in Go, then its tests.
+
+Read all of it before you answer. If your copy is cut off, or you could not read part of it, say so at the very top of your answer and name the last file you saw complete. Do not guess at code you did not see.
+
+WHAT THE PROJECT IS
+
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so nobody can mine early.
+
+The code runs on more than one network, and they do not have the same rules:
+
+- "testnet-1" is an older test network with looser rules. It is being retired. Problems that exist ONLY under testnet-1's rules are low priority.
+- "cvn_testnet" and "devnet" run the LAUNCH RULES: the settings StrictFormat, NoUncles, MaxBlockBytes, AmountsAsUnits, ScheduleAnchored, a PowSchedule with RandomX, and an Economics block. These are what will launch. Review these.
+
+PART 1: ARE THE FIXES REAL?
+
+For every finding marked as fixed in audit/FINDINGS_ROUND_1.md, read the code it concerns and decide for yourself:
+
+- Does the change actually close the hole, in every path that reaches it? A check added at one entry point is no use if another entry point reaches the same code without it.
+- Could an attacker get the same result a slightly different way?
+- Does the test named for it really exercise the attack, or only something like it?
+- Did the fix break or weaken anything else?
+
+Do not accept the authors' description of a fix. Several of the first-round problems existed because code written for one situation was reached from another.
+
+PART 2: WHAT DID THE FIXES ADD?
+
+The fixes brought new rules and new code. New code has new mistakes. Look hard at:
+
+- The rule that a sender signs the amount of every coin spent and the fee (the AmountUnits field, and the fee check in checkTransferAgainstCoins). Can a valid transfer be made invalid by someone else? Can a wallet be left unable to spend?
+- The single written form for keys and signatures. Is there any transfer a correct wallet could produce that is now refused? Any form still accepted in two ways?
+- The launch window: for the first 20 blocks, no relief for a late block and no difficulty below the starting value. What if the starting difficulty is far too high? Can the window be exploited at its last block, or just after it?
+- The rewritten sync pass (sync_pass.go): choosing a source, setting one aside, finding where two chains part by halving the range, the time limit, the rollback and restore. Can a peer make a node set aside every honest source? Give an answer that makes the halving search return the wrong height? Leave the node on a worse chain, or with its bookkeeping wrong after a rollback that is then restored?
+- Refusing a peer that sends invalid work, now also for a rival to the newest block. Can an honest peer be refused? Can an attacker get an honest peer refused by others?
+- The mempool now evicts the cheapest transfer when full. Can that be used to remove someone else's transfer cheaply, again and again?
+- The wait for the Bitcoin anchor (anchor_wait.go), which asks two public websites for a block header. What can those websites, or someone between the node and them, make the node do?
+- Limits added to web requests and block downloads. Is anything still unbounded?
+
+PART 3: WHAT HAS NOBODY LOOKED AT?
+
+The first round concentrated on the network code and the start of the chain. Give the rest the same attention, most important first:
+
+1. Creating coins. Any way for the total of all coins plus the vault to exceed what the schedule has issued: in the reward, the fee split, the vault payout, the sweep, rounding, overflow, a block accepted while paying too much. Work one block through by hand, with real numbers.
+
+2. The Sabbatical sweep and the vault across a reorganisation. When blocks are removed and others applied, is every swept coin, every vault balance and every spent coin put back exactly? Follow one removal and one re-application by hand, for a block that contains a sweep.
+
+3. Honest nodes disagreeing. Any block or transfer one honest node accepts and another rejects: results that depend on a clock, an operating system, the order a map is iterated in, floating-point numbers, how text or JSON is encoded, or what is in a node's memory. Any two different blocks with the same identifier. Any field of a block or transfer that is stored and relayed but not covered by the identifier.
+
+4. Things that only happen late. The reward halving at each seven-year boundary and its end at year 49. The first sweep at year seven. A vault that has grown large. Heights and amounts near the limits of the number types used.
+
+5. The mining rule. The RandomX key and its daily change, the mining blob, how the work value is read and compared, the switch of algorithm at a height. Can a block be valid under one node's key and not another's?
+
+6. The work server for external miners, and the program that starts the fast miner. What can a miner connected to the work server make the node do? What can a file placed where the fast miner is looked for make the program run?
+
+7. The wallets. Anything that could expose a private key, sign something the user did not intend, or send coins to the wrong place. The "combine my coins" action.
+
+8. The guides. Any instruction in README.md, Installation_Guide.md or MINING_GUIDE.md that is wrong, that would lose a user their coins, or that describes something the code does not do.
+
+WHAT IS ALREADY KNOWN - do not report these
+
+- Everything listed under "Not changed, and why" in audit/FINDINGS_ROUND_1.md, unless you can show it is worse than described there.
+- A proof-of-work network with little mining power can be attacked by anyone with more.
+- All balances and transfers are public. A lost private key means lost coins.
+- Which transfers a miner includes is the miner's choice and is not a network rule.
+- The RandomX engine is third-party code and is not included; only CVN's changes to it are.
+- Signatures use ECDSA on the P-256 curve. Report this only if you find an actual weakness in how it is used.
+- Style, naming, comments, and the wording of messages.
+
+HOW TO ANSWER
+
+Start with one line: how much of the material you read, and anything you could not check.
+
+PART 1 first, as a table or list: each first-round finding by its number and title, then one of
+  Fixed / Fixed, but ... / Not fixed / Cannot tell
+with the reason. Where it is anything other than "Fixed", give it as a full finding below.
+
+Then your findings from all three parts together, most serious first. For each one:
+
+  Title: one line.
+  Severity: Critical (coins can be created or taken, or the chain can be split or stopped) / High / Medium / Low.
+  Confidence: Certain (you traced it through the code) / Likely / Possible (you suspect it but could not confirm).
+  Where: the file and the function.
+  What happens: the exact steps. Who does what, with what values, and what each node then does. A finding without concrete steps is a suspicion, and should be marked Possible.
+  Why the code allows it: quote the lines that matter.
+  What to change: the smallest fix you can see.
+
+Then a short list titled "Checked and found sound": the specific things you examined and believe are correct, with one line each saying what you checked. This matters as much as the findings. An empty list will be read as meaning you did not look.
+
+Then a short list titled "Could not determine": things you wanted to check and could not, and what you would need.
+
+Rules for your answer:
+- Be specific or say nothing. "Consider adding more validation" is not a finding.
+- Do not report something as a problem unless you can say what an attacker or an unlucky honest user would do.
+- If you are unsure whether the code does what you think, say so and say what you assumed.
+- Do not soften findings, and do not pad the answer with praise or a summary.
+- A short answer with three real problems is better than a long one with thirty doubtful ones.
+```
+
+After every reviewer has answered Prompt 3, run Prompt 2 again exactly as before, with their new findings.
 
 ---
 

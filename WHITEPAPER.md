@@ -97,7 +97,7 @@ The vault's share is deliberately small. A miner can avoid it by including their
 
 **Minimum coin size.** No coin smaller than 0.0001 CVN can be created, by a transfer or as a mining reward. This keeps the set of unspent coins from filling with dust.
 
-**A block** holds at most 500 transfers and at most 300,000 bytes.
+**A block** holds at most 500 transactions, one of which is its miner's reward, so at most 499 transfers; and at most 300,000 bytes.
 
 **One way to write everything.** A block's identifier is the SHA-256 hash of its header fields, each written with its length in front, so no two different blocks can share an identifier. Every header field has exactly one permitted form. The identifier covers the full contents of every transaction in the block.
 
@@ -184,7 +184,7 @@ Which transfers a miner puts in a block is the miner's choice and is not a netwo
 
 - **A small proof-of-work network can be attacked cheaply.** Anyone with more mining power than everyone else combined can rewrite recent blocks. Total-work selection and the reorganisation limit reduce the damage; they do not remove the risk. It shrinks as honest mining grows.
 - **RandomX favours processors today.** That is an observation about current hardware, not a guarantee. Section 9.2 is the remedy if it changes.
-- **Capacity is modest.** At most 500 transfers every 45 seconds. Block relay between nodes is simple and has not been tested with thousands of nodes.
+- **Capacity is modest.** At most 499 transfers every 45 seconds. Block relay between nodes is simple and has not been tested with thousands of nodes.
 - **A node stores every block.** There is no pruning yet.
 - **No privacy features.** Every transfer and balance is public.
 - **A lost key is a lost wallet.** There is no recovery. The sweep returns only a part of lost coins, slowly, and to miners, not to the person who lost them.

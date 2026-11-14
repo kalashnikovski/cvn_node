@@ -7,8 +7,10 @@ Run from anywhere:
 It writes four text files into audit/out/ (which is not kept in the
 repository):
 
-    cvn_audit_1_rules.txt     the design paper and every file that decides
-                              whether a block or a transfer is valid
+    cvn_audit_1_rules.txt     the design paper, the guides given to users,
+                              the record of the last audit round, and every
+                              file that decides whether a block or a
+                              transfer is valid
     cvn_audit_2_program.txt   networking, mining, wallets and start-up
     cvn_audit_3_tests.txt     the tests
     cvn_audit_full.txt        all three in one file
@@ -30,6 +32,10 @@ OUT = os.path.join(ROOT, "audit", "out")
 
 RULES = [
     "WHITEPAPER.md",
+    "README.md",
+    "Installation_Guide.md",
+    "MINING_GUIDE.md",
+    "audit/FINDINGS_ROUND_1.md",
     "node/chain_params.go",
     "node/amount.go",
     "node/block_format.go",
@@ -54,6 +60,7 @@ PROGRAM = [
     "node/main.go",
     "node/anchor_wait.go",
     "node/mining_readiness.go",
+    "node/sync_pass.go",
     "node/gossip_mesh.go",
     "node/relay_uplink.go",
     "node/peer_cache.go",
@@ -138,7 +145,8 @@ def main():
 
     packs = [
         ("cvn_audit_1_rules.txt", "PACK 1 OF 3 - THE RULES",
-         "The design paper, then every file that decides whether a block or a transfer is valid.", RULES),
+         "The design paper, the guides given to users, the record of the last audit round, then every\n"
+         "file that decides whether a block or a transfer is valid.", RULES),
         ("cvn_audit_2_program.txt", "PACK 2 OF 3 - THE PROGRAM",
          "Networking, mining, wallets and start-up. Nothing here decides validity, but it decides\n"
          "what a node does with what it receives.", PROGRAM),

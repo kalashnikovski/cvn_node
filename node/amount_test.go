@@ -154,7 +154,14 @@ func signedTestTransfer(t *testing.T, privateKey, publicKey, sender, sourceTx st
 		Outputs: []UTXOOutput{{Recipient: "CVN_recipient", Amount: UnitsAmount(units)}},
 	}
 	if Params.StrictFormat {
-		tx.DataSizeKB = 0 // the launch format has no such field
+		// The launch format has no size field, and the sender signs the
+		// amount of the coin spent (50 CVN in every test that uses this)
+		// and the fee.
+		tx.DataSizeKB = 0
+		tx.Inputs[0].AmountUnits = cvn("50")
+		if fee := cvn("50") - units; fee >= 0 {
+			tx.FreeWillOffering = UnitsAmount(fee)
+		}
 	}
 	tx.ID = ComputeTransactionID(tx)
 	r, s, err := SignTransactionPayload(privateKey, tx.ID)

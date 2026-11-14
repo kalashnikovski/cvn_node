@@ -77,7 +77,13 @@ func SignTransactionPayload(privKeyHex string, txData string) (string, string, e
 		return "", "", fmt.Errorf("failed to compute asymmetric ecdsa mathematical signatures: %w", err)
 	}
 
-	return r.Text(16), s.Text(16), nil
+	// Every signature has a mirror image that is equally valid. Wallets
+	// always give the lower one, written at full length, which is the only
+	// form the launch rules accept (see checkTransferFormat).
+	if s.Cmp(signatureHalfOrder) > 0 {
+		s.Sub(curve.Params().N, s)
+	}
+	return padHex64(r), padHex64(s), nil
 }
 
 // VerifyTransactionSignature evaluates an incoming transaction signature using the explicit public key coordinates.

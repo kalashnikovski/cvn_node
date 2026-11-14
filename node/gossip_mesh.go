@@ -296,6 +296,13 @@ func handleIncomingPeerStream(conn net.Conn) {
 				continue
 			}
 			if !VerifyIncomingWireBlock(incomingBlock) {
+				// Under the heartbeat rule this check is the same for every
+				// node (the identifier must be the block's own and its
+				// difficulty at least the minimum), so a block that fails it
+				// is malformed, and counts against the sender.
+				if IsHeartbeatHeight(incomingBlock.Index) {
+					flagMalformedIP(remoteIP)
+				}
 				continue
 			}
 			if blockCarriesBadWork(incomingBlock) {

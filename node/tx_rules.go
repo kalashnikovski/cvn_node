@@ -110,6 +110,9 @@ func transactionSigningBody(tx Transaction) string {
 	for _, input := range tx.Inputs {
 		writeField(&builder, input.SourceTxID)
 		writeField(&builder, strconv.Itoa(input.Index))
+		if Params.StrictFormat {
+			writeField(&builder, strconv.FormatInt(input.AmountUnits, 10))
+		}
 	}
 	writeField(&builder, strconv.Itoa(len(tx.Outputs)))
 	for _, output := range tx.Outputs {
@@ -225,6 +228,9 @@ func CheckTransferStandalone(tx Transaction) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if Params.StrictFormat && tx.Witness != senderAddress {
+		return "", fmt.Errorf("the sender field must hold the sender's address and nothing else")
+	}
 	if tx.ID != ComputeTransactionID(tx) {
 		return "", fmt.Errorf("transfer ID does not match its contents")
 	}
@@ -268,6 +274,9 @@ func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent m
 		if !record.Amount.ValidFee() {
 			return 0, nil, fmt.Errorf("coin %s has an unusable amount", key)
 		}
+		if Params.StrictFormat && input.AmountUnits != record.Amount.Units() {
+			return 0, nil, fmt.Errorf("coin %s holds %s CVN, not the %s CVN the sender signed for", key, FormatUnits(record.Amount.Units()), FormatUnits(input.AmountUnits))
+		}
 		if inputUnits, err = addUnits(inputUnits, record.Amount.Units()); err != nil {
 			return 0, nil, err
 		}
@@ -281,6 +290,11 @@ func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent m
 	}
 	if outputUnits > inputUnits {
 		return 0, nil, fmt.Errorf("transfer pays out %s but only takes in %s", FormatUnits(outputUnits), FormatUnits(inputUnits))
+	}
+	// On the launch rules the fee a sender signs is the fee that is taken:
+	// no more can leave the sender's coins than they agreed to.
+	if Params.StrictFormat && tx.FreeWillOffering.Units() != inputUnits-outputUnits {
+		return 0, nil, fmt.Errorf("transfer states a fee of %s CVN but leaves %s CVN unaccounted for", FormatUnits(tx.FreeWillOffering.Units()), FormatUnits(inputUnits-outputUnits))
 	}
 	return inputUnits - outputUnits, consumed, nil
 }
@@ -474,12 +488,56 @@ func undoBlockCoinChanges(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) {
 // Mempool
 // ---------------------------------------------------------------------------
 
-const (
-	MempoolMaxTransactions = 5000
-	MempoolMaxAge          = 2 * time.Hour
-)
+// MempoolMaxTransactions is how many transfers a node keeps waiting. A
+// variable so tests can make the pool small.
+var MempoolMaxTransactions = 5000
+
+// MempoolMaxAge is how long a transfer may wait before it is dropped.
+const MempoolMaxAge = 2 * time.Hour
 
 var mempoolArrival = make(map[string]time.Time) // guarded by MempoolMatrix's lock
+
+// mempoolFees holds the fee of each waiting transfer, in units. Guarded by
+// MempoolMatrix's lock. An entry may outlive its transfer; it is only ever
+// read for transfers still waiting, and the leftovers are swept out in
+// makeRoomInMempool.
+var mempoolFees = make(map[string]int64)
+
+// makeRoomInMempool removes one waiting transfer to make room for one paying
+// feeUnits, and reports whether it did. Transfers that have waited too long
+// go first; otherwise the lowest fee goes, and among equals the one that
+// arrived last. Nothing is removed for a transfer that pays no more than the
+// lowest fee waiting. The caller holds MempoolMatrix's lock.
+func makeRoomInMempool(feeUnits int64) bool {
+	if len(mempoolFees) > 2*len(MempoolMatrix.Transactions)+1000 {
+		for id := range mempoolFees {
+			if _, waiting := MempoolMatrix.Transactions[id]; !waiting {
+				delete(mempoolFees, id)
+			}
+		}
+	}
+	victim, found := "", false
+	var victimFee int64
+	var victimArrived time.Time
+	for id := range MempoolMatrix.Transactions {
+		arrived := mempoolArrival[id]
+		if time.Since(arrived) > MempoolMaxAge {
+			victim, victimFee, found = id, -1, true
+			break
+		}
+		fee := mempoolFees[id]
+		if !found || fee < victimFee || (fee == victimFee && (arrived.After(victimArrived) || (arrived.Equal(victimArrived) && id > victim))) {
+			victim, victimFee, victimArrived, found = id, fee, arrived, true
+		}
+	}
+	if !found || victimFee >= feeUnits {
+		return false
+	}
+	delete(MempoolMatrix.Transactions, victim)
+	delete(mempoolArrival, victim)
+	delete(mempoolFees, victim)
+	return true
+}
 
 // AdmitTransactionToMempool is the only way a transfer enters the mempool.
 // It applies the same checks a block would, against the current coin set and
@@ -500,9 +558,6 @@ func AdmitTransactionToMempool(tx Transaction) error {
 	if _, known := MempoolMatrix.Transactions[tx.ID]; known {
 		return fmt.Errorf("already known")
 	}
-	if len(MempoolMatrix.Transactions) >= MempoolMaxTransactions {
-		return fmt.Errorf("mempool is full")
-	}
 	if budget := blockTransferBudgetBytes(); budget > 0 && transactionSizeBytes(tx) > budget {
 		return fmt.Errorf("transfer is %d bytes, more than a block can hold (%d)", transactionSizeBytes(tx), budget)
 	}
@@ -513,18 +568,28 @@ func AdmitTransactionToMempool(tx Transaction) error {
 		}
 	}
 	var checkErr error
+	var feeUnits int64
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		bUTXO := dbTx.Bucket(utxoBucket)
 		if bUTXO == nil {
 			checkErr = fmt.Errorf("coin database missing")
 			return nil
 		}
-		_, _, checkErr = checkTransferAgainstCoins(tx, bucketLookup(bUTXO), pendingSpends)
+		feeUnits, _, checkErr = checkTransferAgainstCoins(tx, bucketLookup(bUTXO), pendingSpends)
 		return nil
 	})
 	if checkErr != nil {
 		return checkErr
 	}
+	// A full pool does not turn everything away: that would let anyone keep
+	// it full of fee-less transfers and shut everyone else out for nothing.
+	// A transfer that pays more than the cheapest one waiting takes its place.
+	if len(MempoolMatrix.Transactions) >= MempoolMaxTransactions {
+		if !makeRoomInMempool(feeUnits) {
+			return fmt.Errorf("mempool is full; a transfer paying a higher fee than the lowest one waiting would be taken")
+		}
+	}
+	mempoolFees[tx.ID] = feeUnits
 	MempoolMatrix.Transactions[tx.ID] = tx
 	mempoolArrival[tx.ID] = time.Now()
 	return nil
@@ -815,7 +880,7 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 		if !coin.Amount.Spendable() {
 			continue
 		}
-		inputs = append(inputs, UTXOInput{SourceTxID: coin.TxID, Index: coin.Index})
+		inputs = append(inputs, walletInput(coin))
 		gatheredUnits += coin.Amount.Units()
 		if gatheredUnits >= requiredUnits {
 			break
@@ -836,6 +901,22 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 		feeUnits += changeUnits
 	}
 	return signTransfer(privateKeyHex, publicKeyHex, senderAddress, inputs, outputs, feeUnits)
+}
+
+// looksLikeWalletAddress reports whether text has the form of an address
+// made from a key: "CVN_" and 40 lower-case hex digits.
+func looksLikeWalletAddress(text string) bool {
+	return strings.HasPrefix(text, "CVN_") && isLowerHex(strings.TrimPrefix(text, "CVN_"), 40)
+}
+
+// walletInput names a coin to spend. On the launch rules it also states the
+// coin's amount, which the sender signs.
+func walletInput(coin SpendableCoin) UTXOInput {
+	input := UTXOInput{SourceTxID: coin.TxID, Index: coin.Index}
+	if Params.StrictFormat {
+		input.AmountUnits = coin.Amount.Units()
+	}
+	return input
 }
 
 // signTransfer turns chosen inputs and outputs into a signed transfer.
@@ -917,6 +998,12 @@ func SubmitTransferOverHTTP(gateway string, tx Transaction) error {
 
 // SendTransferFromWallet builds, signs and submits a transfer in one step.
 func SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient string, amountUnits, feeUnits int64) (Transaction, error) {
+	// The rules let coins be sent to any text at all, and coins sent to
+	// something that is not a wallet address are gone for good. A wallet
+	// does not let its user do that by accident.
+	if recipient = strings.TrimSpace(recipient); !looksLikeWalletAddress(recipient) {
+		return Transaction{}, fmt.Errorf("%q is not a CVN wallet address. An address is CVN_ followed by 40 characters, each a digit or a letter from a to f. Nothing was sent", recipient)
+	}
 	senderAddress, err := DeriveAddressFromPublicKey(strings.TrimSpace(publicKeyHex))
 	if err != nil {
 		return Transaction{}, err

@@ -215,6 +215,11 @@ func SaveBlockToStorageInternal(block Block) bool {
 	if GlobalBoltEngine == nil {
 		return false
 	}
+	// The genesis block is written once, when the database is created, and
+	// is never stored again or replaced.
+	if block.Index <= 0 {
+		return false
+	}
 
 	expectedDiff := block.Difficulty
 	if IsHeartbeatHeight(block.Index) {
@@ -427,26 +432,11 @@ func ApplyIncrementalDeltaCacheUpdate(block Block) {
 		StateBalanceCache = make(map[string]int64)
 	}
 
-	// 👑 CRITICAL REMEDY 3: HIGH-SPEED CONCURRENCY DELTA ENGINE
-	// Process inputs (debits) and outputs (credits) only for affected addresses
-	for txIdx, txPayload := range block.Transactions {
-		// Process spending inputs (subtracting balances) for normal transactions
-		if txIdx != 0 {
-			for _, input := range txPayload.Inputs {
-				parentTxBlock := GetBlockByHeightFromDB(block.Index - 1)
-				for _, pTx := range parentTxBlock.Transactions {
-					if pTx.ID == input.SourceTxID && input.Index < len(pTx.Outputs) {
-						sourceRecipient := strings.TrimSpace(pTx.Outputs[input.Index].Recipient)
-						StateBalanceCache[sourceRecipient] -= pTx.Outputs[input.Index].Amount.Units()
-						if StateBalanceCache[sourceRecipient] <= 0 {
-							delete(StateBalanceCache, sourceRecipient)
-						}
-					}
-				}
-			}
-		}
-
-		// Process receiving outputs (adding balances)
+	// This is only called for a block that holds nothing but its reward
+	// transaction, so there are no spent coins to subtract: only the reward
+	// to add. (A block with transfers, a replaced block or a sweep triggers
+	// a full recount instead.)
+	for _, txPayload := range block.Transactions {
 		for _, output := range txPayload.Outputs {
 			sanitizedRecipient := strings.TrimSpace(output.Recipient)
 			if sanitizedRecipient != "" {

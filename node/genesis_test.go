@@ -261,9 +261,9 @@ func TestCVNTestnet(t *testing.T) {
 	if got := CalculateNextDifficulty(genesis, testHeaderTime+60); got != 1000000 {
 		t.Errorf("a first block one minute after the anchor needs difficulty %d, want 1,000,000", got)
 	}
-	// If nobody finds it, the difficulty eases by itself: half after six
-	// minutes, and half again every three.
-	if got := CalculateNextDifficulty(genesis, testHeaderTime+HeartbeatStallAfterSeconds+HeartbeatStallStepSeconds); got != 250000 {
-		t.Errorf("a first block nine minutes after the anchor needs difficulty %d, want 250,000", got)
+	// A Bitcoin block dated well before anyone could start does not make the
+	// start any easier (see audit_launch_test.go).
+	if got := CalculateNextDifficulty(genesis, testHeaderTime+3600); got != 1000000 {
+		t.Errorf("a first block an hour after the anchor needs difficulty %d, want 1,000,000", got)
 	}
 }
