@@ -19,8 +19,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # The node itself is vetted; internal/randomx is third-party code kept as published.
-      - run: go vet .
+      # The project's own code is vetted; internal/randomx is third-party code kept as published.
+      - run: go vet . ./node
       - run: go test ./...
       - name: Build for Linux
         env:

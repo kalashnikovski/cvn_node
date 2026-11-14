@@ -21,7 +21,7 @@ jobs:
         with:
           go-version-file: go.mod
       # The node itself is vetted; internal/randomx is third-party code kept as published.
-      - run: go vet .
+      - run: go vet . ./node
       - run: go test ./...
 
   windows:

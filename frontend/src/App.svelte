@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit, CombineCoinsSubmit } from '../wailsjs/wailsjs/go/main/App.js';
+	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit, CombineCoinsSubmit } from '../wailsjs/wailsjs/go/node/App.js';
 
 	let localHeight = $state(0);
 	let globalTip = $state(0); 

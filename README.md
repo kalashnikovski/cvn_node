@@ -96,6 +96,15 @@ go test ./...
 go build -o cvn_node .
 ```
 
+Where things are:
+
+| Folder | What is in it |
+|---|---|
+| the main folder | The guides, the launcher scripts, and one small start-up file (`main.go`) |
+| `node/` | The program itself: node, miner and wallets, with its tests beside the code they check |
+| `internal/randomx/` | The RandomX engine, kept as published apart from CVN's two settings |
+| `frontend/` | The screens of the Windows desktop wallet |
+
 The project depends on two libraries: [bbolt](https://github.com/etcd-io/bbolt) for storage and [Wails](https://wails.io) for the desktop wallet window.
 
 ## Reporting problems

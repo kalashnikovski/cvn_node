@@ -5,7 +5,7 @@ This folder holds the screens of the Windows desktop wallet (`cvn_node.exe`). Th
 | Path | What it is |
 |---|---|
 | `src/App.svelte` | The wallet's one screen |
-| `wailsjs/` | The link between the screen and the Go program (the functions in `app.go`) |
+| `wailsjs/` | The link between the screen and the Go program (the functions in `node/app.go`) |
 | `dist/` | The built screens. This is what gets packed into `cvn_node.exe`, and it is kept in the repository so that building the wallet does not need Node.js. |
 
 To change the screens, edit `src/`, then run `setup_wallet_deps.bat` in the project folder (it needs [Node.js](https://nodejs.org)) followed by `build_clean.bat`.
