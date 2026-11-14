@@ -568,7 +568,7 @@ avg24h = sum24h / float64(len(hashRateHistory24h))
 hashrateMutex.Unlock()
 if loopCounter%10 == 0 {
 logMutex.Lock()
-liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %.2f MH/s // Ledger Height: #%d", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight))
+liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %s // Ledger Height: #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight))
 logMutex.Unlock()
 }
 logMutex.Lock()
@@ -583,9 +583,9 @@ _ = cmd.Run()
 fmt.Println("================================================================================")
 fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
 fmt.Println("================================================================================")
-fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %.2f MH/s\n", actualBlocksHeight, avg15m)
-fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %.2f MH/s\n", actualCvnBalance, avg1h)
-fmt.Printf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %.2f MH/s\n", CustomMinerAddress, avg24h)
+fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %s\n", actualBlocksHeight, formatHashrate(avg15m))
+fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %s\n", actualCvnBalance, formatHashrate(avg1h))
+fmt.Printf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %s\n", CustomMinerAddress, formatHashrate(avg24h))
 fmt.Println("================================================================================")
 fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 fmt.Println("--------------------------------------------------------------------------------")
@@ -597,7 +597,7 @@ if len(liveTerminalEventLogs) > 12 {
 liveTerminalEventLogs = liveTerminalEventLogs[1:]
 }
 } else {
-fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %.2f MH/s // Height: #%d\n", time.Now().Format("15:04:05"), realHashrateMH, actualBlocksHeight)
+fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %s // Height: #%d\n", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight)
 }
 logMutex.Unlock()
 os.Stdout.Sync()
@@ -740,6 +740,15 @@ Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
 candidateTransactions = append(candidateTransactions, templateTransfers...)
 // The transactions are fixed for this template, so digest them once.
 templateTxDigest := BlockTransactionsDigest(nextIndex, candidateTransactions)
+randomXTemplate := powAlgorithmAt(nextIndex) == PowRandomX
+var randomXKey []byte
+if randomXTemplate {
+var keyKnown bool
+if randomXKey, keyKnown = powKeyFor(nextIndex); !keyKnown {
+time.Sleep(250 * time.Millisecond)
+continue
+}
+}
 for i := 0; i < 100000; i++ {
 nonce++
 atomic.AddUint64(&globalHashCount, 1)
@@ -766,7 +775,19 @@ UncleMiner:   templateUncleMiner,
 }
 // 👑 ABSOLUTE CONGRUENCE PASS: Calculate hash using canonical method blueprint safely
 computedHashHex := CalculateHashWithTxDigest(mockTemplateBlock, templateTxDigest)
-if (heartbeatTemplate && computedHashHex <= heartbeatTargetHex) || (!heartbeatTemplate && strings.HasPrefix(computedHashHex, targetPrefix)) {
+solved := false
+if randomXTemplate {
+// The identifier is cheap; the work is its RandomX hash under this
+// height's key.
+if workHex, ok := randomXMine(workerID, randomXKey, computedHashHex); ok {
+solved = workHex <= heartbeatTargetHex
+} else {
+time.Sleep(200 * time.Millisecond)
+}
+} else {
+solved = (heartbeatTemplate && computedHashHex <= heartbeatTargetHex) || (!heartbeatTemplate && strings.HasPrefix(computedHashHex, targetPrefix))
+}
+if solved {
 StateMutex.RLock()
 latestOnDiskTip := GetLatestBlockInternal()
 StateMutex.RUnlock()
@@ -799,7 +820,7 @@ fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", mockTem
 // 👑 FIXED SERIAL SHUTDOWN OVERRIDE: Saves block data safely without context teardowns
 if SaveBlockToStorage(mockTemplateBlock) {
 logMutex.Lock()
-logLine := fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %.2f MH/s", time.Now().Format("15:04:05"), mockTemplateBlock.Index, mockTemplateBlock.Hash[:16], currentLiveHashrateTrack)
+logLine := fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %s", time.Now().Format("15:04:05"), mockTemplateBlock.Index, mockTemplateBlock.Hash[:16], formatHashrate(currentLiveHashrateTrack))
 liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)
 logMutex.Unlock()
 } else {

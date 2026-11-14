@@ -276,7 +276,7 @@ func candidateBlockProofValid(block Block) bool {
 			return false
 		}
 	}
-	return block.Hash == CalculateHash(block) && HashMeetsDifficulty(block.Hash, block.Index, claimed)
+	return block.Hash == CalculateHash(block) && BlockProofValid(block, claimed)
 }
 
 // measureCandidateBranch downloads a peer's branch above the shared block and

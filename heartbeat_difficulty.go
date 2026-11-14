@@ -79,7 +79,7 @@ func HashMeetsDifficulty(hashHex string, height int64, difficulty int) bool {
 		}
 		return strings.HasPrefix(hashHex, strings.Repeat("0", difficulty))
 	}
-	if len(hashHex) != 64 || difficulty < HeartbeatMinDifficulty {
+	if len(hashHex) != 64 || int64(difficulty) < minDifficultyAt(height) {
 		return false
 	}
 	return hashHex <= HeartbeatTargetHex(difficulty)
@@ -94,10 +94,19 @@ func CalculateHeartbeatDifficulty(lastBlock Block, nextBlockTimestamp int64) int
 		// still carries an old leading-zeros difficulty): start from the
 		// network's initial difficulty.
 		initial := Params.HeartbeatInitialDifficulty
-		if initial < HeartbeatMinDifficulty {
+		if initial < 1 {
 			initial = HeartbeatInitialDifficulty
 		}
+		if Params.ScheduleAnchored {
+			return int(heartbeatRetargetAnchored(initial, HeartbeatTargetSeconds, gapSeconds, 0, minDifficultyAt(lastBlock.Index+1)))
+		}
 		return int(heartbeatRetarget(initial, HeartbeatTargetSeconds, gapSeconds))
+	}
+	minimum := minDifficultyAt(lastBlock.Index + 1)
+	if era := powEraStartingAt(lastBlock.Index + 1); era != nil && era.StartDifficulty > 0 {
+		// The mining algorithm changes at this block, so the parent's
+		// difficulty does not carry over: restart from the era's own value.
+		return int(heartbeatRetargetAnchored(era.StartDifficulty, HeartbeatTargetSeconds, gapSeconds, 0, minimum))
 	}
 	solveSeconds := HeartbeatTargetSeconds
 	if grandParent := GetBlockByHeightFromDB(lastBlock.Index - 1); grandParent.Hash != "" {
@@ -111,7 +120,7 @@ func CalculateHeartbeatDifficulty(lastBlock Block, nextBlockTimestamp int64) int
 		// long block 1 took to find.
 		solveSeconds = HeartbeatTargetSeconds
 	}
-	return int(heartbeatRetargetAnchored(int64(lastBlock.Difficulty), solveSeconds, gapSeconds, scheduleDriftSeconds(lastBlock)))
+	return int(heartbeatRetargetAnchored(int64(lastBlock.Difficulty), solveSeconds, gapSeconds, scheduleDriftSeconds(lastBlock), minimum))
 }
 
 // scheduleDriftSeconds says how far the chain is from its schedule at
@@ -152,7 +161,10 @@ const (
 //
 //	difficulty * (1 + (target - solve)/(target*window)
 //	                - drift/(target*window*damping))      drift term capped
-func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds, driftSeconds int64) int64 {
+func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds, driftSeconds, minimumDifficulty int64) int64 {
+	if minimumDifficulty < 1 {
+		minimumDifficulty = 1
+	}
 	if parentSolveSeconds < 1 {
 		parentSolveSeconds = 1
 	}
@@ -187,8 +199,8 @@ func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds,
 		}
 		difficulty >>= uint(halvings)
 	}
-	if difficulty < HeartbeatMinDifficulty {
-		difficulty = HeartbeatMinDifficulty
+	if difficulty < minimumDifficulty {
+		difficulty = minimumDifficulty
 	}
 	if difficulty > HeartbeatMaxDifficulty {
 		difficulty = HeartbeatMaxDifficulty

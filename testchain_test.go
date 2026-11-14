@@ -24,6 +24,13 @@ func startTestChain(t *testing.T, network string) {
 	if err := SelectNetwork(network); err != nil {
 		t.Fatalf("select network: %v", err)
 	}
+	// Tests of the chain's rules mine with the fast hash, so that a test
+	// chain of dozens of blocks takes a second. RandomX itself, and its place
+	// in the rules, are tested separately (pow_test.go, internal/randomx).
+	if len(Params.PowSchedule) > 0 {
+		Params.PowSchedule = nil
+		Params.HeartbeatInitialDifficulty = HeartbeatMinDifficulty
+	}
 	BlockchainFile = filepath.Join(t.TempDir(), "chain.db")
 	InitBoltEngine()
 	t.Cleanup(func() {
@@ -82,9 +89,8 @@ func mineTestBlock(t *testing.T, timestamp int64, miner string, transfers []Tran
 	digest := BlockTransactionsDigest(index, block.Transactions)
 	for nonce := int64(0); ; nonce++ {
 		block.Nonce = nonce
-		hash := CalculateHashWithTxDigest(block, digest)
-		if HashMeetsDifficulty(hash, index, difficulty) {
-			block.Hash = hash
+		block.Hash = CalculateHashWithTxDigest(block, digest)
+		if BlockProofValid(block, difficulty) {
 			return block
 		}
 	}

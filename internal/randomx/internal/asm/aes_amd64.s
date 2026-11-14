@@ -1,0 +1,215 @@
+//go:build amd64 && !purego
+
+#include "textflag.h"
+
+TEXT ·FillAes1Rx4(SB),NOSPLIT|NOFRAME,$0-32
+	MOVQ states+0(FP), AX
+	MOVQ keys+8(FP), BX
+	MOVQ output+16(FP), CX
+	MOVQ outputLen+24(FP), DX
+
+    // initial state
+	MOVAPD 0(AX), X0
+	MOVAPD 16(AX), X1
+	MOVAPD 32(AX), X2
+	MOVAPD 48(AX), X3
+
+    // keys: X4-X7
+	MOVAPD 0(BX), X4
+	MOVAPD 16(BX), X5
+	MOVAPD 32(BX), X6
+	MOVAPD 48(BX), X7
+
+loop:
+
+	AESDEC X4, X0
+	AESENC X5, X1
+	AESDEC X6, X2
+    AESENC X7, X3
+
+    // store state onto output
+    MOVAPD X0, 0(CX)
+    MOVAPD X1, 16(CX)
+    MOVAPD X2, 32(CX)
+    MOVAPD X3, 48(CX)
+    ADDQ $64, CX
+
+    // outputLen -= 64, continue if not 0
+    SUBQ $64, DX
+    JNE loop
+
+    // offload initial state
+	MOVAPD X0, 0(AX)
+	MOVAPD X1, 16(AX)
+	MOVAPD X2, 32(AX)
+	MOVAPD X3, 48(AX)
+	RET
+
+
+TEXT ·HashAes1Rx4(SB),NOSPLIT|NOFRAME,$0-40
+	MOVQ initialState+0(FP), AX
+
+    // initial state
+	MOVAPD 0(AX), X0
+	MOVAPD 16(AX), X1
+	MOVAPD 32(AX), X2
+	MOVAPD 48(AX), X3
+
+
+	MOVQ xKeys+8(FP), AX
+	MOVQ output+16(FP), BX
+	MOVQ input+24(FP), CX
+	MOVQ inputLen+32(FP), DX
+
+loop:
+    // input as keys: X4-X7
+	MOVAPD 0(CX), X4
+	MOVAPD 16(CX), X5
+	MOVAPD 32(CX), X6
+	MOVAPD 48(CX), X7
+
+	AESENC X4, X0
+	AESDEC X5, X1
+	AESENC X6, X2
+    AESDEC X7, X3
+
+    ADDQ $64, CX
+    // inputLen -= 64, continue if not 0
+    SUBQ $64, DX
+    JNE loop
+
+    // do encdec1 with both keys!
+	MOVAPD 0(AX), X4
+	MOVAPD 16(AX), X5
+
+    AESENC X4, X0
+    AESDEC X4, X1
+    AESENC X4, X2
+    AESDEC X4, X3
+
+    AESENC X5, X0
+    AESDEC X5, X1
+    AESENC X5, X2
+    AESDEC X5, X3
+
+    // offload into output
+	MOVAPD X0, 0(BX)
+	MOVAPD X1, 16(BX)
+	MOVAPD X2, 32(BX)
+	MOVAPD X3, 48(BX)
+	RET
+
+
+
+TEXT ·MergeAes4Rx4(SB),NOSPLIT|NOFRAME,$0-16
+	MOVQ states+0(FP), AX
+	MOVQ key+8(FP), BX
+
+	MOVAPD 0(AX), X0
+	MOVAPD 16(AX), X1
+	MOVAPD 32(AX), X2
+	MOVAPD 48(AX), X3
+	MOVAPD 0(BX), X4
+	MOVAPD 16(BX), X5
+	MOVAPD 32(BX), X6
+	MOVAPD 48(BX), X7
+
+	AESENC X4, X0
+	AESDEC X4, X1
+	AESENC X4, X2
+    AESDEC X4, X3
+
+	AESENC X5, X0
+	AESDEC X5, X1
+	AESENC X5, X2
+    AESDEC X5, X3
+
+	AESENC X6, X0
+	AESDEC X6, X1
+	AESENC X6, X2
+    AESDEC X6, X3
+
+	AESENC X7, X0
+	AESDEC X7, X1
+	AESENC X7, X2
+    AESDEC X7, X3
+
+	MOVAPD X0, 0(AX)
+	MOVAPD X1, 16(AX)
+	MOVAPD X2, 32(AX)
+	MOVAPD X3, 48(AX)
+	RET
+
+TEXT ·AESRoundTrip_DecEnc(SB),NOSPLIT|NOFRAME,$0-16
+	MOVQ states+0(FP), AX
+	MOVQ keys+8(FP), BX
+
+	MOVAPD 0(AX), X0
+	MOVAPD 16(AX), X1
+	MOVAPD 32(AX), X2
+	MOVAPD 48(AX), X3
+
+	MOVAPD 0(BX), X4
+	MOVAPD 16(BX), X5
+	MOVAPD 32(BX), X6
+	MOVAPD 48(BX), X7
+
+	AESDEC X4, X0
+	AESENC X5, X1
+	AESDEC X6, X2
+    AESENC X7, X3
+
+	MOVAPD X0, 0(AX)
+	MOVAPD X1, 16(AX)
+	MOVAPD X2, 32(AX)
+	MOVAPD X3, 48(AX)
+	RET
+
+
+TEXT ·AESRoundTrip_EncDec(SB),NOSPLIT|NOFRAME,$0-16
+	MOVQ states+0(FP), AX
+	MOVQ keys+8(FP), BX
+
+	MOVAPD 0(AX), X0
+	MOVAPD 16(AX), X1
+	MOVAPD 32(AX), X2
+	MOVAPD 48(AX), X3
+
+	MOVAPD 0(BX), X4
+	MOVAPD 16(BX), X5
+	MOVAPD 32(BX), X6
+	MOVAPD 48(BX), X7
+
+	AESENC X4, X0
+	AESDEC X5, X1
+	AESENC X6, X2
+    AESDEC X7, X3
+
+	MOVAPD X0, 0(AX)
+	MOVAPD X1, 16(AX)
+	MOVAPD X2, 32(AX)
+	MOVAPD X3, 48(AX)
+	RET
+
+
+TEXT ·AESRoundTrip_EncDec1(SB),NOSPLIT|NOFRAME,$0-16
+	MOVQ states+0(FP), AX
+	MOVQ key+8(FP), BX
+
+	MOVAPD 0(AX), X0
+	MOVAPD 16(AX), X1
+	MOVAPD 32(AX), X2
+	MOVAPD 48(AX), X3
+	MOVAPD 0(BX), X4
+
+	AESENC X4, X0
+	AESDEC X4, X1
+	AESENC X4, X2
+    AESDEC X4, X3
+
+	MOVAPD X0, 0(AX)
+	MOVAPD X1, 16(AX)
+	MOVAPD X2, 32(AX)
+	MOVAPD X3, 48(AX)
+	RET
+

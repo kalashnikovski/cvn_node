@@ -78,6 +78,14 @@ type ChainParams struct {
 	// Economics, when set, is the launch reward schedule. When nil the
 	// network uses testnet-1's original schedule.
 	Economics *GenesisEconomics
+
+	// PowSchedule says which mining algorithm applies from which height
+	// (see pow.go). Empty means SHA-256 throughout.
+	PowSchedule []PowEra
+	// KeyEpochBlocks is how often the RandomX key changes, and KeyLagBlocks
+	// how far behind the tip the key block must be.
+	KeyEpochBlocks int64
+	KeyLagBlocks   int64
 }
 
 var testnet1Params = ChainParams{
@@ -130,8 +138,14 @@ var devnetParams = ChainParams{
 	HeartbeatHeight: 1,
 	TxForkHeight:    1,
 
-	// The lowest difficulty, so a single development machine can mine.
-	HeartbeatInitialDifficulty: HeartbeatMinDifficulty,
+	// RandomX from the first block. The key changes once a day (1,920 blocks)
+	// and the key block is always more than 100 blocks behind, matching the
+	// reorganisation limit. Difficulty starts at the minimum so that a single
+	// development machine can mine.
+	PowSchedule:                []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 5000}},
+	KeyEpochBlocks:             1920,
+	KeyLagBlocks:               100,
+	HeartbeatInitialDifficulty: 5000,
 	ScheduleAnchored:           true,
 	Economics:                  &NewGenesisEconomics,
 }

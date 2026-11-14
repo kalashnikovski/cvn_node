@@ -46,6 +46,13 @@ func VerifyIncomingWireBlock(b Block) bool {
 		// Cheap pre-check only: the hash must carry the work the block claims.
 		// Whether the claimed difficulty is the right one needs the parent and
 		// is decided in ValidateBlockSignatures.
+		if powAlgorithmAt(b.Index) == PowRandomX {
+			// A RandomX proof is too costly to check for every block that
+			// arrives. Here only the cheap part is checked; the proof itself
+			// is verified in ValidateBlockSignatures, after the block has
+			// been shown to attach and to claim the right difficulty.
+			return b.Hash == CalculateHash(b) && int64(b.Difficulty) >= minDifficultyAt(b.Index)
+		}
 		if !HashMeetsDifficulty(b.Hash, b.Index, b.Difficulty) {
 			fmt.Printf("🚨 WIRE BLOCK FAULT: Hash signature %s missing difficulty constraints.\n", b.Hash)
 			return false

@@ -14,6 +14,12 @@ func TestDevnetUsesLaunchRules(t *testing.T) {
 	if !Params.ScheduleAnchored || Params.Economics == nil || !Params.AmountsAsUnits {
 		t.Error("devnet must run the launch rules: anchored schedule, launch rewards, whole-unit amounts")
 	}
+	if powAlgorithmAt(1) != PowRandomX || powAlgorithmAt(5000000) != PowRandomX || minDifficultyAt(1) != 5000 {
+		t.Error("devnet must mine with RandomX from block 1, with a minimum difficulty of 5,000")
+	}
+	if Params.KeyEpochBlocks != 1920 || Params.KeyLagBlocks != Params.Economics.ReorgLimitBlocks {
+		t.Error("the RandomX key must change daily and sit beyond the reorganisation limit")
+	}
 	if BlockRewardUnits(0) != 0 || BlockRewardUnits(1) != cvn("50") || BlockRewardUnits(4905600) != cvn("50") || BlockRewardUnits(4905601) != cvn("25") {
 		t.Error("devnet rewards do not follow the launch schedule")
 	}
@@ -32,6 +38,9 @@ func TestTestnet1KeepsItsOriginalRules(t *testing.T) {
 	}
 	if IsHeartbeatHeight(2499) || !IsHeartbeatHeight(2500) {
 		t.Error("testnet-1 heartbeat height changed")
+	}
+	if powAlgorithmAt(1) != PowSHA256 || powAlgorithmAt(7000) != PowSHA256 || minDifficultyAt(7000) != HeartbeatMinDifficulty {
+		t.Error("testnet-1 must keep mining with SHA-256 at its original minimum difficulty")
 	}
 }
 
@@ -87,36 +96,36 @@ func TestRewardScheduleOnAChain(t *testing.T) {
 func TestAnchoredRetarget(t *testing.T) {
 	const d = int64(90000000)
 	target := HeartbeatTargetSeconds
-	onSchedule := heartbeatRetargetAnchored(d, target, 10, 0)
+	onSchedule := heartbeatRetargetAnchored(d, target, 10, 0, HeartbeatMinDifficulty)
 	if onSchedule != d {
 		t.Errorf("on target and on schedule, difficulty moved to %d", onSchedule)
 	}
-	if heartbeatRetargetAnchored(d, target, 10, 0) != heartbeatRetarget(d, target, 10) {
+	if heartbeatRetargetAnchored(d, target, 10, 0, HeartbeatMinDifficulty) != heartbeatRetarget(d, target, 10) {
 		t.Error("with no drift the anchored rule must agree with the plain rule")
 	}
-	ahead := heartbeatRetargetAnchored(d, target, 10, -900) // 20 blocks ahead of schedule
-	behind := heartbeatRetargetAnchored(d, target, 10, 900)
+	ahead := heartbeatRetargetAnchored(d, target, 10, -900, HeartbeatMinDifficulty) // 20 blocks ahead of schedule
+	behind := heartbeatRetargetAnchored(d, target, 10, 900, HeartbeatMinDifficulty)
 	if ahead <= d || behind >= d {
 		t.Errorf("ahead of schedule must raise difficulty (%d) and behind must lower it (%d)", ahead, behind)
 	}
 	// The correction is capped at 1% per block however large the drift.
-	farAhead := heartbeatRetargetAnchored(d, target, 10, -100000000)
-	farBehind := heartbeatRetargetAnchored(d, target, 10, 100000000)
+	farAhead := heartbeatRetargetAnchored(d, target, 10, -100000000, HeartbeatMinDifficulty)
+	farBehind := heartbeatRetargetAnchored(d, target, 10, 100000000, HeartbeatMinDifficulty)
 	if farAhead != d+d/100 || farBehind != d-d/100 {
 		t.Errorf("capped correction gives %d and %d, want %d and %d", farAhead, farBehind, d+d/100, d-d/100)
 	}
 	// It still works at the lowest difficulty, where rounding could hide it.
-	if got := heartbeatRetargetAnchored(HeartbeatMinDifficulty*2, 1, 10, 0); got <= HeartbeatMinDifficulty*2 {
+	if got := heartbeatRetargetAnchored(HeartbeatMinDifficulty*2, 1, 10, 0, HeartbeatMinDifficulty); got <= HeartbeatMinDifficulty*2 {
 		t.Errorf("a fast block at low difficulty did not raise it (%d)", got)
 	}
 	// Limits and stall relief behave as in the plain rule.
-	if got := heartbeatRetargetAnchored(d, target, HeartbeatStallAfterSeconds, 0); got != d/2 {
+	if got := heartbeatRetargetAnchored(d, target, HeartbeatStallAfterSeconds, 0, HeartbeatMinDifficulty); got != d/2 {
 		t.Errorf("at the stall threshold difficulty should halve, got %d", got)
 	}
-	if got := heartbeatRetargetAnchored(d, 100000, 100000000, 100000000); got != HeartbeatMinDifficulty {
+	if got := heartbeatRetargetAnchored(d, 100000, 100000000, 100000000, HeartbeatMinDifficulty); got != HeartbeatMinDifficulty {
 		t.Errorf("difficulty fell below the minimum: %d", got)
 	}
-	if got := heartbeatRetargetAnchored(HeartbeatMaxDifficulty, 1, 10, -100000000); got != HeartbeatMaxDifficulty {
+	if got := heartbeatRetargetAnchored(HeartbeatMaxDifficulty, 1, 10, -100000000, HeartbeatMinDifficulty); got != HeartbeatMaxDifficulty {
 		t.Errorf("difficulty rose above the maximum: %d", got)
 	}
 }
@@ -134,7 +143,7 @@ func simulateChain(anchored bool, blocks int, hashrate func(block int) float64, 
 
 	next := func(gap, drift int64) int64 {
 		if anchored {
-			return heartbeatRetargetAnchored(difficulty, parentSolve, gap, drift)
+			return heartbeatRetargetAnchored(difficulty, parentSolve, gap, drift, HeartbeatMinDifficulty)
 		}
 		return heartbeatRetarget(difficulty, parentSolve, gap)
 	}

@@ -251,7 +251,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		}
 	}
 	
-	if !HashMeetsDifficulty(block.Hash, block.Index, expectedDiff) || block.Hash != CalculateHash(block) {
+	if block.Hash != CalculateHash(block) || !BlockProofValid(block, expectedDiff) {
 		fmt.Printf("🚨 STORAGE REFUSAL: Block #%d failed strict cryptographic verification filters!\n", block.Index)
 		return false
 	}

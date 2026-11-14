@@ -971,7 +971,9 @@ if b.Difficulty != expectedDiff {
 fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDiff)
 return false
 }
-if !HashMeetsDifficulty(b.Hash, b.Index, expectedDiff) || b.Hash != CalculateHash(b) {
+// The cheap check first: the identifier must be the block's own. Only then
+// the proof of work, which under RandomX costs real time.
+if b.Hash != CalculateHash(b) || !BlockProofValid(b, expectedDiff) {
 return false
 }
 if len(b.Transactions) == 0 {
