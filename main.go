@@ -101,6 +101,20 @@ func main() {
 		}
 	}
 
+	// A launch network's genesis block needs its anchor before anything else
+	// can happen (see genesis.go).
+	if err := resolveGenesisAnchor(os.Args); err != nil {
+		fmt.Println("🚨 " + err.Error())
+		os.Exit(1)
+	}
+	// `--show-genesis` prints what identifies this network's starting point.
+	for _, arg := range os.Args {
+		if arg == "--show-genesis" {
+			ShowGenesis()
+			return
+		}
+	}
+
 	// `--randomx-bench` measures this machine's RandomX speed and exits.
 	for _, arg := range os.Args {
 		if arg == "--randomx-bench" {
@@ -136,6 +150,10 @@ func main() {
 	}
 
 	InitBoltEngine()
+	if err := checkStoredGenesis(); err != nil {
+		fmt.Println("🚨 " + err.Error())
+		os.Exit(1)
+	}
 
 	// Sync atomic architecture tracker to database height upon boot
 	StateMutex.RLock()

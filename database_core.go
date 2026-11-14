@@ -47,33 +47,7 @@ func InitBoltEngine() {
 		if bBlocks.Stats().KeyN == 0 {
 			paddedZeroKey := fmt.Sprintf("%016d", int64(0))
 
-			genesisBlock := Block{
-				Version:      1, 
-				Index:        0,
-				Timestamp:    Params.GenesisTimestamp,
-				Transactions: []Transaction{
-					{
-						Version:          1, 
-						ID:               "TX_GENESIS_FAIR_LAUNCH_POOL",
-						Witness:          "COVENANT_STEWARD_ASSEMBLY",
-						PublicKey:        "GENESIS_VOID_REWARD_POOL",
-						Inputs:           []UTXOInput{},
-						Outputs:          []UTXOOutput{
-							{Recipient: "COVENANT_STEWARD_ASSEMBLY", Amount: UnitsAmount(0)}, // 👑 100% PURE FAIR LAUNCH ARRIVAL
-						},
-						Timestamp:        Params.GenesisTimestamp,
-						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-					},
-				},
-				PrevHash:     "0000000000000000000000000000000000000000000000000000000000000000",
-				Difficulty:   2,
-				Nonce:        0,
-				GuardMatrix:  "",
-				UncleHash:    "0000000000000000000000000000000000000000000000000000000000000000",
-				UncleMiner:   "NONE",
-			}
-
-			genesisBlock.Hash = CalculateHash(genesisBlock)
+			genesisBlock := buildGenesisBlock()
 			genesisData, _ := json.Marshal(genesisBlock)
 			_ = bBlocks.Put([]byte(paddedZeroKey), genesisData)
 			

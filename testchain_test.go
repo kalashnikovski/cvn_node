@@ -17,8 +17,9 @@ import (
 var testCoinbaseCounter int64
 
 // startTestChain opens an empty chain in a temporary database on the named
-// network and restores the previous settings when the test ends.
-func startTestChain(t *testing.T, network string) {
+// network and restores the previous settings when the test ends. Functions in
+// `prepare` run after the network is chosen and before the chain is created.
+func startTestChain(t *testing.T, network string, prepare ...func()) {
 	t.Helper()
 	savedParams := Params
 	if err := SelectNetwork(network); err != nil {
@@ -30,6 +31,11 @@ func startTestChain(t *testing.T, network string) {
 	if len(Params.PowSchedule) > 0 {
 		Params.PowSchedule = nil
 		Params.HeartbeatInitialDifficulty = HeartbeatMinDifficulty
+	}
+	// Any further settings a test needs must be in place before the genesis
+	// block is created.
+	for _, step := range prepare {
+		step()
 	}
 	BlockchainFile = filepath.Join(t.TempDir(), "chain.db")
 	InitBoltEngine()

@@ -59,6 +59,8 @@ type ChainParams struct {
 	WindowsSelfSkipHost string
 
 	GenesisTimestamp int64
+	// Anchor ties the genesis block to a moment in time (see genesis.go).
+	Anchor GenesisAnchor
 
 	// AmountsAsUnits says how amounts are written into blocks: as whole
 	// units when set, as decimal CVN numbers when not (testnet-1 only; see
@@ -133,6 +135,8 @@ var devnetParams = ChainParams{
 	PeerCacheFile: "peers_devnet.json",
 
 	GenesisTimestamp: 1794614400, // 14 November 2026 00:00 UTC
+	// A development network proves nothing about when it started.
+	Anchor: GenesisAnchor{Placeholder: "development network, no anchor, no value"},
 
 	AmountsAsUnits: true,
 

@@ -71,7 +71,9 @@ These are being built on a separate development network (`--network devnet`), wh
   - *Also have:* the built-in miner now uses large memory pages when the system grants them, which on the same processor raised it from about 12,800 to about 16,400 hashes per second. Miners who do nothing special still get the ordinary speed; those who enable large pages get most of the way to a tuned miner without installing anything else.
   - *Missing:* the CVN node does not yet start the fast miner by itself; the two are run side by side. Not yet tried on Linux or across several machines. A plain guide to enabling large pages.
 - [ ] **Limit on deep reorganisations.** Built on devnet: a node will not replace more than 100 of its own blocks, however much work a competing chain shows. Not yet seen in action on a real network.
-- [ ] **Proof that nobody mined early:** the genesis block will contain a value nobody can know before the announced launch time.
+- [ ] **Proof that nobody mined early.**
+  - *Have:* built. A launch network's genesis block carries the hash of a Bitcoin block whose height is announced before that block is mined. Nobody can know that hash in advance, so nobody can build the genesis block, or even prepare to mine on it, before then; anyone can check it against Bitcoin afterwards. The software can be released with the height fixed and the hash still open, so that on launch day every operator supplies the hash themselves and starts at the same moment, with no head start for whoever published the software. `--show-genesis` prints a network's anchor and genesis block.
+  - *Missing:* a launch network to use it on. The Bitcoin height is chosen when a launch is announced.
 
 ## Phase 4: Launch
 
