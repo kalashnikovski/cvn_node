@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -186,5 +187,28 @@ func TestNewGenesisEconomics(t *testing.T) {
 	}
 	if e.SweepDivisor != 5 || e.FeeVaultDivisor != 5 || e.MinOutputUnits != 10000 || e.ReorgLimitBlocks != 100 {
 		t.Error("sweep, fee split, minimum output or reorganisation limit differ from the specification")
+	}
+}
+
+func TestSeedsGivenAtStart(t *testing.T) {
+	t.Setenv("CVN_SEEDS", "")
+	onNetwork(t, "devnet")
+	applySeedOverride([]string{"cvn_node", "--network", "devnet"})
+	if len(Params.SeedHosts) != 0 {
+		t.Fatal("devnet gained seeds without being given any")
+	}
+	applySeedOverride([]string{"cvn_node", "--seeds", "10.0.0.1, 10.0.0.2 ,,bad host,http://x,10.0.0.3:99"})
+	if got := strings.Join(Params.SeedHosts, " "); got != "10.0.0.1 10.0.0.2" {
+		t.Errorf("seeds read as %q", got)
+	}
+	if got := seedSyncURLs(); len(got) != 2 || got[0] != "http://10.0.0.1:18081" {
+		t.Errorf("seed download addresses: %v", got)
+	}
+	// A network that has its own seeds keeps them.
+	onNetwork(t, "testnet-1")
+	before := strings.Join(Params.SeedHosts, " ")
+	applySeedOverride([]string{"cvn_node", "--seeds", "10.9.9.9"})
+	if strings.Join(Params.SeedHosts, " ") != before {
+		t.Error("testnet-1's seeds were replaced from the command line")
 	}
 }

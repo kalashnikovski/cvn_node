@@ -222,6 +222,28 @@ func applyParams() {
 	TxForkActivationHeight = Params.TxForkHeight
 }
 
+// applySeedOverride lets a network that has no built-in seeds be given some
+// when the program starts: `--seeds HOST,HOST,...` or the CVN_SEEDS
+// environment variable. It is how a development network is run across
+// several machines. A network with built-in seeds ignores it.
+func applySeedOverride(args []string) {
+	if len(Params.SeedHosts) > 0 {
+		return
+	}
+	list := argumentValue(args, "--seeds")
+	if list == "" {
+		list = os.Getenv("CVN_SEEDS")
+	}
+	var hosts []string
+	for _, host := range strings.Split(list, ",") {
+		host = strings.TrimSpace(host)
+		if host != "" && len(host) <= 253 && !strings.ContainsAny(host, " /:@") {
+			hosts = append(hosts, host)
+		}
+	}
+	Params.SeedHosts = hosts
+}
+
 // requestedNetworkName reads the network asked for on the command line
 // (`--network NAME`) or, failing that, in CVN_NETWORK.
 func requestedNetworkName(args []string) string {

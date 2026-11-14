@@ -57,8 +57,12 @@ func main() {
 		fmt.Println("🚨 " + err.Error())
 		os.Exit(1)
 	}
+	applySeedOverride(os.Args)
 	if Params.Name != testnet1Params.Name {
 		fmt.Printf("🌐 NETWORK: %s — %s\n", Params.Name, Params.Description)
+		if len(Params.SeedHosts) == 0 {
+			fmt.Println("🌐 This network has no seeds. To join other machines, start every one with --seeds HOST,HOST,...")
+		}
 	}
 
 	for _, arg := range os.Args {
