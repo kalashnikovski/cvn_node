@@ -201,7 +201,7 @@ func TestSeedsGivenAtStart(t *testing.T) {
 	if got := strings.Join(Params.SeedHosts, " "); got != "10.0.0.1 10.0.0.2" {
 		t.Errorf("seeds read as %q", got)
 	}
-	if got := seedSyncURLs(); len(got) != 2 || got[0] != "http://10.0.0.1:18081" {
+	if got := seedSyncURLs(); len(got) != 2 || got[0] != "http://10.0.0.1:28081" {
 		t.Errorf("seed download addresses: %v", got)
 	}
 	// A network that has its own seeds keeps them.

@@ -134,11 +134,11 @@ var devnetParams = ChainParams{
 
 	AuthKey: "CVN_DEVNET_NODE_MESSAGE_KEY_NOT_FOR_REAL_VALUE_2026",
 
-	GossipPort:       18080,
-	SyncPort:         18081,
-	SyncFallbackPort: 19091,
-	StatusPort:       18082,
-	StratumPort:      18083,
+	GossipPort:       28080,
+	SyncPort:         28081,
+	SyncFallbackPort: 29091,
+	StatusPort:       28082,
+	StratumPort:      28083,
 
 	DatabaseFile:  "cvn_devnet.db",
 	PeerCacheFile: "peers_devnet.json",
@@ -170,12 +170,68 @@ var devnetParams = ChainParams{
 	Economics:                  &NewGenesisEconomics,
 }
 
+// cvnTestnetParams is the public test network of the launch rules: the full
+// rehearsal for the real launch. Its coins have no value.
+//
+// It starts the way the real network will: from a Bitcoin block named in
+// advance (see genesis.go). Until that height is announced the network is
+// marked unscheduled and cannot be started. Scheduling it is two edits here,
+// made in the release that announces the start:
+//
+//	Anchor: GenesisAnchor{BitcoinHeight: <the announced height>},
+//
+// and, in a later release once that Bitcoin block exists, its header in
+// Anchor.BitcoinHeader so that newcomers need not supply it.
+var cvnTestnetParams = ChainParams{
+	Name:        "cvn_testnet",
+	Description: "CVN Testnet: the public test network of the launch rules. Its coins have no value",
+
+	AuthKey: "CVN_TESTNET_NODE_MESSAGE_KEY_COINS_HAVE_NO_VALUE_2026",
+
+	GossipPort:       18080,
+	SyncPort:         18081,
+	SyncFallbackPort: 19091,
+	StatusPort:       18082,
+	StratumPort:      18083,
+
+	DatabaseFile:  "cvn_testnet.db",
+	PeerCacheFile: "peers_testnet.json",
+
+	SeedHosts:           []string{"202.137.175.220", "207.148.67.11", "64.177.45.153"},
+	WindowsSelfSkipHost: "202.137.175.220",
+
+	// The genesis block's date is the anchor block's own timestamp, set when
+	// the anchor is supplied.
+	Anchor: GenesisAnchor{Unscheduled: true},
+
+	AmountsAsUnits: true,
+	StrictFormat:   true,
+	NoUncles:       true,
+	MaxBlockBytes:  300000,
+
+	HeartbeatHeight: 1,
+	TxForkHeight:    1,
+
+	// The minimum is what one slow processor thread can still meet in about
+	// a block interval. The start is set for the handful of machines expected
+	// on the first day: about 22,000 hashes per second meets it once every
+	// 45 seconds. Too high corrects itself (difficulty halves after six
+	// minutes without a block); too low hands the first miner a burst of
+	// fast blocks, so the guess errs high.
+	PowSchedule:                []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 5000}},
+	KeyEpochBlocks:             1920,
+	KeyLagBlocks:               100,
+	HeartbeatInitialDifficulty: 1000000,
+	ScheduleAnchored:           true,
+	Economics:                  &NewGenesisEconomics,
+}
+
 // Params is the network this process runs on.
 var Params = testnet1Params
 
 // KnownNetworks lists the names SelectNetwork accepts.
 func KnownNetworks() []string {
-	return []string{testnet1Params.Name, devnetParams.Name}
+	return []string{testnet1Params.Name, cvnTestnetParams.Name, devnetParams.Name}
 }
 
 // SelectNetwork switches this process to the named network. It must be called
@@ -184,6 +240,8 @@ func SelectNetwork(name string) error {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", testnet1Params.Name, "testnet", "mainnet":
 		Params = testnet1Params
+	case cvnTestnetParams.Name, "cvn-testnet", "cvn testnet", "cvntestnet":
+		Params = cvnTestnetParams
 	case devnetParams.Name:
 		Params = devnetParams
 		applyDevnetOverrides()

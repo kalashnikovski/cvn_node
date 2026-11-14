@@ -1,8 +1,12 @@
 package node
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 
@@ -12,29 +16,42 @@ import (
 // THE GENESIS BLOCK AND ITS ANCHOR
 //
 // A fair launch has to be able to show that nobody mined before everyone
-// could. The genesis block of a launch network therefore carries a value that
-// did not exist until the moment of launch: the hash of one particular
-// Bitcoin block, named by its height when the launch is announced, days
-// before that block is mined. Nobody can know a future Bitcoin block's hash,
-// so nobody can build this genesis block, or anything on top of it, early.
-// Anyone can check the anchor against the Bitcoin chain at any later time.
+// could. The genesis block of a launch network therefore carries something
+// that did not exist until the moment of launch: one particular Bitcoin
+// block, named by its height when the launch is announced, days before that
+// block is mined. Nobody can know a future Bitcoin block, so nobody can build
+// this genesis block, or anything on top of it, early. Anyone can check the
+// anchor against the Bitcoin chain at any later time.
 //
-// The anchor is part of the genesis block's header, so it decides the genesis
-// block's identifier, and with it the RandomX key for the first blocks: even
-// preparing to mine is impossible before the anchor exists.
+// The anchor gives the genesis block two things:
+//
+//   - Its identity. The Bitcoin block's hash is written into the genesis
+//     header, so it decides the genesis identifier and, with it, the RandomX
+//     key for the first blocks: even preparing to mine is impossible before
+//     the anchor exists.
+//   - Its date. The genesis block is dated with the Bitcoin block's own
+//     timestamp, so the chain's clock starts at the launch and not at some
+//     date written into the software weeks earlier. Without this the first
+//     miner could date the first blocks far in the past, and the difficulty
+//     rule, seeing days pass between blocks, would drop to its minimum.
+//
+// Both come from the Bitcoin block's 80-byte header, which is what an
+// operator supplies. The header proves itself: its hash must meet the
+// difficulty it states, which nobody can fake without Bitcoin's own mining
+// power.
 //
 // To give no one a head start on launch day, not even whoever publishes the
-// software, a network can be released with the Bitcoin height fixed and the
-// hash still open. When the Bitcoin block appears, every operator supplies its
-// hash themselves (it is public the instant it is mined) and starts at the
-// same moment:
+// software, a network is released with the Bitcoin height fixed and the
+// header still open. When the Bitcoin block appears, every operator supplies
+// its header themselves (it is public the instant the block is mined) and
+// starts at the same moment:
 //
-//	cvn_node --network NAME --genesis-anchor HASH
+//	cvn_node --network NAME --genesis-anchor HEADER
 //
-// or by putting the hash in the file genesis_anchor_NAME.txt. Nodes started
-// with the wrong hash build a different genesis block and simply never meet
-// the real network. Later releases carry the hash, and nobody has to supply
-// it again.
+// or by putting the header in the file genesis_anchor_NAME.txt. Nodes started
+// with a different header build a different genesis block and simply never
+// meet the real network. Later releases carry the header, and nobody has to
+// supply it again.
 //
 // testnet-1 began before this existed. Its genesis block has no anchor and is
 // left exactly as it is.
@@ -42,73 +59,119 @@ import (
 // GenesisAnchor describes how a network's genesis block is tied to a moment
 // in time.
 type GenesisAnchor struct {
-	// BitcoinHeight is the height of the Bitcoin block whose hash is embedded.
-	// It is announced before that block is mined.
+	// BitcoinHeight is the height of the Bitcoin block the genesis block is
+	// anchored to. It is announced before that block is mined.
 	BitcoinHeight int64
-	// BitcoinHash is that block's hash: 64 hex digits. Empty means the block
-	// had not been mined when this software was released, and the hash must
-	// be supplied at first start.
-	BitcoinHash string
+	// BitcoinHeader is that block's header: 160 hex digits. Empty means the
+	// block had not been mined when this software was released, and the
+	// header must be supplied at first start.
+	BitcoinHeader string
+	// Unscheduled marks a launch network whose Bitcoin height has not been
+	// announced yet. Such a network cannot be started at all.
+	Unscheduled bool
 	// Placeholder marks a development network whose genesis block carries a
 	// statement in place of a real anchor. Such a network proves nothing
 	// about when it started and must never carry value.
 	Placeholder string
+
+	// BitcoinHash is the block's hash, worked out from the header.
+	BitcoinHash string
 }
 
 // required reports whether this network needs a real anchor.
-func (a GenesisAnchor) required() bool { return a.BitcoinHeight > 0 }
+func (a GenesisAnchor) required() bool { return a.BitcoinHeight > 0 || a.Unscheduled }
 
-// validBitcoinBlockHash accepts 64 lower-case hex digits that begin with at
-// least sixteen zeros. Every Bitcoin block hash for many years has begun with
-// more than that, so this catches typing errors and pasted nonsense.
-func validBitcoinBlockHash(hash string) bool {
-	if len(hash) != 64 || !strings.HasPrefix(hash, "0000000000000000") {
-		return false
+// bitcoinAnchorMinZeroDigits is how many zero hex digits a Bitcoin block hash
+// must begin with to be accepted as an anchor. Every Bitcoin block for many
+// years has had more; a header with less cannot be a current Bitcoin block.
+const bitcoinAnchorMinZeroDigits = 16
+
+// parseBitcoinHeader checks an 80-byte Bitcoin block header given as hex and
+// returns the block's hash, as Bitcoin explorers show it, and its timestamp.
+func parseBitcoinHeader(headerHex string) (hash string, timestamp int64, err error) {
+	headerHex = strings.ToLower(strings.TrimSpace(headerHex))
+	if len(headerHex) != 160 {
+		return "", 0, fmt.Errorf("a Bitcoin block header is 160 hex digits; this has %d", len(headerHex))
 	}
-	for _, c := range hash {
-		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
-			return false
-		}
+	header, decodeErr := hex.DecodeString(headerHex)
+	if decodeErr != nil {
+		return "", 0, fmt.Errorf("a Bitcoin block header is 160 hex digits; this contains other characters")
 	}
-	return true
+	first := sha256.Sum256(header)
+	second := sha256.Sum256(first[:])
+	// Bitcoin shows a hash with its bytes in reverse order.
+	reversed := make([]byte, len(second))
+	for i, b := range second {
+		reversed[len(second)-1-i] = b
+	}
+	hash = hex.EncodeToString(reversed)
+
+	// The header states its own target in a compact form; the hash, read as
+	// a number, must not exceed it.
+	bits := binary.LittleEndian.Uint32(header[72:76])
+	exponent := uint(bits >> 24)
+	mantissa := new(big.Int).SetUint64(uint64(bits & 0x007fffff))
+	if bits&0x00800000 != 0 || mantissa.Sign() == 0 || exponent < 3 || exponent > 32 {
+		return "", 0, fmt.Errorf("this is not a valid Bitcoin block header")
+	}
+	target := mantissa.Lsh(mantissa, 8*(exponent-3))
+	if new(big.Int).SetBytes(reversed).Cmp(target) > 0 {
+		return "", 0, fmt.Errorf("this header does not carry the proof of work it claims, so it is not a Bitcoin block header (check for a copying error)")
+	}
+	if !strings.HasPrefix(hash, strings.Repeat("0", bitcoinAnchorMinZeroDigits)) {
+		return "", 0, fmt.Errorf("this header carries far less work than a current Bitcoin block (its hash is %s)", hash)
+	}
+	return hash, int64(binary.LittleEndian.Uint32(header[68:72])), nil
 }
 
 func genesisAnchorFileName() string {
 	return "genesis_anchor_" + Params.Name + ".txt"
 }
 
-// resolveGenesisAnchor makes sure the anchor hash is known before a genesis
-// block is built. It looks, in order, at the hash released with the software,
-// at --genesis-anchor on the command line, and at the anchor file.
+// useAnchorHeader makes a checked Bitcoin header this network's anchor: it
+// fixes the anchor's hash and dates the genesis block.
+func useAnchorHeader(headerHex string) error {
+	hash, timestamp, err := parseBitcoinHeader(headerHex)
+	if err != nil {
+		return err
+	}
+	Params.Anchor.BitcoinHeader = strings.ToLower(strings.TrimSpace(headerHex))
+	Params.Anchor.BitcoinHash = hash
+	Params.GenesisTimestamp = timestamp
+	return nil
+}
+
+// resolveGenesisAnchor makes sure the anchor is known before a genesis block
+// is built. It looks, in order, at the header released with the software, at
+// --genesis-anchor on the command line, and at the anchor file.
 func resolveGenesisAnchor(args []string) error {
 	anchor := &Params.Anchor
 	if !anchor.required() {
 		return nil
 	}
-	if anchor.BitcoinHash == "" {
-		supplied := ""
-		for i, arg := range args {
-			if arg == "--genesis-anchor" && i+1 < len(args) {
-				supplied = args[i+1]
-			} else if strings.HasPrefix(arg, "--genesis-anchor=") {
-				supplied = strings.TrimPrefix(arg, "--genesis-anchor=")
-			}
-		}
-		if supplied == "" {
-			if raw, err := os.ReadFile(genesisAnchorFileName()); err == nil {
-				supplied = string(raw)
-			}
-		}
-		anchor.BitcoinHash = strings.ToLower(strings.TrimSpace(supplied))
+	if anchor.BitcoinHeight <= 0 {
+		return fmt.Errorf("the %s network has not been scheduled yet.\n"+
+			"   Its start will be announced as a Bitcoin block height, in a new version of this software", Params.Name)
 	}
-	if anchor.BitcoinHash == "" {
+	supplied := anchor.BitcoinHeader
+	if supplied == "" {
+		supplied = argumentValue(args, "--genesis-anchor")
+	}
+	if supplied == "" {
+		if raw, err := os.ReadFile(genesisAnchorFileName()); err == nil {
+			supplied = string(raw)
+		}
+	}
+	if strings.TrimSpace(supplied) == "" {
 		return fmt.Errorf("the %s network starts from Bitcoin block %d, and this software was released before that block was mined.\n"+
-			"   Once it exists, look up its hash on any Bitcoin block explorer and start with:\n"+
-			"       --network %s --genesis-anchor HASH\n"+
-			"   or put the hash in a file named %s", Params.Name, anchor.BitcoinHeight, Params.Name, genesisAnchorFileName())
+			"   Once it exists, get its header (160 hex digits). Find the block on a Bitcoin block explorer,\n"+
+			"   copy its hash, and open  https://mempool.space/api/block/HASH/header  with that hash.\n"+
+			"   Then start with:\n"+
+			"       --network %s --genesis-anchor HEADER\n"+
+			"   or put the header in a file named %s", Params.Name, anchor.BitcoinHeight, Params.Name, genesisAnchorFileName())
 	}
-	if !validBitcoinBlockHash(anchor.BitcoinHash) {
-		return fmt.Errorf("%q is not a Bitcoin block hash (64 hex digits beginning with zeros). Check it against Bitcoin block %d", anchor.BitcoinHash, anchor.BitcoinHeight)
+	if err := useAnchorHeader(supplied); err != nil {
+		return fmt.Errorf("the anchor for Bitcoin block %d was not accepted: %v", anchor.BitcoinHeight, err)
 	}
 	return nil
 }
@@ -196,9 +259,10 @@ func ShowGenesis() {
 	case anchor.required():
 		fmt.Printf(" Anchored to Bitcoin block: %d\n", anchor.BitcoinHeight)
 		fmt.Printf(" That block's hash:         %s\n", anchor.BitcoinHash)
+		fmt.Printf(" That block's header:       %s\n", anchor.BitcoinHeader)
 		fmt.Println(" To check it yourself, look up that block on any Bitcoin block")
-		fmt.Println(" explorer and compare the hash. This network's genesis block could")
-		fmt.Println(" not have been built before that Bitcoin block was mined.")
+		fmt.Println(" explorer and compare the hash and the time. This network's genesis")
+		fmt.Println(" block could not have been built before that Bitcoin block was mined.")
 	case anchor.Placeholder != "":
 		fmt.Printf(" No anchor: %s\n", anchor.Placeholder)
 	default:

@@ -77,11 +77,9 @@ These are being built on a separate development network (`--network devnet`), wh
 - [ ] **Peers that send bad work are cut off.** Built: a peer that sends a block claiming to extend a node's tip with invalid proof of work is disconnected and refused for 10 minutes. Checking a RandomX proof costs real time, so this stops a peer making nodes do it for nothing. Only what is certain counts: a block from another branch is never held against its sender.
 - [ ] **Limit on deep reorganisations.** Built on devnet: a node will not replace more than 100 of its own blocks, however much work a competing chain shows. Not yet seen in action on a real network.
 - [ ] **Proof that nobody mined early.**
-  - *Have:* built. A launch network's genesis block carries the hash of a Bitcoin block whose height is announced before that block is mined. Nobody can know that hash in advance, so nobody can build the genesis block, or even prepare to mine on it, before then; anyone can check it against Bitcoin afterwards. The software can be released with the height fixed and the hash still open, so that on launch day every operator supplies the hash themselves and starts at the same moment, with no head start for whoever published the software. `--show-genesis` prints a network's anchor and genesis block.
-  - *Missing:* a launch network to use it on. The Bitcoin height is chosen when a launch is announced.
-
-## Phase 4: Launch
-
+  - *Have:* built. A launch network's first block is tied to a Bitcoin block whose height is announced before that block is mined. Miners supply that block's 80-byte header at the start; the node checks the header carries Bitcoin's proof of work, writes its hash into the first block and dates the first block with its timestamp. So nobody can mine, or prepare to mine, before the Bitcoin block exists, and nobody can date the first blocks in the past to pull the difficulty down. The software ships with the height fixed and the header open, so its publisher has no head start either.
+  - *Missing:* a real launch. On the day everyone has to start by hand within moments of the Bitcoin block; a waiting mode that starts by itself would be kinder.
+- [ ] **The CVN Testnet.** Defined (`--network cvn_testnet`): every launch rule, its own ports, files and message key, the three seed nodes, and a starting difficulty of 1,000,000. Not scheduled: it cannot be started until a Bitcoin height is announced in a release.
 - [ ] **Automated tests for every consensus rule.** Started: settings, amounts, chain selection, difficulty and the mining guard are covered and run on every change.
 - [ ] **Public testnet of the launch rules** with outside miners.
 - [ ] **Independent review.**

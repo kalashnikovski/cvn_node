@@ -298,7 +298,7 @@ func TestWorkServerOnlyRunsOnRandomXNetworks(t *testing.T) {
 		t.Error("testnet-1 mines with SHA-256 and must not start a work server")
 	}
 	onNetwork(t, "devnet")
-	if !networkUsesRandomX() || Params.StratumPort != 18083 {
-		t.Error("devnet must offer mining work on port 18083")
+	if !networkUsesRandomX() || Params.StratumPort != 28083 {
+		t.Error("devnet must offer mining work on port 28083")
 	}
 }

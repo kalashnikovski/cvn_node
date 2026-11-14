@@ -159,9 +159,16 @@ The last rule trades one risk for another. It stops a long secret chain from rew
 
 A fair launch has to be able to show that nobody mined before everybody could.
 
-The first block of a launch network contains the hash of one particular Bitcoin block, named by its height when the launch is announced and not yet mined at that time. Nobody can know a future Bitcoin block's hash, so nobody can build the first block, or anything on top of it, early. Because the first RandomX key is the first block's identifier, nobody can even prepare to mine early.
+The first block of a launch network is tied to one particular Bitcoin block, named by its height when the launch is announced and not yet mined at that time. Nobody can know a future Bitcoin block, so nobody can build the first block, or anything on top of it, early.
 
-The software can be published with the Bitcoin height fixed and the hash still unknown. When that Bitcoin block appears, every miner, including the people who wrote the software, reads its hash from the public Bitcoin chain and starts at the same moment.
+The Bitcoin block gives the first block two things:
+
+- **Its identity.** The Bitcoin block's hash is written into the first block, so it decides the first block's identifier. The first RandomX key is that identifier, so nobody can even prepare to mine early.
+- **Its date.** The first block is dated with the Bitcoin block's own timestamp. The chain's clock therefore starts at the launch, not at a date written into the software weeks before. Without this, the first miner could date the first blocks far in the past; the difficulty rule would see days passing between blocks and fall to its minimum, handing that miner a long run of easy blocks.
+
+Both come from the Bitcoin block's 80-byte header, which is what a miner supplies at the start. The header proves itself: its hash has to meet the difficulty it states, which nobody can fake without Bitcoin's own mining power.
+
+The software is published with the Bitcoin height fixed and the header still unknown. When that Bitcoin block appears, every miner, including the people who wrote the software, takes its header from the public Bitcoin chain and starts at the same moment.
 
 Anyone can check the anchor against Bitcoin afterwards: `--show-genesis` prints it.
 

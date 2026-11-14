@@ -87,7 +87,7 @@ Any node answers these in a browser:
 | Lost coins | — | 20% of any coin unmoved for 7 years returns to miners over time |
 | Pre-mine | None | None |
 
-The launch rules are being built on a separate development network (`--network devnet`) and will run as a public testnet before the real launch.
+The launch rules run on a separate development network (`--network devnet`). The public test of them, the CVN Testnet (`--network cvn_testnet`), is defined but not started; its start will be announced as a Bitcoin block height.
 
 ## Building and testing
 
