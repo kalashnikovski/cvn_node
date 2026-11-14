@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -93,10 +94,13 @@ func Run(frontendAssets embed.FS) {
 		}
 	}
 
-	// A launch network's genesis block needs its anchor before anything else
-	// can happen (see genesis.go).
-	if err := resolveGenesisAnchor(os.Args); err != nil {
-		fmt.Println("🚨 " + err.Error())
+	// A launch network's genesis block needs its anchor (see genesis.go). A
+	// network that is scheduled but whose Bitcoin block has not been mined
+	// yet is waited for further down, once it is clear a node is wanted;
+	// the wallets and tools below do not need the genesis block.
+	anchorErr := resolveGenesisAnchor(os.Args)
+	if anchorErr != nil && !errors.Is(anchorErr, errAnchorNotYetKnown) {
+		fmt.Println("🚨 " + anchorErr.Error())
 		os.Exit(1)
 	}
 	// A mistyped miner choice is better refused now than discovered later.
@@ -107,6 +111,10 @@ func Run(frontendAssets embed.FS) {
 	// `--show-genesis` prints what identifies this network's starting point.
 	for _, arg := range os.Args {
 		if arg == "--show-genesis" {
+			if anchorErr != nil {
+				fmt.Println("🚨 " + anchorErr.Error())
+				os.Exit(1)
+			}
 			ShowGenesis()
 			return
 		}
@@ -143,6 +151,12 @@ func Run(frontendAssets embed.FS) {
 		os.Exit(1)
 	}
 	CustomMinerAddress = minerAddress
+
+	// Everything is in order for a node to run. If the network has not
+	// started yet, wait here for its anchor (see anchor_wait.go).
+	if anchorErr != nil {
+		waitForGenesisAnchor(os.Args, 10*time.Second, time.Minute)
+	}
 
 	InitBoltEngine()
 	if err := checkStoredGenesis(); err != nil {

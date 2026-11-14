@@ -157,7 +157,7 @@ The program runs on one network at a time.
 | Network | How to choose it | What it is |
 |---|---|---|
 | `testnet-1` | nothing; it is the default | The public test network |
-| `cvn_testnet` | add `--network cvn_testnet` | The CVN Testnet: the public test of the launch rules. **Not started yet.** Its start will be announced as a Bitcoin block height. |
+| `cvn_testnet` | add `--network cvn_testnet` | The CVN Testnet: the public test of the launch rules. **Not started yet.** Its start will be announced as a Bitcoin block height. Once it is announced, start your miner on it any time beforehand: it waits, and begins by itself at the same moment as everyone else. |
 | `devnet` | add `--network devnet` | The development network for the launch rules. It has no public seeds and may be wiped at any time. |
 
 The same option works for the wallet, for example `./cvn_node --network devnet --wallet` or `LaunchWallet.bat --network devnet`. Each network keeps its own database file and uses its own ports, so they do not interfere.

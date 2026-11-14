@@ -163,12 +163,12 @@ func resolveGenesisAnchor(args []string) error {
 		}
 	}
 	if strings.TrimSpace(supplied) == "" {
-		return fmt.Errorf("the %s network starts from Bitcoin block %d, and this software was released before that block was mined.\n"+
+		return fmt.Errorf("%w: the %s network starts from Bitcoin block %d, and this software was released before that block was mined.\n"+
 			"   Once it exists, get its header (160 hex digits). Find the block on a Bitcoin block explorer,\n"+
 			"   copy its hash, and open  https://mempool.space/api/block/HASH/header  with that hash.\n"+
 			"   Then start with:\n"+
 			"       --network %s --genesis-anchor HEADER\n"+
-			"   or put the header in a file named %s", Params.Name, anchor.BitcoinHeight, Params.Name, genesisAnchorFileName())
+			"   or put the header in a file named %s", errAnchorNotYetKnown, Params.Name, anchor.BitcoinHeight, Params.Name, genesisAnchorFileName())
 	}
 	if err := useAnchorHeader(supplied); err != nil {
 		return fmt.Errorf("the anchor for Bitcoin block %d was not accepted: %v", anchor.BitcoinHeight, err)

@@ -168,7 +168,7 @@ The Bitcoin block gives the first block two things:
 
 Both come from the Bitcoin block's 80-byte header, which is what a miner supplies at the start. The header proves itself: its hash has to meet the difficulty it states, which nobody can fake without Bitcoin's own mining power.
 
-The software is published with the Bitcoin height fixed and the header still unknown. When that Bitcoin block appears, every miner, including the people who wrote the software, takes its header from the public Bitcoin chain and starts at the same moment.
+The software is published with the Bitcoin height fixed and the header still unknown. A node started before that block exists waits for it. When the block appears, every waiting node, including those of the people who wrote the software, takes its header from the public Bitcoin chain and starts within seconds of the others. A node finds the header by asking public Bitcoin block explorers and uses it only when two independent ones agree; an operator who prefers not to rely on them can supply it by hand.
 
 Anyone can check the anchor against Bitcoin afterwards: `--show-genesis` prints it.
 

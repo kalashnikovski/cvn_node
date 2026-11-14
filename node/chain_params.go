@@ -258,6 +258,7 @@ func SelectNetwork(name string) error {
 //
 //	CVN_DEVNET_SWEEP_BLOCKS=30   sweep a coin after 30 blocks instead of 7 years
 //	CVN_DEVNET_VAULT_BLOCKS=100  pay out 1/100 of the vault per block
+//	CVN_DEVNET_ANCHOR_HEIGHT=N   rehearse a launch: start from Bitcoin block N
 //
 // Every node on a devnet must use the same values, and a database made with
 // one setting is not valid under another. No other network reads these.
@@ -270,6 +271,14 @@ func applyDevnetOverrides() {
 		economics.VaultPayoutBlocks = blocks
 	}
 	Params.Economics = &economics
+
+	// CVN_DEVNET_ANCHOR_HEIGHT=N turns devnet into a rehearsal of a launch:
+	// it starts from Bitcoin block N exactly as a launch network does,
+	// waiting for that block if it has not been mined yet.
+	if height, err := strconv.ParseInt(os.Getenv("CVN_DEVNET_ANCHOR_HEIGHT"), 10, 64); err == nil && height > 0 {
+		Params.Anchor = GenesisAnchor{BitcoinHeight: height}
+		Params.GenesisTimestamp = 0
+	}
 }
 
 // applyParams copies the chosen network's values into the variables the rest
