@@ -103,17 +103,17 @@ type ChainParams struct {
 }
 
 // publicSeedHosts are the always-on nodes of the public networks. They keep
-// the chain and pass blocks on; all but the first do not mine. They are
-// spread over several regions so that no single outage takes them all away
-// and so that a miner anywhere has one nearby.
+// the chain and pass blocks on, and none of them mines: a seed is the
+// best-connected place on the network to mine from, and nobody should have
+// that. They are spread over several regions so that no single outage takes
+// them all away and so that a miner anywhere has one nearby.
 var publicSeedHosts = []string{
-	"202.137.175.220", // Melbourne, Australia (also mines)
-	"207.148.67.11",   // Singapore
-	"64.177.44.185",   // Atlanta, United States
-	"149.28.69.173",   // Los Angeles, United States
-	"149.248.54.9",    // Toronto, Canada
-	"95.179.179.191",  // Amsterdam, Netherlands
-	"65.20.67.25",     // Mumbai, India
+	"207.148.67.11",  // Singapore
+	"64.177.44.185",  // Atlanta, United States
+	"149.28.69.173",  // Los Angeles, United States
+	"149.248.54.9",   // Toronto, Canada
+	"95.179.179.191", // Amsterdam, Netherlands
+	"65.20.67.25",    // Mumbai, India
 }
 
 var testnet1Params = ChainParams{
@@ -130,9 +130,7 @@ var testnet1Params = ChainParams{
 	DatabaseFile:  "cvn_mainnet.db",
 	PeerCacheFile: "peers.json",
 
-	SeedHosts:           publicSeedHosts,
-	ExtraSyncURLs:       []string{"http://202.137.175.220:9091"},
-	WindowsSelfSkipHost: "202.137.175.220",
+	SeedHosts: publicSeedHosts,
 
 	GenesisTimestamp: 1790640000,
 
@@ -211,8 +209,7 @@ var cvnTestnetParams = ChainParams{
 	DatabaseFile:  "cvn_testnet.db",
 	PeerCacheFile: "peers_testnet.json",
 
-	SeedHosts:           publicSeedHosts,
-	WindowsSelfSkipHost: "202.137.175.220",
+	SeedHosts: publicSeedHosts,
 
 	// The genesis block's date is the anchor block's own timestamp, set when
 	// the anchor is supplied.

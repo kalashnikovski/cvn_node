@@ -29,7 +29,7 @@ func TestTestnet1SettingsArePinned(t *testing.T) {
 	if Params.AmountsAsUnits {
 		t.Error("testnet-1 writes amounts as decimal numbers; changing that breaks every existing block hash")
 	}
-	hosts := []string{"202.137.175.220", "207.148.67.11", "64.177.44.185", "149.28.69.173", "149.248.54.9", "95.179.179.191", "65.20.67.25"}
+	hosts := []string{"207.148.67.11", "64.177.44.185", "149.28.69.173", "149.248.54.9", "95.179.179.191", "65.20.67.25"}
 	var wantSync, wantGossip []string
 	wantWallet := []string{"http://localhost:8081", "http://localhost:9091"}
 	for _, host := range hosts {

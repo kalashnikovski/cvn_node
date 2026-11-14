@@ -66,13 +66,25 @@ A miner receives a separate coin for every block won, and one transfer can spend
 | Sync and wallet | 8081 | Block download, balances, sending transfers |
 | Status | 8082 | Height and tip of this node |
 
-Seed nodes (all run by the project's maintainer; they are where a new node looks first and have no say over the rules): Melbourne `202.137.175.220`, Singapore `207.148.67.11`, Atlanta `64.177.44.185`, Los Angeles `149.28.69.173`, Toronto `149.248.54.9`, Amsterdam `95.179.179.191`, Mumbai `65.20.67.25`.
+Seed nodes (all run by the project's maintainer; they are where a new node looks first, they have no say over the rules, and none of them mines): Singapore `207.148.67.11`, Atlanta `64.177.44.185`, Los Angeles `149.28.69.173`, Toronto `149.248.54.9`, Amsterdam `95.179.179.191`, Mumbai `65.20.67.25`.
 
 Any node answers these in a browser:
 
 - `http://NODE:8081/block` — current height, block hash and total work
 - `http://NODE:8081/addresses` — balances
 - `http://NODE:8081/` — a simple block explorer
+
+## Fair launch statement
+
+From the maintainer, who wrote this software and runs its seed nodes:
+
+- **No coins have been sold, promised or set aside** for anyone, by any arrangement, and none will be. The first block pays nothing. Every coin there will ever be is paid by the rules to whoever mines a block.
+- **Coins on the test networks carry over to nothing.** `testnet-1`, the CVN Testnet and `devnet` are for testing. Their coins have no value and no claim on any later network, which will start from zero for everyone.
+- **I will mine from the first block, like anyone else,** with one home computer (a 16-core desktop processor) running the programs published here. Its mining address will be published before the start, so that anyone can see what it earned.
+- **The seed nodes do not mine.** They are rented servers that keep the chain and pass blocks on. The computer I mine with is not a seed and has no better place on the network than yours.
+- **The start is announced in advance** as a Bitcoin block height fixed in a tagged release of this software, together with the packages, their SHA-256 sums and the source of the faster miner, so that everybody has the same programs and nobody can begin early. How that works, and how to check it afterwards, is in section 11 of the [design paper](WHITEPAPER.md).
+
+What reviewers found when they tested these claims against the code, and what was done about it, is recorded in [audit/FINDINGS_FAIR_LAUNCH.md](audit/FINDINGS_FAIR_LAUNCH.md).
 
 ## Design in brief
 

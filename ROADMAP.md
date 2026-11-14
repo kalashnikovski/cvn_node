@@ -21,7 +21,7 @@ A box is ticked only when the feature is built **and** has been seen working on 
 
 - [x] **Block and transfer gossip** between all nodes.
 - [x] **Mining without port forwarding.** Nodes behind a home router receive blocks through an outbound connection; routers that support it are configured automatically.
-- [x] **Peers remembered between restarts**, and seven seed nodes on four continents.
+- [x] **Peers remembered between restarts**, and six seed nodes on three continents, none of which mines.
 - [x] **Miner waits when its node is behind**, so it never mines on a stale chain.
 - [ ] **Capacity for a large network.**
   - *Have:* comfortable for roughly 100–150 nodes.
@@ -81,7 +81,7 @@ These are being built on a separate development network (`--network devnet`), wh
   - *Have:* built. A launch network's first block is tied to a Bitcoin block whose height is announced before that block is mined. Miners supply that block's 80-byte header at the start; the node checks the header carries Bitcoin's proof of work, writes its hash into the first block and dates the first block with its timestamp. So nobody can mine, or prepare to mine, before the Bitcoin block exists, and nobody can date the first blocks in the past to pull the difficulty down. The software ships with the height fixed and the header open, so its publisher has no head start either.
   - *Also have:* a waiting mode. A node started before the Bitcoin block exists waits and starts by itself when it appears, so everyone who is waiting starts within seconds of each other. It asks public Bitcoin block explorers and uses a header only when two agree; `--no-anchor-lookup` turns that off for an operator who supplies the header by hand. Rehearsed against a real Bitcoin block on the development network.
   - *Missing:* a real launch. If the anchor block itself is replaced in a rare Bitcoin reorganisation just after it appears, nodes could start from two different blocks and the launch would have to be repeated.
-- [ ] **The CVN Testnet.** Defined (`--network cvn_testnet`): every launch rule, its own ports, files and message key, the seven seed nodes, and a starting difficulty of 1,000,000. Not scheduled: it cannot be started until a Bitcoin height is announced in a release.
+- [ ] **The CVN Testnet.** Defined (`--network cvn_testnet`): every launch rule, its own ports, files and message key, the six seed nodes, and a starting difficulty of 1,000,000. Not scheduled: it cannot be started until a Bitcoin height is announced in a release.
 - [ ] **Automated tests for every consensus rule.** Started: settings, amounts, chain selection, difficulty and the mining guard are covered and run on every change.
 - [ ] **Public testnet of the launch rules** with outside miners.
 - [ ] **Independent review.**

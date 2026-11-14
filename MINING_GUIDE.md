@@ -15,7 +15,14 @@ The built-in miner is what runs unless you ask for the other one. Both pay the s
 
 ### Using the fast miner
 
-1. Download the CVN edition for your system from https://github.com/kalashnikovski/cvn-xmrig/releases
+1. Download the CVN edition for your system from https://github.com/kalashnikovski/cvn-xmrig/releases. The current release is `cvn-6.26.0-2`. Its complete source is in that repository under the same tag (it is XMRig with CVN's two RandomX settings and no donation, under the GNU GPL version 3), so anyone can build it and compare. To check a download, compare its SHA-256 with the release's `SHA256SUMS` file, which reads:
+
+   ```
+   7782052f46500678aa06d5e798ea8e9b0e9ff0febc51a1048559cb280b67fd8d  xmrig-cvn-linux-static-x64.tar.gz
+   60c081d09fdeb3628995d5ce28a13c000372cf93b26dbf55922f2081d5f72a4b  xmrig-cvn-windows-x64.zip
+   ```
+
+   On Windows: `certutil -hashfile xmrig-cvn-windows-x64.zip SHA256`. On Linux: `sha256sum xmrig-cvn-linux-static-x64.tar.gz`.
 2. Unpack it into a folder named `xmrig-cvn` beside the CVN program, so that the folder contains `xmrig.exe` (Windows) or `xmrig` (Linux).
 3. Start the CVN program with `--miner xmrig`:
 

@@ -62,7 +62,7 @@ These are for the person running the launch. Each reviewer said the same things 
 | A6, G1 | Fix the Bitcoin height, and the earliest date its block may carry, in a tagged release, and announce both in a dated public place well ahead. No later change to the network's settings. | The tag's date against the Bitcoin block's date; `--show-genesis`. |
 | G2 | Publish the exact source, the packages and their SHA-256 sums with that release. | Build from the tag and compare. |
 | B5 | Publish the fast miner's complete source, tagged, with builds and their SHA-256 sums, no later than that release. | Build it and compare; compare its speed with the published build. |
-| G3 | Say beforehand that the maintainer will mine from the first block, with which address and roughly how much power, using the published programs. One seed (Melbourne) also mines; say so, or move the mining to a machine that is not a seed. | The first blocks on the explorer. |
-| G4 | State that no coins have been sold, promised or set aside. | The list of addresses after the first day. |
+| G3 | Say beforehand that the maintainer will mine from the first block, with which address and roughly how much power, using the published programs. One seed (Melbourne) also mined. **Done:** it is no longer a seed. No seed mines, and the maintainer's one mining machine joins the network like anyone else's. The statement is in the README. | The first blocks on the explorer. |
+| G4 | State that no coins have been sold, promised or set aside. **Done:** in the README. | The list of addresses after the first day. |
 | G5 | Say who runs each seed, and add seeds run by others as they come forward. | Connect without the listed seeds, with `--connect`. |
-| G6 | State that test-network coins carry over to nothing. A mainnet needs its own name, message key, ports and database file. | The network's settings in the source. |
+| G6 | State that test-network coins carry over to nothing (**done:** in the README). A mainnet needs its own name, message key, ports and database file. | The network's settings in the source. |

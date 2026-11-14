@@ -217,7 +217,7 @@ func TestCVNTestnet(t *testing.T) {
 		}
 	}
 	onNetwork(t, "cvn_testnet")
-	if BlockchainFile != "cvn_testnet.db" || len(Params.SeedHosts) != 7 {
+	if BlockchainFile != "cvn_testnet.db" || len(Params.SeedHosts) != 6 {
 		t.Errorf("database %q, %d seeds", BlockchainFile, len(Params.SeedHosts))
 	}
 	// Every launch rule is on.
