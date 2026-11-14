@@ -1,3 +1,5 @@
+> **Note (November 2026):** this document predates the current design and is being rewritten. Where it differs from [README.md](README.md) or [ROADMAP.md](ROADMAP.md), those are correct. In particular: the chain running today is a test network, the supply figures here are superseded, and coin recycling is designed but not yet built.
+
 # Covenant Standard (CVN) Protocol
 ## Layer-1 Ledger Specification & Monetary Constitution
 Version 1.0 - Production Launch Specification (October 15, 2026)

@@ -1,42 +1,103 @@
-# 💎 Covenant Standard (CVN) Protocol 📡
+# Covenant Standard (CVN)
 
-Covenant Standard (CVN) is a production-grade Layer-1 blockchain protocol engineered in Go using an embedded BoltDB engine (`cvn_mainnet.db`), designed for consumer hardware with a Fair Launch mandate.
+Covenant Standard is a proof-of-work blockchain written from scratch in Go. It is built for fair, open mining on ordinary home computers: no pre-mine, no founder allocation, no investor sale.
 
-## 🌐 1. Executive Summary
-CVN uses an adaptive CPU-optimized difficulty loop to keep validation accessible to household processors and prevent ASIC/capital monopolies.
+> **Status: public test network.** The chain running today is a test network (`testnet-1`). Its coins have no value, and it will be reset before the real launch so that everyone starts from zero at an announced time. Mine it to help test, not to accumulate.
 
-## 🚀 2. Quick-Start Onboarding Framework
+## What works today
 
-### 🪟 Windows Setup (Windows 11)
-* **OS / Setup Environment:** Windows 11 
-* **Headless Miner Launch:** Run `LaunchMiner.bat` as Administrator to generate a wallet, sync, and mine: `.\LaunchMiner.bat`
-* **Desktop Wallet GUI Launch:** Run `LaunchWallet.bat` to open the graphical wallet interface: `.\LaunchWallet.bat`
+- Mining with 45-second blocks; difficulty adjusts on every block.
+- Sending CVN between wallets. Every transfer is signed by its owner and checked by every node.
+- A desktop wallet on Windows and a text wallet on Linux and Windows.
+- Nodes find each other, sync from scratch, and recover from forks without help.
+- No port forwarding needed: a node behind a home router still receives blocks and can mine.
 
-### 🐧 Linux Setup (Ubuntu / Debian Baseline Path)
-* **OS / Setup Environment:** Xubuntu/Ubuntu/Debian. Allow ingress/egress on port **8080** (P2P) and **8081–8082** (HTTP API).
-* **Core Dependencies:** Ensure Go (v1.21+) is installed (`sudo apt install golang`).
-* **Headless Terminal Onboarding:** In your `/cvn_node` directory:
-  ```bash
-  rm -f cvn_mainnet.db miner_config.json cvn_secret_backup.txt
-  go run . --generate-wallet
-  go build -o cvn_miner .
-  ./cvn_miner --connect 202.137.175.220:8081
-  ```
-* **Hardware Resource Control:** Limit CPU core usage via environment variable:
-  ```bash
-  GOMAXPROCS=4 ./cvn_miner --connect 202.137.175.220:8081
-  ```
+See [ROADMAP.md](ROADMAP.md) for what is finished and what is still being built.
 
-## 📡 3. Live Mainnet Telemetry & Seed Node Gateway
-Connects via cross-continental bootstrap anchors:
-* **Melbourne Master Rig:** `202.137.175.220` (Ports 8080/8081)
-* **Singapore Cloud VPS:** `207.148.67.11` (Ports 8080/8081)
-* **Atlanta Cloud VPS:** `64.177.45.153` (Ports 8080/8081)
+## Quick start
 
-## 🤖 4. Deep-Tech Protocol Specifications
-* **Consensus & Storage:** Proof-of-Diligence (PoD) with a 45-second calibration window and ACID-compliant BoltDB storage (`SaveBlockToStorageInternal`).
-* **Concurrency & P2P:** Bidirectional mempool firewall (`sync.RWMutex`), 8-decimal precision transaction templates (`%.8f`), and autonomous peer exchange (`PEER_LIST:` on Port 8080).
+Full step-by-step instructions are in [Installation_Guide.md](Installation_Guide.md). In short:
 
-## 🏛️ 5. Long-Horizon Economic Policy
-* **ASIC-Neutral PoD Optimization (Q2 2027):** Software fork splitting rewards (80% memory-hard CPU / 20% SHA-256 ASIC).
-* **Sabbatical & Jubilee Loops:** Automated decay parameters on stationary balances over 7-year and 49-year scales, routing 20% of stagnant wealth to the `jubilee_vault`.
+### Windows
+
+1. Install the current version of [Go](https://go.dev/dl/).
+2. Download this repository and unpack it.
+3. Run `build_clean.bat`.
+4. Run `LaunchMiner.bat` as Administrator to create a wallet and start mining.
+5. Run `LaunchWallet.bat` for the desktop wallet.
+
+### Linux
+
+```bash
+git clone https://github.com/kalashnikovski/cvn_node
+cd cvn_node
+rm -f miner_config.json
+go build -o cvn_node .
+./cvn_node --generate-wallet
+./cvn_node --miner-address YOUR_CVN_ADDRESS
+```
+
+`--generate-wallet` prints your address and your private key once. **Write the private key down.** It is not saved anywhere, and coins mined to an address cannot be spent without it.
+
+To limit how many processor threads the miner uses:
+
+```bash
+GOMAXPROCS=4 ./cvn_node --miner-address YOUR_CVN_ADDRESS
+```
+
+### The wallet
+
+While the miner runs in one terminal, open another:
+
+```bash
+./cvn_node --wallet
+```
+
+On Windows: `cvn_miner.exe --wallet`, or `LaunchWallet.bat` for the desktop version.
+
+## Network
+
+| | Port | Purpose |
+|---|---|---|
+| Node to node | 8080 | Blocks and transfers |
+| Sync and wallet | 8081 | Block download, balances, sending transfers |
+| Status | 8082 | Height and tip of this node |
+
+Seed nodes: `202.137.175.220`, `207.148.67.11`, `64.177.45.153`.
+
+Any node answers these in a browser:
+
+- `http://NODE:8081/block` — current height, block hash and total work
+- `http://NODE:8081/addresses` — balances
+- `http://NODE:8081/` — a simple block explorer
+
+## Design in brief
+
+| | Test network today | Planned for launch |
+|---|---|---|
+| Block time | 45 seconds | 45 seconds |
+| Mining algorithm | SHA-256 | RandomX, tuned for home processors |
+| Block reward | 50 CVN | 50 CVN, halving every 7 years for 49 years |
+| Total supply | — | 486,727,500 CVN |
+| Fees | Voluntary; zero is allowed | Voluntary; zero is allowed |
+| Lost coins | — | 20% of any coin unmoved for 7 years returns to miners over time |
+| Pre-mine | None | None |
+
+The launch rules are being built on a separate development network (`--network devnet`) and will run as a public testnet before the real launch.
+
+## Building and testing
+
+```bash
+go test ./...
+go build -o cvn_node .
+```
+
+The project depends on two libraries: [bbolt](https://github.com/etcd-io/bbolt) for storage and [Wails](https://wails.io) for the desktop wallet window.
+
+## Reporting problems
+
+Open an issue on GitHub with a screenshot of the miner window and the output of `http://localhost:8081/block`. For anything that could let someone take or create coins, please contact the maintainer privately first.
+
+## Licence
+
+[MIT](LICENSE).

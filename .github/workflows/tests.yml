@@ -1,0 +1,32 @@
+name: Tests
+
+# Runs the test suite and builds every variant on each push and pull request.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build for Linux
+        env:
+          CGO_ENABLED: '0'
+        run: go build -o cvn_node .
+      - name: Build the Windows miner
+        env:
+          CGO_ENABLED: '0'
+          GOOS: windows
+        run: go build -tags server -o cvn_miner.exe .

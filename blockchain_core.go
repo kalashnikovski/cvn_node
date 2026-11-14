@@ -11,7 +11,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -506,10 +505,7 @@ time.Sleep(60 * time.Second)
 if atomic.LoadInt32(&IsSyncingActive) == 1 {
 continue
 }
-gateways := []string{"http://64.177.45.153:8081", "http://207.148.67.11:8081"}
-if runtime.GOOS != "windows" {
-gateways = append(gateways, "http://202.137.175.220:8081")
-}
+gateways := reachableSeedSyncURLs()
 gateways = append(gateways, cachedPeerHTTPGateways(gateways)...)
 StateMutex.RLock()
 localHeight := GetLatestBlockInternal().Index
@@ -555,12 +551,7 @@ atomic.StoreInt32(&IsSyncingActive, 0)
 log.Println("🟩 [SYNC GATEWAY RELEASED] Consensus engine flag cleared: FALSE. Mining worker pool RESUMED.")
 drainAndProcessDeferredQueue()
 }()
-activeGlobalRecoveryGateways := []string{
-"http://202.137.175.220:8081",
-"http://207.148.67.11:8081",
-"http://64.177.45.153:8081",
-"http://202.137.175.220:9091",
-}
+activeGlobalRecoveryGateways := append(seedSyncURLs(), Params.ExtraSyncURLs...)
 activeGlobalRecoveryGateways = append(activeGlobalRecoveryGateways, cachedPeerHTTPGateways(activeGlobalRecoveryGateways)...)
 client := &http.Client{Timeout: 3 * time.Second}
 var chosenTargetSeedURL string
@@ -599,11 +590,11 @@ freshPeerAddresses = append(freshPeerAddresses, activePeerAddress)
 PeerMapMutex.RUnlock()
 for _, activePeerAddress := range freshPeerAddresses {
 cleanHostIP, _, _ := net.SplitHostPort(activePeerAddress)
-considerSyncSource(fmt.Sprintf("http://%s:8081", cleanHostIP))
+considerSyncSource(Params.syncURL(cleanHostIP))
 }
 if chosenTargetSeedURL == "" {
 for _, endpoint := range activeGlobalRecoveryGateways {
-if strings.Contains(endpoint, "202.137.175.220:8081") && runtime.GOOS == "windows" {
+if skipSeedOnThisMachine(endpoint) && strings.HasSuffix(endpoint, ":"+Params.syncPortText()) {
 continue
 }
 considerSyncSource(endpoint)

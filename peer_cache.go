@@ -26,7 +26,6 @@ import (
 // reached them itself, so a peer cannot fill the file with junk.
 
 const (
-	peerCacheFile         = "peers.json"
 	peerCacheMaxEntries   = 100
 	peerCacheMaxAge       = 30 * 24 * time.Hour
 	peerCacheSaveInterval = 30 * time.Second
@@ -63,13 +62,13 @@ func normalizePeerAddress(address string) string {
 }
 
 func loadPeerCache() {
-	raw, err := os.ReadFile(peerCacheFile)
+	raw, err := os.ReadFile(Params.PeerCacheFile)
 	if err != nil {
 		return
 	}
 	var stored []cachedPeer
 	if json.Unmarshal(raw, &stored) != nil {
-		log.Printf("⚠️ [PEER CACHE] %s is unreadable; starting with seeds only.\n", peerCacheFile)
+		log.Printf("⚠️ [PEER CACHE] %s is unreadable; starting with seeds only.\n", Params.PeerCacheFile)
 		return
 	}
 	now := time.Now()
@@ -88,7 +87,7 @@ func loadPeerCache() {
 	count := len(peerCache)
 	peerCacheMutex.Unlock()
 	if count > 0 {
-		announceNetworkStatus(fmt.Sprintf("📒 [PEER CACHE] Loaded %d known peers from %s.", count, peerCacheFile))
+		announceNetworkStatus(fmt.Sprintf("📒 [PEER CACHE] Loaded %d known peers from %s.", count, Params.PeerCacheFile))
 	}
 }
 
@@ -174,11 +173,11 @@ func savePeerCacheIfDirty() {
 		return
 	}
 	// Write to a temporary file first so a crash never leaves half a file.
-	temporary := peerCacheFile + ".tmp"
+	temporary := Params.PeerCacheFile + ".tmp"
 	if err := os.WriteFile(temporary, data, 0644); err != nil {
 		return
 	}
-	if err := os.Rename(temporary, peerCacheFile); err != nil {
+	if err := os.Rename(temporary, Params.PeerCacheFile); err != nil {
 		_ = os.Remove(temporary)
 	}
 }
@@ -214,7 +213,7 @@ func cachedPeerHTTPGateways(alreadyListed []string) []string {
 		if duplicate {
 			continue
 		}
-		gateways = append(gateways, "http://"+net.JoinHostPort(host, "8081"))
+		gateways = append(gateways, Params.syncURL(host))
 		if len(gateways) >= peerCacheSyncGateways {
 			break
 		}

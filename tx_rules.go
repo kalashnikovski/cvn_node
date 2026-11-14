@@ -811,13 +811,7 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amount, 
 // walletNodeGateways are the nodes a wallet asks, in order: the node on this
 // machine first, then the public seeds.
 func walletNodeGateways() []string {
-	return []string{
-		"http://localhost:8081",
-		"http://localhost:9091",
-		"http://64.177.45.153:8081",
-		"http://207.148.67.11:8081",
-		"http://202.137.175.220:8081",
-	}
+	return append(localSyncURLs(), seedSyncURLs()...)
 }
 
 // FetchSpendableCoinsOverHTTP asks a node for an address's unspent coins and

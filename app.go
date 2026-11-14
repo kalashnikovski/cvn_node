@@ -44,7 +44,7 @@ func walletAddressFromConfig() string {
 		}
 	}
 	client := &http.Client{Timeout: 2 * time.Second}
-	if resp, err := client.Get("http://localhost:8082/status"); err == nil {
+	if resp, err := client.Get(localStatusURL()); err == nil {
 		var status map[string]interface{}
 		decodeErr := json.NewDecoder(resp.Body).Decode(&status)
 		resp.Body.Close()

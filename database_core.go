@@ -50,7 +50,7 @@ func InitBoltEngine() {
 			genesisBlock := Block{
 				Version:      1, 
 				Index:        0,
-				Timestamp:    1790640000, 
+				Timestamp:    Params.GenesisTimestamp,
 				Transactions: []Transaction{
 					{
 						Version:          1, 
@@ -61,7 +61,7 @@ func InitBoltEngine() {
 						Outputs:          []UTXOOutput{
 							{Recipient: "COVENANT_STEWARD_ASSEMBLY", Amount: 0.0}, // 👑 100% PURE FAIR LAUNCH ARRIVAL
 						},
-						Timestamp:        1790640000,
+						Timestamp:        Params.GenesisTimestamp,
 						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
 					},
 				},

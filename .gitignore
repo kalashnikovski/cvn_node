@@ -37,3 +37,20 @@ Thumbs.db
 # Peers this node has reached before (local, rebuilt automatically)
 peers.json
 peers.json.tmp
+
+# Wallet screen build dependencies (restored with setup_wallet_deps.bat)
+node_modules/
+frontend/package.json.md5
+
+# Development network files
+peers_devnet.json
+peers_devnet.json.tmp
+
+# Maintainer's own operations scripts and working folders (not part of the project)
+/scripts/
+/testing_suite/
+/backup_ledger.ps1
+/bundle_pure_engine.bat
+/bundle_source.bat
+/release_package/
+/cvn_node_vault_backups/

@@ -15,7 +15,7 @@ func getNetworkAuthSecret() []byte {
 	secret := os.Getenv("CVN_NETWORK_AUTH_TOKEN")
 	if secret == "" {
 		// Secure default baseline token for standard P2P mesh network communication
-		return []byte("COVENANT_STANDARD_MAINNET_IGNITION_AUTHENTICATION_KEY_TOKEN_2026")
+		return []byte(Params.AuthKey)
 	}
 	return []byte(secret)
 }

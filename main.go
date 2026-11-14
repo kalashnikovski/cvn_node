@@ -53,6 +53,15 @@ func initWindowsAnsi() {}
 func main() {
 	initWindowsAnsi()
 
+	// Pick the network before anything opens a file or a connection.
+	if err := SelectNetwork(requestedNetworkName(os.Args)); err != nil {
+		fmt.Println("🚨 " + err.Error())
+		os.Exit(1)
+	}
+	if Params.Name != testnet1Params.Name {
+		fmt.Printf("🌐 NETWORK: %s — %s\n", Params.Name, Params.Description)
+	}
+
 	for _, arg := range os.Args {
 		if arg == "--generate-wallet" {
 			fmt.Println("🔑 Generating secure asymmetric cryptography parameters via CSPRNG...")
@@ -202,7 +211,7 @@ func main() {
 				}
 				PeerMapMutex.RUnlock()
 				if len(peerList) == 0 {
-					peerList = []string{"202.137.175.220:8080 (Melbourne Master)"}
+					peerList = seedGossipAddresses()
 				}
 				json.NewEncoder(w).Encode(peerList)
 				return
@@ -323,10 +332,10 @@ payload := map[string]interface{}{
 }
 json.NewEncoder(w).Encode(payload)
 })
-fmt.Println("📡 [PORT 8081] Initializing HTTP Bulk Sync api channels...")
-if err := http.ListenAndServe(":8081", winMux); err != nil {
+fmt.Printf("📡 [PORT %d] Initializing HTTP Bulk Sync api channels...\n", Params.SyncPort)
+if err := http.ListenAndServe(fmt.Sprintf(":%d", Params.SyncPort), winMux); err != nil {
 if runtime.GOOS == "windows" {
-_ = http.ListenAndServe(":9091", winMux)
+_ = http.ListenAndServe(fmt.Sprintf(":%d", Params.SyncFallbackPort), winMux)
 }
 }
 }()
@@ -349,9 +358,9 @@ json.NewEncoder(w).Encode(map[string]interface{}{
 "miner_address": strings.TrimSpace(CustomMinerAddress),
 })
 })
-go func() { _ = http.ListenAndServe(":8082", mirrorMux) }()
+go func() { _ = http.ListenAndServe(fmt.Sprintf(":%d", Params.StatusPort), mirrorMux) }()
 fmt.Println("🚀 INITIALIZING COVENANT STANDARD BULK SYNC CORES...")
-seedGateways := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
+seedGateways := seedSyncURLs()
 // Peers remembered from earlier runs are extra sync sources, so a node can
 // catch up even when every built-in seed is offline. Only those answering
 // right now are kept, so dead entries do not slow each batch down.
@@ -379,7 +388,7 @@ currentLocalHeight := int64(liveBlock.Index)
 var targetGlobalTip int64 = 0
 var activeSyncSeed string = ""
 for _, endpoint := range seedGateways {
-if strings.Contains(endpoint, "202.137.175.220") && runtime.GOOS == "windows" {
+if skipSeedOnThisMachine(endpoint) {
 continue
 }
 remoteHeight := GetGlobalMeshMaxHeight(endpoint)
@@ -432,7 +441,7 @@ if currentLocalHeight == heightBeforeBatch {
 // back to that point and catch up from there.
 startupForkRecoveryAttempts++
 if startupForkRecoveryAttempts > 3 {
-fmt.Println("\n🚨 [BULK SYNC] Could not rejoin the network automatically. Stop the node, delete cvn_mainnet.db and start again to sync from scratch.")
+fmt.Printf("\n🚨 [BULK SYNC] Could not rejoin the network automatically. Stop the node, delete %s and start again to sync from scratch.\n", Params.DatabaseFile)
 break
 }
 fmt.Printf("\n🔀 [BULK SYNC] Local chain does not match the network after block #%d. Rolling back to the last shared block and re-syncing...\n", currentLocalHeight)
@@ -487,7 +496,7 @@ BalanceCacheMutex.RUnlock()
 if loopCounter == 1 || loopCounter%15 == 0 {
 go func(targetAddress string) {
 client := &http.Client{Timeout: 2 * time.Second}
-resp, err := client.Get(fmt.Sprintf("http://localhost:8081/audit?address=%s", targetAddress))
+resp, err := client.Get(fmt.Sprintf("http://localhost:%d/audit?address=%s", Params.SyncPort, targetAddress))
 if err == nil && resp.StatusCode == http.StatusOK {
 var ledgerPayload map[string]interface{}
 if err := json.NewDecoder(resp.Body).Decode(&ledgerPayload); err == nil {

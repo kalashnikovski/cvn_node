@@ -1,36 +1,81 @@
-﻿name: Upload Production Release Assets
+﻿name: Release
+
+# Builds the Windows and Linux packages and attaches them to a GitHub release
+# whenever a version tag (v1.2.3) is pushed.
 
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  build-windows:
-    name: Compile Standalone Executable
-    runs-on: windows-latest
-
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source Code Repository Context
-        uses: actions/checkout@v4
-
-      - name: Initialize Stable Go Toolchain Environment
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
 
-      - name: Execute High-Performance Standalone Compilation
+  windows:
+    name: Windows package
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build the miner
+        run: go build -tags server -ldflags="-s -w" -o cvn_miner.exe .
+
+      - name: Build the desktop wallet
+        run: go build -tags "desktop,production" -ldflags="-s -w -H windowsgui" -o cvn_node.exe .
+
+      - name: Package
         run: |
-          $env:CGO_ENABLED="0"
-          go build -ldflags="-s -w" -o cvn_node.exe .
+          New-Item -ItemType Directory -Force -Path package/cvn_node | Out-Null
+          Copy-Item cvn_miner.exe, cvn_node.exe, LaunchMiner.bat, LaunchWallet.bat, explorer.html, README.md, Installation_Guide.md, LICENSE -Destination package/cvn_node
+          Compress-Archive -Path package/cvn_node -DestinationPath cvn_node_windows.zip
 
-      - name: Package Executable Binary Inside Compressed Release Zip
-        run: |
-          Compress-Archive -Path cvn_node.exe, AutoOnboard_And_Mine.bat, README.md -DestinationPath cvn_node_windows.zip
-
-      - name: Publish Compiled Production Assets Directly to GitHub Releases
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: cvn_node_windows.zip
+
+  linux:
+    name: Linux package
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build for Intel/AMD and ARM
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CGO_ENABLED: '0'
+        run: |
+          mkdir -p package/cvn_node_linux_amd64 package/cvn_node_linux_arm64
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o package/cvn_node_linux_amd64/cvn_node .
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o package/cvn_node_linux_arm64/cvn_node .
+
+      - name: Package
+        run: |
+          for arch in amd64 arm64; do
+            cp explorer.html README.md Installation_Guide.md LICENSE package/cvn_node_linux_$arch/
+            tar -C package -czf cvn_node_linux_$arch.tar.gz cvn_node_linux_$arch
+          done
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cvn_node_linux_amd64.tar.gz
+            cvn_node_linux_arm64.tar.gz

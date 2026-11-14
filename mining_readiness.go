@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -73,10 +72,7 @@ func decideMiningHold(tipHeight, tipAgeSeconds, bestPeerHeight int64, anyPeerAns
 
 // miningReadinessGateways lists the nodes asked for their height.
 func miningReadinessGateways() []string {
-	gateways := []string{"http://64.177.45.153:8081", "http://207.148.67.11:8081"}
-	if runtime.GOOS != "windows" {
-		gateways = append(gateways, "http://202.137.175.220:8081")
-	}
+	gateways := reachableSeedSyncURLs()
 	return append(gateways, cachedPeerHTTPGateways(gateways)...)
 }
 
@@ -124,6 +120,12 @@ func evaluateMiningReadiness() {
 	if miningHoldTrackedHeight != tip.Index {
 		miningHoldTrackedHeight = tip.Index
 		miningHoldSinceUnix = now
+	}
+	if len(miningReadinessGateways()) == 0 {
+		// A network with no seeds and no remembered peers: there is nobody to
+		// ask, so there is nothing to wait for.
+		setMiningHold(false, "")
+		return
 	}
 	best, answered := probePeerHeights()
 	hold, resync, reason := decideMiningHold(tip.Index, tipAge, best, answered, now-miningHoldSinceUnix)

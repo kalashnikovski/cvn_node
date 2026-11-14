@@ -28,7 +28,10 @@ import (
 //
 // Set CVN_DISABLE_UPNP=1 to skip this entirely.
 
-var upnpMappedPorts = []int{8080, 8081}
+// upnpMappedPorts are the ports a router is asked to forward to this node.
+func upnpMappedPorts() []int { return []int{Params.GossipPort, Params.SyncPort} }
+
+func natPortsText() string { return fmt.Sprintf("%d-%d", Params.GossipPort, Params.SyncPort) }
 
 const (
 	upnpLeaseSeconds  = 3600
@@ -71,9 +74,9 @@ func SetupAutomatedPortMapping() {
 				if !announcedSuccess {
 					announcedSuccess, announcedFailure = true, false
 					if parsed := net.ParseIP(externalIP); parsed != nil && isBehindNATAddress(parsed) {
-						announceNetworkStatus(fmt.Sprintf("⚠️ [NAT] Router mapped ports 8080-8081, but its own address (%s) is private: your ISP uses carrier-grade NAT, so peers still cannot connect in. Running in outbound relay mode.", externalIP))
+						announceNetworkStatus(fmt.Sprintf("⚠️ [NAT] Router mapped ports "+natPortsText()+", but its own address (%s) is private: your ISP uses carrier-grade NAT, so peers still cannot connect in. Running in outbound relay mode.", externalIP))
 					} else {
-						announceNetworkStatus(fmt.Sprintf("✅ [NAT] Router mapped ports 8080-8081 to this machine automatically (public IP %s). No manual port forwarding needed.", externalIP))
+						announceNetworkStatus(fmt.Sprintf("✅ [NAT] Router mapped ports "+natPortsText()+" to this machine automatically (public IP %s). No manual port forwarding needed.", externalIP))
 					}
 				}
 				time.Sleep(upnpRenewInterval)
@@ -81,7 +84,7 @@ func SetupAutomatedPortMapping() {
 			}
 			if !announcedFailure {
 				announcedFailure, announcedSuccess = true, false
-				announceNetworkStatus(fmt.Sprintf("📡 [NAT] Automatic port mapping unavailable (%v). Running in outbound relay mode: you still receive blocks and can mine. Forward ports 8080-8081 by hand if you want other nodes to sync from you.", err))
+				announceNetworkStatus(fmt.Sprintf("📡 [NAT] Automatic port mapping unavailable (%v). Running in outbound relay mode: you still receive blocks and can mine. Forward ports "+natPortsText()+" by hand if you want other nodes to sync from you.", err))
 			}
 			time.Sleep(upnpRetryInterval)
 		}
@@ -124,7 +127,7 @@ func mapPortsViaUPnP(localIP net.IP) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, port := range upnpMappedPorts {
+	for _, port := range upnpMappedPorts() {
 		if err := upnpAddPortMapping(controlURL, serviceType, port, localIP.String()); err != nil {
 			return "", fmt.Errorf("router refused port %d: %v", port, err)
 		}

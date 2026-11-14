@@ -82,12 +82,12 @@ func (tb *TokenBucket) Allow() bool {
 
 func StartMeshNetwork() {
 	fmt.Println("====================================================================")
-	fmt.Println("📡 HARDENED P2P GOSSIP MESH INITIALIZING ON PORT 8080...")
+	fmt.Printf("📡 HARDENED P2P GOSSIP MESH INITIALIZING ON PORT %d...\n", Params.GossipPort)
 	fmt.Println("====================================================================")
 
-	listener8080, err := net.Listen("tcp", ":8080")
+	listener8080, err := net.Listen("tcp", ":"+Params.gossipPortText())
 	if err != nil {
-		log.Printf("🚨 CRITICAL MESH FAILURE: Unable to bind raw TCP socket on Port 8080: %v\n", err)
+		log.Printf("🚨 CRITICAL MESH FAILURE: Unable to bind raw TCP socket on Port %d: %v\n", Params.GossipPort, err)
 		return
 	}
 	defer listener8080.Close()
@@ -259,7 +259,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 					delete(ActivePeerMap, oldestPeer)
 				}
 			}
-			canonicalPeerKey := fmt.Sprintf("%s:8080", remoteIP)
+			canonicalPeerKey := Params.gossipAddress(remoteIP)
 			ActivePeerMap[canonicalPeerKey] = time.Now()
 			
 			var peers []string
@@ -389,7 +389,7 @@ func transmitPayloadToNetworkBoundary(payload string) {
 
 	localBypassIP := os.Getenv("CVN_BYPASS_SEED_IP")
 	if localBypassIP == "" {
-		localBypassIP = "202.137.175.220"
+		localBypassIP = Params.WindowsSelfSkipHost
 	}
 
 	// Peers holding a relay connection to us get the payload down that
@@ -398,7 +398,7 @@ func transmitPayloadToNetworkBoundary(payload string) {
 	subscribedIPs := pushPayloadToRelaySubscribers(payload)
 
 	for _, address := range targets {
-		if strings.Contains(address, localBypassIP) && runtime.GOOS == "windows" {
+		if localBypassIP != "" && strings.Contains(address, localBypassIP) && runtime.GOOS == "windows" {
 			continue
 		}
 		if host, _, splitErr := net.SplitHostPort(address); splitErr == nil && subscribedIPs[host] {
@@ -415,11 +415,7 @@ func transmitPayloadToNetworkBoundary(payload string) {
 }
 
 func loadStaticMeshSeeds() []string {
-	staticMeshSeeds := []string{
-		"202.137.175.220:8080",
-		"207.148.67.11:8080",
-		"64.177.45.153:8080",
-	}
+	staticMeshSeeds := seedGossipAddresses()
 
 	configFileBytes, err := os.ReadFile("miner_config.json")
 	if err == nil {
