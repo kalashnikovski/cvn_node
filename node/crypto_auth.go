@@ -16,12 +16,8 @@ func DeriveAddressFromPublicKey(pubHex string) (string, error) {
 	if len(pubHex) < 128 {
 		return "", fmt.Errorf("invalid public key length: expected 128 characters, got %d", len(pubHex))
 	}
-
-	// Compute the unique public ledger address wallet handle (CVN_...) using a SHA-256 digest
 	addressHash := sha256.Sum256([]byte(pubHex))
-	walletAddress := "CVN_" + hex.EncodeToString(addressHash[:20])
-
-	return walletAddress, nil
+	return addressWithBody(hex.EncodeToString(addressHash[:20])), nil
 }
 
 // GenerateKeyPair creates a cryptographically secure random ECDSA P-256 key pair

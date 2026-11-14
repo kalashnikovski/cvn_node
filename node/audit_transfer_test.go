@@ -18,7 +18,7 @@ func launchTransfer(t *testing.T) (tx Transaction, privateKey, publicKey string,
 	}
 	coins := map[string]UTXORecord{"TX_A_0": {Amount: UnitsAmount(cvn("50")), Recipient: owner}}
 	lookup = func(key string) (UTXORecord, bool) { record, ok := coins[key]; return record, ok }
-	tx, err = BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), cvn("0.5"), []SpendableCoin{{TxID: "TX_A", Index: 0, Amount: UnitsAmount(cvn("50"))}})
+	tx, err = BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("0.5"), []SpendableCoin{{TxID: "TX_A", Index: 0, Amount: UnitsAmount(cvn("50"))}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestALyingNodeCannotTurnChangeIntoAFee(t *testing.T) {
 	// The node says the 50 CVN coin holds 11. The wallet sends 10, pays the
 	// 0.5 fee it was asked for, and believes 0.5 comes back as change.
 	understated := []SpendableCoin{{TxID: "TX_A", Index: 0, Amount: UnitsAmount(cvn("11"))}}
-	tx, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), cvn("0.5"), understated)
+	tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("0.5"), understated)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestTestnet1TransfersAreUnchanged(t *testing.T) {
 	}
 	coins := map[string]UTXORecord{"TX_A_0": {Amount: UnitsAmount(cvn("50")), Recipient: owner}}
 	lookup := func(key string) (UTXORecord, bool) { record, ok := coins[key]; return record, ok }
-	tx, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), cvn("0.5"), []SpendableCoin{{TxID: "TX_A", Index: 0, Amount: UnitsAmount(cvn("50"))}})
+	tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("0.5"), []SpendableCoin{{TxID: "TX_A", Index: 0, Amount: UnitsAmount(cvn("50"))}})
 	if err != nil {
 		t.Fatal(err)
 	}

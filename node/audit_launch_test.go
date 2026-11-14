@@ -30,14 +30,14 @@ func TestLaunchDifficultyCannotBeTalkedDown(t *testing.T) {
 
 	// The first miner dates block 1 a second after the anchor, long before
 	// the real time, so that block 2 looks most of a day late.
-	backdated := extendTestChain(t, genesis.Timestamp+1, "CVN_first", nil)
+	backdated := extendTestChain(t, genesis.Timestamp+1, testAddress("first"), nil)
 	weekLater := genesis.Timestamp + 20*3600
 	if got := CalculateNextDifficulty(backdated, weekLater); got < start {
 		t.Fatalf("after a backdated first block, the second needs difficulty %d: below the starting %d", got, start)
 	}
 	// Nor does it help on the block after that, where the long gap shows up
 	// as a slow block.
-	second := extendTestChain(t, weekLater, "CVN_first", nil)
+	second := extendTestChain(t, weekLater, testAddress("first"), nil)
 	if got := CalculateNextDifficulty(second, weekLater+45); got < start {
 		t.Errorf("the third block needs difficulty %d: below the starting %d", got, start)
 	}
@@ -46,7 +46,7 @@ func TestLaunchDifficultyCannotBeTalkedDown(t *testing.T) {
 	timestamp := weekLater
 	for height := int64(3); height <= HeartbeatLaunchBlocks; height++ {
 		timestamp += 5
-		extendTestChain(t, timestamp, "CVN_first", nil)
+		extendTestChain(t, timestamp, testAddress("first"), nil)
 	}
 	tip := GetLatestBlockInternal()
 	if tip.Index != HeartbeatLaunchBlocks || tip.Difficulty <= start {
@@ -95,11 +95,11 @@ func TestBadWorkBesideOurTipIsHeldAgainstThePeer(t *testing.T) {
 	timestamp := Params.GenesisTimestamp + 100
 	for i := 0; i < 3; i++ {
 		timestamp += 45
-		extendTestChain(t, timestamp, "CVN_miner", nil)
+		extendTestChain(t, timestamp, testAddress("miner"), nil)
 	}
 	// Two honest candidates for the next block; one becomes our tip.
-	ours := mineTestBlock(t, timestamp+45, "CVN_miner", nil, 0)
-	theirs := mineTestBlock(t, timestamp+46, "CVN_rival", nil, 0)
+	ours := mineTestBlock(t, timestamp+45, testAddress("miner"), nil, 0)
+	theirs := mineTestBlock(t, timestamp+46, testAddress("rival"), nil, 0)
 	if !ValidateBlockSignatures(ours) || !SaveBlockToStorageInternal(ours) {
 		t.Fatal("could not extend the chain")
 	}

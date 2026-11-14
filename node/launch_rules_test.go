@@ -78,16 +78,16 @@ func TestRewardScheduleOnAChain(t *testing.T) {
 		t.Errorf("a block with nothing to pay has %d outputs", len(empty.Transactions[0].Outputs))
 	}
 	// ...and a block with transfers pays its miner exactly their fees.
-	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), cvn("0.3"), ListSpendableCoins(miner))
+	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("0.3"), ListSpendableCoins(miner))
 	if err != nil {
 		t.Fatal(err)
 	}
 	timestamp += 45
-	feeBlock := extendTestChain(t, timestamp, "CVN_fee_miner", []Transaction{transfer})
+	feeBlock := extendTestChain(t, timestamp, testAddress("fee_miner"), []Transaction{transfer})
 	if got := feeBlock.Transactions[0].Outputs[0].Amount.Units(); got != cvn("0.3") {
 		t.Errorf("after emission the miner received %s, want exactly the 0.3 fee", FormatUnits(got))
 	}
-	total := balanceOf(miner) + balanceOf("CVN_someone") + balanceOf("CVN_fee_miner")
+	total := balanceOf(miner) + balanceOf(testAddress("someone")) + balanceOf(testAddress("fee_miner"))
 	if total != cvn("350") {
 		t.Errorf("total supply is %s after emission ended, want 350", FormatUnits(total))
 	}

@@ -24,7 +24,7 @@ func TestGenesisBlockCannotBeReplaced(t *testing.T) {
 				UncleHash: strings.Repeat("0", 64), UncleMiner: "NONE",
 				Transactions: []Transaction{
 					{Version: 1, ID: "TX_GENESIS_FAIR_LAUNCH_POOL", Inputs: []UTXOInput{}, Outputs: []UTXOOutput{}},
-					{Version: 1, ID: "TX_FORGED", Inputs: []UTXOInput{}, Outputs: []UTXOOutput{{Recipient: "CVN_thief", Amount: UnitsAmount(cvn("1000000"))}}},
+					{Version: 1, ID: "TX_FORGED", Inputs: []UTXOInput{}, Outputs: []UTXOOutput{{Recipient: testAddress("thief"), Amount: UnitsAmount(cvn("1000000"))}}},
 				},
 			}
 			for nonce := int64(0); ; nonce++ {
@@ -48,7 +48,7 @@ func TestGenesisBlockCannotBeReplaced(t *testing.T) {
 			if now := GetBlockByHeightFromDB(0); now.Hash != genesis.Hash {
 				t.Fatalf("the genesis block was replaced: %.16s became %.16s", genesis.Hash, now.Hash)
 			}
-			if got := balanceOf("CVN_thief"); got != 0 {
+			if got := balanceOf(testAddress("thief")); got != 0 {
 				t.Fatalf("%s CVN were created from nothing", FormatUnits(got))
 			}
 			// The real genesis block is still accepted as itself.

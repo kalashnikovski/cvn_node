@@ -63,7 +63,7 @@ func TestChainMinedWithRandomX(t *testing.T) {
 	keysSeen := make(map[int64]bool)
 	for height := int64(1); height <= 12; height++ {
 		*timestamp += 45
-		block := extendTestChain(t, *timestamp, "CVN_miner", nil)
+		block := extendTestChain(t, *timestamp, testAddress("miner"), nil)
 		keysSeen[powKeyHeight(block.Index)] = true
 
 		// The identifier is still a plain SHA-256 hash of the header...
@@ -84,8 +84,8 @@ func TestChainMinedWithRandomX(t *testing.T) {
 	if len(keysSeen) < 3 {
 		t.Errorf("the chain should have crossed at least two key changes; keys used: %v", keysSeen)
 	}
-	if balanceOf("CVN_miner") != cvn("600") {
-		t.Errorf("after 12 RandomX blocks the miner has %s, want 600", FormatUnits(balanceOf("CVN_miner")))
+	if balanceOf(testAddress("miner")) != cvn("600") {
+		t.Errorf("after 12 RandomX blocks the miner has %s, want 600", FormatUnits(balanceOf(testAddress("miner"))))
 	}
 }
 
@@ -93,7 +93,7 @@ func TestBlockWithoutRandomXProofIsRefused(t *testing.T) {
 	timestamp := startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 64}})
 	Params.HeartbeatInitialDifficulty = 64
 	*timestamp += 45
-	good := mineTestBlock(t, *timestamp, "CVN_miner", nil, 0)
+	good := mineTestBlock(t, *timestamp, testAddress("miner"), nil, 0)
 
 	// Find a nonce whose identifier is valid but whose RandomX hash misses
 	// the target: a block someone did not do the work for.
@@ -134,7 +134,7 @@ func TestAlgorithmChangesAtAHeight(t *testing.T) {
 	var last Block
 	for height := int64(1); height <= 9; height++ {
 		*timestamp += 45
-		last = extendTestChain(t, *timestamp, "CVN_miner", nil)
+		last = extendTestChain(t, *timestamp, testAddress("miner"), nil)
 		switch {
 		case height <= 5:
 			if last.Difficulty < int(HeartbeatMinDifficulty) || !HashMeetsDifficulty(last.Hash, last.Index, last.Difficulty) {
@@ -150,14 +150,14 @@ func TestAlgorithmChangesAtAHeight(t *testing.T) {
 			}
 		}
 	}
-	if GetLatestBlockInternal().Index != 9 || balanceOf("CVN_miner") != cvn("450") {
-		t.Fatalf("the chain did not carry on across the change: height %d, balance %s", GetLatestBlockInternal().Index, FormatUnits(balanceOf("CVN_miner")))
+	if GetLatestBlockInternal().Index != 9 || balanceOf(testAddress("miner")) != cvn("450") {
+		t.Fatalf("the chain did not carry on across the change: height %d, balance %s", GetLatestBlockInternal().Index, FormatUnits(balanceOf(testAddress("miner"))))
 	}
 
 	// After the change, SHA-256 work alone is no longer accepted: a block
 	// whose identifier meets the target but whose RandomX hash does not.
 	*timestamp += 45
-	candidate := mineTestBlock(t, *timestamp, "CVN_miner", nil, 0)
+	candidate := mineTestBlock(t, *timestamp, testAddress("miner"), nil, 0)
 	digest := BlockTransactionsDigest(candidate.Index, candidate.Transactions)
 	for nonce := int64(0); ; nonce++ {
 		candidate.Nonce = nonce

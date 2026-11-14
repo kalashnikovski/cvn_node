@@ -12,9 +12,9 @@ func TestPeersAreJudgedOnlyOnWhatIsCertain(t *testing.T) {
 	timestamp := Params.GenesisTimestamp + 100
 	for i := 0; i < 3; i++ {
 		timestamp += 45
-		extendTestChain(t, timestamp, "CVN_miner", nil)
+		extendTestChain(t, timestamp, testAddress("miner"), nil)
 	}
-	good := mineTestBlock(t, timestamp+45, "CVN_miner", nil, 0)
+	good := mineTestBlock(t, timestamp+45, testAddress("miner"), nil, 0)
 	if blockCarriesBadWork(good) {
 		t.Fatal("a valid next block was counted against its sender")
 	}
@@ -81,13 +81,13 @@ func TestNextKeyIsPreparedAhead(t *testing.T) {
 	// the key taken from block 4.
 	for height := int64(1); height <= 4; height++ {
 		*timestamp += 45
-		extendTestChain(t, *timestamp, "CVN_miner", nil)
+		extendTestChain(t, *timestamp, testAddress("miner"), nil)
 	}
 	if warmNextVerifyKey() {
 		t.Error("an engine was prepared while the key for the coming blocks is still the one in use")
 	}
 	*timestamp += 45
-	extendTestChain(t, *timestamp, "CVN_miner", nil) // block 5
+	extendTestChain(t, *timestamp, testAddress("miner"), nil) // block 5
 	nextKey, _ := powKeyFor(7)
 	currentKey, _ := powKeyFor(6)
 	if string(nextKey) == string(currentKey) {
@@ -115,7 +115,7 @@ func TestNextKeyIsPreparedAhead(t *testing.T) {
 	}
 	for height := int64(6); height <= 8; height++ {
 		*timestamp += 45
-		extendTestChain(t, *timestamp, "CVN_miner", nil)
+		extendTestChain(t, *timestamp, testAddress("miner"), nil)
 	}
 	if find(nextKey) != prepared {
 		t.Error("the engine prepared ahead was not the one used when the key changed")

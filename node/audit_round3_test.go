@@ -333,7 +333,7 @@ func TestAnOwnerCanReplaceTheirWaitingTransferByPayingMore(t *testing.T) {
 	extendTestChain(t, Params.GenesisTimestamp+60, owner, nil)
 	coins := ListSpendableCoins(owner)
 	build := func(fee string) Transaction {
-		tx, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), cvn(fee), coins)
+		tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn(fee), coins)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -387,7 +387,7 @@ func TestTransfersAreChosenOncePerTip(t *testing.T) {
 	}
 	coins := ListSpendableCoins(owner)
 	admit := func(coin SpendableCoin) {
-		tx, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("1"), 0, []SpendableCoin{coin})
+		tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("1"), 0, []SpendableCoin{coin})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -423,11 +423,11 @@ func TestTransfersInRemovedBlocksGoBackToWaiting(t *testing.T) {
 		timestamp += 45
 		extendTestChain(t, timestamp, owner, nil)
 	}
-	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), cvn("0.1"), ListSpendableCoins(owner))
+	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("0.1"), ListSpendableCoins(owner))
 	if err != nil {
 		t.Fatal(err)
 	}
-	extendTestChain(t, timestamp+45, "CVN_other", []Transaction{transfer})
+	extendTestChain(t, timestamp+45, testAddress("other"), []Transaction{transfer})
 
 	StateMutex.Lock()
 	rollbackChainToHeightLocked(3)
@@ -476,9 +476,9 @@ func TestNoPeerIsJudgedWhileTheChainIsChanging(t *testing.T) {
 	timestamp := Params.GenesisTimestamp + 100
 	for i := 0; i < 3; i++ {
 		timestamp += 45
-		extendTestChain(t, timestamp, "CVN_miner", nil)
+		extendTestChain(t, timestamp, testAddress("miner"), nil)
 	}
-	unworked := mineTestBlock(t, timestamp+45, "CVN_miner", nil, 0)
+	unworked := mineTestBlock(t, timestamp+45, testAddress("miner"), nil, 0)
 	for unworked.Nonce++; ; unworked.Nonce++ {
 		unworked.Hash = CalculateHash(unworked)
 		if !BlockProofValid(unworked, unworked.Difficulty) {

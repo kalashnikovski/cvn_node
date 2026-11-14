@@ -127,7 +127,7 @@ func TestCombineOnAChain(t *testing.T) {
 				t.Errorf("%d coins are offered again while the combine is waiting", len(left))
 			}
 
-			extendTestChain(t, timestamp+45, "CVN_other_miner", []Transaction{combine})
+			extendTestChain(t, timestamp+45, testAddress("other_miner"), []Transaction{combine})
 			after := ListSpendableCoins(owner)
 			if len(after) != 1 || after[0].Amount.Units() != cvn("599.5") {
 				t.Fatalf("after the block the wallet should hold one coin of 599.5 CVN: %+v", after)
@@ -136,12 +136,12 @@ func TestCombineOnAChain(t *testing.T) {
 				t.Errorf("the balance is %s, want 599.5", FormatUnits(got))
 			}
 			// The combined coin spends like any other.
-			spend, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("599.5"), 0, after)
+			spend, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("599.5"), 0, after)
 			if err != nil {
 				t.Fatalf("spend the combined coin: %v", err)
 			}
-			extendTestChain(t, timestamp+90, "CVN_other_miner", []Transaction{spend})
-			if balanceOf(owner) != 0 || balanceOf("CVN_someone") != cvn("599.5") {
+			extendTestChain(t, timestamp+90, testAddress("other_miner"), []Transaction{spend})
+			if balanceOf(owner) != 0 || balanceOf(testAddress("someone")) != cvn("599.5") {
 				t.Error("the combined coin did not move in full")
 			}
 		})

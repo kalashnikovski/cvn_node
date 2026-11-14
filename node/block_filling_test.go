@@ -135,7 +135,7 @@ func TestFreeLaneOnAChain(t *testing.T) {
 		extendTestChain(t, timestamp, owner, nil)
 	}
 	for _, coin := range ListSpendableCoins(owner) { // coins created at heights 1 to 8
-		transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", coin.Amount.Units(), 0, []SpendableCoin{coin})
+		transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), coin.Amount.Units(), 0, []SpendableCoin{coin})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -158,7 +158,7 @@ func TestFreeLaneOnAChain(t *testing.T) {
 			t.Errorf("a coin made at height %d was taken for block #%d ahead of older ones", from, height)
 		}
 	}
-	block := extendTestChain(t, timestamp+45, "CVN_other", chosen)
+	block := extendTestChain(t, timestamp+45, testAddress("other"), chosen)
 	if len(block.Transactions) != 5 {
 		t.Errorf("the block holds %d transactions, want the reward and 4 transfers", len(block.Transactions))
 	}

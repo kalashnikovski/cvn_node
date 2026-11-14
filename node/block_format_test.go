@@ -45,7 +45,7 @@ func TestHeaderFieldsCannotBleedIntoEachOther(t *testing.T) {
 func TestBlocksOutsideTheLaunchFormatAreRefused(t *testing.T) {
 	startTestChain(t, "devnet")
 	timestamp := Params.GenesisTimestamp + 60
-	good := mineTestBlock(t, timestamp, "CVN_miner", nil, 0)
+	good := mineTestBlock(t, timestamp, testAddress("miner"), nil, 0)
 	if !ValidateBlockSignatures(good) {
 		t.Fatal("a well-formed block was refused")
 	}
@@ -63,7 +63,7 @@ func TestBlocksOutsideTheLaunchFormatAreRefused(t *testing.T) {
 	}
 	bad := map[string]func(*Block){
 		"text in the header":       func(b *Block) { b.GuardMatrix = "hello" },
-		"an uncle named":           func(b *Block) { b.UncleHash = strings.Repeat("ab", 32); b.UncleMiner = "CVN_friend" },
+		"an uncle named":           func(b *Block) { b.UncleHash = strings.Repeat("ab", 32); b.UncleMiner = testAddress("friend") },
 		"an empty uncle hash":      func(b *Block) { b.UncleHash = "" },
 		"an unknown block version": func(b *Block) { b.Version = 2 },
 		"a parent with a space":    func(b *Block) { b.PrevHash = b.PrevHash + " " },
@@ -89,7 +89,7 @@ func TestBlocksOutsideTheLaunchFormatAreRefused(t *testing.T) {
 		"an identifier not hex": func(tx *Transaction) { tx.ID += "zz" },
 		"another public key":    func(tx *Transaction) { tx.PublicKey = "x" },
 		"two outputs": func(tx *Transaction) {
-			tx.Outputs = append(tx.Outputs, UTXOOutput{Recipient: "CVN_friend", Amount: UnitsAmount(1000000)})
+			tx.Outputs = append(tx.Outputs, UTXOOutput{Recipient: testAddress("friend"), Amount: UnitsAmount(1000000)})
 			tx.Outputs[0].Amount = UnitsAmount(cvn("49"))
 		},
 		"an output below minimum": func(tx *Transaction) { tx.Outputs[0].Amount = UnitsAmount(minimumOutputUnits() - 1) },
@@ -123,7 +123,7 @@ func TestTransfersCarryNothingUnsigned(t *testing.T) {
 		t.Fatal(err)
 	}
 	extendTestChain(t, Params.GenesisTimestamp+60, owner, nil)
-	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), 0, ListSpendableCoins(owner))
+	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), 0, ListSpendableCoins(owner))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestTransferIsBoundToItsNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	coins := []SpendableCoin{{TxID: "TX_A", Index: 0, Amount: UnitsAmount(cvn("50"))}}
-	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), 0, coins)
+	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), 0, coins)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestBlockSizeLimit(t *testing.T) {
 	coins := ListSpendableCoins(owner)
 	var transfers []Transaction
 	for _, coin := range coins {
-		transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("1"), cvn("0.01"), []SpendableCoin{coin})
+		transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("1"), cvn("0.01"), []SpendableCoin{coin})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -195,7 +195,7 @@ func TestBlockSizeLimit(t *testing.T) {
 	if one < 300 || one > 1500 {
 		t.Fatalf("a simple transfer is counted as %d bytes; expected a few hundred", one)
 	}
-	full := mineTestBlock(t, timestamp+45, "CVN_miner", transfers, 0)
+	full := mineTestBlock(t, timestamp+45, testAddress("miner"), transfers, 0)
 	size := blockSizeBytes(full)
 
 	// One byte under the block's size, the block is refused; at its size, accepted.
@@ -220,7 +220,7 @@ func TestBlockSizeLimit(t *testing.T) {
 	if len(chosen) != 3 {
 		t.Errorf("a miner chose %d transfers for a block with room for 3", len(chosen))
 	}
-	block := extendTestChain(t, timestamp+45, "CVN_miner", chosen)
+	block := extendTestChain(t, timestamp+45, testAddress("miner"), chosen)
 	if blockSizeBytes(block) > Params.MaxBlockBytes {
 		t.Error("the miner's own block is over the limit")
 	}

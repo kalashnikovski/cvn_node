@@ -162,7 +162,7 @@ func TestFastMinerStandIn(t *testing.T) {
 		if err != nil {
 			os.Exit(4)
 		}
-		fmt.Fprintln(conn, `{"id":1,"jsonrpc":"2.0","method":"login","params":{"login":"CVN_5555555555555555555555555555555555555555","pass":"x"}}`)
+		fmt.Fprintln(conn, `{"id":1,"jsonrpc":"2.0","method":"login","params":{"login":"`+testAddress("stand-in miner")+`","pass":"x"}}`)
 		if _, err := bufio.NewReader(conn).ReadString(10); err != nil { // 10 is the line ending
 			os.Exit(5)
 		}

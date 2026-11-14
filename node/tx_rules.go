@@ -170,6 +170,12 @@ func BlockTransactionsDigest(height int64, transactions []Transaction) string {
 }
 
 func validRecipient(recipient string) bool {
+	// On the launch rules a coin can only be made out to a well-formed
+	// address. Anything else could never be spent, and a field that took any
+	// text would be a place to store data in the chain at no cost.
+	if Params.StrictFormat {
+		return looksLikeWalletAddress(recipient)
+	}
 	if recipient == "" || len(recipient) > TxMaxAddressLength {
 		return false
 	}
@@ -1028,12 +1034,6 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 	return signTransfer(privateKeyHex, publicKeyHex, senderAddress, inputs, outputs, feeUnits)
 }
 
-// looksLikeWalletAddress reports whether text has the form of an address
-// made from a key: "CVN_" and 40 lower-case hex digits.
-func looksLikeWalletAddress(text string) bool {
-	return strings.HasPrefix(text, "CVN_") && isLowerHex(strings.TrimPrefix(text, "CVN_"), 40)
-}
-
 // walletInput names a coin to spend. On the launch rules it also states the
 // coin's amount, which the sender signs.
 func walletInput(coin SpendableCoin) UTXOInput {
@@ -1127,7 +1127,7 @@ func SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient string, amoun
 	// something that is not a wallet address are gone for good. A wallet
 	// does not let its user do that by accident.
 	if recipient = strings.TrimSpace(recipient); !looksLikeWalletAddress(recipient) {
-		return Transaction{}, fmt.Errorf("%q is not a CVN wallet address. An address is CVN_ followed by 40 characters, each a digit or a letter from a to f. Nothing was sent", recipient)
+		return Transaction{}, fmt.Errorf("%q is not a CVN wallet address on this network. An address is %s. Check it against the one you were given, character by character. Nothing was sent", recipient, addressFormDescription())
 	}
 	senderAddress, err := DeriveAddressFromPublicKey(strings.TrimSpace(publicKeyHex))
 	if err != nil {

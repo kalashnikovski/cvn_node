@@ -91,7 +91,7 @@ The vault's share is deliberately small. A miner can avoid it by including their
 
 ## 8. Transfers and blocks
 
-**Ownership.** A coin belongs to an address. An address is `CVN_` followed by the first 20 bytes of the SHA-256 hash of a public key. A transfer is signed with the matching private key (ECDSA on the P-256 curve).
+**Ownership.** A coin belongs to an address. An address is `CVN_`, then the first 20 bytes of the SHA-256 hash of a public key, then a 4-byte check on those 20, all in hex: 52 characters in all. The check means a mistyped address is not an address at all, and the rules refuse to make a coin out to anything that is not one. So a slip of the hand cannot send coins where nobody can spend them; about one mistake in four billion would still pass. A transfer is signed with the matching private key (ECDSA on the P-256 curve).
 
 **A transfer** spends up to 200 coins and creates up to 50. It carries nothing its sender did not sign, and what is signed includes the name of the network, so a transfer made for one CVN network is invalid on any other.
 

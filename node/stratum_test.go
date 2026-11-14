@@ -198,7 +198,7 @@ func TestExternalMinerFindsABlock(t *testing.T) {
 
 	miner := connectFakeMiner(t, server)
 	// Mining software commonly appends a rig name to the address.
-	result, errorText, _ := miner.call("login", map[string]string{"login": "CVN_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.rig1", "pass": "x", "agent": "test"})
+	result, errorText, _ := miner.call("login", map[string]string{"login": testAddress("external") + ".rig1", "pass": "x", "agent": "test"})
 	if errorText != "" {
 		t.Fatalf("login refused: %s", errorText)
 	}
@@ -236,11 +236,11 @@ func TestExternalMinerFindsABlock(t *testing.T) {
 		t.Fatalf("a good nonce was refused: %s %s", errorText, result)
 	}
 	tip := GetLatestBlockInternal()
-	if tip.Index != 1 || tip.Transactions[0].Outputs[0].Recipient != "CVN_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" {
+	if tip.Index != 1 || tip.Transactions[0].Outputs[0].Recipient != testAddress("external") {
 		t.Fatalf("block 1 should exist and pay the external miner: height %d", tip.Index)
 	}
-	if balanceOf("CVN_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") != cvn("50") {
-		t.Errorf("the external miner has %s, want 50", FormatUnits(balanceOf("CVN_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")))
+	if balanceOf(testAddress("external")) != cvn("50") {
+		t.Errorf("the external miner has %s, want 50", FormatUnits(balanceOf(testAddress("external"))))
 	}
 
 	// The same nonce again is stale: the chain has moved on.
@@ -266,8 +266,8 @@ func TestExternalMinerFindsABlock(t *testing.T) {
 	if _, errorText, _ = miner.call("submit", map[string]string{"id": login.ID, "job_id": next.JobID, "nonce": miner.search(next, true)}); errorText != "" {
 		t.Fatalf("the second block was refused: %s", errorText)
 	}
-	if GetLatestBlockInternal().Index != 2 || balanceOf("CVN_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") != cvn("100") {
-		t.Errorf("after two blocks: height %d, balance %s", GetLatestBlockInternal().Index, FormatUnits(balanceOf("CVN_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")))
+	if GetLatestBlockInternal().Index != 2 || balanceOf(testAddress("external")) != cvn("100") {
+		t.Errorf("after two blocks: height %d, balance %s", GetLatestBlockInternal().Index, FormatUnits(balanceOf(testAddress("external"))))
 	}
 
 	miner.conn.Close()

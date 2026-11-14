@@ -25,7 +25,7 @@ func TestAFeeGetsIntoAFullMempool(t *testing.T) {
 	}
 	coins := ListSpendableCoins(owner)
 	transfer := func(coin SpendableCoin, fee string) Transaction {
-		tx, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("1"), cvn(fee), []SpendableCoin{coin})
+		tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("1"), cvn(fee), []SpendableCoin{coin})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +82,7 @@ func TestWalletRefusesToSendToSomethingThatIsNotAnAddress(t *testing.T) {
 		t.Fatalf("a freshly made address was not recognised: %s", real)
 	}
 	for _, text := range []string{
-		"", "CVN_", "CVN_miner", "hello", real[:len(real)-1], real + "0", strings.ToUpper(real),
+		"", "CVN_", "CVN_not_an_address", "hello", real[:len(real)-1], real + "0", strings.ToUpper(real),
 		"cvn_" + real[4:], real[:10] + "g" + real[11:], " " + real, "0x" + real[4:],
 	} {
 		if looksLikeWalletAddress(text) {

@@ -132,6 +132,12 @@ func resolveMinerAddress(args []string) (string, error) {
 			"   Create a wallet with --generate-wallet (or --wallet) and write its private key down,\n" +
 			"   or start with --miner-address CVN_... to mine to a wallet you already have")
 	}
+	// An address saved before addresses had a checksum is completed, not
+	// refused: the checksum follows from the rest of it.
+	if full, completed := completeOlderAddress(address); completed {
+		fmt.Printf("🪪 Addresses on this network end with a check on the rest. Yours is now written %s\n", full)
+		address = full
+	}
 	if !looksLikeWalletAddress(address) {
 		return "", fmt.Errorf("%q is not a CVN wallet address. Nobody holds a key for it, so coins mined to it could never be spent.\n"+
 			"   Create a wallet with --generate-wallet (or --wallet), or start with --miner-address CVN_...", address)

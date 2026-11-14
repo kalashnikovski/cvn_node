@@ -102,35 +102,35 @@ func TestVaultOnAChain(t *testing.T) {
 	}
 
 	// A transfer paying a 5 CVN fee: 4 to the miner, 1 into the vault.
-	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", cvn("20"), cvn("5"), ListSpendableCoins(sender))
+	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), cvn("20"), cvn("5"), ListSpendableCoins(sender))
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine("CVN_minerA", []Transaction{transfer})
-	if balanceOf("CVN_minerA") != cvn("54") || VaultBalanceUnits() != cvn("1") {
-		t.Fatalf("after the fee block: miner %s, vault %s; want 54 and 1", FormatUnits(balanceOf("CVN_minerA")), FormatUnits(VaultBalanceUnits()))
+	mine(testAddress("minerA"), []Transaction{transfer})
+	if balanceOf(testAddress("minerA")) != cvn("54") || VaultBalanceUnits() != cvn("1") {
+		t.Fatalf("after the fee block: miner %s, vault %s; want 54 and 1", FormatUnits(balanceOf(testAddress("minerA"))), FormatUnits(VaultBalanceUnits()))
 	}
-	checkNothingLost("after the fee block", sender, "CVN_recipient", "CVN_minerA")
+	checkNothingLost("after the fee block", sender, testAddress("recipient"), testAddress("minerA"))
 
 	// From the next block on the vault pays a tenth of what it holds, each
 	// block, to that block's miner.
-	block := mine("CVN_minerB", nil)
+	block := mine(testAddress("minerB"), nil)
 	if got := block.Transactions[0].Outputs[0].Amount.Units(); got != cvn("50.1") || VaultBalanceUnits() != cvn("0.9") {
 		t.Fatalf("first payout block pays %s and leaves %s; want 50.1 and 0.9", FormatUnits(got), FormatUnits(VaultBalanceUnits()))
 	}
-	block = mine("CVN_minerB", nil)
+	block = mine(testAddress("minerB"), nil)
 	if got := block.Transactions[0].Outputs[0].Amount.Units(); got != cvn("50.09") || VaultBalanceUnits() != cvn("0.81") {
 		t.Fatalf("second payout block pays %s and leaves %s; want 50.09 and 0.81", FormatUnits(got), FormatUnits(VaultBalanceUnits()))
 	}
-	checkNothingLost("after two payouts", sender, "CVN_recipient", "CVN_minerA", "CVN_minerB")
+	checkNothingLost("after two payouts", sender, testAddress("recipient"), testAddress("minerA"), testAddress("minerB"))
 
 	// A miner may not take more than the reward plus the payout.
 	timestamp += 45
-	greedy := mineTestBlock(t, timestamp, "CVN_minerB", nil, cvn("50.081")+1)
+	greedy := mineTestBlock(t, timestamp, testAddress("minerB"), nil, cvn("50.081")+1)
 	if ValidateBlockSignatures(greedy) && SaveBlockToStorageInternal(greedy) {
 		t.Fatal("a block paid its miner one unit more than the reward plus the vault payout")
 	}
-	honest := mineTestBlock(t, timestamp, "CVN_minerB", nil, 0)
+	honest := mineTestBlock(t, timestamp, testAddress("minerB"), nil, 0)
 	if got := honest.Transactions[0].Outputs[0].Amount.Units(); got != cvn("50.081") {
 		t.Fatalf("third payout should be 50.081, test block pays %s", FormatUnits(got))
 	}
@@ -152,7 +152,7 @@ func TestVaultOnAChain(t *testing.T) {
 	if VaultBalanceUnits() != vaultAtTip || GetLatestBlockInternal().Hash != tip.Hash {
 		t.Errorf("after putting the blocks back the vault holds %s, want %s", FormatUnits(VaultBalanceUnits()), FormatUnits(vaultAtTip))
 	}
-	checkNothingLost("at the end", sender, "CVN_recipient", "CVN_minerA", "CVN_minerB")
+	checkNothingLost("at the end", sender, testAddress("recipient"), testAddress("minerA"), testAddress("minerB"))
 }
 
 func TestMinimumOutput(t *testing.T) {
@@ -169,7 +169,7 @@ func TestMinimumOutput(t *testing.T) {
 	}
 
 	// The wallet refuses to send less than the minimum.
-	if _, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", minimum-1, 0, coins); err == nil {
+	if _, err := BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), minimum-1, 0, coins); err == nil {
 		t.Error("the wallet built a transfer below the minimum output")
 	}
 	// A hand-made transfer with an output below the minimum is refused by the rules.
@@ -184,7 +184,7 @@ func TestMinimumOutput(t *testing.T) {
 
 	// Change that would be below the minimum is given to the miner instead.
 	amount := cvn("50") - cvn("1") - (minimum - 1) // leaves minimum-1 units over after a 1 CVN fee
-	tx, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", amount, cvn("1"), coins)
+	tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), amount, cvn("1"), coins)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestMinimumOutput(t *testing.T) {
 		t.Errorf("the wallet's own transfer was refused: %v", err)
 	}
 	// Change of exactly the minimum is returned to the sender.
-	tx, err = BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", cvn("50")-cvn("1")-minimum, cvn("1"), coins)
+	tx, err = BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), cvn("50")-cvn("1")-minimum, cvn("1"), coins)
 	if err != nil || len(tx.Outputs) != 2 || tx.Outputs[1].Amount.Units() != minimum {
 		t.Errorf("change of exactly the minimum should be its own output (err %v)", err)
 	}

@@ -69,36 +69,36 @@ func TestTestnet1DoesNotSweep(t *testing.T) {
 		t.Error("testnet-1 must not sweep coins")
 	}
 	// Its coin records carry no age, so their stored form is unchanged.
-	raw, _ := json.Marshal(UTXORecord{Amount: UnitsAmount(cvn("50")), Recipient: "CVN_a"})
-	if string(raw) != `{"amount":50,"recipient":"CVN_a"}` {
+	raw, _ := json.Marshal(UTXORecord{Amount: UnitsAmount(cvn("50")), Recipient: testAddress("a")})
+	if string(raw) != `{"amount":50,"recipient":"`+testAddress("a")+`"}` {
 		t.Errorf("testnet-1 coin record is written as %s", raw)
 	}
 }
 
 func TestUnmovedCoinsAreSwept(t *testing.T) {
 	timestamp := startSweepChain(t)
-	mineNext(t, timestamp, "CVN_idle") // block 1: the coin we watch
+	mineNext(t, timestamp, testAddress("idle")) // block 1: the coin we watch
 	for height := 2; height <= 5; height++ {
-		mineNext(t, timestamp, "CVN_other")
+		mineNext(t, timestamp, testAddress("other"))
 	}
-	if balanceOf("CVN_idle") != cvn("50") || VaultBalanceUnits() != 0 {
-		t.Fatalf("one block before the sweep: balance %s, vault %s; want 50 and 0", FormatUnits(balanceOf("CVN_idle")), FormatUnits(VaultBalanceUnits()))
+	if balanceOf(testAddress("idle")) != cvn("50") || VaultBalanceUnits() != 0 {
+		t.Fatalf("one block before the sweep: balance %s, vault %s; want 50 and 0", FormatUnits(balanceOf(testAddress("idle"))), FormatUnits(VaultBalanceUnits()))
 	}
 
 	// Block 6 is five blocks after block 1: a fifth of the coin moves to the vault.
-	mineNext(t, timestamp, "CVN_other")
-	if balanceOf("CVN_idle") != cvn("40") || VaultBalanceUnits() != cvn("10") {
-		t.Fatalf("after the first sweep: balance %s, vault %s; want 40 and 10", FormatUnits(balanceOf("CVN_idle")), FormatUnits(VaultBalanceUnits()))
+	mineNext(t, timestamp, testAddress("other"))
+	if balanceOf(testAddress("idle")) != cvn("40") || VaultBalanceUnits() != cvn("10") {
+		t.Fatalf("after the first sweep: balance %s, vault %s; want 40 and 10", FormatUnits(balanceOf(testAddress("idle"))), FormatUnits(VaultBalanceUnits()))
 	}
-	coins := ListSpendableCoins("CVN_idle")
+	coins := ListSpendableCoins(testAddress("idle"))
 	if len(coins) != 1 || coins[0].SweepAt != 11 {
 		t.Fatalf("the swept coin should next be due at block 11: %+v", coins)
 	}
-	everythingIssuedIsAccountedFor(t, "after the first sweep", "CVN_idle", "CVN_other")
+	everythingIssuedIsAccountedFor(t, "after the first sweep", testAddress("idle"), testAddress("other"))
 
 	// Blocks 7-10 sweep the four coins CVN_other mined in blocks 2-5.
 	for height := 7; height <= 10; height++ {
-		mineNext(t, timestamp, "CVN_third")
+		mineNext(t, timestamp, testAddress("third"))
 	}
 	if VaultBalanceUnits() != cvn("50") {
 		t.Fatalf("after five coins were swept once the vault holds %s, want 50", FormatUnits(VaultBalanceUnits()))
@@ -106,11 +106,11 @@ func TestUnmovedCoinsAreSwept(t *testing.T) {
 
 	// Block 11: the first coin, untouched for another five blocks, is swept
 	// again: a fifth of the 40 it had left.
-	mineNext(t, timestamp, "CVN_third")
-	if balanceOf("CVN_idle") != cvn("32") {
-		t.Fatalf("after the second sweep the idle coin holds %s, want 32", FormatUnits(balanceOf("CVN_idle")))
+	mineNext(t, timestamp, testAddress("third"))
+	if balanceOf(testAddress("idle")) != cvn("32") {
+		t.Fatalf("after the second sweep the idle coin holds %s, want 32", FormatUnits(balanceOf(testAddress("idle"))))
 	}
-	everythingIssuedIsAccountedFor(t, "after the second sweep", "CVN_idle", "CVN_other", "CVN_third")
+	everythingIssuedIsAccountedFor(t, "after the second sweep", testAddress("idle"), testAddress("other"), testAddress("third"))
 }
 
 func TestMovingACoinResetsItsAge(t *testing.T) {
@@ -120,17 +120,17 @@ func TestMovingACoinResetsItsAge(t *testing.T) {
 		t.Fatal(err)
 	}
 	mineNext(t, timestamp, owner) // block 1
-	mineNext(t, timestamp, "CVN_other")
-	mineNext(t, timestamp, "CVN_other")
+	mineNext(t, timestamp, testAddress("other"))
+	mineNext(t, timestamp, testAddress("other"))
 
 	// Block 4: the owner sends the whole coin to themselves, with no fee.
 	move, err := BuildSignedTransfer(privateKey, publicKey, owner, cvn("50"), 0, ListSpendableCoins(owner))
 	if err != nil {
 		t.Fatal(err)
 	}
-	mineNext(t, timestamp, "CVN_other", move)
-	mineNext(t, timestamp, "CVN_other")
-	mineNext(t, timestamp, "CVN_other") // block 6: the original coin would have been swept here
+	mineNext(t, timestamp, testAddress("other"), move)
+	mineNext(t, timestamp, testAddress("other"))
+	mineNext(t, timestamp, testAddress("other")) // block 6: the original coin would have been swept here
 	if balanceOf(owner) != cvn("50") {
 		t.Fatalf("a coin moved at block 4 was swept at block 6: owner has %s", FormatUnits(balanceOf(owner)))
 	}
@@ -139,17 +139,17 @@ func TestMovingACoinResetsItsAge(t *testing.T) {
 	}
 
 	// Moving it in the very block where it falls due still saves it in full.
-	mineNext(t, timestamp, "CVN_other")
-	mineNext(t, timestamp, "CVN_other") // block 8
+	mineNext(t, timestamp, testAddress("other"))
+	mineNext(t, timestamp, testAddress("other")) // block 8
 	move, err = BuildSignedTransfer(privateKey, publicKey, owner, cvn("50"), 0, ListSpendableCoins(owner))
 	if err != nil {
 		t.Fatal(err)
 	}
-	mineNext(t, timestamp, "CVN_other", move) // block 9
+	mineNext(t, timestamp, testAddress("other"), move) // block 9
 	if balanceOf(owner) != cvn("50") {
 		t.Fatalf("a coin moved in the block where it fell due lost value: owner has %s", FormatUnits(balanceOf(owner)))
 	}
-	everythingIssuedIsAccountedFor(t, "at the end", owner, "CVN_other")
+	everythingIssuedIsAccountedFor(t, "at the end", owner, testAddress("other"))
 }
 
 func TestSmallCoinsAreSweptInFull(t *testing.T) {
@@ -160,34 +160,34 @@ func TestSmallCoinsAreSweptInFull(t *testing.T) {
 	}
 	mineNext(t, timestamp, owner) // block 1
 	// Block 2: pay someone exactly the minimum output, 0.0001 CVN.
-	tiny, err := BuildSignedTransfer(privateKey, publicKey, "CVN_tiny", minimumOutputUnits(), 0, ListSpendableCoins(owner))
+	tiny, err := BuildSignedTransfer(privateKey, publicKey, testAddress("tiny"), minimumOutputUnits(), 0, ListSpendableCoins(owner))
 	if err != nil {
 		t.Fatal(err)
 	}
-	mineNext(t, timestamp, "CVN_other", tiny)
-	if balanceOf("CVN_tiny") != cvn("0.0001") {
-		t.Fatalf("recipient has %s, want 0.0001", FormatUnits(balanceOf("CVN_tiny")))
+	mineNext(t, timestamp, testAddress("other"), tiny)
+	if balanceOf(testAddress("tiny")) != cvn("0.0001") {
+		t.Fatalf("recipient has %s, want 0.0001", FormatUnits(balanceOf(testAddress("tiny"))))
 	}
 	for height := 3; height <= 7; height++ { // block 7 is five blocks after block 2
-		mineNext(t, timestamp, "CVN_other")
+		mineNext(t, timestamp, testAddress("other"))
 	}
-	if balanceOf("CVN_tiny") != 0 || len(ListSpendableCoins("CVN_tiny")) != 0 {
-		t.Fatalf("a coin at the minimum should be swept in full: %s left", FormatUnits(balanceOf("CVN_tiny")))
+	if balanceOf(testAddress("tiny")) != 0 || len(ListSpendableCoins(testAddress("tiny"))) != 0 {
+		t.Fatalf("a coin at the minimum should be swept in full: %s left", FormatUnits(balanceOf(testAddress("tiny"))))
 	}
-	everythingIssuedIsAccountedFor(t, "after the full sweep", owner, "CVN_tiny", "CVN_other")
+	everythingIssuedIsAccountedFor(t, "after the full sweep", owner, testAddress("tiny"), testAddress("other"))
 }
 
 func TestSweepIsUndoneWithItsBlock(t *testing.T) {
 	timestamp := startSweepChain(t)
-	mineNext(t, timestamp, "CVN_idle")
+	mineNext(t, timestamp, testAddress("idle"))
 	for height := 2; height <= 5; height++ {
-		mineNext(t, timestamp, "CVN_other")
+		mineNext(t, timestamp, testAddress("other"))
 	}
-	sweepBlock := mineNext(t, timestamp, "CVN_other") // block 6 sweeps the idle coin
-	mineNext(t, timestamp, "CVN_other")               // block 7 sweeps the coin from block 2
+	sweepBlock := mineNext(t, timestamp, testAddress("other")) // block 6 sweeps the idle coin
+	mineNext(t, timestamp, testAddress("other"))               // block 7 sweeps the coin from block 2
 	tip, vaultAtTip := GetLatestBlockInternal(), VaultBalanceUnits()
-	if balanceOf("CVN_idle") != cvn("40") || vaultAtTip != cvn("20") {
-		t.Fatalf("set-up: idle %s, vault %s; want 40 and 20", FormatUnits(balanceOf("CVN_idle")), FormatUnits(vaultAtTip))
+	if balanceOf(testAddress("idle")) != cvn("40") || vaultAtTip != cvn("20") {
+		t.Fatalf("set-up: idle %s, vault %s; want 40 and 20", FormatUnits(balanceOf(testAddress("idle"))), FormatUnits(vaultAtTip))
 	}
 
 	// A competing block at the same height must see coins as they were
@@ -209,43 +209,43 @@ func TestSweepIsUndoneWithItsBlock(t *testing.T) {
 	StateMutex.Lock()
 	removed := rollbackChainToHeightLocked(sweepBlock.Index - 1)
 	StateMutex.Unlock()
-	if balanceOf("CVN_idle") != cvn("50") || VaultBalanceUnits() != 0 {
-		t.Fatalf("after removing the sweep blocks: idle %s, vault %s; want 50 and 0", FormatUnits(balanceOf("CVN_idle")), FormatUnits(VaultBalanceUnits()))
+	if balanceOf(testAddress("idle")) != cvn("50") || VaultBalanceUnits() != 0 {
+		t.Fatalf("after removing the sweep blocks: idle %s, vault %s; want 50 and 0", FormatUnits(balanceOf(testAddress("idle"))), FormatUnits(VaultBalanceUnits()))
 	}
-	if coins := ListSpendableCoins("CVN_idle"); len(coins) != 1 || coins[0].SweepAt != 6 {
+	if coins := ListSpendableCoins(testAddress("idle")); len(coins) != 1 || coins[0].SweepAt != 6 {
 		t.Fatalf("the restored coin should be due at block 6 again: %+v", coins)
 	}
-	everythingIssuedIsAccountedFor(t, "after the rollback", "CVN_idle", "CVN_other")
+	everythingIssuedIsAccountedFor(t, "after the rollback", testAddress("idle"), testAddress("other"))
 
 	// Put them back: the sweeps happen again, identically.
 	StateMutex.Lock()
 	restoreChainLocked(sweepBlock.Index-1, removed)
 	StateMutex.Unlock()
-	if GetLatestBlockInternal().Hash != tip.Hash || balanceOf("CVN_idle") != cvn("40") || VaultBalanceUnits() != vaultAtTip {
-		t.Fatalf("after restoring: idle %s, vault %s; want 40 and %s", FormatUnits(balanceOf("CVN_idle")), FormatUnits(VaultBalanceUnits()), FormatUnits(vaultAtTip))
+	if GetLatestBlockInternal().Hash != tip.Hash || balanceOf(testAddress("idle")) != cvn("40") || VaultBalanceUnits() != vaultAtTip {
+		t.Fatalf("after restoring: idle %s, vault %s; want 40 and %s", FormatUnits(balanceOf(testAddress("idle"))), FormatUnits(VaultBalanceUnits()), FormatUnits(vaultAtTip))
 	}
-	everythingIssuedIsAccountedFor(t, "after restoring", "CVN_idle", "CVN_other")
+	everythingIssuedIsAccountedFor(t, "after restoring", testAddress("idle"), testAddress("other"))
 }
 
 // A block that pays its miner less than it could puts the rest in the vault.
 func TestUnclaimedRewardGoesToTheVault(t *testing.T) {
 	timestamp := startSweepChain(t)
-	mineNext(t, timestamp, "CVN_miner")
+	mineNext(t, timestamp, testAddress("miner"))
 	*timestamp += 45
-	modest := mineTestBlock(t, *timestamp, "CVN_miner", nil, cvn("49"))
+	modest := mineTestBlock(t, *timestamp, testAddress("miner"), nil, cvn("49"))
 	if !ValidateBlockSignatures(modest) || !SaveBlockToStorageInternal(modest) {
 		t.Fatal("a block claiming less than its reward was refused")
 	}
-	if balanceOf("CVN_miner") != cvn("99") || VaultBalanceUnits() != cvn("1") {
-		t.Fatalf("miner %s, vault %s; want 99 and 1", FormatUnits(balanceOf("CVN_miner")), FormatUnits(VaultBalanceUnits()))
+	if balanceOf(testAddress("miner")) != cvn("99") || VaultBalanceUnits() != cvn("1") {
+		t.Fatalf("miner %s, vault %s; want 99 and 1", FormatUnits(balanceOf(testAddress("miner"))), FormatUnits(VaultBalanceUnits()))
 	}
-	everythingIssuedIsAccountedFor(t, "after an under-claimed block", "CVN_miner")
+	everythingIssuedIsAccountedFor(t, "after an under-claimed block", testAddress("miner"))
 }
 
 func TestWalletWarnsAboutTheSweep(t *testing.T) {
 	timestamp := startSweepChain(t)
-	mineNext(t, timestamp, "CVN_idle")
-	raw, _ := json.Marshal(ListSpendableCoins("CVN_idle"))
+	mineNext(t, timestamp, testAddress("idle"))
+	raw, _ := json.Marshal(ListSpendableCoins(testAddress("idle")))
 	if !strings.Contains(string(raw), `"sweep_at":6`) {
 		t.Errorf("a wallet asking for coins is not told when they fall due: %s", raw)
 	}

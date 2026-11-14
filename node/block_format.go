@@ -211,3 +211,78 @@ func blockTransferBudgetBytes() int {
 	}
 	return Params.MaxBlockBytes - blockRewardReserveBytes
 }
+
+// ADDRESSES
+//
+// An address names the key that may spend a coin. It is "CVN_" followed by
+// the first 20 bytes of the SHA-256 hash of the public key, in hex.
+//
+// On the launch rules it ends with four more bytes, a checksum of the rest.
+// A coin sent to a mistyped address can never be spent by anyone, and there
+// is nobody to ask for it back. With the checksum, a slip of the hand gives
+// something that is not an address at all, which every wallet and every node
+// refuses: about one mistake in four billion still passes.
+//
+// The first test network's addresses have no checksum.
+
+const (
+	addressPrefix     = "CVN_"
+	addressBodyDigits = 40 // 20 bytes
+	addressSumDigits  = 8  // 4 bytes
+)
+
+// addressChecksum is the checksum of an address body.
+func addressChecksum(body string) string {
+	sum := sha256.Sum256([]byte("CVN address checksum v1|" + body))
+	return fmt.Sprintf("%x", sum[:addressSumDigits/2])
+}
+
+// addressWithBody writes the address for a key hash in this network's form.
+func addressWithBody(body string) string {
+	if Params.StrictFormat {
+		return addressPrefix + body + addressChecksum(body)
+	}
+	return addressPrefix + body
+}
+
+// looksLikeWalletAddress reports whether text is an address in this
+// network's form: the prefix, lower-case hex of the right length and, on the
+// launch rules, a checksum that matches.
+func looksLikeWalletAddress(text string) bool {
+	if !strings.HasPrefix(text, addressPrefix) {
+		return false
+	}
+	rest := strings.TrimPrefix(text, addressPrefix)
+	if !Params.StrictFormat {
+		return isLowerHex(rest, addressBodyDigits)
+	}
+	if !isLowerHex(rest, addressBodyDigits+addressSumDigits) {
+		return false
+	}
+	return rest[addressBodyDigits:] == addressChecksum(rest[:addressBodyDigits])
+}
+
+// addressFormDescription says in words what an address looks like on this
+// network, for messages to people.
+func addressFormDescription() string {
+	if Params.StrictFormat {
+		return fmt.Sprintf("%s followed by %d characters, each a digit or a letter from a to f; the last %d are a check on the rest", addressPrefix, addressBodyDigits+addressSumDigits, addressSumDigits)
+	}
+	return fmt.Sprintf("%s followed by %d characters, each a digit or a letter from a to f", addressPrefix, addressBodyDigits)
+}
+
+// completeOlderAddress turns an address written without its checksum into
+// the full form, on a network whose addresses have one. The checksum follows
+// from the rest, so nothing is guessed. It is for an address a miner saved
+// before the checksum existed, never for an address someone has just typed:
+// there the checksum is the point.
+func completeOlderAddress(text string) (string, bool) {
+	if !Params.StrictFormat || !strings.HasPrefix(text, addressPrefix) {
+		return text, false
+	}
+	body := strings.TrimPrefix(text, addressPrefix)
+	if !isLowerHex(body, addressBodyDigits) {
+		return text, false
+	}
+	return addressWithBody(body), true
+}

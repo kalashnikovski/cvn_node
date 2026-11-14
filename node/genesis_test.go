@@ -186,12 +186,12 @@ func TestChainOnAnAnchoredNetwork(t *testing.T) {
 	// Nobody can date a block at or before the anchor block: the chain's
 	// clock starts at the launch, and its first blocks cannot be backdated.
 	for _, early := range []int64{testHeaderTime, testHeaderTime - 1, testHeaderTime - 7*24*3600} {
-		if ValidateBlockSignatures(mineTestBlock(t, early, "CVN_miner", nil, 0)) {
+		if ValidateBlockSignatures(mineTestBlock(t, early, testAddress("miner"), nil, 0)) {
 			t.Errorf("a block dated %d seconds before the anchor block was accepted", testHeaderTime-early)
 		}
 	}
-	block := extendTestChain(t, testHeaderTime+60, "CVN_miner", nil)
-	if block.PrevHash != genesis.Hash || balanceOf("CVN_miner") != cvn("50") {
+	block := extendTestChain(t, testHeaderTime+60, testAddress("miner"), nil)
+	if block.PrevHash != genesis.Hash || balanceOf(testAddress("miner")) != cvn("50") {
 		t.Error("the first block does not build on the anchored genesis block")
 	}
 

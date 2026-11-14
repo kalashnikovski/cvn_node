@@ -50,7 +50,7 @@ func TestTipIsRightAfterManySavesAtOnce(t *testing.T) {
 	if GetBlockByHeightFromDB(41).Hash != "" {
 		t.Error("a block was stored beyond the end of the chain")
 	}
-	if got := balanceOf("CVN_miner"); got != cvn("2000") {
+	if got := balanceOf(testAddress("miner")); got != cvn("2000") {
 		t.Errorf("after the race the miner has %s CVN, want 2000", FormatUnits(got))
 	}
 }
@@ -164,11 +164,11 @@ func TestMinerReadsTheVaultOfTheBlockItBuildsOn(t *testing.T) {
 	}
 	parent := GetLatestBlockInternal()
 	// The next block carries a fee, a fifth of which goes into the vault.
-	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone", cvn("10"), cvn("5"), ListSpendableCoins(owner))
+	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("5"), ListSpendableCoins(owner))
 	if err != nil {
 		t.Fatal(err)
 	}
-	extendTestChain(t, timestamp+45, "CVN_other", []Transaction{transfer})
+	extendTestChain(t, timestamp+45, testAddress("other"), []Transaction{transfer})
 	tip := GetLatestBlockInternal()
 
 	if got := vaultUnitsAfter(tip); got != cvn("1") || got != VaultBalanceUnits() {
@@ -192,7 +192,7 @@ func TestMiningIsOnlyPaidToARealAddress(t *testing.T) {
 	if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", real}); err != nil || address != real {
 		t.Fatalf("a real address was refused: %v", err)
 	}
-	for _, bad := range []string{"CVN_miner", "CVN_my_wallet", strings.ToUpper(real), real[:len(real)-2], real + "00"} {
+	for _, bad := range []string{"CVN_not_an_address", "CVN_my_wallet", strings.ToUpper(real), real[:len(real)-2], real + "00"} {
 		if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", bad}); err == nil {
 			t.Errorf("the miner would have paid its rewards to %q", address)
 		}
@@ -203,7 +203,7 @@ func TestWorkServerPaysOnlyARealAddress(t *testing.T) {
 	startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 32}})
 	Params.HeartbeatInitialDifficulty = 32
 	atomic.StoreInt32(&externalMinersConnected, 0)
-	CustomMinerAddress = "CVN_" + strings.Repeat("1", 40) // this node's own address
+	CustomMinerAddress = testAddress("the node's owner") // this node's own address
 	server := startWorkServerForTest(t)
 
 	// A miner that mistypes its address must be told, not silently made to
@@ -220,7 +220,7 @@ func TestWorkServerPaysOnlyARealAddress(t *testing.T) {
 
 	// While the node is changing its chain, answers are turned away as stale.
 	miner := connectFakeMiner(t, server)
-	result, errorText, _ := miner.call("login", map[string]string{"login": "CVN_" + strings.Repeat("e", 40), "pass": "x"})
+	result, errorText, _ := miner.call("login", map[string]string{"login": testAddress("external"), "pass": "x"})
 	if errorText != "" {
 		t.Fatalf("a miner with a real address was refused: %s", errorText)
 	}
@@ -248,9 +248,9 @@ func TestAnIdentifierThatIsNotTheBlocksOwnIsRefusedOnArrival(t *testing.T) {
 	timestamp := Params.GenesisTimestamp + 100
 	for i := 0; i < 3; i++ {
 		timestamp += 45
-		extendTestChain(t, timestamp, "CVN_miner", nil)
+		extendTestChain(t, timestamp, testAddress("miner"), nil)
 	}
-	honest := mineTestBlock(t, timestamp+45, "CVN_miner", nil, 0)
+	honest := mineTestBlock(t, timestamp+45, testAddress("miner"), nil, 0)
 	if !VerifyIncomingWireBlock(honest) {
 		t.Fatal("an honest block was refused on arrival")
 	}
@@ -308,15 +308,15 @@ func TestLaunchBlockDatesDoNotLeanOnLaterDifficulty(t *testing.T) {
 		startTestChain(t, "devnet", func() { Params.GenesisTimestamp = time.Now().Unix() - 3*24*3600 })
 		// Block 1 is dated wherever its miner likes; the rest of the launch
 		// window follows at a steady pace up to a fixed moment.
-		extendTestChain(t, Params.GenesisTimestamp+firstBlockSecondsAfterGenesis, "CVN_first", nil)
+		extendTestChain(t, Params.GenesisTimestamp+firstBlockSecondsAfterGenesis, testAddress("first"), nil)
 		end := Params.GenesisTimestamp + 24*3600
 		for height := int64(2); height <= HeartbeatLaunchBlocks; height++ {
-			extendTestChain(t, end-(HeartbeatLaunchBlocks-height)*45, "CVN_first", nil)
+			extendTestChain(t, end-(HeartbeatLaunchBlocks-height)*45, testAddress("first"), nil)
 		}
 		timestamp := end
 		for i := 0; i < 5; i++ {
 			timestamp += 45
-			extendTestChain(t, timestamp, "CVN_first", nil)
+			extendTestChain(t, timestamp, testAddress("first"), nil)
 		}
 		drift := scheduleDriftSeconds(GetLatestBlockInternal())
 		GlobalBoltEngine.Close()

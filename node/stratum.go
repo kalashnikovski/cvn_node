@@ -277,7 +277,7 @@ func handleStratumClient(conn net.Conn) {
 			// own address instead would take the miner's work without
 			// telling them, and paying the text as given would burn it.
 			if !looksLikeWalletAddress(login) {
-				client.reply(request.ID, nil, "log in with a CVN wallet address: CVN_ followed by 40 hex digits")
+				client.reply(request.ID, nil, "log in with a CVN wallet address: "+addressFormDescription())
 				return
 			}
 			client.address = login

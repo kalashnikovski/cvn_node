@@ -58,8 +58,8 @@ func TestFormatUnits(t *testing.T) {
 func TestAmountsAsWholeUnits(t *testing.T) {
 	onNetwork(t, "devnet")
 
-	encoded, _ := json.Marshal(UTXOOutput{Recipient: "CVN_a", Amount: UnitsAmount(cvn("50.25"))})
-	if string(encoded) != `{"recipient":"CVN_a","amount":5025000000}` {
+	encoded, _ := json.Marshal(UTXOOutput{Recipient: testAddress("a"), Amount: UnitsAmount(cvn("50.25"))})
+	if string(encoded) != `{"recipient":"`+testAddress("a")+`","amount":5025000000}` {
 		t.Errorf("written as %s", encoded)
 	}
 	var decoded UTXOOutput
@@ -116,8 +116,8 @@ func TestAmountsOnTestnet1KeepTheirDecimalForm(t *testing.T) {
 	}
 
 	// New amounts made by this build are exact and written as plain decimals.
-	fresh, _ := json.Marshal(UTXOOutput{Recipient: "CVN_a", Amount: UnitsAmount(cvn("50.01"))})
-	if string(fresh) != `{"recipient":"CVN_a","amount":50.01}` {
+	fresh, _ := json.Marshal(UTXOOutput{Recipient: testAddress("a"), Amount: UnitsAmount(cvn("50.01"))})
+	if string(fresh) != `{"recipient":"`+testAddress("a")+`","amount":50.01}` {
 		t.Errorf("new amount written as %s", fresh)
 	}
 	if UnitsAmount(cvn("50")).hashText() != "50" {
@@ -151,7 +151,7 @@ func signedTestTransfer(t *testing.T, privateKey, publicKey, sender, sourceTx st
 	tx := Transaction{
 		Version: 1, PublicKey: publicKey, Timestamp: 1, DataSizeKB: 1, Witness: sender,
 		Inputs:  []UTXOInput{{SourceTxID: sourceTx, Index: 0}},
-		Outputs: []UTXOOutput{{Recipient: "CVN_recipient", Amount: UnitsAmount(units)}},
+		Outputs: []UTXOOutput{{Recipient: testAddress("recipient"), Amount: UnitsAmount(units)}},
 	}
 	if Params.StrictFormat {
 		// The launch format has no size field, and the sender signs the
@@ -205,7 +205,7 @@ func TestTransferAmountRules(t *testing.T) {
 
 			// Changing an amount after signing must break the transfer.
 			tampered := exact
-			tampered.Outputs = []UTXOOutput{{Recipient: "CVN_recipient", Amount: UnitsAmount(cvn("49"))}}
+			tampered.Outputs = []UTXOOutput{{Recipient: testAddress("recipient"), Amount: UnitsAmount(cvn("49"))}}
 			if _, _, err := checkTransferAgainstCoins(tampered, lookup, nil); err == nil {
 				t.Error("a transfer whose amount was changed after signing was accepted")
 			}
@@ -231,7 +231,7 @@ func TestWalletBuildsExactTransfers(t *testing.T) {
 		{TxID: "TX_B", Amount: UnitsAmount(cvn("0.1"))},
 	}
 
-	tx, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", cvn("50.25"), cvn("0.01"), spendable)
+	tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), cvn("50.25"), cvn("0.01"), spendable)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -244,10 +244,10 @@ func TestWalletBuildsExactTransfers(t *testing.T) {
 	if fee, _, err := checkTransferAgainstCoins(tx, lookup, nil); err != nil || fee != cvn("0.01") {
 		t.Errorf("fee %d units, err %v; want 0.01 CVN", fee, err)
 	}
-	if _, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", cvn("60"), 0, spendable); err == nil {
+	if _, err := BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), cvn("60"), 0, spendable); err == nil {
 		t.Error("a transfer for more than the wallet holds was built")
 	}
-	if _, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", 0, 0, spendable); err == nil {
+	if _, err := BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), 0, 0, spendable); err == nil {
 		t.Error("a transfer of nothing was built")
 	}
 
@@ -268,11 +268,11 @@ func TestRewardRules(t *testing.T) {
 			onNetwork(t, network)
 			block := func(rewards ...int64) Block {
 				coinbase := Transaction{
-					Version: 1, ID: fmt.Sprintf("TX_COINBASE_H%d_0a", 100), Inputs: []UTXOInput{}, Witness: "CVN_miner",
+					Version: 1, ID: fmt.Sprintf("TX_COINBASE_H%d_0a", 100), Inputs: []UTXOInput{}, Witness: testAddress("miner"),
 					PublicKey: CoinbasePublicKeyMarker, Signature: CoinbaseSignatureMarker,
 				}
 				for _, units := range rewards {
-					coinbase.Outputs = append(coinbase.Outputs, UTXOOutput{Recipient: "CVN_miner", Amount: UnitsAmount(units)})
+					coinbase.Outputs = append(coinbase.Outputs, UTXOOutput{Recipient: testAddress("miner"), Amount: UnitsAmount(units)})
 				}
 				return Block{Index: 100, Transactions: []Transaction{coinbase}}
 			}

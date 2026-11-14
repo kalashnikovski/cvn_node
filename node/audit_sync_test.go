@@ -91,7 +91,7 @@ func buildTestChain(t *testing.T, length int) []Block {
 	timestamp := Params.GenesisTimestamp + 100
 	for i := 0; i < length; i++ {
 		timestamp += 45
-		extendTestChain(t, timestamp, "CVN_miner", nil)
+		extendTestChain(t, timestamp, testAddress("miner"), nil)
 	}
 	return localChain()
 }
@@ -183,8 +183,8 @@ func TestAnHonestSourceIsFollowed(t *testing.T) {
 	if syncSourceIsSetAside(source) {
 		t.Error("a source that delivered the chain it claimed was set aside")
 	}
-	if balanceOf("CVN_miner") != cvn("600") {
-		t.Errorf("after catching up the miner has %s CVN, want 600", FormatUnits(balanceOf("CVN_miner")))
+	if balanceOf(testAddress("miner")) != cvn("600") {
+		t.Errorf("after catching up the miner has %s CVN, want 600", FormatUnits(balanceOf(testAddress("miner"))))
 	}
 }
 

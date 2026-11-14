@@ -1,6 +1,8 @@
 package node
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"path/filepath"
@@ -170,4 +172,14 @@ func balanceOf(address string) int64 {
 	BalanceCacheMutex.RLock()
 	defer BalanceCacheMutex.RUnlock()
 	return StateBalanceCache[address]
+}
+
+// testAddress returns a well-formed address for a made-up owner, the same
+// one every time for the same name. Nobody holds a key for it; tests use it
+// as somewhere to pay. It is written in the launch rules' form, with its
+// checksum, which the first test network's looser rules accept as well.
+func testAddress(name string) string {
+	hash := sha256.Sum256([]byte("test owner " + name))
+	body := hex.EncodeToString(hash[:20])
+	return addressPrefix + body + addressChecksum(body)
 }
