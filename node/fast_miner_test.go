@@ -299,3 +299,30 @@ func TestMiningAddressMustBeARealWallet(t *testing.T) {
 		t.Errorf("CVN_MINER_ADDRESS should win, as it always has: %q", address)
 	}
 }
+
+func TestMiningCanBeSwitchedOff(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("CVN_NO_MINING", "")
+	t.Setenv("CVN_MINER_ADDRESS", "")
+	if miningSwitchedOff([]string{"cvn_node", "--network", "devnet"}) {
+		t.Fatal("a node mines unless told not to")
+	}
+	if !miningSwitchedOff([]string{"cvn_node", "--network", "devnet", "--no-mining"}) {
+		t.Error("--no-mining was not understood")
+	}
+	t.Setenv("CVN_NO_MINING", "1")
+	if !miningSwitchedOff([]string{"cvn_node"}) {
+		t.Error("CVN_NO_MINING was not understood")
+	}
+	t.Setenv("CVN_NO_MINING", "")
+	if err := os.WriteFile("miner_config.json", []byte(`{"mining": "off"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if !miningSwitchedOff([]string{"cvn_node"}) {
+		t.Error(`"mining": "off" in miner_config.json was not understood`)
+	}
+	// A seed needs no mining address; a mining node still does.
+	if _, err := resolveMinerAddress([]string{"cvn_node"}); err == nil {
+		t.Error("a node with no address would have been allowed to mine")
+	}
+}

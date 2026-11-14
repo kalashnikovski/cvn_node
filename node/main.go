@@ -145,12 +145,16 @@ func Run(frontendAssets embed.FS) {
 	// Decide where rewards go before anything else starts. A node never
 	// invents an address: coins mined to an address whose private key nobody
 	// holds could never be spent.
-	minerAddress, err := resolveMinerAddress(os.Args)
-	if err != nil {
-		fmt.Println("🚨 " + err.Error())
-		os.Exit(1)
+	// A node that does not mine earns nothing and needs no address.
+	seedOnly := miningSwitchedOff(os.Args)
+	if !seedOnly {
+		minerAddress, err := resolveMinerAddress(os.Args)
+		if err != nil {
+			fmt.Println("🚨 " + err.Error())
+			os.Exit(1)
+		}
+		CustomMinerAddress = minerAddress
 	}
-	CustomMinerAddress = minerAddress
 
 	// Everything is in order for a node to run. If the network has not
 	// started yet, wait here for its anchor (see anchor_wait.go).
@@ -169,7 +173,11 @@ func Run(frontendAssets embed.FS) {
 	atomic.StoreUint64(&GlobalHeightSolverLatch, uint64(GetLatestBlockInternal().Index))
 	StateMutex.RUnlock()
 
-	log.Printf("🪪 Mining rewards go to %s\n", CustomMinerAddress)
+	if seedOnly {
+		log.Println("🌱 This node does not mine. It keeps the chain, checks every block and passes blocks on.")
+	} else {
+		log.Printf("🪪 Mining rewards go to %s\n", CustomMinerAddress)
+	}
 
 	go func() {
 		winMux := http.NewServeMux()
@@ -401,10 +409,14 @@ func Run(frontendAssets embed.FS) {
 	// On a RandomX network, also offer work to external mining software.
 	// If the fast miner was chosen, start it; the built-in miner below then
 	// stays idle unless the fast miner cannot run (see fast_miner.go).
-	StartChosenMiner(StartMiningWorkServer())
-	go runVerifyKeyWarmer()
-	go runTableJanitor()
-	StartContextMinerEngine()
+	if seedOnly {
+		announceNetworkStatus("🌱 [SEED] Mining is switched off on this node (--no-mining). It keeps the chain, checks every block and passes blocks on.")
+	} else {
+		StartChosenMiner(StartMiningWorkServer())
+		go runVerifyKeyWarmer()
+		go runTableJanitor()
+		StartContextMinerEngine()
+	}
 	ticker := time.NewTicker(4 * time.Second)
 	defer ticker.Stop()
 	_ = exec.Command("cmd", "/c", "cls").Run()
@@ -495,7 +507,11 @@ func Run(frontendAssets embed.FS) {
 			hashrateMutex.Unlock()
 			if loopCounter%10 == 0 {
 				logMutex.Lock()
-				liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %s // Ledger Height: #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight))
+				if seedOnly {
+					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] 🌱 [SEED] Not mining. Following the network // Ledger Height: #%d", time.Now().Format("15:04:05"), actualBlocksHeight))
+				} else {
+					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %s // Ledger Height: #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight))
+				}
 				logMutex.Unlock()
 			}
 			logMutex.Lock()
@@ -512,7 +528,11 @@ func Run(frontendAssets embed.FS) {
 			fmt.Println("================================================================================")
 			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %s\n", actualBlocksHeight, formatHashrate(avg15m))
 			fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %s\n", actualCvnBalance, formatHashrate(avg1h))
-			fmt.Printf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %s\n", CustomMinerAddress, formatHashrate(avg24h))
+			if seedOnly {
+				fmt.Printf("🌱 SEED NODE: NOT MINING            | 📊 24h AVG HASHRATE: %s\n", formatHashrate(avg24h))
+			} else {
+				fmt.Printf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %s\n", CustomMinerAddress, formatHashrate(avg24h))
+			}
 			fmt.Println("================================================================================")
 			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
 			fmt.Println("--------------------------------------------------------------------------------")

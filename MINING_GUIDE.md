@@ -43,6 +43,12 @@ Things to know:
 - **Fewer threads:** `--threads N` limits either miner to N processor threads.
 - **Antivirus programs often flag mining software**, including XMRig and programs that start it, because the same software is abused by malware. If yours removes the files, you will need to allow the CVN folder in your antivirus settings. Only do this for files you downloaded from the two project pages yourself.
 
+### A small machine is a good node and a poor miner
+
+RandomX needs about 2.3 GB of free memory to mine at full speed. With less, the miner falls back to a low-memory mode that is many times slower: a 1 GB server manages a handful of hashes per second, against thousands on a desktop. It will almost never find a block.
+
+Such a machine is still useful to the network as a node. Run it with `--no-mining` and it does everything a node does without wasting its one processor on mining; see the installation guide.
+
 ## 2. Large pages
 
 RandomX works through a 2 GB table in memory. Normally the system hands out memory in 4 KB pieces; with large pages it uses 2 MB pieces, and the processor spends far less time finding its place in the table.

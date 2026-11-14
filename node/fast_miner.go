@@ -139,6 +139,32 @@ func resolveMinerAddress(args []string) (string, error) {
 	return address, nil
 }
 
+// miningSwitchedOff reports whether this node was asked not to mine: with
+// `--no-mining` on the command line, CVN_NO_MINING in the environment, or
+// "mining": "off" in miner_config.json.
+//
+// Such a node is a seed and nothing else. It keeps the whole chain, checks
+// every block and transfer, and passes them on, exactly as a mining node
+// does. It starts no miner and offers no mining work, so it needs no mining
+// address and only the memory that checking blocks takes. That is what a
+// small rented server should run: on one shared processor, mining would
+// earn next to nothing and get in the way of the work a seed is there for.
+func miningSwitchedOff(args []string) bool {
+	for _, arg := range args {
+		if arg == "--no-mining" {
+			return true
+		}
+	}
+	if os.Getenv("CVN_NO_MINING") != "" {
+		return true
+	}
+	switch strings.ToLower(readMinerConfig()["mining"]) {
+	case "off", "no", "false", "none":
+		return true
+	}
+	return false
+}
+
 // chosenMiner returns which miner was asked for: on the command line first,
 // then in CVN_MINER, then in miner_config.json. Nothing chosen means the
 // built-in miner.

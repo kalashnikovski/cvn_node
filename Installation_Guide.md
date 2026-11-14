@@ -109,6 +109,16 @@ While the miner runs in one terminal, open a second one:
 cd cvn_node && ./cvn_node --wallet
 ```
 
+### Running a node that does not mine
+
+A node does not have to mine. Started with `--no-mining` it keeps the whole chain, checks every block and transfer, and passes them on to other nodes, and that is all. It needs no wallet and no mining address, and very little memory.
+
+```bash
+./cvn_node --no-mining
+```
+
+This is the right way to run a small rented server. On one shared processor, mining would earn next to nothing and get in the way of the server's real use to the network, which is being online and reachable. Open the network's two ports in the server's firewall so that other nodes can reach it (8080 and 8081 on `testnet-1`; see section 7 for the others).
+
 ---
 
 ## 4. Using the wallet
