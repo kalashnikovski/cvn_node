@@ -20,9 +20,9 @@ var cvnVectors = []struct {
 	want       string
 	standard   string
 }{
-	{"test key 000", "This is a test", "da988dd2ebec7ca179cad9df709cfb094775cdd25d5218ffa1ed3f353c0c38cf", "639183aae1bf4c9a35884cb46b09cad9175f04efd7684e7262a0ac1c2f0b4e3f"},
-	{"test key 000", "Lorem ipsum dolor sit amet", "c972015f4c979d07e6fb733a77614aca2f831e466ba59c4ce8e7728721d15059", "300a0adb47603dedb42228ccb2b211104f4da45af709cd7547cd049e9489c969"},
-	{"test key 001", "sed do eiusmod tempor incididunt ut labore et dolore magna aliqua", "4e6cd8fec69a815bfc0a93df1cf04c5698d4cd64673299060721be166fb460ae", "e9ff4503201c0c2cca26d285c93ae883f9b1d30c9eb240b820756f2d5a7905fc"},
+	{"test key 000", "This is a test", "d2db24590cf1c6bcf9ae6f70a4ae604e4d05c5e875ef03548762156536396b6b", "639183aae1bf4c9a35884cb46b09cad9175f04efd7684e7262a0ac1c2f0b4e3f"},
+	{"test key 000", "Lorem ipsum dolor sit amet", "5991812fdef620e334156c618a4acc305fab85b5aa0051649cdef9d108d9c1b9", "300a0adb47603dedb42228ccb2b211104f4da45af709cd7547cd049e9489c969"},
+	{"test key 001", "sed do eiusmod tempor incididunt ut labore et dolore magna aliqua", "73ac1e70b6cf0f67b28daf1453c6dd769fe6288661f828179f13724a788c5c0b", "e9ff4503201c0c2cca26d285c93ae883f9b1d30c9eb240b820756f2d5a7905fc"},
 }
 
 func TestCVNSettings(t *testing.T) {
@@ -31,6 +31,9 @@ func TestCVNSettings(t *testing.T) {
 	}
 	if RANDOMX_DATASET_EXTRA_SIZE%64 != 0 {
 		t.Fatal("the extra dataset size must be divisible by 64")
+	}
+	if RANDOMX_DATASET_EXTRA_SIZE > 33554368 {
+		t.Fatal("the extra dataset size must not exceed the standard value: mining software reserves memory sized for standard RandomX")
 	}
 	// The settings that keep the algorithm hard for anything but ordinary
 	// processors must stay exactly as published.

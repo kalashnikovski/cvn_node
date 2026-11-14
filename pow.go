@@ -20,10 +20,21 @@ import (
 // force at its height:
 //
 //   - sha256:  the identifier itself must be at or below the target.
-//   - randomx: the RandomX hash of the identifier, under the key for that
-//     height, must be at or below the target. RandomX is slow and
+//   - randomx: the RandomX hash of the block's mining blob, under the key
+//     for that height, must be at or below the target. RandomX is slow and
 //     memory-hungry by design, which is what keeps ordinary processors
 //     competitive (see internal/randomx).
+//
+// The mining blob is 43 bytes: a version byte, six zero bytes, the 32-byte
+// commitment to everything in the block except the nonce, and the nonce as
+// four bytes, lowest first. The commitment is the block's identifier computed
+// with the nonce set to zero. The RandomX result is read as a number with its
+// last byte the most significant.
+//
+// That layout, the 4-byte nonce at byte 39 and the way the result is read are
+// what widely used RandomX mining software (XMRig) expects, so such software
+// can mine CVN through the work server in stratum.go without CVN having to
+// trust it: every block it finds is checked here like any other.
 //
 // The algorithm is chosen by height from the network's schedule, so a future
 // algorithm can take over at a chosen block without restarting the chain.
@@ -115,6 +126,47 @@ func powKeyFor(height int64) ([]byte, bool) {
 	return key, true
 }
 
+const (
+	powBlobSize        = 43
+	powBlobNonceOffset = 39
+	powNonceLimit      = int64(1) << 32
+)
+
+// powCommitment commits to everything in a block except its nonce: it is the
+// block's identifier computed with the nonce set to zero, as 64 hex digits.
+func powCommitment(block Block) string {
+	block.Nonce = 0
+	return CalculateHash(block)
+}
+
+// powBlob builds the 43 bytes that are hashed with RandomX for a block with
+// this commitment and nonce.
+func powBlob(commitmentHex string, nonce uint32) ([]byte, bool) {
+	commitment, err := hex.DecodeString(commitmentHex)
+	if err != nil || len(commitment) != 32 {
+		return nil, false
+	}
+	blob := make([]byte, powBlobSize)
+	blob[0] = 1
+	copy(blob[7:powBlobNonceOffset], commitment)
+	blob[powBlobNonceOffset] = byte(nonce)
+	blob[powBlobNonceOffset+1] = byte(nonce >> 8)
+	blob[powBlobNonceOffset+2] = byte(nonce >> 16)
+	blob[powBlobNonceOffset+3] = byte(nonce >> 24)
+	return blob, true
+}
+
+// powWorkValue turns a RandomX result into the number it stands for, written
+// as 64 hex digits with the most significant first, so that it can be
+// compared with a target directly.
+func powWorkValue(hash [randomx.RANDOMX_HASH_SIZE]byte) string {
+	var reversed [randomx.RANDOMX_HASH_SIZE]byte
+	for i := range hash {
+		reversed[len(hash)-1-i] = hash[i]
+	}
+	return hex.EncodeToString(reversed[:])
+}
+
 // BlockProofValid reports whether a block carries the work its difficulty
 // demands, under the algorithm in force at its height. block.Hash must
 // already be known to be the block's true identifier.
@@ -122,14 +174,18 @@ func BlockProofValid(block Block, difficulty int) bool {
 	if powAlgorithmAt(block.Index) != PowRandomX {
 		return HashMeetsDifficulty(block.Hash, block.Index, difficulty)
 	}
-	if int64(difficulty) < minDifficultyAt(block.Index) {
+	if int64(difficulty) < minDifficultyAt(block.Index) || block.Nonce < 0 || block.Nonce >= powNonceLimit {
 		return false
 	}
 	key, ok := powKeyFor(block.Index)
 	if !ok {
 		return false
 	}
-	work, ok := randomXVerify(key, block.Hash)
+	blob, ok := powBlob(powCommitment(block), uint32(block.Nonce))
+	if !ok {
+		return false
+	}
+	work, ok := randomXVerify(key, blob)
 	return ok && work <= HeartbeatTargetHex(difficulty)
 }
 
@@ -171,26 +227,25 @@ func (e *rxLight) close() {
 func (e *rxLight) hash(input []byte) string {
 	var output [randomx.RANDOMX_HASH_SIZE]byte
 	e.vm.CalculateHash(input, &output)
-	return hex.EncodeToString(output[:])
+	return powWorkValue(output)
 }
 
 var rxVerifier struct {
 	sync.Mutex
 	engines []*rxLight        // most recently used first; at most two keys
-	results map[string]string // key + identifier -> work hash, for repeat checks
+	results map[string]string // key + blob -> work value, for repeat checks
 }
 
-// randomXVerify returns the RandomX hash of a block identifier under a key,
-// as 64 hex digits. It keeps engines for the two most recent keys, so the
-// daily key change does not interrupt verification.
-func randomXVerify(key []byte, blockHashHex string) (string, bool) {
-	input, err := hex.DecodeString(blockHashHex)
-	if err != nil || len(input) != 32 {
+// randomXVerify returns the work value of a mining blob under a key (see
+// powWorkValue). It keeps engines for the two most recent keys, so the daily
+// key change does not interrupt verification.
+func randomXVerify(key []byte, input []byte) (string, bool) {
+	if len(input) == 0 || len(key) == 0 {
 		return "", false
 	}
 	rxVerifier.Lock()
 	defer rxVerifier.Unlock()
-	cacheKey := string(key) + blockHashHex
+	cacheKey := string(key) + string(input)
 	if work, known := rxVerifier.results[cacheKey]; known {
 		return work, true
 	}
@@ -283,13 +338,13 @@ func prepareRxMiner(key []byte) bool {
 	return true
 }
 
-// randomXMine returns the RandomX hash of a block identifier for a mining
-// thread, preparing the shared engine for the key first if needed.
-func randomXMine(workerID int64, key []byte, blockHashHex string) (string, bool) {
-	input, err := hex.DecodeString(blockHashHex)
-	if err != nil || len(input) != 32 {
+// randomXMine returns the work value of a mining blob for a mining thread,
+// preparing the shared engine for the key first if needed.
+func randomXMine(workerID int64, key []byte, input []byte) (string, bool) {
+	if len(input) == 0 {
 		return "", false
 	}
+	var err error
 	rxMiner.RLock()
 	ready := rxMiner.key == string(key) && rxMiner.cache != nil
 	rxMiner.RUnlock()
@@ -320,7 +375,7 @@ func randomXMine(workerID int64, key []byte, blockHashHex string) (string, bool)
 	rxMiner.vmLock.Unlock()
 	var output [randomx.RANDOMX_HASH_SIZE]byte
 	vm.CalculateHash(input, &output)
-	return hex.EncodeToString(output[:]), true
+	return powWorkValue(output), true
 }
 
 // formatHashrate writes a mining speed for the dashboard. megaHashes is in

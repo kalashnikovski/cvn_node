@@ -42,6 +42,9 @@ type ChainParams struct {
 	SyncPort         int // block download, wallet and explorer requests
 	SyncFallbackPort int // used on Windows when SyncPort is taken
 	StatusPort       int // small status page
+	// StratumPort is where external mining software fetches work (see
+	// stratum.go). Zero on networks that do not mine with RandomX.
+	StratumPort int
 
 	DatabaseFile  string
 	PeerCacheFile string
@@ -124,6 +127,7 @@ var devnetParams = ChainParams{
 	SyncPort:         18081,
 	SyncFallbackPort: 19091,
 	StatusPort:       18082,
+	StratumPort:      18083,
 
 	DatabaseFile:  "cvn_devnet.db",
 	PeerCacheFile: "peers_devnet.json",

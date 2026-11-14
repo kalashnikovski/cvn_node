@@ -15,4 +15,8 @@ package randomx
 const RANDOMX_ARGON_SALT = "RandomCVN\x01"
 
 // Dataset extra size. Must be divisible by 64 (standard RandomX: 33554368).
-const RANDOMX_DATASET_EXTRA_SIZE = 33554368 + 64*2026
+//
+// CVN's value is smaller than the standard one, never larger: mining software
+// reserves a fixed amount of memory sized for standard RandomX, and a larger
+// dataset would not fit in it.
+const RANDOMX_DATASET_EXTRA_SIZE = 33554368 - 64*2026

@@ -489,6 +489,8 @@ go runChainLagWatchdog()
 // keep checking. See mining_readiness.go.
 evaluateMiningReadiness()
 go runMiningReadinessMonitor()
+// On a RandomX network, also offer work to external mining software.
+StartMiningWorkServer()
 StartContextMinerEngine()
 ticker := time.NewTicker(4 * time.Second)
 defer ticker.Stop()
@@ -636,7 +638,7 @@ var nonce int64 = workerID * 100000000
 var floorTipHash string
 var floorTipFirstSeen int64
 for {
-if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 {
+if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 || atomic.LoadInt32(&externalMinersConnected) > 0 {
 time.Sleep(100 * time.Millisecond)
 continue
 }
@@ -703,59 +705,25 @@ if workerTargetDifficulty > 8 { workerTargetDifficulty = 8 }
 targetPrefix = strings.Repeat("0", workerTargetDifficulty)
 }
 var guardMatrixPlaceholder = ""
-coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%d", nextIndex, nonce))))
-var coinbaseOutputs []UTXOOutput
-// From the transaction fork on, waiting transfers that are valid on top of
-// this tip go into the block, and their fees are added to the miner's reward.
-var templateTransfers []Transaction
-var feeUnits int64
-if IsTxForkHeight(nextIndex) {
-templateTransfers, feeUnits = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 1)
-}
-// If the tip won a same-height race, name the losing block as an uncle and
-// split this block's reward 80/20 with its miner. Total emission is unchanged.
-// Everything is whole units, so the amounts written into the block are
-// exact. rewardUnits is the new reward plus the vault's payout for this
-// block; feeUnits becomes the miner's share of the fees.
-accounting := accountForBlock(nextIndex, feeUnits, VaultBalanceUnits())
-rewardUnits := accounting.SubsidyUnits()
-feeUnits = accounting.MinerFeeUnits
-templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
-templateUncleMiner := "NONE"
-if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle && rewardUnits/5 > 0 {
-templateUncleHash = pendingUncleHash
-templateUncleMiner = pendingUncleMiner
-// Whole units: the uncle gets a fifth of the new reward, rounded down, and
-// the miner the rest plus the fees, so the two always add up exactly.
-uncleUnits := rewardUnits / 5
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsAmount(rewardUnits - uncleUnits + feeUnits)})
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsAmount(uncleUnits)})
-} else if rewardUnits+feeUnits > 0 {
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
-}
-candidateTransactions := []Transaction{
-{
-Version:          1,
-ID:               coinbaseTxID,
-Witness:          CustomMinerAddress,
-PublicKey:        "GENESIS_VOID_REWARD_POOL",
-Inputs:           []UTXOInput{},
-Outputs:          coinbaseOutputs,
-Timestamp:        simulatedTime,
-Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
-},
-}
-candidateTransactions = append(candidateTransactions, templateTransfers...)
+candidateTransactions, templateUncleHash, templateUncleMiner := buildBlockContents(currentBlock, CustomMinerAddress, simulatedTime, fmt.Sprintf("%d", nonce))
 // The transactions are fixed for this template, so digest them once.
 templateTxDigest := BlockTransactionsDigest(nextIndex, candidateTransactions)
 randomXTemplate := powAlgorithmAt(nextIndex) == PowRandomX
 var randomXKey []byte
+randomXCommitment := ""
 if randomXTemplate {
 var keyKnown bool
 if randomXKey, keyKnown = powKeyFor(nextIndex); !keyKnown {
 time.Sleep(250 * time.Millisecond)
 continue
 }
+// Everything in the block except the nonce is fixed for this template,
+// so it is committed to once; only the nonce changes per attempt.
+randomXCommitment = CalculateHashWithTxDigest(Block{
+Version: 1, Index: nextIndex, Timestamp: simulatedTime, PrevHash: parentBlockTipHash,
+Difficulty: workerTargetDifficulty, GuardMatrix: guardMatrixPlaceholder,
+UncleHash: templateUncleHash, UncleMiner: templateUncleMiner,
+}, templateTxDigest)
 }
 for i := 0; i < 100000; i++ {
 nonce++
@@ -768,6 +736,11 @@ StateMutex.RUnlock()
 if actualTipCheck.Index != (nextIndex-1) || actualTipCheck.Hash != parentBlockTipHash {
 break
 }
+// Under RandomX the nonce is four bytes.
+templateNonce := nonce
+if randomXTemplate {
+templateNonce = int64(uint32(nonce))
+}
 mockTemplateBlock := Block{
 Version:      1,
 Index:        nextIndex,
@@ -776,7 +749,7 @@ Transactions: candidateTransactions,
 PrevHash:     parentBlockTipHash,
 Hash:         "",
 Difficulty:   workerTargetDifficulty,
-Nonce:        nonce,
+Nonce:        templateNonce,
 GuardMatrix:  guardMatrixPlaceholder,
 UncleHash:    templateUncleHash,
 UncleMiner:   templateUncleMiner,
@@ -785,9 +758,9 @@ UncleMiner:   templateUncleMiner,
 computedHashHex := CalculateHashWithTxDigest(mockTemplateBlock, templateTxDigest)
 solved := false
 if randomXTemplate {
-// The identifier is cheap; the work is its RandomX hash under this
-// height's key.
-if workHex, ok := randomXMine(workerID, randomXKey, computedHashHex); ok {
+// The work is the RandomX hash of the mining blob under this height's key.
+blob, blobOK := powBlob(randomXCommitment, uint32(templateNonce))
+if workHex, ok := randomXMine(workerID, randomXKey, blob); ok && blobOK {
 solved = workHex <= heartbeatTargetHex
 } else {
 time.Sleep(200 * time.Millisecond)
@@ -842,4 +815,57 @@ break
 }
 func osCheckArgs() []string {
 return os.Args
+}
+// buildBlockContents assembles what goes into a new block on top of `tip`:
+// the reward transaction paying minerAddress (and the uncle's miner when one
+// is owed), followed by the waiting transfers. It is used by the built-in
+// miner and by the work server for external miners, so both build identical
+// blocks. `uniqueness` only has to differ between attempts; it keeps reward
+// transaction IDs distinct.
+func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniqueness string) ([]Transaction, string, string) {
+nextIndex := tip.Index + 1
+coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%s", nextIndex, uniqueness))))
+var coinbaseOutputs []UTXOOutput
+// From the transaction fork on, waiting transfers that are valid on top of
+// this tip go into the block, and their fees are added to the miner's reward.
+var templateTransfers []Transaction
+var feeUnits int64
+if IsTxForkHeight(nextIndex) {
+templateTransfers, feeUnits = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 1)
+}
+// If the tip won a same-height race, name the losing block as an uncle and
+// split this block's reward 80/20 with its miner. Total emission is unchanged.
+// Everything is whole units, so the amounts written into the block are
+// exact. rewardUnits is the new reward plus the vault's payout for this
+// block; feeUnits becomes the miner's share of the fees.
+accounting := accountForBlock(nextIndex, feeUnits, VaultBalanceUnits())
+rewardUnits := accounting.SubsidyUnits()
+feeUnits = accounting.MinerFeeUnits
+templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
+templateUncleMiner := "NONE"
+if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(tip); hasUncle && rewardUnits/5 > 0 {
+templateUncleHash = pendingUncleHash
+templateUncleMiner = pendingUncleMiner
+// Whole units: the uncle gets a fifth of the new reward, rounded down, and
+// the miner the rest plus the fees, so the two always add up exactly.
+uncleUnits := rewardUnits / 5
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits - uncleUnits + feeUnits)})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsAmount(uncleUnits)})
+} else if rewardUnits+feeUnits > 0 {
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
+}
+candidateTransactions := []Transaction{
+{
+Version:          1,
+ID:               coinbaseTxID,
+Witness:          minerAddress,
+PublicKey:        "GENESIS_VOID_REWARD_POOL",
+Inputs:           []UTXOInput{},
+Outputs:          coinbaseOutputs,
+Timestamp:        timestamp,
+Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+},
+}
+candidateTransactions = append(candidateTransactions, templateTransfers...)
+return candidateTransactions, templateUncleHash, templateUncleMiner
 }

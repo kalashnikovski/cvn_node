@@ -70,12 +70,13 @@ func TestChainMinedWithRandomX(t *testing.T) {
 		if block.Hash != CalculateHash(block) {
 			t.Fatalf("block #%d: identifier is not the header hash", block.Index)
 		}
-		// ...and the work is the RandomX hash of that identifier.
+		// ...and the work is the RandomX hash of the block's mining blob.
 		key, ok := powKeyFor(block.Index)
 		if !ok {
 			t.Fatalf("block #%d: no key", block.Index)
 		}
-		work, ok := randomXVerify(key, block.Hash)
+		blob, _ := powBlob(powCommitment(block), uint32(block.Nonce))
+		work, ok := randomXVerify(key, blob)
 		if !ok || work > HeartbeatTargetHex(block.Difficulty) {
 			t.Fatalf("block #%d was stored without a valid RandomX proof", block.Index)
 		}
