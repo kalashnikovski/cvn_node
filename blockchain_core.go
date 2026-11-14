@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"math/big"
 	"crypto/sha256"
 	"embed"
@@ -152,6 +153,10 @@ func CalculateHash(b Block) string {
 // transactions. The miner computes that digest once per template instead of
 // once per nonce.
 func CalculateHashWithTxDigest(b Block, txHashStr string) string {
+	if Params.StrictFormat {
+		digest := sha256.Sum256([]byte(blockHeaderEncoding(b, txHashStr)))
+		return hex.EncodeToString(digest[:])
+	}
 	
 	uHash := strings.TrimSpace(b.UncleHash)
 	if uHash == "" {
@@ -925,6 +930,10 @@ return currentDiff
 func ValidateBlockSignatures(b Block) bool {
 if !ValidateBlockByVersion(b) {
 fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d rejected by version dispatcher gateway rule.\n", b.Index)
+return false
+}
+if err := checkBlockFormat(b); err != nil {
+fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, err)
 return false
 }
 if b.Index > 0 {

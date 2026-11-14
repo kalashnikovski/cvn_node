@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"embed"
 	"encoding/json" // 👑 CORRECT STANDARD LIBRARY IMPORT RESIDENCY
 	"fmt"
@@ -863,7 +862,7 @@ return os.Args
 // transaction IDs distinct.
 func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniqueness string) ([]Transaction, string, string) {
 nextIndex := tip.Index + 1
-coinbaseTxID := fmt.Sprintf("TX_COINBASE_H%d_%x", nextIndex, sha256.Sum256([]byte(fmt.Sprintf("%d-%s", nextIndex, uniqueness))))
+coinbaseTxID := rewardTransactionID(nextIndex, uniqueness)
 var coinbaseOutputs []UTXOOutput
 // From the transaction fork on, waiting transfers that are valid on top of
 // this tip go into the block, and their fees are added to the miner's reward.
@@ -882,7 +881,7 @@ rewardUnits := accounting.SubsidyUnits()
 feeUnits = accounting.MinerFeeUnits
 templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 templateUncleMiner := "NONE"
-if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(tip); hasUncle && rewardUnits/5 > 0 {
+if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(tip); hasUncle && rewardUnits/5 > 0 && !Params.NoUncles {
 templateUncleHash = pendingUncleHash
 templateUncleMiner = pendingUncleMiner
 // Whole units: the uncle gets a fifth of the new reward, rounded down, and
@@ -890,7 +889,8 @@ templateUncleMiner = pendingUncleMiner
 uncleUnits := rewardUnits / 5
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits - uncleUnits + feeUnits)})
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsAmount(uncleUnits)})
-} else if rewardUnits+feeUnits > 0 {
+} else if rewardUnits+feeUnits >= minimumOutputUnits() {
+// An amount too small to be a coin is not paid; it stays in the vault.
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
 }
 candidateTransactions := []Transaction{

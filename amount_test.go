@@ -153,6 +153,9 @@ func signedTestTransfer(t *testing.T, privateKey, publicKey, sender, sourceTx st
 		Inputs:  []UTXOInput{{SourceTxID: sourceTx, Index: 0}},
 		Outputs: []UTXOOutput{{Recipient: "CVN_recipient", Amount: UnitsAmount(units)}},
 	}
+	if Params.StrictFormat {
+		tx.DataSizeKB = 0 // the launch format has no such field
+	}
 	tx.ID = ComputeTransactionID(tx)
 	r, s, err := SignTransactionPayload(privateKey, tx.ID)
 	if err != nil {
@@ -257,7 +260,10 @@ func TestRewardRules(t *testing.T) {
 		t.Run(network, func(t *testing.T) {
 			onNetwork(t, network)
 			block := func(rewards ...int64) Block {
-				coinbase := Transaction{Version: 1, ID: fmt.Sprintf("TX_COINBASE_H%d_x", 100), Inputs: []UTXOInput{}}
+				coinbase := Transaction{
+					Version: 1, ID: fmt.Sprintf("TX_COINBASE_H%d_0a", 100), Inputs: []UTXOInput{}, Witness: "CVN_miner",
+					PublicKey: CoinbasePublicKeyMarker, Signature: CoinbaseSignatureMarker,
+				}
 				for _, units := range rewards {
 					coinbase.Outputs = append(coinbase.Outputs, UTXOOutput{Recipient: "CVN_miner", Amount: UnitsAmount(units)})
 				}
@@ -266,9 +272,14 @@ func TestRewardRules(t *testing.T) {
 			nothing := func(string) (UTXORecord, bool) { return UTXORecord{}, false }
 
 			accept := map[string]Block{
-				"exactly the reward":        block(cvn("50")),
-				"80/20 split with an uncle": block(cvn("40"), cvn("10")),
-				"less than the reward":      block(cvn("49.5")),
+				"exactly the reward":   block(cvn("50")),
+				"less than the reward": block(cvn("49.5")),
+			}
+			// Two reward outputs are the uncle split, which only the first
+			// test network has.
+			split := block(cvn("40"), cvn("10"))
+			if _, _, err := ValidateBlockTransactions(split, nothing, 0); (err == nil) == Params.NoUncles {
+				t.Errorf("a reward split in two on %s: err %v", network, err)
 			}
 			for name, b := range accept {
 				if _, _, err := ValidateBlockTransactions(b, nothing, 0); err != nil {

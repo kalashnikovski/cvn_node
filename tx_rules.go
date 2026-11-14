@@ -93,7 +93,14 @@ func writeField(builder *strings.Builder, value string) {
 // coins are spent, who receives how much. It excludes the ID and signatures.
 func transactionSigningBody(tx Transaction) string {
 	var builder strings.Builder
-	writeField(&builder, "CVN_TX_V1")
+	if Params.StrictFormat {
+		// The network's name is part of what is signed, so a transfer made
+		// for one CVN network is worthless on every other.
+		writeField(&builder, "CVN_TX_V2")
+		writeField(&builder, Params.Name)
+	} else {
+		writeField(&builder, "CVN_TX_V1")
+	}
 	writeField(&builder, strconv.FormatUint(uint64(tx.Version), 10))
 	writeField(&builder, tx.PublicKey)
 	writeField(&builder, strconv.FormatInt(tx.Timestamp, 10))
@@ -125,6 +132,11 @@ func transactionContentDigest(tx Transaction) string {
 	writeField(&builder, tx.ID)
 	writeField(&builder, transactionSigningBody(tx))
 	writeField(&builder, tx.Signature)
+	if Params.StrictFormat {
+		// Under the launch format a transaction has no other fields.
+		digest := sha256.Sum256([]byte(builder.String()))
+		return hex.EncodeToString(digest[:])
+	}
 	for _, input := range tx.Inputs {
 		writeField(&builder, input.Signature)
 	}
@@ -183,6 +195,9 @@ func CheckTransferStandalone(tx Transaction) (string, error) {
 	}
 	if len(tx.Extra) > 1024 || len(tx.Witness) > TxMaxAddressLength {
 		return "", fmt.Errorf("oversized transfer fields")
+	}
+	if err := checkTransferFormat(tx); err != nil {
+		return "", err
 	}
 	seenInputs := make(map[string]bool, len(tx.Inputs))
 	for _, input := range tx.Inputs {
@@ -295,11 +310,24 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int6
 	if len(coinbase.Outputs) > 2 || (len(coinbase.Outputs) == 0 && Params.Economics == nil) {
 		return none, nil, fmt.Errorf("reward transaction must have one or two outputs")
 	}
+	if err := checkRewardFormat(coinbase, b); err != nil {
+		return none, nil, err
+	}
+	if Params.MaxBlockBytes > 0 {
+		if size := blockSizeBytes(b); size > Params.MaxBlockBytes {
+			return none, nil, fmt.Errorf("block is %d bytes (limit %d)", size, Params.MaxBlockBytes)
+		}
+	}
 	var coinbaseUnits int64
 	var err error
 	for _, output := range coinbase.Outputs {
 		if !validRecipient(output.Recipient) || !output.Amount.Spendable() {
 			return none, nil, fmt.Errorf("invalid reward output")
+		}
+		// A reward coin obeys the same minimum as every other coin. What a
+		// block cannot pay because of it stays in the vault.
+		if output.Amount.Units() < minimumOutputUnits() {
+			return none, nil, fmt.Errorf("a reward output must be at least %s CVN", FormatUnits(minimumOutputUnits()))
 		}
 		if coinbaseUnits, err = addUnits(coinbaseUnits, output.Amount.Units()); err != nil {
 			return none, nil, err
@@ -475,6 +503,9 @@ func AdmitTransactionToMempool(tx Transaction) error {
 	if len(MempoolMatrix.Transactions) >= MempoolMaxTransactions {
 		return fmt.Errorf("mempool is full")
 	}
+	if budget := blockTransferBudgetBytes(); budget > 0 && transactionSizeBytes(tx) > budget {
+		return fmt.Errorf("transfer is %d bytes, more than a block can hold (%d)", transactionSizeBytes(tx), budget)
+	}
 	pendingSpends := make(map[string]bool)
 	for _, waiting := range MempoolMatrix.Transactions {
 		for _, input := range waiting.Inputs {
@@ -565,9 +596,14 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, int64) {
 	var selected []Transaction
 	var totalFeeUnits int64
 	taken := make(map[string]bool)
+	budgetBytes, usedBytes := blockTransferBudgetBytes(), 0
 	for _, entry := range candidates {
 		if len(selected) >= limit {
 			break
+		}
+		size := transactionSizeBytes(entry.tx)
+		if budgetBytes > 0 && usedBytes+size > budgetBytes {
+			continue // too big for what is left of this block; a smaller one may still fit
 		}
 		conflict := false
 		for _, record := range entry.spent {
@@ -584,6 +620,7 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, int64) {
 		}
 		selected = append(selected, entry.tx)
 		totalFeeUnits += entry.fee
+		usedBytes += size
 	}
 	return selected, totalFeeUnits
 }
@@ -725,6 +762,9 @@ func signTransfer(privateKeyHex, publicKeyHex, senderAddress string, inputs []UT
 		FreeWillOffering: UnitsAmount(feeUnits),
 		DataSizeKB:       1.0,
 		Witness:          senderAddress,
+	}
+	if Params.StrictFormat {
+		tx.DataSizeKB = 0 // the launch format has no such field
 	}
 	tx.ID = ComputeTransactionID(tx)
 	r, s, err := SignTransactionPayload(privateKeyHex, tx.ID)

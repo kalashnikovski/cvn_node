@@ -66,6 +66,15 @@ type ChainParams struct {
 	// units when set, as decimal CVN numbers when not (testnet-1 only; see
 	// amount.go).
 	AmountsAsUnits bool
+	// StrictFormat turns on the launch format rules (see block_format.go):
+	// an unambiguous block header, no unused or unsigned fields in a
+	// transfer, and the network's name inside everything a transfer signs.
+	StrictFormat bool
+	// NoUncles removes the uncle share: a block pays its own miner only.
+	NoUncles bool
+	// MaxBlockBytes limits the size of a block (see blockSizeBytes). Zero
+	// means the network has no such limit.
+	MaxBlockBytes int
 
 	// Heights at which rule changes switch on.
 	HeartbeatHeight int64
@@ -139,6 +148,9 @@ var devnetParams = ChainParams{
 	Anchor: GenesisAnchor{Placeholder: "development network, no anchor, no value"},
 
 	AmountsAsUnits: true,
+	StrictFormat:   true,
+	NoUncles:       true,
+	MaxBlockBytes:  300000,
 
 	// Launch rules: the heartbeat difficulty rule and transfer validation
 	// apply from the first block, the chain is steered to an exact 45-second
