@@ -58,7 +58,7 @@ func SignTransactionPayload(privKeyHex string, txData string) (string, string, e
 
 	curve := elliptic.P256()
 	d := new(big.Int).SetBytes(privBytes)
-	
+
 	// Reconstruct the structural ecdsa.PrivateKey parameters securely
 	privKey := &ecdsa.PrivateKey{
 		PublicKey: ecdsa.PublicKey{
@@ -99,7 +99,7 @@ func VerifyTransactionSignature(pubKeyHex string, txData string, rStr string, sS
 	// 2. Reconstruct the un-truncated public key coordinate points safely out of the hex data track
 	pubKeyX := new(big.Int)
 	pubKeyY := new(big.Int)
-	
+
 	if _, ok := pubKeyX.SetString(pubKeyHex[:64], 16); !ok {
 		return false
 	}
@@ -113,7 +113,7 @@ func VerifyTransactionSignature(pubKeyHex string, txData string, rStr string, sS
 		X:     pubKeyX,
 		Y:     pubKeyY,
 	}
-	
+
 	// 3. Compute message digest hash to execute signature validation
 	txHash := sha256.Sum256([]byte(txData))
 

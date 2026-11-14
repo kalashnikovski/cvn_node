@@ -1,187 +1,55 @@
 @echo off
-title Covenant Standard Hashing Engine
-color 0A
-cls
-
-echo ====================================================================
-echo 💎 COVENANT STANDARD CVN LEDGER SYNCHRONIZATION MATRIX CORE
-echo ====================================================================
-echo.
-
-echo 📡 [1/3] Preparing network socket channels safely...
+rem Starts the CVN miner. Anything you add after the file name is passed on to
+rem the miner, for example:   LaunchMiner.bat --threads 8
+title Covenant Standard (CVN) Miner
 cd /d "%~dp0"
 
-echo ⚙️  [2/3] Verifying environment profile configurations...
-setlocal enabledelayedexpansion
-
-:: If the configuration file or keys are missing, drop directly into the selection menu
-if not exist "miner_config.json" (
-    goto WALLET_INTERACTIVE_MENU
-)
-if not exist "cvn_secret_backup.txt" (
-    goto WALLET_INTERACTIVE_MENU
-)
-
-:: 👑 HARDENED RAW VALUE STRING EXTRACTOR GATE:
-set "LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID"
-for /f "usebackq tokens=*" %%A in ("miner_config.json") do (
-    set "line=%%A"
-    set "line=!line:"=!"
-    set "line=!line:{=!"
-    set "line=!line:}=!"
-    set "line=!line:,=!"
-    
-    for /f "tokens=1,2 delims=:" %%B in ("!line!") do (
-        set "key=%%B"
-        set "val=%%C"
-        
-        :: Clean the key spaces cleanly
-        if not "!key!"=="" (
-            for /f "tokens=*" %%X in ("!key!") do set "key=%%X"
-        )
-        
-        if "!key!"=="miner_address" (
-            :: 👑 INTENSE LEADING SPACE SHREDDER:
-            :: Forces the batch pipeline to explicitly strip all leading json
-            :: indentation spaces, matching your raw coin identity string down to the bit!
-            for /f "tokens=*" %%Y in ("!val!") do set "LOCAL_RIG_ID=%%Y"
-        )
-    )
-)
-
-if "!LOCAL_RIG_ID!"=="CVN_UNCONFIGURED_LOCAL_NODE_ID" (
-    goto WALLET_INTERACTIVE_MENU
-)
-if "!LOCAL_RIG_ID!"=="" (
-    goto WALLET_INTERACTIVE_MENU
-)
-
-goto IGNITE_MINER_CORE
-
-:WALLET_INTERACTIVE_MENU
-cls
-color 0B
-echo ====================================================================
-echo 👤 COVENANT STANDARD ONBOARDING SELECTION GATEWAY
-echo ====================================================================
-echo.
-echo [1] Create a Brand New Cryptographic Wallet Identity Profile
-echo [2] Use Existing Wallet Identity Mapped inside miner_config.json
-echo [3] Exit Launchpad
-echo.
-echo --------------------------------------------------------------------
-choice /c 123 /n /m "👉 Select an onboarding option to establish rig identity [1-3]: "
-set CHOICE_RESULT=%ERRORLEVEL%
-
-if "%CHOICE_RESULT%"=="1" goto GENERATE_NEW_KEYS
-if "%CHOICE_RESULT%"=="2" goto RUN_AUTOPILOT
-if "%CHOICE_RESULT%"=="3" exit
-
-:GENERATE_NEW_KEYS
-cls
-color 0A
-echo ====================================================================
-echo 🔑 GENERATING LAYER-1 CRYPTOGRAPHIC WALLET PARAMETERS
-echo ====================================================================
-echo.
-
-if exist ".\cvn_miner.exe" (
-    .\cvn_miner.exe --generate-wallet
-) else if exist ".\cvn_node.exe" (
-    .\cvn_node.exe --generate-wallet
-) else if exist ".\build\bin\cvn_node.exe" (
-    .\build\bin\cvn_node.exe --generate-wallet
-) else (
-    color 0C
-    echo 🚨 CRITICAL ERROR: Core engine binary executable was not found!
-    echo Cannot compile secure address keys. Run build_clean.bat first.
+set "MINER=cvn_miner.exe"
+if not exist "%MINER%" (
+    echo.
+    echo  cvn_miner.exe was not found in this folder.
+    echo  Run build_clean.bat first, or download a release package.
+    echo.
     pause
-    goto WALLET_INTERACTIVE_MENU
+    exit /b 1
 )
 
+rem A mining address given on the command line needs no saved wallet.
+echo %* | findstr /i /c:"--miner-address" >nul
+if not errorlevel 1 goto START_MINER
+
+if exist "miner_config.json" (
+    findstr /c:"CVN_" "miner_config.json" >nul
+    if not errorlevel 1 goto START_MINER
+)
+
+:NO_WALLET
+cls
+echo ====================================================================
+echo  COVENANT STANDARD (CVN) - THIS MACHINE HAS NO MINING ADDRESS YET
+echo ====================================================================
 echo.
-echo --------------------------------------------------------------------
-echo 🔐 ATTENTION: Your Private Keys have been saved to cvn_secret_backup.txt
-echo 💾 Your Public Wallet Address has been configured inside miner_config.json
-echo --------------------------------------------------------------------
+echo  [1] Create a new wallet and mine to it
+echo  [2] Exit
 echo.
-echo Please copy your keys securely now before initializing mining worker threads.
+echo  To mine to a wallet you already have, close this window and run:
+echo      LaunchMiner.bat --miner-address CVN_your_address
+echo.
+choice /c 12 /n /m " Choose 1 or 2: "
+if errorlevel 2 exit /b 0
+
+echo.
+"%MINER%" --generate-wallet
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
+echo.
+echo  WRITE THE PRIVATE KEY DOWN NOW. It is not saved anywhere, and without
+echo  it the coins you mine can never be spent.
 echo.
 pause
-goto RELOAD_AND_LAUNCH
 
-:RUN_AUTOPILOT
-cls
-color 0B
-echo ⚡ [AUTOPILOT IGNITION] Restoring production cryptographic safe state...
-timeout /t 1 >nul
-
-:: 👑 DYNAMIC IDENTITY LOCK: 
-:: Seeds the missing structural file pointer with a secured mainnet token signature.
-:: This satisfies the batch file's file checks and prevents the infinite menu loop!
-if not exist "cvn_secret_backup.txt" (
-    echo === COVENANT STANDARD SECURE MAINNET ANCHOR === > cvn_secret_backup.txt
-    echo Account credentials verified inside miner_config.json. >> cvn_secret_backup.txt
-    echo Keys securely isolated under protocol Remedy 7 regulations. >> cvn_secret_backup.txt
-)
-
-echo.
-echo ✅ Identity parameters locked. Directing miner pool straight to Melbourne seeds...
-timeout /t 2 >nul
-goto RELOAD_AND_LAUNCH
-
-:RELOAD_AND_LAUNCH
-set "LOCAL_RIG_ID=CVN_UNCONFIGURED_LOCAL_NODE_ID"
-for /f "usebackq tokens=*" %%A in ("miner_config.json") do (
-    set "line=%%A"
-    set "line=!line:"=!"
-    set "line=!line:{=!"
-    set "line=!line:}=!"
-    set "line=!line:,=!"
-    for /f "tokens=1,2 delims=:" %%B in ("!line!") do (
-        set "key=%%B"
-        set "val=%%C"
-        if not "!key!"=="" (
-            for /f "tokens=*" %%X in ("!key!") do set "key=%%X"
-        )
-        if "!key!"=="miner_address" (
-            :: 👑 SANITIZE RELOAD STREAM: Strip trailing spaces from the freshly written file
-            for /f "tokens=*" %%Y in ("!val!") do set "LOCAL_RIG_ID=%%Y"
-        )
-    )
-)
-
-:IGNITE_MINER_CORE
-cls
-color 0A
-echo ====================================================================
-echo 💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD
-echo ====================================================================
-echo.
-echo 🚀 [3/3] Igniting un-throttled Proof-of-Diligence (PoD) hashing engine...
-echo --------------------------------------------------------------------
-echo ACTIVE RIG IDENTITY: !LOCAL_RIG_ID!
-echo --------------------------------------------------------------------
-echo.
-
-set "ROUTING_ARGS=%*"
-if "!ROUTING_ARGS!"=="" (
-    set "ROUTING_ARGS=--connect 202.137.175.220:8081"
-)
-
-if exist ".\cvn_miner.exe" (
-    .\cvn_miner.exe --miner-address !LOCAL_RIG_ID! !ROUTING_ARGS!
-) else if exist ".\cvn_node.exe" (
-    .\cvn_node.exe --miner-address !LOCAL_RIG_ID! !ROUTING_ARGS!
-) else if exist ".\build\bin\cvn_node.exe" (
-    .\build\bin\cvn_node.exe --miner-address !LOCAL_RIG_ID! !ROUTING_ARGS!
-) else (
-    color 0C
-    echo 🚨 CRITICAL ERROR: Core engine binary executable was not found!
-    echo Please compile your project targets or run your onboarding script first.
-    pause
-)
-goto END_LAUNCHPAD
-
-:END_LAUNCHPAD
-endlocal
+:START_MINER
+"%MINER%" %*
+if errorlevel 1 pause

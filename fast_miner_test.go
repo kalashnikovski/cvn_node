@@ -266,3 +266,36 @@ func TestBuiltInMinerTakesOverWhenTheFastMinerKeepsFailing(t *testing.T) {
 		t.Error("the built-in miner was not released after the fast miner failed")
 	}
 }
+
+// A node never invents a mining address: nobody would hold its key.
+func TestMiningAddressMustBeARealWallet(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("CVN_MINER_ADDRESS", "")
+	if _, err := resolveMinerAddress([]string{"cvn_node"}); err == nil || !strings.Contains(err.Error(), "--generate-wallet") {
+		t.Errorf("with no address the node should refuse and say how to make a wallet: %v", err)
+	}
+	if _, err := os.Stat("miner_config.json"); err == nil {
+		t.Error("a wallet file was created without being asked for")
+	}
+	for _, bad := range []string{"CVN_FALLBACK_MYPC_123", "CVN_UNCONFIGURED_LOCAL_NODE_ID", "someone", "CVN_with space"} {
+		if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", bad}); err == nil {
+			t.Errorf("%q was accepted as a mining address (%q)", bad, address)
+		}
+	}
+	if address, err := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_abc123"}); err != nil || address != "CVN_abc123" {
+		t.Errorf("an address on the command line: %q %v", address, err)
+	}
+	if err := saveMinerAddress("CVN_fromfile"); err != nil {
+		t.Fatal(err)
+	}
+	if address, _ := resolveMinerAddress([]string{"cvn_node"}); address != "CVN_fromfile" {
+		t.Errorf("the address in miner_config.json was not used: %q", address)
+	}
+	if address, _ := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_cmdline"}); address != "CVN_cmdline" {
+		t.Errorf("the command line should win over the file: %q", address)
+	}
+	t.Setenv("CVN_MINER_ADDRESS", "CVN_fromenv")
+	if address, _ := resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_cmdline"}); address != "CVN_fromenv" {
+		t.Errorf("CVN_MINER_ADDRESS should win, as it always has: %q", address)
+	}
+}

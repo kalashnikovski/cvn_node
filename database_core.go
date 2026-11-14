@@ -19,9 +19,9 @@ var GlobalBoltEngine *bbolt.DB
 var errBlockAlreadyStored = fmt.Errorf("block already stored")
 var localHeightState int64
 
-var blocksBucket      = []byte("blocks")
-var metaBucket        = []byte("meta")
-var utxoBucket        = []byte("utxo")
+var blocksBucket = []byte("blocks")
+var metaBucket = []byte("meta")
+var utxoBucket = []byte("utxo")
 var uncleLedgerBucket = []byte("uncle_ledger") // 👑 STANDALONE IMMUTABLE UNCLE STORAGE PARTITION
 
 // InitBoltEngine mounts the local physical bbolt storage files safely on startup
@@ -50,7 +50,7 @@ func InitBoltEngine() {
 			genesisBlock := buildGenesisBlock()
 			genesisData, _ := json.Marshal(genesisBlock)
 			_ = bBlocks.Put([]byte(paddedZeroKey), genesisData)
-			
+
 			bMeta := tx.Bucket(metaBucket)
 			if bMeta != nil {
 				_ = bMeta.Put([]byte("height"), []byte(paddedZeroKey))
@@ -63,7 +63,7 @@ func InitBoltEngine() {
 		}
 		return nil
 	})
-	
+
 	_ = ctx // Context tracking satisfied natively inside transactional callbacks
 	if err != nil {
 		panic(fmt.Sprintf("🚨 DATABASE CORRUPTION: Failed to provision partition buckets: %v", err))
@@ -176,6 +176,7 @@ func GetLatestBlockInternal() Block {
 
 	return currentTip
 }
+
 // GetLatestBlock wraps our internal state memory helper to fulfill global interface requirements
 func GetLatestBlock() Block {
 	return GetLatestBlockInternal()
@@ -211,7 +212,9 @@ func SaveBlockToStorage(block Block) bool {
 
 // SaveBlockToStorageInternal isolates block reads completely outside the atomic Update loop
 func SaveBlockToStorageInternal(block Block) bool {
-	if GlobalBoltEngine == nil { return false }
+	if GlobalBoltEngine == nil {
+		return false
+	}
 
 	expectedDiff := block.Difficulty
 	if IsHeartbeatHeight(block.Index) {
@@ -224,7 +227,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return false
 		}
 	}
-	
+
 	if block.Hash != CalculateHash(block) || !BlockProofValid(block, expectedDiff) {
 		fmt.Printf("🚨 STORAGE REFUSAL: Block #%d failed strict cryptographic verification filters!\n", block.Index)
 		return false
@@ -250,7 +253,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 		bBlocks := tx.Bucket(blocksBucket)
 		bMeta := tx.Bucket(metaBucket)
 		bUTXO := tx.Bucket(utxoBucket)
-		if bBlocks == nil || bMeta == nil || bUTXO == nil { return fmt.Errorf("required buckets missing") }
+		if bBlocks == nil || bMeta == nil || bUTXO == nil {
+			return fmt.Errorf("required buckets missing")
+		}
 
 		// Never move the chain tip backwards through a plain save. Rollbacks lower
 		// the stored height first, so a legitimate reorg is unaffected.
@@ -311,18 +316,12 @@ func SaveBlockToStorageInternal(block Block) bool {
 			if undoErr := storeUndoRecords(tx, block.Index, consumed); undoErr != nil {
 				return undoErr
 			}
-		} else {
-			// Perform fast structural database transaction verification checks
-			for txIdx, txPayload := range block.Transactions {
-				if txIdx == 0 { continue }
-				if !VerifyTransactionIntegrity(txPayload, int(block.Index), txIdx, bUTXO) {
-					return fmt.Errorf("transaction verification failed for txID: %s", txPayload.ID)
-				}
-			}
 		}
 
 		data, err := json.Marshal(block)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 
 		_ = bBlocks.Put([]byte(paddedKey), data)
 		_ = bMeta.Put([]byte("height"), []byte(paddedKey))
@@ -390,7 +389,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		}
 		return false
 	}
-	
+
 	atomic.StoreInt64(&localHeightState, block.Index)
 	if displacedHigherHashSibling != nil {
 		// We replaced a same-parent block that had the higher hash: it is the uncle.
@@ -419,7 +418,6 @@ func SaveBlockToStorageInternal(block Block) bool {
 	return true
 }
 
-func existingBlockBytes(b []byte) []byte { return b }
 // ApplyIncrementalDeltaCacheUpdate updates the memory cache using only the block's deltas
 func ApplyIncrementalDeltaCacheUpdate(block Block) {
 	BalanceCacheMutex.Lock()
@@ -470,7 +468,7 @@ func RebuildStateBalanceCache() {
 func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
-	
+
 	StateBalanceCache = make(map[string]int64)
 	if GlobalBoltEngine == nil {
 		return
@@ -478,7 +476,6 @@ func RebuildStateBalanceCacheInternal() {
 
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		bUTXO := tx.Bucket(utxoBucket)
-		bBlocks := tx.Bucket(blocksBucket)
 
 		if bUTXO != nil {
 			c := bUTXO.Cursor()
@@ -494,22 +491,6 @@ func RebuildStateBalanceCacheInternal() {
 		// uncle_ledger is a local record of races this node witnessed. It is not
 		// consensus state, so it must not contribute to balances.
 
-		if bBlocks != nil {
-			bc := bBlocks.Cursor()
-			for k, v := bc.First(); k != nil; k, v = bc.Next() {
-				var blk Block
-				if json.Unmarshal(v, &blk) == nil {
-					for _, txPayload := range blk.Transactions {
-						for _, output := range txPayload.Outputs {
-							sanitizedRecipient := strings.TrimSpace(output.Recipient)
-							if sanitizedRecipient != "" {
-								ApplyJubileeDecayIfNeeded(sanitizedRecipient, blk.Timestamp)
-							}
-						}
-					}
-				}
-			}
-		}
 		return nil
 	})
 }

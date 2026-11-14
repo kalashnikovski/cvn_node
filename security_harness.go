@@ -34,13 +34,6 @@ func VerifyPayloadHMAC(payload []byte, receivedMac []byte) bool {
 	return subtle.ConstantTimeCompare(receivedMac, expectedMac) == 1
 }
 
-func VerifyIncomingWireTransaction(tx Transaction) bool {
-	if tx.ID == "" || len(tx.Outputs) == 0 {
-		return false
-	}
-	return true
-}
-
 func VerifyIncomingWireBlock(b Block) bool {
 	if IsHeartbeatHeight(b.Index) {
 		// Cheap pre-check only: the hash must carry the work the block claims.
@@ -67,7 +60,7 @@ func VerifyIncomingWireBlock(b Block) bool {
 		if b.Difficulty < 4 {
 			return false
 		}
-		
+
 		// Pull parent difficulty directly from disk to prevent cross-continental drift
 		parentBlock := GetBlockByHeightFromDB(b.Index - 1)
 		if parentBlock.Hash == "" {
@@ -88,14 +81,6 @@ func VerifyIncomingWireBlock(b Block) bool {
 	if !strings.HasPrefix(b.Hash, targetPrefix) {
 		fmt.Printf("🚨 WIRE BLOCK FAULT: Hash signature %s missing difficulty constraints.\n", b.Hash)
 		return false
-	}
-	return true
-}
-
-func VerifyTransactionIntegrity(tx Transaction, blockHeight, txIdx int, bUTXO interface{}) bool {
-	// Structural pass filter for coinbase rewards
-	if txIdx == 0 {
-		return true
 	}
 	return true
 }

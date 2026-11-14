@@ -55,7 +55,7 @@ func GetIPRateLimiter(ip string) *TokenBucket {
 		limiter = &TokenBucket{
 			tokens:     50,
 			maxTokens:  50,
-			refillRate: 20, 
+			refillRate: 20,
 			lastRefill: time.Now(),
 		}
 		IPTokensMap[ip] = limiter
@@ -161,7 +161,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
 	rateLimiter := GetIPRateLimiter(remoteIP)
-	
+
 	defer func() {
 		unregisterRelaySubscriber(conn)
 		conn.Close()
@@ -170,7 +170,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 	}()
 
 	var lastGetBatchRequest time.Time
-	
+
 	for {
 		// Enforce adaptive refreshing read deadline (30-second idle timeout)
 		_ = conn.SetReadDeadline(time.Now().Add(DefaultReadTimeout))
@@ -179,7 +179,7 @@ func handleIncomingPeerStream(conn net.Conn) {
 		lengthHeaderBuffer := make([]byte, 4)
 		_, err := io.ReadFull(conn, lengthHeaderBuffer)
 		if err != nil {
-			return 
+			return
 		}
 
 		frameLength := binary.BigEndian.Uint32(lengthHeaderBuffer)
@@ -261,13 +261,13 @@ func handleIncomingPeerStream(conn net.Conn) {
 			}
 			canonicalPeerKey := Params.gossipAddress(remoteIP)
 			ActivePeerMap[canonicalPeerKey] = time.Now()
-			
+
 			var peers []string
 			for p := range ActivePeerMap {
 				peers = append(peers, p)
 			}
 			PeerMapMutex.Unlock()
-			
+
 			listBytes, _ := json.Marshal(peers)
 			writeFramedPayloadNatively(conn, fmt.Sprintf("PEER_LIST:%s", string(listBytes)))
 			continue
@@ -342,11 +342,11 @@ func handleIncomingPeerStream(conn net.Conn) {
 func writeFramedPayloadNatively(w io.Writer, payload string) {
 	payloadBytes := []byte(payload)
 	macSignature := ComputePayloadHMAC(payloadBytes)
-	
+
 	// Structured serialization layout protocol: [Length Header] -> [HMAC Signature] -> [Payload JSON]
 	lengthHeaderBuffer := make([]byte, 4)
 	binary.BigEndian.PutUint32(lengthHeaderBuffer, uint32(len(payloadBytes)))
-	
+
 	// One Write call per frame. Relay connections are written to by several
 	// goroutines (ping replies, block pushes), and three separate writes could
 	// interleave two frames into garbage.
@@ -448,10 +448,10 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 				if err == nil {
 					writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
-					
+
 					var frameLength uint32
 					_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
-					
+
 					lengthHeaderBuffer := make([]byte, 4)
 					_, err = io.ReadFull(conn, lengthHeaderBuffer)
 					if err == nil {

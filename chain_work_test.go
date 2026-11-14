@@ -2,7 +2,10 @@ package main
 
 import (
 	"math/big"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"go.etcd.io/bbolt"
 )
@@ -281,5 +284,39 @@ func TestStoringTheSameBlockTwice(t *testing.T) {
 	}
 	if balanceOf("CVN_minerA") != cvn("50") || GetLatestBlockInternal().Hash != block.Hash {
 		t.Errorf("state changed after a repeated save: balance %s", FormatUnits(balanceOf("CVN_minerA")))
+	}
+}
+
+// A block at our own height from another branch must not cost us our tip.
+// Earlier code removed the tip, on the strength of the other block's date
+// alone and before checking it, and then could not attach the other block.
+func TestBlockFromAnotherBranchDoesNotRemoveOurTip(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, network := range []string{"devnet", "testnet-1"} {
+		t.Run(network, func(t *testing.T) {
+			startTestChain(t, network)
+			timestamp := Params.GenesisTimestamp + 100
+			for i := 0; i < 4; i++ {
+				timestamp += 45
+				extendTestChain(t, timestamp, "CVN_miner", nil)
+			}
+			tip := GetLatestBlockInternal()
+
+			// Same height, another parent, and dated earlier than our tip.
+			foreign := tip
+			foreign.PrevHash = strings.Repeat("ab", 32)
+			foreign.Timestamp = tip.Timestamp - 30
+			foreign.Hash = CalculateHash(foreign)
+			ProcessIncomingNetworkBlock(foreign)
+
+			// The comparison of chains runs in the background; let it finish.
+			time.Sleep(200 * time.Millisecond)
+			for wait := 0; atomic.LoadInt32(&IsSyncingActive) == 1 && wait < 100; wait++ {
+				time.Sleep(50 * time.Millisecond)
+			}
+			if now := GetLatestBlockInternal(); now.Hash != tip.Hash || now.Index != tip.Index {
+				t.Errorf("our tip was #%d %.12s and is now #%d %.12s", tip.Index, tip.Hash, now.Index, now.Hash)
+			}
+		})
 	}
 }

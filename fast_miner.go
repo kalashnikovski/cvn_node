@@ -116,6 +116,29 @@ func saveMinerAddress(address string) error {
 	return os.WriteFile("miner_config.json", configBytes, 0644)
 }
 
+// resolveMinerAddress returns the address mining rewards are paid to: the
+// CVN_MINER_ADDRESS environment variable, then `--miner-address`, then
+// miner_config.json. With none of them it refuses, and says how to make one.
+func resolveMinerAddress(args []string) (string, error) {
+	address := strings.TrimSpace(os.Getenv("CVN_MINER_ADDRESS"))
+	if address == "" {
+		address = argumentValue(args, "--miner-address")
+	}
+	if address == "" {
+		address = readMinerConfig()["miner_address"]
+	}
+	if address == "" || strings.Contains(address, "UNCONFIGURED") {
+		return "", fmt.Errorf("this machine has no mining address.\n" +
+			"   Create a wallet with --generate-wallet (or --wallet) and write its private key down,\n" +
+			"   or start with --miner-address CVN_... to mine to a wallet you already have")
+	}
+	if !strings.HasPrefix(address, "CVN_") || !validRecipient(address) || strings.HasPrefix(address, "CVN_FALLBACK_") {
+		return "", fmt.Errorf("%q is not a CVN wallet address. Nobody holds a key for it, so coins mined to it could never be spent.\n"+
+			"   Create a wallet with --generate-wallet (or --wallet), or start with --miner-address CVN_...", address)
+	}
+	return address, nil
+}
+
 // chosenMiner returns which miner was asked for: on the command line first,
 // then in CVN_MINER, then in miner_config.json. Nothing chosen means the
 // built-in miner.
