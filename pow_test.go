@@ -185,3 +185,25 @@ func TestHashrateDisplay(t *testing.T) {
 		t.Errorf("RandomX shows %q, want 18.50 kH/s", got)
 	}
 }
+
+func TestSmallMachinesMineInLowMemoryMode(t *testing.T) {
+	t.Setenv("CVN_RANDOMX_FULL", "")
+	megabyte := uint64(1) << 20
+	if enoughMemoryForFullMining(774*megabyte, true) {
+		t.Error("a machine with 774 MB free was sent to full-memory mining")
+	}
+	if !enoughMemoryForFullMining(2300*megabyte, true) || !enoughMemoryForFullMining(20000*megabyte, true) {
+		t.Error("a machine with enough memory was kept out of full-memory mining")
+	}
+	if !enoughMemoryForFullMining(0, false) {
+		t.Error("when the free memory is not known the miner should still try")
+	}
+	t.Setenv("CVN_RANDOMX_FULL", "1")
+	if !enoughMemoryForFullMining(774*megabyte, true) {
+		t.Error("CVN_RANDOMX_FULL did not force the attempt")
+	}
+	// This machine can say how much memory it has free.
+	if available, known := availableMemoryBytes(); !known || available < 64*megabyte {
+		t.Errorf("free memory read as %d bytes (known: %v)", available, known)
+	}
+}

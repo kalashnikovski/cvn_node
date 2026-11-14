@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -333,6 +334,9 @@ func prepareRxMiner(key []byte) bool {
 			if largePages {
 				rxMiner.mode = "full memory, large pages"
 			}
+		} else if err == errTooLittleMemory {
+			available, _ := availableMemoryBytes()
+			announceNetworkStatus(fmt.Sprintf("⚙️ [RANDOMX] This machine has about %d MB of memory free. Full-speed mining needs about %d MB, so the miner is using low memory mode, which is many times slower. The node itself is not affected.", available>>20, rxFullMemoryNeededBytes>>20))
 		}
 	}
 	rxMiner.key = string(key)
@@ -357,8 +361,30 @@ func newMiningDataset(flags randomx.Flags) (*randomx.Dataset, randomx.Flags, boo
 			return dataset, largeFlags, true, nil
 		}
 	}
+	// Ordinary memory is handed out whether or not the machine really has
+	// it; a machine without enough would push the table onto its disk and
+	// mine at almost nothing. Better to say so and use the small mode.
+	if available, known := availableMemoryBytes(); !enoughMemoryForFullMining(available, known) {
+		return nil, flags, false, errTooLittleMemory
+	}
 	dataset, err := randomx.NewDataset(fullFlags)
 	return dataset, fullFlags, false, err
+}
+
+// rxFullMemoryNeededBytes is the free memory full-speed mining needs: the
+// 2,080 MB mining table plus working room.
+const rxFullMemoryNeededBytes = uint64(2300) << 20
+
+var errTooLittleMemory = errors.New("not enough free memory for the full mining table")
+
+// enoughMemoryForFullMining decides whether to build the full mining table
+// in ordinary memory. When the amount free is not known the miner tries, as
+// it always did. CVN_RANDOMX_FULL=1 forces the attempt.
+func enoughMemoryForFullMining(availableBytes uint64, known bool) bool {
+	if !known || os.Getenv("CVN_RANDOMX_FULL") != "" {
+		return true
+	}
+	return availableBytes >= rxFullMemoryNeededBytes
 }
 
 // pinMiningThread ties the calling goroutine to its own operating-system
