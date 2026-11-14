@@ -52,7 +52,7 @@ func AuditActiveLedger() {
 				for _, txPayload := range currentBlock.Transactions {
 					for _, out := range txPayload.Outputs {
 						if out.Recipient == "0x0000000000000000000000000000000000000000_BURN_VOID" {
-							burnedTokens += out.Amount
+							burnedTokens += out.Amount.CVN()
 						}
 					}
 				}

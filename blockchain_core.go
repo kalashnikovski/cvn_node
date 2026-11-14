@@ -43,7 +43,7 @@ type Transaction struct {
 	Signature        string       `json:"signature"`
 	PublicKey        string       `json:"public_key"`
 	Timestamp        int64        `json:"timestamp"`
-	FreeWillOffering float64      `json:"free_will_offering"`
+	FreeWillOffering Amount       `json:"free_will_offering"`
 	DataSizeKB       float64      `json:"data_size_kb"`
 	Witness          string       `json:"witness"`
 	Extra            []byte       `json:"extra,omitempty"`
@@ -56,13 +56,13 @@ type UTXOInput struct {
 }
 
 type UTXOOutput struct {
-	Recipient string  `json:"recipient"`
-	Amount    float64 `json:"amount"`
+	Recipient string `json:"recipient"`
+	Amount    Amount `json:"amount"`
 }
 
 type UTXORecord struct {
-	Amount    float64 `json:"amount"`
-	Recipient string  `json:"recipient"`
+	Amount    Amount `json:"amount"`
+	Recipient string `json:"recipient"`
 }
 
 type MempoolType struct {
@@ -85,7 +85,8 @@ var CustomMinerAddress string
 var IsSyncingActive int32 = 0
 
 var BalanceCacheMutex sync.RWMutex
-var StateBalanceCache = make(map[string]float64)
+// StateBalanceCache holds every address's balance in units.
+var StateBalanceCache = make(map[string]int64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
@@ -775,11 +776,12 @@ return
 }
 func ForceBackgroundSyncPass() {}
 func GetAddressBalance(address string) float64 {
+// For display. Balances are held in units; see StateBalanceCache.
 BalanceCacheMutex.RLock()
 privateBalance, exists := StateBalanceCache[cleanAddr(address)]
 BalanceCacheMutex.RUnlock()
 if exists {
-return privateBalance
+return UnitsAmount(privateBalance).CVN()
 }
 return 0.0
 }
@@ -968,7 +970,7 @@ if len(b.Transactions) == 0 {
 return false
 }
 isBlockValid := true
-var forkBlockFees float64
+var forkBlockFeeUnits int64
 if IsTxForkHeight(b.Index) {
 // Transfers can only be judged against the coin set just before this
 // block. That is known when the block sits on our tip, or competes with
@@ -1000,7 +1002,7 @@ fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, err)
 isBlockValid = false
 return nil
 }
-forkBlockFees = fees
+forkBlockFeeUnits = fees
 return nil
 })
 } else if GlobalBoltEngine != nil {
@@ -1025,22 +1027,21 @@ return nil
 if !isBlockValid {
 return false
 }
-coinbaseTx := b.Transactions
-var totalCoinbasePayout float64 = 0.0
-if len(coinbaseTx) > 0 {
-for _, out := range coinbaseTx[0].Outputs {
-totalCoinbasePayout += out.Amount
-}
-} else {
+// Reward check, in whole units with no tolerance.
+if len(b.Transactions) == 0 {
 return false
 }
-targetBlockHeight := int64(b.Index)
-allowedTotalEmission := CalculateBlockReward(targetBlockHeight)
-if targetBlockHeight > 21024000 {
-allowedTotalEmission += 5.0
+coinbaseOutputs := b.Transactions[0].Outputs
+var totalCoinbaseUnits int64
+for _, out := range coinbaseOutputs {
+if out.Amount.Units() < 0 || out.Amount.Units() > MaxAmountUnits {
+return false
 }
+totalCoinbaseUnits += out.Amount.Units()
+}
+rewardUnits := BlockRewardUnits(b.Index)
 if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
-if len(coinbaseTx[0].Outputs) != 2 {
+if len(coinbaseOutputs) != 2 {
 fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
 return false
 }
@@ -1049,27 +1050,27 @@ if strings.TrimSpace(b.UncleHash) == strings.TrimSpace(b.PrevHash) {
 fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash must not equal the parent block hash.")
 return false
 }
-mainMinerPayout := coinbaseTx[0].Outputs[0].Amount
-uncleMinerPayout := coinbaseTx[0].Outputs[1].Amount
-uncleMinerRecipient := cleanAddr(coinbaseTx[0].Outputs[1].Recipient)
-expectedMainSplit := allowedTotalEmission * 0.80
-expectedUncleSplit := allowedTotalEmission * 0.20
-// The block's miner may add the transfers' fees to its own share.
-if (mainMinerPayout-expectedMainSplit) > forkBlockFees+0.00001 || (mainMinerPayout-expectedMainSplit) < -0.00001 {
-fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Main Miner Split footprint. Got: %f, Expected: %f\n", mainMinerPayout, expectedMainSplit)
+// The uncle's miner receives a fifth of the new reward; this block's miner
+// receives the rest and may add the transfers' fees.
+uncleShareUnits := rewardUnits / 5
+mainShareUnits := rewardUnits - uncleShareUnits
+mainPayoutUnits := coinbaseOutputs[0].Amount.Units()
+unclePayoutUnits := coinbaseOutputs[1].Amount.Units()
+if mainPayoutUnits < mainShareUnits || mainPayoutUnits > mainShareUnits+forkBlockFeeUnits {
+fmt.Printf("🚨 CONSENSUS REJECTION: Block miner's share is %s, expected %s plus fees of at most %s.\n", FormatUnits(mainPayoutUnits), FormatUnits(mainShareUnits), FormatUnits(forkBlockFeeUnits))
 return false
 }
-if (uncleMinerPayout-expectedUncleSplit) > 0.00001 || (uncleMinerPayout-expectedUncleSplit) < -0.00001 {
-fmt.Printf("🚨 CONSENSUS REJECTION: Invalid Uncle Miner Payout footprint. Got: %f, Expected: %f\n", uncleMinerPayout, expectedUncleSplit)
+if unclePayoutUnits != uncleShareUnits {
+fmt.Printf("🚨 CONSENSUS REJECTION: Uncle miner's share is %s, expected %s.\n", FormatUnits(unclePayoutUnits), FormatUnits(uncleShareUnits))
 return false
 }
-if uncleMinerRecipient != cleanAddr(b.UncleMiner) {
-fmt.Printf("🚨 CONSENSUS REJECTION: Coinbase index recipient %s does not match Uncle header signature metadata %s\n", uncleMinerRecipient, b.UncleMiner)
+if cleanAddr(coinbaseOutputs[1].Recipient) != cleanAddr(b.UncleMiner) {
+fmt.Printf("🚨 CONSENSUS REJECTION: Second reward output pays %s, but the block names %s as the uncle's miner.\n", cleanAddr(coinbaseOutputs[1].Recipient), b.UncleMiner)
 return false
 }
 } else {
-if (totalCoinbasePayout - allowedTotalEmission - forkBlockFees) > 0.00001 {
-fmt.Printf("🚨 EMISSION BLOCKED: Claim over-allocated payout: %f // Allowed: %f\n", totalCoinbasePayout, allowedTotalEmission)
+if totalCoinbaseUnits > rewardUnits+forkBlockFeeUnits {
+fmt.Printf("🚨 EMISSION BLOCKED: Block pays %s, allowed %s.\n", FormatUnits(totalCoinbaseUnits), FormatUnits(rewardUnits+forkBlockFeeUnits))
 return false
 }
 }

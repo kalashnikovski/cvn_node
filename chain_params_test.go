@@ -22,8 +22,11 @@ func TestTestnet1SettingsArePinned(t *testing.T) {
 	if Params.DatabaseFile != "cvn_mainnet.db" || Params.PeerCacheFile != "peers.json" {
 		t.Errorf("file names changed: %q %q", Params.DatabaseFile, Params.PeerCacheFile)
 	}
-	if Params.HeartbeatHeight != 2500 || Params.TxForkHeight != 6100 || Params.UnitsForkHeight != 6600 {
-		t.Errorf("rule heights changed: %d %d %d", Params.HeartbeatHeight, Params.TxForkHeight, Params.UnitsForkHeight)
+	if Params.HeartbeatHeight != 2500 || Params.TxForkHeight != 6100 {
+		t.Errorf("rule heights changed: %d %d", Params.HeartbeatHeight, Params.TxForkHeight)
+	}
+	if Params.AmountsAsUnits {
+		t.Error("testnet-1 writes amounts as decimal numbers; changing that breaks every existing block hash")
 	}
 	wantSync := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	if got := seedSyncURLs(); !reflect.DeepEqual(got, wantSync) {
@@ -82,7 +85,7 @@ func TestDevnetIsSeparateFromTestnet1(t *testing.T) {
 	if genesis.Hash == "" || genesis.Hash == testnet1GenesisHash {
 		t.Errorf("devnet genesis hash %q must exist and differ from testnet-1's", genesis.Hash)
 	}
-	if !IsTxForkHeight(1) || !IsUnitsForkHeight(1) || IsHeartbeatHeight(10) || !IsHeartbeatHeight(11) {
+	if !IsTxForkHeight(1) || !Params.AmountsAsUnits || IsHeartbeatHeight(10) || !IsHeartbeatHeight(11) {
 		t.Error("devnet rule heights were not applied")
 	}
 }
@@ -118,10 +121,10 @@ func TestDevnetChainRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, timestamp := buildSharedHistory(t, address, address)
-	if got := balanceOf(address); got != 600 {
-		t.Fatalf("after 12 blocks the miner has %v CVN, want 600", got)
+	if got := balanceOf(address); got != cvn("600") {
+		t.Fatalf("after 12 blocks the miner has %s CVN, want 600", FormatUnits(got))
 	}
-	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone_else", 75.5, 0.25, ListSpendableCoins(address))
+	transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_someone_else", cvn("75.5"), cvn("0.25"), ListSpendableCoins(address))
 	if err != nil {
 		t.Fatalf("build transfer: %v", err)
 	}
@@ -129,14 +132,14 @@ func TestDevnetChainRuns(t *testing.T) {
 	if !IsHeartbeatHeight(block.Index) || block.Difficulty < HeartbeatMinDifficulty {
 		t.Errorf("block #%d is not a heartbeat block (difficulty %d)", block.Index, block.Difficulty)
 	}
-	if got := balanceOf("CVN_someone_else"); got != 75.5 {
-		t.Errorf("recipient has %v, want 75.5", got)
+	if got := balanceOf("CVN_someone_else"); got != cvn("75.5") {
+		t.Errorf("recipient has %s, want 75.5", FormatUnits(got))
 	}
-	if got := balanceOf("CVN_other_miner"); got != 50.25 {
-		t.Errorf("miner of the block has %v, want 50.25 (reward plus fee)", got)
+	if got := balanceOf("CVN_other_miner"); got != cvn("50.25") {
+		t.Errorf("miner of the block has %s, want 50.25 (reward plus fee)", FormatUnits(got))
 	}
-	if got := balanceOf(address); got != 600-75.5-0.25 {
-		t.Errorf("sender has %v, want %v", got, 600-75.5-0.25)
+	if got := balanceOf(address); got != cvn("524.25") {
+		t.Errorf("sender has %s, want 524.25", FormatUnits(got))
 	}
 }
 

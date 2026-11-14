@@ -33,7 +33,9 @@ A box is ticked only when the feature is built **and** has been seen working on 
 These are being built on a separate development network (`--network devnet`), which has its own key, ports and files and can run beside a test-network node.
 
 - [x] **Separate network identities** and one place for every chain setting.
-- [ ] **Amounts stored as whole units** (today they are checked as units but stored as decimals).
+- [ ] **Amounts stored as whole units.**
+  - *Have:* built. Inside the program every amount is a whole number of units, and on devnet that is also how it is written into blocks and hashed. The test network keeps its original decimal format so its existing blocks stay valid. The whole real chain replays through the new code with identical hashes and balances.
+  - *Missing:* not yet running on the live test network.
 - [ ] **Supply schedule:** 50 CVN per block, halving every 7 years for 49 years; 486,727,500 CVN in total. Written into the settings with tests; not yet used by consensus.
 - [ ] **Exact 45-second average.** Test-network blocks run about 6% fast; the launch rule corrects this.
 - [ ] **Recycling of long-unmoved coins** to miners. Designed, not built.

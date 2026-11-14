@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -93,13 +92,13 @@ func textWalletShowBalance(ask func(string) string, ownAddress string) {
 		return
 	}
 	balance, _ := data["balance"].(float64)
-	fmt.Printf("\n💰 Balance of %s\n   %s CVN\n", address, formatAmountExact(balance))
+	fmt.Printf("\n💰 Balance of %s\n   %s CVN\n", address, formatFloatExact(balance))
 	if coins, _, err := FetchSpendableCoinsOverHTTP(address); err == nil {
-		var spendable float64
+		var spendable int64
 		for _, coin := range coins {
-			spendable += coin.Amount
+			spendable += coin.Amount.Units()
 		}
-		fmt.Printf("   Ready to spend now: %s CVN in %d coin(s)\n", formatAmountExact(spendable), len(coins))
+		fmt.Printf("   Ready to spend now: %s CVN in %d coin(s)\n", FormatUnits(spendable), len(coins))
 	}
 }
 
@@ -109,16 +108,15 @@ func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 		fmt.Println("❌ That is not a valid CVN address.")
 		return
 	}
-	amount, err := strconv.ParseFloat(ask("Amount of CVN to send: "), 64)
-	if err != nil || !validAmount(amount) {
-		fmt.Println("❌ The amount must be a number greater than zero.")
+	amountUnits, err := ParseCVN(ask("Amount of CVN to send: "))
+	if err != nil || amountUnits < 1 {
+		fmt.Println("❌ The amount must be a number greater than zero, with at most 8 decimal places.")
 		return
 	}
-	fee := 0.0
+	feeUnits := int64(0)
 	if feeText := ask("Voluntary fee (press Enter for 0): "); feeText != "" {
-		fee, err = strconv.ParseFloat(feeText, 64)
-		if err != nil || fee < 0 || fee > TxMaxAmount {
-			fmt.Println("❌ The fee must be zero or a positive number.")
+		if feeUnits, err = ParseCVN(feeText); err != nil {
+			fmt.Println("❌ The fee must be zero or a positive number, with at most 8 decimal places.")
 			return
 		}
 	}
@@ -141,15 +139,15 @@ func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 	fmt.Println("\n--------------------------------------------------------------------")
 	fmt.Printf(" From:   %s\n", senderAddress)
 	fmt.Printf(" To:     %s\n", recipient)
-	fmt.Printf(" Amount: %s CVN\n", formatAmountExact(amount))
-	fmt.Printf(" Fee:    %s CVN\n", formatAmountExact(fee))
+	fmt.Printf(" Amount: %s CVN\n", FormatUnits(amountUnits))
+	fmt.Printf(" Fee:    %s CVN\n", FormatUnits(feeUnits))
 	fmt.Println("--------------------------------------------------------------------")
 	if answer := strings.ToLower(ask("Send this transfer? It cannot be undone. (y/n): ")); answer != "y" && answer != "yes" {
 		fmt.Println("Nothing was sent.")
 		return
 	}
 
-	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amount, fee)
+	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amountUnits, feeUnits)
 	if err != nil {
 		fmt.Printf("❌ Not sent: %v\n", err)
 		return

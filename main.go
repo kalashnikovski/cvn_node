@@ -194,7 +194,7 @@ func main() {
 				activeWallets := make(map[string]float64)
 				for addr, bal := range StateBalanceCache {
 					if bal > 0 {
-						activeWallets[addr] = bal
+						activeWallets[addr] = UnitsAmount(bal).CVN()
 					}
 				}
 				BalanceCacheMutex.RUnlock()
@@ -326,7 +326,9 @@ balance, exists := StateBalanceCache[targetAddress]
 BalanceCacheMutex.RUnlock()
 payload := map[string]interface{}{
 "address":        targetAddress,
-"balance":        balance,
+// balance is in CVN, for display; balance_units is the exact figure.
+"balance":        UnitsAmount(balance).CVN(),
+"balance_units":  balance,
 "exists":         exists,
 "account_status": "VALIDATED_ON_CHAIN",
 }
@@ -491,7 +493,7 @@ liveBlock := GetLatestBlockInternal()
 StateMutex.RUnlock()
 actualBlocksHeight := liveBlock.Index
 BalanceCacheMutex.RLock()
-localMemoryCoins := StateBalanceCache[CustomMinerAddress]
+localMemoryCoins := UnitsAmount(StateBalanceCache[CustomMinerAddress]).CVN()
 BalanceCacheMutex.RUnlock()
 if loopCounter == 1 || loopCounter%15 == 0 {
 go func(targetAddress string) {
@@ -696,16 +698,15 @@ var coinbaseOutputs []UTXOOutput
 // From the transaction fork on, waiting transfers that are valid on top of
 // this tip go into the block, and their fees are added to the miner's reward.
 var templateTransfers []Transaction
-var templateFees float64
+var feeUnits int64
 if IsTxForkHeight(nextIndex) {
-templateTransfers, templateFees = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 1)
+templateTransfers, feeUnits = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 1)
 }
 // If the tip won a same-height race, name the losing block as an uncle and
 // split this block's reward 80/20 with its miner. Total emission is unchanged.
-// Reward and fees as whole units (see units.go), so the amounts written
-// into the block are exact.
+// Reward and fees are whole units, so the amounts written into the block
+// are exact.
 rewardUnits := BlockRewardUnits(nextIndex)
-feeUnits, _ := AmountToUnits(templateFees)
 templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 templateUncleMiner := "NONE"
 if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle {
@@ -714,10 +715,10 @@ templateUncleMiner = pendingUncleMiner
 // Whole units: the uncle gets a fifth of the new reward, rounded down, and
 // the miner the rest plus the fees, so the two always add up exactly.
 uncleUnits := rewardUnits / 5
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsToAmount(rewardUnits - uncleUnits + feeUnits)})
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsToAmount(uncleUnits)})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsAmount(rewardUnits - uncleUnits + feeUnits)})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsAmount(uncleUnits)})
 } else {
-coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsToAmount(rewardUnits + feeUnits)})
+coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
 }
 candidateTransactions := []Transaction{
 {

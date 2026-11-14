@@ -40,9 +40,9 @@ func startTestChain(t *testing.T, network string) {
 }
 
 // mineTestBlock builds a valid block on the current tip without saving it.
-// rewardOverride, when above zero, replaces the correct reward (to build
-// blocks that must be refused).
-func mineTestBlock(t *testing.T, timestamp int64, miner string, transfers []Transaction, rewardOverride float64) Block {
+// rewardOverrideUnits, when above zero, replaces the correct reward (to
+// build blocks that must be refused).
+func mineTestBlock(t *testing.T, timestamp int64, miner string, transfers []Transaction, rewardOverrideUnits int64) Block {
 	t.Helper()
 	tip := GetLatestBlockInternal()
 	index := tip.Index + 1
@@ -53,24 +53,23 @@ func mineTestBlock(t *testing.T, timestamp int64, miner string, transfers []Tran
 	var feeUnits int64
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		for _, tx := range transfers {
-			fee, _, err := checkTransferAgainstCoins(tx, bucketLookup(dbTx.Bucket(utxoBucket)), nil, true)
+			fee, _, err := checkTransferAgainstCoins(tx, bucketLookup(dbTx.Bucket(utxoBucket)), nil)
 			if err != nil {
 				t.Fatalf("test transfer is not valid: %v", err)
 			}
-			units, _ := AmountToUnits(fee)
-			feeUnits += units
+			feeUnits += fee
 		}
 		return nil
 	})
-	reward := UnitsToAmount(BlockRewardUnits(index) + feeUnits)
-	if rewardOverride > 0 {
-		reward = rewardOverride
+	reward := BlockRewardUnits(index) + feeUnits
+	if rewardOverrideUnits > 0 {
+		reward = rewardOverrideUnits
 	}
 	testCoinbaseCounter++
 	coinbase := Transaction{
 		Version: 1, ID: fmt.Sprintf("TX_COINBASE_H%d_%d", index, testCoinbaseCounter), Witness: miner,
 		PublicKey: CoinbasePublicKeyMarker, Signature: CoinbaseSignatureMarker, Timestamp: timestamp,
-		Inputs: []UTXOInput{}, Outputs: []UTXOOutput{{Recipient: miner, Amount: reward}},
+		Inputs: []UTXOInput{}, Outputs: []UTXOOutput{{Recipient: miner, Amount: UnitsAmount(reward)}},
 	}
 	block := Block{
 		Version: 1, Index: index, Timestamp: timestamp, PrevHash: tip.Hash, Difficulty: difficulty,
@@ -140,8 +139,18 @@ func serveBlocks(blocks []Block) func(int64) []Block {
 	}
 }
 
-// balanceOf returns an address's balance after a full recount from the coins.
-func balanceOf(address string) float64 {
+// cvn turns a figure written in CVN, such as "120.25", into units.
+func cvn(text string) int64 {
+	units, err := ParseCVN(text)
+	if err != nil {
+		panic(err)
+	}
+	return units
+}
+
+// balanceOf returns an address's balance in units after a full recount from
+// the coins.
+func balanceOf(address string) int64 {
 	RebuildStateBalanceCacheInternal()
 	BalanceCacheMutex.RLock()
 	defer BalanceCacheMutex.RUnlock()

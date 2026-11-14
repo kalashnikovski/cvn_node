@@ -57,10 +57,14 @@ type ChainParams struct {
 
 	GenesisTimestamp int64
 
+	// AmountsAsUnits says how amounts are written into blocks: as whole
+	// units when set, as decimal CVN numbers when not (testnet-1 only; see
+	// amount.go).
+	AmountsAsUnits bool
+
 	// Heights at which rule changes switch on.
 	HeartbeatHeight int64
 	TxForkHeight    int64
-	UnitsForkHeight int64
 }
 
 var testnet1Params = ChainParams{
@@ -85,7 +89,6 @@ var testnet1Params = ChainParams{
 
 	HeartbeatHeight: 2500,
 	TxForkHeight:    6100,
-	UnitsForkHeight: 6600,
 }
 
 var devnetParams = ChainParams{
@@ -104,11 +107,12 @@ var devnetParams = ChainParams{
 
 	GenesisTimestamp: 1794614400, // 14 November 2026 00:00 UTC
 
+	AmountsAsUnits: true,
+
 	// The first ten blocks still use the old fixed start-up difficulty, so the
-	// heartbeat begins at block 11. Transfers and whole units apply from block 1.
+	// heartbeat begins at block 11. Transfers are validated from block 1.
 	HeartbeatHeight: 11,
 	TxForkHeight:    1,
-	UnitsForkHeight: 1,
 }
 
 // Params is the network this process runs on.
@@ -140,7 +144,6 @@ func applyParams() {
 	BlockchainFile = Params.DatabaseFile
 	HeartbeatActivationHeight = Params.HeartbeatHeight
 	TxForkActivationHeight = Params.TxForkHeight
-	UnitsForkActivationHeight = Params.UnitsForkHeight
 }
 
 // requestedNetworkName reads the network asked for on the command line

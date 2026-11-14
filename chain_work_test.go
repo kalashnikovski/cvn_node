@@ -33,7 +33,7 @@ func buildCompetingBranches(t *testing.T) competingBranches {
 		heavyTime++
 		var transfers []Transaction
 		if i == 2 {
-			transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", 120.25, 0.5, ListSpendableCoins(earlyMiner))
+			transfer, err := BuildSignedTransfer(privateKey, publicKey, "CVN_recipient", cvn("120.25"), cvn("0.5"), ListSpendableCoins(earlyMiner))
 			if err != nil {
 				t.Fatalf("build transfer: %v", err)
 			}
@@ -177,8 +177,8 @@ func TestSwitchingChainsMovesCoinsCorrectly(t *testing.T) {
 	b := buildCompetingBranches(t)
 
 	putBranchInPlace(b.light, b.ancestor)
-	if balanceOf("CVN_minerB") != 450 || balanceOf("CVN_recipient") != 0 || balanceOf("CVN_minerA") != 100 {
-		t.Fatalf("on the light branch: B=%v recipient=%v A=%v", balanceOf("CVN_minerB"), balanceOf("CVN_recipient"), balanceOf("CVN_minerA"))
+	if balanceOf("CVN_minerB") != cvn("450") || balanceOf("CVN_recipient") != 0 || balanceOf("CVN_minerA") != cvn("100") {
+		t.Fatalf("on the light branch: B=%d recipient=%d A=%d units", balanceOf("CVN_minerB"), balanceOf("CVN_recipient"), balanceOf("CVN_minerA"))
 	}
 	lightWork := TotalChainWork()
 
@@ -203,8 +203,8 @@ func TestSwitchingChainsMovesCoinsCorrectly(t *testing.T) {
 		t.Error("total work did not rise after switching to the heavier branch")
 	}
 	// Miner A: blocks 11 and 12 plus eight more, plus the 0.5 fee.
-	if balanceOf("CVN_minerA") != 500.5 || balanceOf("CVN_minerB") != 0 || balanceOf("CVN_recipient") != 120.25 {
-		t.Errorf("after the switch: A=%v B=%v recipient=%v; want 500.5, 0, 120.25", balanceOf("CVN_minerA"), balanceOf("CVN_minerB"), balanceOf("CVN_recipient"))
+	if balanceOf("CVN_minerA") != cvn("500.5") || balanceOf("CVN_minerB") != 0 || balanceOf("CVN_recipient") != cvn("120.25") {
+		t.Errorf("after the switch: A=%s B=%s recipient=%s; want 500.5, 0, 120.25", FormatUnits(balanceOf("CVN_minerA")), FormatUnits(balanceOf("CVN_minerB")), FormatUnits(balanceOf("CVN_recipient")))
 	}
 }
 
@@ -219,7 +219,7 @@ func TestFailedSwitchPutsOurBlocksBack(t *testing.T) {
 	SaveBlockToStorageInternal(b.heavy[0])
 	SaveBlockToStorageInternal(b.heavy[1])
 	// The third block of the new branch pays its miner 60 CVN: invalid.
-	bad := mineTestBlock(t, b.heavy[1].Timestamp+1, "CVN_minerA", nil, 60)
+	bad := mineTestBlock(t, b.heavy[1].Timestamp+1, "CVN_minerA", nil, cvn("60"))
 	stored := SaveBlockToStorageInternal(bad)
 	worse := TotalChainWork().Cmp(workBefore) < 0
 	restoreChainLocked(b.ancestor.Index, removed)
@@ -234,8 +234,8 @@ func TestFailedSwitchPutsOurBlocksBack(t *testing.T) {
 	if GetLatestBlockInternal().Hash != tipBefore.Hash || TotalChainWork().Cmp(workBefore) != 0 {
 		t.Error("our previous chain was not put back exactly")
 	}
-	if balanceOf("CVN_minerB") != 450 || balanceOf("CVN_minerA") != 100 || balanceOf("CVN_recipient") != 0 {
-		t.Errorf("balances after putting our chain back: B=%v A=%v recipient=%v", balanceOf("CVN_minerB"), balanceOf("CVN_minerA"), balanceOf("CVN_recipient"))
+	if balanceOf("CVN_minerB") != cvn("450") || balanceOf("CVN_minerA") != cvn("100") || balanceOf("CVN_recipient") != 0 {
+		t.Errorf("balances after putting our chain back: B=%d A=%d recipient=%d units", balanceOf("CVN_minerB"), balanceOf("CVN_minerA"), balanceOf("CVN_recipient"))
 	}
 }
 
@@ -278,7 +278,7 @@ func TestStoringTheSameBlockTwice(t *testing.T) {
 	if SaveBlockToStorageInternal(block) {
 		t.Error("a block already stored was reported as newly stored")
 	}
-	if balanceOf("CVN_minerA") != 50 || GetLatestBlockInternal().Hash != block.Hash {
-		t.Errorf("state changed after a repeated save: balance %v", balanceOf("CVN_minerA"))
+	if balanceOf("CVN_minerA") != cvn("50") || GetLatestBlockInternal().Hash != block.Hash {
+		t.Errorf("state changed after a repeated save: balance %s", FormatUnits(balanceOf("CVN_minerA")))
 	}
 }

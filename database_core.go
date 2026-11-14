@@ -59,7 +59,7 @@ func InitBoltEngine() {
 						PublicKey:        "GENESIS_VOID_REWARD_POOL",
 						Inputs:           []UTXOInput{},
 						Outputs:          []UTXOOutput{
-							{Recipient: "COVENANT_STEWARD_ASSEMBLY", Amount: 0.0}, // 👑 100% PURE FAIR LAUNCH ARRIVAL
+							{Recipient: "COVENANT_STEWARD_ASSEMBLY", Amount: UnitsAmount(0)}, // 👑 100% PURE FAIR LAUNCH ARRIVAL
 						},
 						Timestamp:        Params.GenesisTimestamp,
 						Signature:        "COINBASE_IMMUTABLE_CONSENSUS_VALID",
@@ -82,7 +82,7 @@ func InitBoltEngine() {
 				_ = bMeta.Put([]byte("height"), []byte(paddedZeroKey))
 			}
 
-			utxoRecord := UTXORecord{Amount: 0.0, Recipient: "COVENANT_STEWARD_ASSEMBLY"}
+			utxoRecord := UTXORecord{Amount: UnitsAmount(0), Recipient: "COVENANT_STEWARD_ASSEMBLY"}
 			utxoData, _ := json.Marshal(utxoRecord)
 			compoundOutputKey := fmt.Sprintf("TX_GENESIS_FAIR_LAUNCH_POOL_%d", 0)
 			_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
@@ -411,7 +411,7 @@ func ApplyIncrementalDeltaCacheUpdate(block Block) {
 	defer BalanceCacheMutex.Unlock()
 
 	if StateBalanceCache == nil {
-		StateBalanceCache = make(map[string]float64)
+		StateBalanceCache = make(map[string]int64)
 	}
 
 	// 👑 CRITICAL REMEDY 3: HIGH-SPEED CONCURRENCY DELTA ENGINE
@@ -424,8 +424,8 @@ func ApplyIncrementalDeltaCacheUpdate(block Block) {
 				for _, pTx := range parentTxBlock.Transactions {
 					if pTx.ID == input.SourceTxID && input.Index < len(pTx.Outputs) {
 						sourceRecipient := strings.TrimSpace(pTx.Outputs[input.Index].Recipient)
-						StateBalanceCache[sourceRecipient] -= pTx.Outputs[input.Index].Amount
-						if StateBalanceCache[sourceRecipient] <= 0.000001 {
+						StateBalanceCache[sourceRecipient] -= pTx.Outputs[input.Index].Amount.Units()
+						if StateBalanceCache[sourceRecipient] <= 0 {
 							delete(StateBalanceCache, sourceRecipient)
 						}
 					}
@@ -437,7 +437,7 @@ func ApplyIncrementalDeltaCacheUpdate(block Block) {
 		for _, output := range txPayload.Outputs {
 			sanitizedRecipient := strings.TrimSpace(output.Recipient)
 			if sanitizedRecipient != "" {
-				StateBalanceCache[sanitizedRecipient] += output.Amount
+				StateBalanceCache[sanitizedRecipient] += output.Amount.Units()
 			}
 		}
 	}
@@ -456,7 +456,7 @@ func RebuildStateBalanceCacheInternal() {
 	BalanceCacheMutex.Lock()
 	defer BalanceCacheMutex.Unlock()
 	
-	StateBalanceCache = make(map[string]float64)
+	StateBalanceCache = make(map[string]int64)
 	if GlobalBoltEngine == nil {
 		return
 	}
@@ -471,7 +471,7 @@ func RebuildStateBalanceCacheInternal() {
 				var record UTXORecord
 				if json.Unmarshal(v, &record) == nil {
 					sanitizedRecipient := strings.TrimSpace(record.Recipient)
-					StateBalanceCache[sanitizedRecipient] += record.Amount
+					StateBalanceCache[sanitizedRecipient] += record.Amount.Units()
 				}
 			}
 		}

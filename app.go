@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -145,15 +144,14 @@ func publicKeyFromPrivateKey(privateKeyHex string) (string, error) {
 // and hands the finished transfer to a node. The private key is used for this
 // one transfer only: it is not saved, logged or sent anywhere.
 func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, privateKeyHex string) string {
-	amount, err := strconv.ParseFloat(strings.TrimSpace(amountStr), 64)
-	if err != nil || amount <= 0 {
-		return "REJECTED: Enter an amount greater than zero."
+	amountUnits, err := ParseCVN(amountStr)
+	if err != nil || amountUnits < 1 {
+		return "REJECTED: Enter an amount greater than zero, with at most 8 decimal places."
 	}
-	fee := 0.0
+	feeUnits := int64(0)
 	if strings.TrimSpace(feeStr) != "" {
-		fee, err = strconv.ParseFloat(strings.TrimSpace(feeStr), 64)
-		if err != nil || fee < 0 {
-			return "REJECTED: The fee must be zero or a positive number."
+		if feeUnits, err = ParseCVN(feeStr); err != nil {
+			return "REJECTED: The fee must be zero or a positive number, with at most 8 decimal places."
 		}
 	}
 	recipient = strings.TrimSpace(recipient)
@@ -176,7 +174,7 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, priv
 		return "REJECTED: " + err.Error()
 	}
 
-	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amount, fee)
+	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amountUnits, feeUnits)
 	if err != nil {
 		return "REJECTED: " + err.Error() + " (sending from " + senderAddress + ")"
 	}
