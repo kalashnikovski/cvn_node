@@ -43,7 +43,7 @@ jobs:
       - name: Package
         run: |
           New-Item -ItemType Directory -Force -Path package/cvn_node | Out-Null
-          Copy-Item cvn_miner.exe, cvn_node.exe, LaunchMiner.bat, LaunchWallet.bat, explorer.html, README.md, Installation_Guide.md, LICENSE -Destination package/cvn_node
+          Copy-Item cvn_miner.exe, cvn_node.exe, LaunchMiner.bat, LaunchWallet.bat, explorer.html, README.md, Installation_Guide.md, MINING_GUIDE.md, WHITEPAPER.md, LICENSE -Destination package/cvn_node
           Compress-Archive -Path package/cvn_node -DestinationPath cvn_node_windows.zip
 
       - uses: softprops/action-gh-release@v2
@@ -71,7 +71,7 @@ jobs:
       - name: Package
         run: |
           for arch in amd64 arm64; do
-            cp explorer.html README.md Installation_Guide.md LICENSE package/cvn_node_linux_$arch/
+            cp explorer.html README.md Installation_Guide.md MINING_GUIDE.md WHITEPAPER.md LICENSE package/cvn_node_linux_$arch/
             tar -C package -czf cvn_node_linux_$arch.tar.gz cvn_node_linux_$arch
           done
 

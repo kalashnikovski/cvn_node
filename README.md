@@ -12,7 +12,7 @@ Covenant Standard is a proof-of-work blockchain written from scratch in Go. It i
 - Nodes find each other, sync from scratch, and recover from forks without help.
 - No port forwarding needed: a node behind a home router still receives blocks and can mine.
 
-See [ROADMAP.md](ROADMAP.md) for what is finished and what is still being built.
+See [ROADMAP.md](ROADMAP.md) for what is finished and what is still being built. The rules planned for launch are set out in [WHITEPAPER.md](WHITEPAPER.md).
 
 ## Quick start
 
@@ -23,7 +23,7 @@ Full step-by-step instructions are in [Installation_Guide.md](Installation_Guide
 1. Install the current version of [Go](https://go.dev/dl/).
 2. Download this repository and unpack it.
 3. Run `build_clean.bat`.
-4. Run `LaunchMiner.bat` as Administrator to create a wallet and start mining.
+4. Run `LaunchMiner.bat` to create a wallet and start mining. If it shows a mining address that is not yours, choose "Create a new wallet".
 5. Run `LaunchWallet.bat` for the desktop wallet.
 
 ### Linux

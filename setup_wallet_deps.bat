@@ -1,68 +1,50 @@
 @echo off
-title Covenant Standard Node Package Dependency Installer (CVN)
-color 0B
-cls
-
-echo ====================================================================
-echo 💎 COVENANT STANDARD (CVN) - FRONTEND DESKTOP DEPENDENCY MATRIX
-echo ====================================================================
-echo.
-echo 🔍 [ENVIRONMENT CHECK] Verifying node runtime environments on disk...
-
-:: Adapt execution scope dynamically to whatever folder path holds this script
+rem For developers only. You do NOT need this to run the miner or the wallet:
+rem the wallet's screens are already built and stored in frontend\dist.
+rem
+rem Run this after changing anything in frontend\src. It installs the tools
+rem the wallet's screens are built with and rebuilds frontend\dist. Then run
+rem build_clean.bat to put the new screens into cvn_node.exe.
+title Covenant Standard (CVN) - Rebuild the wallet screens
 cd /d "%~dp0"
 
-:: Use a string-safe inline conditional trap to avoid multi-line path parenthesis parsing crashes
-where node >nul 2>nul || (
-    echo 🚨 CRITICAL ERROR: Node.js was not detected on this machine!
+where node >nul 2>nul
+if errorlevel 1 (
     echo.
-    echo 📥 Please install Node.js v26.11.1 or later before proceeding.
-    echo 👉 Download Link: https://nodejs.org
+    echo  Node.js was not found. Install it from https://nodejs.org and run this again.
     echo.
     pause
-    exit /b
+    exit /b 1
 )
 
-:: Secure variables strictly into isolated execution lines
-for /f "delims=" %%i in ('node -v 2^>nul') do set "NODE_VER=%%i"
-for /f "delims=" %%i in ('npm -v 2^>nul') do set "NPM_VER=%%i"
-
-echo ✅ Found Node.js Runtime Engine: %NODE_VER%
-echo ✅ Found Node Package Manager (NPM): v%NPM_VER%
-echo --------------------------------------------------------------------
-
-if not exist ".\frontend" (
-    echo 🚨 FOLDER MISMATCH: Core ".\frontend" directory structure was not found!
-    echo Ensure this script remains situated inside your \cvn_node project workspace.
+if not exist "frontend\package.json" (
+    echo.
+    echo  The frontend folder was not found. Run this from the cvn_node folder.
+    echo.
     pause
-    exit /b
+    exit /b 1
 )
 
-echo 📂 Descending straight into local front-end layout folder tracks...
-cd .\frontend
+cd frontend
 
-echo ⚡ [NPM PASS] Pulling missing node package wheels down over the wire...
-echo This process registers Svelte/Vite UI assets. Please wait a brief moment...
-echo --------------------------------------------------------------------
-
-:: Call using a safe legacy peer dependency flag directly to clear out frontend package tree conflicts
+echo [1/2] Installing the build tools...
 call npm install --no-audit --no-fund --legacy-peer-deps
-
-if %ERRORLEVEL% NEQ 0 (
-	echo.
-	echo 🚨 BUILD BREAKDOWN: NPM package asset download pass failed or dropped out!
-	echo Check your internet connection configuration parameters and try again.
-	cd /d "%~dp0"
-	pause
-	exit /b
-)
+if errorlevel 1 goto FAILED
 
 echo.
-echo ====================================================================
-echo ✨ [P2P SUITE READY] Frontend Node dependencies successfully locked on disk!
-echo ====================================================================
-echo.
-echo You can now safely close this window and run the build pass.
-echo.
+echo [2/2] Building the wallet screens...
+call npm run build
+if errorlevel 1 goto FAILED
+
 cd /d "%~dp0"
+echo.
+echo Done. Run build_clean.bat to build the wallet with the new screens.
 pause
+exit /b 0
+
+:FAILED
+cd /d "%~dp0"
+echo.
+echo That step failed. Read the messages above for the cause.
+pause
+exit /b 1

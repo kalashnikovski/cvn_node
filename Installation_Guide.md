@@ -1,122 +1,186 @@
+# Installation guide
 
-🏛️ Covenant Standard (CVN) Protocol
+How to run a Covenant Standard (CVN) node, mine, and use the wallet, on Windows and Linux.
 
+> **This is a test network.** The chain running today (`testnet-1`) is for testing. Its coins have no value and the chain will be reset before any real launch. See [README.md](README.md) for the current status.
 
-Layer-1 Core Network Onboarding Specification
+One program does everything: it is the node, the miner and the text wallet. On Windows there is also a desktop wallet with a window.
 
-Established: October 13, 2026
-The Covenant Standard (CVN) Layer-1 network protocol was birthed under a strict, uncorrupted Fair Launch Mandate. The network coordinator and the Assembly of Stewards hereby declare that the network adheres to the following immutable economic pillars:
-1. Absolute Zero Pre-Mine: The Genesis Block (Block #0) contains exactly 0.00 CVN in circulating supply. There are no developer allocations, no founder reserve pools, and no venture capital token buckets baked into the code layout.
-2. Organic Distribution Only: Every single CVN token in existence must be earned openly and transparently. New tokens only enter circulation when an honest node processor provides computational work to solve a Proof-of-Diligence (PoD) block reward block (+50 CVN).
-3. No Private Pre-Sales or ICOs: No cheap tokens were sold to private insiders or early investors before the mainnet went live. Every participant starts their wallet balance at absolute zero on their very first boot.
-4. Democratized Hardware Access: The network's difficulty constants are tuned exclusively for consumer-grade desktop processors (CPUs). This prevents centralized ASIC mining factories or millionaire staking pools from monopolizing the ledger, keeping validation accessible to ordinary household hardware slots forever.
-Covenant Standard is an open-source, public-validated, decentralized ecosystem owned entirely by the community from block number one.
+**Build from source for now.** The packages on the GitHub Releases page date from October 2026 and are too old to follow the current chain. New packages will be published with the public test network.
 
-💎 Covenant Standard (CVN) Onboarding Guide
-
-
-Zero-Configuration Household Hardware Setup
-
-Covenant Standard is an open-source Layer-1 network optimized for standard consumer processors (CPUs). By following this guide, you will initialize a sovereign validation rig on your computer to secure the global ledger and collect transaction fees.
-
-🪟 SECTION A: Microsoft Windows Installation Track
-
-
-📂 Step 1: Create and Populate Your Workspace Folder
-
-To ensure the network files run securely on your computer, we must create a dedicated home directory and populate it with the core software suite.
-1. Open your internet browser and visit the official repository release page: `https://github.com/kalashnikovski/cvn_node`
-2. Click the green Code button near the top right of the file grid, then click Download ZIP.
-3. Open your File Explorer (the folder icon on your taskbar).
-4. Click on This PC in the left sidebar, then double-click your primary hard drive (usually labeled Local Disk (C:)).
-5. Right-click inside any empty white space, hover over New, select Folder, and name it exactly: cvn_node
-6. Go to your Downloads folder, double-click the cvn_node-main.zip file you just grabbed from GitHub, and drag all the contents directly out of the zip file and drop them straight inside your newly created C:\cvn_node directory folder.
-
-📦 Step 2: Install the Framework Runtime Engine
-
-The network requires a foundational, open-source programming runtime environment to run natively on Windows hardware slots.
-1. Open your internet browser and visit the official download page: https://go.dev/dl/
-2. Locate the Featured Downloads section and click the link for Microsoft Windows (it will end in .msi).
-3. Once the installer finishes downloading, double-click the file to run it.
-4. Click Next on all prompts, accept the standard license terms, and click Install.
-5. When the installation completes, click Finish. Your operating system is now fully upgraded.
-
-🚀 Step 3: Build and Launch Your Miner
-1. Run **`build_clean.bat`** inside `C:\cvn_node` to compile `cvn_miner.exe` and `cvn_node.exe` 
-2. Right-click **`LaunchMiner.bat`** and run as administrator, or double-click **`LaunchWallet.bat`** for the desktop UI.
-
-**About the desktop wallet (`LaunchWallet.bat`):**
-* It can run at the same time as the miner. It shows the balance of the address in `miner_config.json`.
-* To send CVN, paste the private key of the sending wallet into the form. The transfer is signed on your computer; the key is not saved or sent anywhere.
-* It needs Microsoft's WebView2 runtime. Windows 11 includes it. On Windows 10, install the "Evergreen" runtime from `https://developer.microsoft.com/microsoft-edge/webview2/` if the wallet window does not open.
-* You do **not** need Node.js. `setup_wallet_deps.bat` is only for developers who want to change the wallet's screens.
-
-🪪 Step 4: Profile Routing & Consensus Sync
-* **New Users:** Missing configuration triggers automatic wallet generation (`--generate-wallet`) via CSPRNG, displaying your private key directly in the terminal.
-* **Returning Miners:** Existing configurations lock onto your saved public address in `miner_config.json` 
-* **Sync & Mining:** The node handles bulk chain sync (`⏳ [BULK SYNC]`) before starting active CPU Proof-of-Diligence mining.
-
-⚠️ **Security Note:** Store your Secret Private Key offline immediately upon generation; plaintext keys are no longer written to `cvn_secret_backup.txt`
 ---
 
+## 1. Before you start
 
-🐧 SECTION B: Headless Linux Installation Track
+- A 64-bit computer running Windows 10 or 11, or Linux.
+- About 1 GB of free disk space.
+- An internet connection. No port forwarding is needed.
+- **Your private key is your wallet.** It is shown once, when the wallet is created, and saved nowhere. Anyone who has it can spend your coins, and without it nobody can, including you. Write it down on paper before you start mining.
 
+---
 
-📂 Step 1: Create and Populate Your Workspace Folder
+## 2. Windows
 
-To ensure the network files run securely on your Linux environment, we must provision a clean repository directory.
-1. Open your terminal application window.
-2. Clone the official repository branches directly into your local home space using git, or download the archived tree layout using curl:
-cd ~
+### Install
+
+1. Install Go from https://go.dev/dl/ (the Windows installer, a file ending in `.msi`). Accept the defaults.
+2. Download this project: on https://github.com/kalashnikovski/cvn_node click **Code**, then **Download ZIP**.
+3. Unpack the ZIP into a folder of your own, for example `C:\cvn_node`.
+4. In that folder, double-click **`build_clean.bat`**. It builds two programs:
+   - `cvn_miner.exe`, the node, miner and text wallet;
+   - `cvn_node.exe`, the desktop wallet.
+
+### Mine
+
+Double-click **`LaunchMiner.bat`**.
+
+The first time, it asks about your mining address:
+
+- If the folder has no address yet, it offers to create a wallet.
+- If the folder already has one saved (the download currently includes a file with the maintainer's address), it shows that address and asks whether it is yours. **Unless you put it there, choose "Create a new wallet"**, or everything you mine is paid to someone else.
+
+Creating a wallet prints your address and your private key. **Write the private key down**, then press a key to start mining. You are not asked again.
+
+The miner downloads the chain first (a progress bar), then starts mining. The dashboard shows the network height, your balance and your mining speed.
+
+Useful options are added after the file name, in a Command Prompt opened in the folder:
+
+| To do this | Run |
+|---|---|
+| Mine to a wallet you already have | `LaunchMiner.bat --miner-address CVN_your_address` |
+| Use only some processor threads | `LaunchMiner.bat --threads 8` |
+
+To stop the miner, press `Ctrl+C` or close its window.
+
+### The wallet
+
+The wallet runs alongside the miner; leave the miner running.
+
+- **Desktop wallet:** double-click **`LaunchWallet.bat`**. If the window does not open on Windows 10, install Microsoft's WebView2 runtime ("Evergreen") from https://developer.microsoft.com/microsoft-edge/webview2/ . Windows 11 already has it.
+- **Text wallet:** in a Command Prompt opened in the folder, run `cvn_miner.exe --wallet`.
+
+---
+
+## 3. Linux
+
+### Install
+
+```bash
+sudo apt update && sudo apt install -y git golang-go
+```
+
+Any Go from version 1.21 works; it fetches the exact version the project needs the first time you build. If your system's Go is older than that, install a current one from https://go.dev/dl/ instead.
+
+```bash
 git clone https://github.com/kalashnikovski/cvn_node
+```
 
-cd cvn_node
+```bash
+cd cvn_node && go build -o cvn_node .
+```
 
+### Create a wallet
 
-📦 Step 2: Install the Framework Runtime Engine
+```bash
+./cvn_node --generate-wallet
+```
 
-The compilation mechanics require an active, open-source Go compiler framework on your environment's binary path.
-1. Update your localized package managers and install the foundational runtime utilities:
-sudo apt update
-sudo apt install golang-go git build-essential -y
+This prints your address and your private key and saves the address as this machine's mining address. **Write the private key down.**
 
-2. Verify that your runtime profile meets the platform specifications by checking the tool version (should register v1.21 or higher):
-go version
+### Mine
 
-🚀 Step 3: Initialize Keys and Build Targets
+```bash
+./cvn_node
+```
 
-1. Clean out any legacy developer database artifacts or configurations from your directory workspace to prepare for a clean mainnet launch:
-rm -f cvn_mainnet.db miner_config.json cvn_secret_backup.txt
+To mine to a different wallet, or to limit the processor threads used:
 
-2. Fire your secure, clock-isolated CSPRNG Elliptic Curve Factory Module to derive your unique asymmetric cryptography signature parameters natively on your storage card:
-go run . --generate-wallet
+```bash
+./cvn_node --miner-address CVN_your_address --threads 4
+```
 
-3. Compile your high-performance, un-throttled proof-of-work consensus hashing core executable block target:
-go build -o cvn_node .
+To keep the miner running after you close the terminal, start it inside `screen` or `tmux`.
 
-4. Generate your wallet address and private keys:
-./cvn_node --generate-wallet 
+### The wallet
 
-⚡ Step 4: Core Execution & Multi-Threaded Resource Fencing
+While the miner runs in one terminal, open a second one:
 
-1. Launch your compiled validator binary core on autopilot and hook directly into the primary mainnet sync gateways: bash
-./cvn_node --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
+```bash
+cd cvn_node && ./cvn_node --wallet
+```
 
-2. Hardware Micro-Throttling (Optional): By default, the mining thread will process nonces over all available CPU execution frames. To restrict your hardware footprint to a specific thread frame ceiling so your machine stays quiet and cool, prefix your launch sequence with the native resource gate variable (e.g., limiting execution to exactly 4 cores): bash
-GOMAXPROCS=4 ./cvn_node --miner-address YOUR_CVN_ADDRESS --connect 202.137.175.220:8081
+---
 
-💼 Step 5: Open the Wallet (Linux and Windows)
+## 4. Using the wallet
 
-The text wallet runs in its own terminal while the miner keeps running in another. It shows balances, sends CVN and creates new wallets. It never opens the chain database, so the two do not interfere.
-1. Leave the miner running. Open a second terminal.
-2. On Linux:
-cd ~/cvn_node
-./cvn_node --wallet
+Both wallets do the same things.
 
-3. On Windows (Command Prompt, inside the cvn_node folder):
-cvn_miner.exe --wallet
+| Action | What it does |
+|---|---|
+| Show a balance | The balance of any address, how many separate coins it is held in, and, where it applies, when the oldest coin is due to be swept |
+| Send CVN | Sends an amount to an address, with an optional fee |
+| Combine my coins | Merges many small coins into a few large ones in your own address |
+| Create a new wallet | Makes a new address and private key (text wallet) |
 
-To send CVN you paste the private key of the sending wallet. On Linux it is not shown while you type. The key is used to sign that one transfer on your computer and is not saved or sent anywhere.
+**Sending.** You enter the recipient's address, the amount, an optional fee, and the private key of the wallet you are sending from. The transfer is signed on your own computer. The key is used for that one transfer and is not saved or sent anywhere. A transfer normally confirms in the next block.
 
-⚠️ **Security Note:** Store your Secret Private Key offline immediately upon generation; plaintext keys are no longer written to `cvn_secret_backup.txt`
+**Why combine?** A miner receives one separate coin for every block won, and one transfer can spend at most 200 coins. A wallet holding hundreds of mining rewards therefore cannot send them all at once. Combining sends them back to your own address as a few large coins. Your balance does not change, apart from any fee you choose to pay.
+
+---
+
+## 5. Mining faster
+
+On networks that mine with RandomX, two things make a large difference: a one-time system setting called large pages, and an optional faster miner. Both are covered in [MINING_GUIDE.md](MINING_GUIDE.md). Neither applies to `testnet-1`.
+
+---
+
+## 6. Updating
+
+Stop the miner first.
+
+**Windows:** download the ZIP again, unpack it over your folder, and run `build_clean.bat`. Your `miner_config.json` and the chain database are kept.
+
+**Linux:**
+
+```bash
+cd cvn_node && git pull && go build -o cvn_node .
+```
+
+Then start the miner again.
+
+---
+
+## 7. Networks
+
+The program runs on one network at a time.
+
+| Network | How to choose it | What it is |
+|---|---|---|
+| `testnet-1` | nothing; it is the default | The public test network |
+| `devnet` | add `--network devnet` | The development network for the launch rules. It has no public seeds and may be wiped at any time. |
+
+The same option works for the wallet, for example `./cvn_node --network devnet --wallet` or `LaunchWallet.bat --network devnet`. Each network keeps its own database file and uses its own ports, so they do not interfere.
+
+---
+
+## 8. Looking at the chain
+
+Any node answers in a web browser. On the machine running it:
+
+- `http://localhost:8081/` — a small block explorer
+- `http://localhost:8081/block` — the newest block
+- `http://localhost:8081/addresses` — every address with a balance
+
+---
+
+## 9. If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| "this machine has no mining address" | Create a wallet (`LaunchMiner.bat`, or `--generate-wallet` on Linux), or start with `--miner-address CVN_...` |
+| "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself, within five minutes at most. |
+| The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_mainnet.db` on `testnet-1`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
+| Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
+| The desktop wallet shows no balance | Check that the miner is running and that both were started on the same network. |
+
+To report a problem, open an issue on GitHub with a picture of the miner window and what `http://localhost:8081/block` shows. If the problem could let someone take or create coins, contact the maintainer privately first.
