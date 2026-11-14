@@ -187,13 +187,19 @@ var devnetParams = ChainParams{
 //
 // It starts the way the real network will: from a Bitcoin block named in
 // advance (see genesis.go). Until that height is announced the network is
-// marked unscheduled and cannot be started. Scheduling it is two edits here,
+// marked unscheduled and cannot be started. Scheduling it is one edit here,
 // made in the release that announces the start:
 //
-//	Anchor: GenesisAnchor{BitcoinHeight: <the announced height>},
+//	Anchor: GenesisAnchor{
+//		BitcoinHeight: <the announced height>,
+//		NotBefore:     <the time of the announcement, in seconds since 1970>,
+//	},
 //
-// and, in a later release once that Bitcoin block exists, its header in
-// Anchor.BitcoinHeader so that newcomers need not supply it.
+// Both are needed. A Bitcoin header names its block by hash, not by height,
+// so NotBefore is what stops a block mined before the announcement being
+// passed off as the anchor; a test refuses a release that sets one without
+// the other. In a later release, once that Bitcoin block exists, its header
+// goes in Anchor.BitcoinHeader so that newcomers need not supply it.
 var cvnTestnetParams = ChainParams{
 	Name:        "cvn_testnet",
 	Description: "CVN Testnet: the public test network of the launch rules. Its coins have no value",
@@ -211,8 +217,8 @@ var cvnTestnetParams = ChainParams{
 
 	SeedHosts: publicSeedHosts,
 
-	// The genesis block's date is the anchor block's own timestamp, set when
-	// the anchor is supplied.
+	// The genesis block's date is the anchor block's own timestamp less two
+	// hours, set when the anchor is supplied.
 	Anchor: GenesisAnchor{Unscheduled: true},
 
 	AmountsAsUnits: true,

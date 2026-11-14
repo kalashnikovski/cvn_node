@@ -192,11 +192,11 @@ A launch network starts when one particular Bitcoin block is mined. Its height i
 
 1. **Get the release that names the height.** Download its package, or build from its tag, and check it against the published sums (section 10).
 2. **Create a wallet for that network** and write its private key down on paper:
-   - Windows: `LaunchMiner.bat --network NETWORK` and choose "Create a new wallet".
+   - Windows: `LaunchMiner.bat --network NETWORK` and choose "Create a new wallet". For the CVN Testnet, double-click `LaunchMiner_CVN_Testnet.bat`, which does the same.
    - Linux: `./cvn_node --network NETWORK --generate-wallet`
 3. **Optional, for more speed:** switch on large pages and add the fast miner. Both are in [MINING_GUIDE.md](MINING_GUIDE.md), and both can be done later without losing anything.
 4. **Start the miner** on that network and leave it running:
-   - Windows: `LaunchMiner.bat --network NETWORK`
+   - Windows: `LaunchMiner.bat --network NETWORK`, or for the CVN Testnet double-click `LaunchMiner_CVN_Testnet.bat`. **A double-click on plain `LaunchMiner.bat` runs the first test network, not the one that is starting.**
    - Linux: `./cvn_node --network NETWORK`
 
    It shows how many Bitcoin blocks are left and waits.
@@ -213,7 +213,7 @@ or from any block explorer: find the block, copy its hash, and open `https://mem
 
 The program checks the header whoever supplies it: it must carry the work of a real, current Bitcoin block. A wrong header cannot cost you coins. It would start your node on a network of its own, and the program warns you if that has happened.
 
-**What being first is worth.** A node that asks the explorers starts within about ten to twenty seconds of the Bitcoin block appearing. Someone who supplies the header from their own Bitcoin node starts those seconds earlier. A block takes about 45 seconds for the whole network at the starting difficulty, and for the first 20 blocks that difficulty cannot fall, so a lead of that size is worth a fraction of one block's chance. Nobody has to wait for the clock at the start either: the first block is dated two hours before its Bitcoin block's own time, because Bitcoin allows a block's time to run up to two hours ahead.
+**What being first is worth.** A node that asks the explorers starts within about ten to twenty seconds of the Bitcoin block appearing. Someone who supplies the header from their own Bitcoin node starts those seconds earlier. A block takes about 45 seconds for the whole network at the starting difficulty, and for the first 20 blocks that difficulty cannot fall, so a lead of that size is worth a fraction of one block's chance. Nobody has to wait for the clock at the start either: the first block is dated two hours before its Bitcoin block's own time, because Bitcoin allows a block's time to run up to two hours ahead. Those two hours of earlier dates buy nothing, because the difficulty rule counts any date before the Bitcoin block's own time as that time.
 
 **If Bitcoin replaces that block.** About one Bitcoin block in several hundred is replaced by another moments after it appears. Nodes could then have started from two different blocks and be on two networks. The rule is fixed in advance and is nobody's to decide: **the network is the one that begins from the Bitcoin block still in Bitcoin's chain six blocks later. Blocks mined on the other are void.** For the first hour or so the program keeps asking the explorers whether its Bitcoin block is still the one at that height, and it also compares its first block with the seed nodes'. If either check fails it says so, repeatedly. To move over to the right network: stop the program, delete `genesis_anchor_NETWORK.txt` and that network's chain database, and start again. Your wallet is not in those files.
 

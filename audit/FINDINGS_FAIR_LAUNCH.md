@@ -105,3 +105,37 @@ Two reviewers (Claude, Grok) ran the scorecard again on commit `e4d8b89`, with t
 | B3 | A miner can claim relief for a late block two minutes early, and whoever mines the first 20 blocks can date them close together, which is repaid as slightly faster blocks for everyone. | Accepted. Both reviewers agree it is bounded and neither could name a change. Any chain that takes its time from its miners gives them some latitude; this one gives two minutes where Bitcoin gives two hours. |
 | C6 | All six seeds are run by one person. A newcomer who reaches only the seeds sees only what they show. | Not a matter of code. Seeds run by others will be added to the list as they are offered; until then `--connect` names any node. The software cannot tell a stranger's node from one run by whoever runs the seeds, and the code says so. |
 | A6, B5 | The launch height is not set; the fast miner's source is in its own repository. | Both are for the scheduling release. The fast miner's source, builds and sums are already public (`cvn-xmrig`, tag `cvn-6.26.0-2`). |
+
+---
+
+# Third run of the scorecard
+
+Two reviewers (Claude, Grok) ran it again on commit `dc55f48`. Grok passed 32 of 33 code items. Claude, working in the repository and running the code, found two real faults, both in changes made after the second run, and proved one with a test of its own. Tests named below fail on the old code and pass on the new; both were checked that way.
+
+## Fixed in the code
+
+| Item | Finding | What was wrong | Fix | Test |
+|---|---|---|---|---|
+| C6, F4 | **Seeds could still hold a newcomer, across a RandomX key change** | A rival branch was checked with RandomX keys read from the node's own chain. A settled node never notices: the 100-block limit keeps the key block common to both chains. A newcomer is free of that limit, so its chain can part from the real one below a key block. Every block of the real chain that depends on that key then failed, the honest node was set aside as a liar, and the newcomer stayed on the seed's chain however much heavier the real one was. The second run's fix made this reachable; no test used RandomX on that path. | While a rival branch is measured, the identifiers of its blocks are remembered, and a block whose key block lies on that branch is checked with that key. | `TestARivalBranchIsCheckedWithItsOwnRandomXKeys` |
+| B3 | **Dating the first block two hours back handed out two hours of dates** | The second run dated the first block two hours before its Bitcoin block so that nobody waits for the clock. A miner finding the first blocks in a row could date them close together and then one far later, with no real time passed. The rule read that as a block hours late: difficulty at its floor by block 23 and about a hundred blocks nearly free. The limit on late-block relief after the window did not cover the term that follows the previous block's time. | For the difficulty rule only, a date earlier than the Bitcoin block's own time counts as that time. No time passes between such blocks, so difficulty can only rise, and the schedule is counted the same way. | `TestDatesFromBeforeTheLaunchBuyNothing` |
+| A3 | A release could name a Bitcoin height without the earliest date its block may carry, and the note on how to schedule left that date out. | The note gives both, and a test refuses a network that names one without the other. | `TestAScheduledNetworkNamesItsEarliestDate` |
+| B6 | A double-click on the Windows launcher on launch day ran the first test network. | `LaunchMiner_CVN_Testnet.bat` and `LaunchWallet_CVN_Testnet.bat` choose the network; they are in the package and the checklist names them. | By reading |
+
+## Fixed in the documents
+
+| Item | Finding | Fix |
+|---|---|---|
+| E5 | The paper and guide said the seeds alone can never hold a newcomer, and that being early costs nothing. Both were untrue until the two fixes above. | True now; the wording says how. |
+| E5 | The roadmap said a replaced anchor block means the launch is repeated, and that the first block carries the Bitcoin block's time. | It gives the six-blocks-later rule and the two hours. |
+| E2 | Svelte, whose runtime is compiled into the desktop wallet's screens, was not credited. | It is, with its licence text. The script that writes the notices is now in the repository (`audit/make_notices.py`). |
+| E4 | The guide said anyone can build the fast miner and compare, without saying how or whether a rebuild gives the same file. | It points to XMRig's build instructions and says plainly that those builds are not repeatable bit for bit: the sums check a download, not a rebuild. |
+
+## Not changed, and why
+
+| Item | Finding | Decision |
+|---|---|---|
+| A3, A4 | A Bitcoin header names its block by hash, not by height. Two of the five explorers, three of which run the same software, could serve a real block mined after the announcement as the block at the announced height, having mined on it since it appeared. | Open, and to be closed before the real network: ship a Bitcoin block fixed in the release and have each node follow Bitcoin's headers from it to the announced height, checking the links and the work. For the test network the earliest date, two explorers agreeing, the six-blocks-later check and the comparison with the seeds stand in. Both reviewers rate it as able to follow the test launch. |
+| B3 | A miner with most of the network's power can still date blocks up to two minutes ahead. | Accepted, as before. |
+| C6 | All six seeds are run by one person. | Not a matter of code; as in the second run. |
+| E4 | The seed installer builds the newest source unless given a tag. | The launch release's instructions will name the tag (`CVN_VERSION`). |
+| A6, B5 | The launch height is not set; the fast miner's source is in its own repository. | For the scheduling release. |

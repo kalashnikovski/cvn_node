@@ -1,6 +1,7 @@
 package node
 
 import (
+	"math/big"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -419,5 +420,145 @@ func TestAnAddressForAnotherNetworkIsNamedAsSuch(t *testing.T) {
 	_, err = resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_my_wallet"})
 	if err == nil || strings.Contains(err.Error(), "--network NAME") {
 		t.Errorf("text that is no address anywhere was blamed on the network: %v", err)
+	}
+}
+
+// Third review: a rival branch was checked with RandomX keys read from the
+// node's own chain. For a newcomer, which is not held back by the
+// reorganisation limit, the two chains can part below a key block; every
+// block of the real chain that depends on that key then failed, and the
+// newcomer stayed on the seed's chain however much heavier the real one was.
+func TestARivalBranchIsCheckedWithItsOwnRandomXKeys(t *testing.T) {
+	t.Chdir(t.TempDir())
+	timestamp := startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 4}})
+	withReorgLimit(2)()
+	clearSyncMemory(t)
+
+	// The key changes every 4 blocks and trails by 2. Both chains share
+	// blocks 1 to 3. The seed's runs to block 9, the real one to block 15,
+	// so each has key blocks (4 and 8) that the other does not.
+	extend := func(count int, miner string) {
+		for i := 0; i < count; i++ {
+			*timestamp += 45
+			extendTestChain(t, *timestamp, testAddress(miner), nil)
+		}
+	}
+	extend(3, "shared")
+	forkTime := *timestamp
+	extend(6, "the seed's own miner")
+	seedChain := localChain()
+	StateMutex.Lock()
+	rollbackChainToHeightLocked(3)
+	StateMutex.Unlock()
+	*timestamp = forkTime
+	extend(12, "everyone else")
+	realChain := localChain()
+	if sumBlockWork(realChain).Cmp(sumBlockWork(seedChain)) <= 0 {
+		t.Fatal("the test's real chain should hold more work than the seed's")
+	}
+	if seedChain[4].Hash == realChain[4].Hash || powKeyHeight(7) != 4 {
+		t.Fatal("the test needs the two chains to differ at a block that is a RandomX key")
+	}
+
+	StateMutex.Lock()
+	rollbackChainToHeightLocked(0)
+	StateMutex.Unlock()
+	newStandInPeer(t, seedChain).asOnlySeed(t)
+	runInitialDownload([]string{"cvn_node"})
+	if tip := GetLatestBlockInternal(); tip.Hash != seedChain[len(seedChain)-1].Hash {
+		t.Fatalf("the newcomer should first have what the seed gave it; it is at #%d", tip.Index)
+	}
+
+	real := newStandInPeer(t, realChain)
+	real.alsoServeOn(t, "127.0.0.2", Params.SyncPort)
+	PeerMapMutex.Lock()
+	savedPeers := ActivePeerMap
+	ActivePeerMap = map[string]time.Time{Params.gossipAddress("127.0.0.2"): time.Now()}
+	PeerMapMutex.Unlock()
+	t.Cleanup(func() {
+		PeerMapMutex.Lock()
+		ActivePeerMap = savedPeers
+		PeerMapMutex.Unlock()
+	})
+	TriggerActiveReSyncPass()
+	if tip := GetLatestBlockInternal(); tip.Hash != realChain[len(realChain)-1].Hash {
+		t.Fatalf("the newcomer stayed on the seed's chain at #%d: the real chain's blocks were checked with the wrong RandomX keys", tip.Index)
+	}
+
+	// A branch whose blocks were mined under some other key is still refused.
+	forged := append([]Block{}, realChain[4:]...)
+	forged[0].Hash = strings.Repeat("ab", 32)
+	if work, wins := measureCandidateBranch(serveBlocks(forged), 3, realChain[3].Hash, 15, big.NewInt(0)); wins || work.Sign() != 0 {
+		t.Error("a branch that does not prove its work was measured as having some")
+	}
+}
+
+// Third review: dating the first block two hours back left two hours of
+// dates that a miner finding the first blocks in a row could spend at once.
+// Dating blocks close together and then one far later, with no real time
+// passed, read as a block hours late: difficulty fell to its floor by block
+// 23 and a hundred blocks followed nearly free.
+func TestDatesFromBeforeTheLaunchBuyNothing(t *testing.T) {
+	const start = 300000
+	startTestChain(t, "devnet", func() {
+		Params.Anchor = GenesisAnchor{BitcoinHeight: 800000}
+		Params.GenesisTimestamp = 0
+		t.Chdir(t.TempDir())
+		if err := resolveGenesisAnchor([]string{"cvn_node", "--genesis-anchor", testHeaderA}); err != nil {
+			t.Fatal(err)
+		}
+		Params.HeartbeatInitialDifficulty = start
+	})
+	if difficultyClockStart() != testHeaderTime || Params.GenesisTimestamp != testHeaderTime-bitcoinClockAllowance {
+		t.Fatalf("the difficulty clock should start at the Bitcoin block's own time: %d", difficultyClockStart())
+	}
+	// The attack as the reviewer gave it: blocks 1 to 19 dated 45 seconds
+	// apart from the backdated first block, then longer and longer gaps, all
+	// inside the two hours before the launch.
+	date := Params.GenesisTimestamp
+	gaps := []int64{}
+	for i := 0; i < 19; i++ {
+		gaps = append(gaps, 45)
+	}
+	gaps = append(gaps, 495, 539, 719, 2000, 2000)
+	lowest := int64(1) << 62
+	for _, gap := range gaps {
+		date += gap
+		if date >= testHeaderTime {
+			t.Fatal("the test's dates should all fall before the launch")
+		}
+		block := extendTestChain(t, date, testAddress("first miner"), nil)
+		if int64(block.Difficulty) < lowest {
+			lowest = int64(block.Difficulty)
+		}
+	}
+	if lowest < start {
+		t.Errorf("blocks dated before the launch brought difficulty down to %d; it started at %d", lowest, start)
+	}
+	// Once dates are past the launch, time counts from the launch: a block
+	// dated one minute after it is one minute late, not two hours.
+	tip := GetLatestBlockInternal()
+	if got := CalculateNextDifficulty(tip, testHeaderTime+60); got < tip.Difficulty/2 {
+		t.Errorf("a block one minute after the launch was read as hours late: difficulty %d after %d", got, tip.Difficulty)
+	}
+	// A network with no Bitcoin anchor is untouched.
+	onNetwork(t, "devnet")
+	if difficultyClockStart() != 0 || difficultyClock(5) != 5 {
+		t.Error("a network without an anchor should read dates as they are")
+	}
+}
+
+// Third review: a Bitcoin header cannot be tied to its height, so the
+// earliest date its block may carry is what keeps an older block from being
+// passed off as the anchor. A release that names a height must name that
+// date too.
+func TestAScheduledNetworkNamesItsEarliestDate(t *testing.T) {
+	for _, network := range []ChainParams{testnet1Params, cvnTestnetParams, devnetParams} {
+		if network.Anchor.BitcoinHeight > 0 && network.Anchor.NotBefore <= 0 {
+			t.Errorf("%s names Bitcoin block %d as its start and no earliest date (Anchor.NotBefore)", network.Name, network.Anchor.BitcoinHeight)
+		}
+		if network.Anchor.BitcoinHeight > 0 && network.Anchor.Unscheduled {
+			t.Errorf("%s names a Bitcoin height and is still marked unscheduled", network.Name)
+		}
 	}
 }

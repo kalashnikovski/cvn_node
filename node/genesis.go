@@ -43,8 +43,9 @@ import (
 //     waiting for the clock, while a miner altered to work ahead and hold
 //     its blocks back had the start to itself. Two hours back, the genesis
 //     date can never be ahead of the true time, and nobody has to wait.
-//     Being early costs nothing: for the first blocks the difficulty rule
-//     takes no notice of dates (see heartbeat_difficulty.go).
+//     The two hours of dates this opens up before the launch buy nothing:
+//     the difficulty rule counts any date earlier than the Bitcoin block's
+//     own time as that time (difficultyClock in heartbeat_difficulty.go).
 //
 // Both come from the Bitcoin block's 80-byte header, which is what an
 // operator supplies. The header proves itself: its hash must meet the

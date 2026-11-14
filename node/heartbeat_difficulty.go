@@ -88,7 +88,7 @@ func HashMeetsDifficulty(hashHex string, height int64, difficulty int) bool {
 // CalculateHeartbeatDifficulty returns the difficulty required of the block that
 // follows lastBlock and is dated nextBlockTimestamp.
 func CalculateHeartbeatDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	gapSeconds := nextBlockTimestamp - lastBlock.Timestamp
+	gapSeconds := difficultyClock(nextBlockTimestamp) - difficultyClock(lastBlock.Timestamp)
 	if !inLaunchWindow(lastBlock.Index + 1) {
 		return heartbeatDifficultyWithGap(lastBlock, launchRampGap(lastBlock.Index+1, gapSeconds))
 	}
@@ -103,6 +103,38 @@ func CalculateHeartbeatDifficulty(lastBlock Block, nextBlockTimestamp int64) int
 		return int(floor)
 	}
 	return difficulty
+}
+
+// difficultyClock is the date the difficulty rule reads off a block.
+//
+// The first block of a network that starts from a Bitcoin block is dated two
+// hours before that Bitcoin block's own time, so that no miner ever has to
+// wait for the clock at the start (see genesis.go). That leaves two hours of
+// dates, all earlier than the launch itself, that a block may carry. If the
+// difficulty rule took them at face value, a miner who found several blocks
+// in a row could date them close together and then date one far later,
+// without any real time having passed, and the rule would read that block as
+// hours late and collapse the difficulty.
+//
+// So for the difficulty rule, and only for it, a date earlier than the
+// Bitcoin block's own time counts as that time. Blocks dated before it are
+// all "at the start": no time has passed between them, so difficulty can
+// only rise. Time starts counting at the Bitcoin block's time, which is the
+// earliest moment the network can really have begun.
+func difficultyClock(timestamp int64) int64 {
+	if start := difficultyClockStart(); timestamp < start {
+		return start
+	}
+	return timestamp
+}
+
+// difficultyClockStart is the Bitcoin anchor block's own time on a network
+// that starts from one, and zero on any other.
+func difficultyClockStart() int64 {
+	if !Params.Anchor.required() || Params.Anchor.BitcoinHeader == "" {
+		return 0
+	}
+	return Params.GenesisTimestamp + bitcoinClockAllowance
 }
 
 // launchFloorAt is the lowest difficulty allowed at a height inside the
@@ -185,7 +217,7 @@ func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
 	}
 	solveSeconds := HeartbeatTargetSeconds
 	if grandParent := GetBlockByHeightFromDB(lastBlock.Index - 1); grandParent.Hash != "" {
-		solveSeconds = lastBlock.Timestamp - grandParent.Timestamp
+		solveSeconds = difficultyClock(lastBlock.Timestamp) - difficultyClock(grandParent.Timestamp)
 	}
 	if !Params.ScheduleAnchored {
 		return int(heartbeatRetarget(int64(lastBlock.Difficulty), solveSeconds, gapSeconds))
@@ -216,7 +248,7 @@ func scheduleDriftSeconds(lastBlock Block) int64 {
 	if firstBlock.Hash == "" {
 		return 0
 	}
-	elapsed := lastBlock.Timestamp - firstBlock.Timestamp
+	elapsed := difficultyClock(lastBlock.Timestamp) - difficultyClock(firstBlock.Timestamp)
 	scheduled := (lastBlock.Index - origin) * HeartbeatTargetSeconds
 	return elapsed - scheduled
 }

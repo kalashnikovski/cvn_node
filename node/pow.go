@@ -173,13 +173,31 @@ func powWorkValue(hash [randomx.RANDOMX_HASH_SIZE]byte) string {
 // demands, under the algorithm in force at its height. block.Hash must
 // already be known to be the block's true identifier.
 func BlockProofValid(block Block, difficulty int) bool {
+	return blockProofValidWithKeyBlock(block, difficulty, "")
+}
+
+// blockProofValidWithKeyBlock is BlockProofValid for a block that may belong
+// to a branch this node does not hold. The RandomX key for a block is the
+// identifier of an earlier block of the same chain. For a block on our own
+// chain that key block is in our database, and keyBlockHash is left empty.
+// For a block on another branch whose key block lies on that branch too,
+// the caller passes that key block's identifier: checking such a block
+// against a key from our own chain would refuse every one of them, however
+// much work they carry.
+func blockProofValidWithKeyBlock(block Block, difficulty int, keyBlockHash string) bool {
 	if powAlgorithmAt(block.Index) != PowRandomX {
 		return HashMeetsDifficulty(block.Hash, block.Index, difficulty)
 	}
 	if int64(difficulty) < minDifficultyAt(block.Index) || block.Nonce < 0 || block.Nonce >= powNonceLimit {
 		return false
 	}
-	key, ok := powKeyFor(block.Index)
+	var key []byte
+	ok := false
+	if keyBlockHash == "" {
+		key, ok = powKeyFor(block.Index)
+	} else if decoded, err := hex.DecodeString(keyBlockHash); err == nil && len(decoded) > 0 {
+		key, ok = decoded, true
+	}
 	if !ok {
 		return false
 	}

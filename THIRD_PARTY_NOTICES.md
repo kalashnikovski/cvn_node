@@ -2,9 +2,13 @@
 
 The Covenant Standard (CVN) program is published under the MIT licence (see `LICENSE`). It contains, or is built with, the work of others listed here. Each is used under its own licence, reproduced below as its authors published it.
 
+This file is written by `audit/make_notices.py`.
+
 ## Kept inside this repository
 
-**RandomX engine** (`internal/randomx/`). A copy of the Go implementation of RandomX from `git.gammaspectra.live/P2Pool/go-randomx`, version 4.7.0, with the changes listed in `internal/randomx/README_CVN.md`. BSD 3-clause licence; its text is in `internal/randomx/LICENSE` and is reproduced at the end of this file. RandomX itself was designed by tevador and contributors.
+**RandomX engine** (`internal/randomx/`). A copy of the Go implementation of RandomX from `git.gammaspectra.live/P2Pool/go-randomx`, version 4.7.0, with the changes listed in `internal/randomx/README_CVN.md` and shown line by line in `internal/randomx/DIFFERENCES.md`. BSD 3-clause licence; its text is in `internal/randomx/LICENSE` and is reproduced below. RandomX itself was designed by tevador and contributors.
+
+**Svelte** 5.57.2, the library the desktop wallet's screens are written with. Its runtime is compiled into the built screens (`frontend/dist`) and so into the desktop wallet. MIT licence; its text is reproduced below. The tool that builds the screens, Vite, is not part of any program.
 
 ## Separate programs
 
@@ -14,7 +18,7 @@ The Covenant Standard (CVN) program is published under the MIT licence (see `LIC
 
 **The Go programming language and its standard library.** Copyright The Go Authors. BSD 3-clause licence: https://go.dev/LICENSE
 
-The modules below are named in `go.mod`. The node and miner use bbolt; the others are there for the Windows desktop wallet (Wails and what it depends on).
+The modules below are named in `go.mod`. The node and miner use bbolt and golang.org/x/sys; the others are there for the Windows desktop wallet (Wails and what it depends on).
 
 - `git.sr.ht/~jackmordaunt/go-toast/v2` v2.0.3
 - `github.com/bep/debounce` v1.2.1
@@ -85,6 +89,18 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+### Svelte 5.57.2
+
+```text
+Copyright (c) 2016-2025 [Svelte Contributors](https://github.com/sveltejs/svelte/graphs/contributors)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 ### git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3

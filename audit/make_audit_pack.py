@@ -102,6 +102,8 @@ PROGRAM = [
     "explorer.html",
     "LaunchMiner.bat",
     "LaunchWallet.bat",
+    "LaunchMiner_CVN_Testnet.bat",
+    "LaunchWallet_CVN_Testnet.bat",
     "build_clean.bat",
     "deploy/install_seed.sh",
     "deploy/update_seed.sh",

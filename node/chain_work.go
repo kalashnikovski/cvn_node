@@ -281,6 +281,13 @@ func peerChainIsBetter(peerHeight int64, peerWork *big.Int, localHeight int64, l
 // its parent's state: that its hash is really its hash, and that the hash
 // meets the difficulty the block claims. Work claimed this way is work done.
 func candidateBlockProofValid(block Block) bool {
+	return candidateBlockProofValidWithKeyBlock(block, "")
+}
+
+// candidateBlockProofValidWithKeyBlock is candidateBlockProofValid for a
+// block whose RandomX key block is on the same foreign branch (see
+// blockProofValidWithKeyBlock).
+func candidateBlockProofValidWithKeyBlock(block Block, keyBlockHash string) bool {
 	claimed := block.Difficulty
 	if !IsHeartbeatHeight(block.Index) {
 		if block.Index <= 10 {
@@ -289,18 +296,36 @@ func candidateBlockProofValid(block Block) bool {
 			return false
 		}
 	}
-	return block.Hash == CalculateHash(block) && BlockProofValid(block, claimed)
+	return block.Hash == CalculateHash(block) && blockProofValidWithKeyBlock(block, claimed, keyBlockHash)
 }
 
 // measureCandidateBranch downloads a peer's branch above the shared block and
 // adds up its proven work. It stops as soon as the branch has more work than
 // `workToBeat`, at the first block that does not link or prove its work, or
 // at the size limit. It reports the work found and whether it beat the target.
+//
+// A block's RandomX key is the identifier of an earlier block of its own
+// chain. Usually that key block is far below the point where the branches
+// part and is the same on both. But a node that has just downloaded its
+// chain may be offered a branch that parts from its own below a key block
+// (it is not held back by the reorganisation limit; see sync_pass.go). The
+// key blocks of that branch are then blocks of that branch, so their
+// identifiers are remembered here as they are measured and used as the keys
+// for the blocks that depend on them.
 func measureCandidateBranch(fetchBatch func(start int64) []Block, ancestorHeight int64, ancestorHash string, peerTipHeight int64, workToBeat *big.Int) (*big.Int, bool) {
 	total := new(big.Int)
 	previousHash := ancestorHash
 	next := ancestorHeight + 1
 	examined := 0
+	branchHashes := make(map[int64]string)
+	keyBlockOnBranch := func(height int64) (string, bool) {
+		keyHeight := powKeyHeight(height)
+		if powAlgorithmAt(height) != PowRandomX || keyHeight <= ancestorHeight {
+			return "", true // the key block is one both chains share
+		}
+		hash, measured := branchHashes[keyHeight]
+		return hash, measured
+	}
 	for next <= peerTipHeight && examined < maxCandidateBranchBlocks {
 		batch := fetchBatch(next)
 		if len(batch) == 0 {
@@ -311,9 +336,11 @@ func measureCandidateBranch(fetchBatch func(start int64) []Block, ancestorHeight
 			if block.Index != next {
 				continue
 			}
-			if strings.TrimSpace(block.PrevHash) != previousHash || !candidateBlockProofValid(block) {
+			keyBlockHash, known := keyBlockOnBranch(block.Index)
+			if strings.TrimSpace(block.PrevHash) != previousHash || !known || !candidateBlockProofValidWithKeyBlock(block, keyBlockHash) {
 				return total, total.Cmp(workToBeat) > 0
 			}
+			branchHashes[block.Index] = block.Hash
 			total.Add(total, BlockWork(block))
 			if total.Cmp(workToBeat) > 0 {
 				return total, true

@@ -15,7 +15,7 @@ The built-in miner is what runs unless you ask for the other one. Both pay the s
 
 ### Using the fast miner
 
-1. Download the CVN edition for your system from https://github.com/kalashnikovski/cvn-xmrig/releases. The current release is `cvn-6.26.0-2`. Its complete source is in that repository under the same tag (it is XMRig with CVN's two RandomX settings and no donation, under the GNU GPL version 3), so anyone can build it and compare. To check a download, compare its SHA-256 with the release's `SHA256SUMS` file, which reads:
+1. Download the CVN edition for your system from https://github.com/kalashnikovski/cvn-xmrig/releases. The current release is `cvn-6.26.0-2`. Its complete source is in that repository under the same tag (it is XMRig with CVN's two RandomX settings and no donation, under the GNU GPL version 3), so anyone can build it and compare what it does and how fast it runs. It is built exactly as XMRig is: follow XMRig's own instructions at https://xmrig.com/docs/miner/build on the tagged source. A build of your own will not have the same SHA-256 as the published one, because XMRig's builds are not repeatable bit for bit; the sums below check a download, not a rebuild. To check a download, compare its SHA-256 with the release's `SHA256SUMS` file, which reads:
 
    ```
    7782052f46500678aa06d5e798ea8e9b0e9ff0febc51a1048559cb280b67fd8d  xmrig-cvn-linux-static-x64.tar.gz
