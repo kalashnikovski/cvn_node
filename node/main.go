@@ -417,6 +417,7 @@ func Run(frontendAssets embed.FS) {
 		go runTableJanitor()
 		StartContextMinerEngine()
 	}
+	dashboardOnScreen := stdoutIsTerminal()
 	ticker := time.NewTicker(4 * time.Second)
 	defer ticker.Stop()
 	_ = exec.Command("cmd", "/c", "cls").Run()
@@ -513,6 +514,21 @@ func Run(frontendAssets embed.FS) {
 					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %s // Ledger Height: #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight))
 				}
 				logMutex.Unlock()
+			}
+			// The dashboard is for a person at a terminal. Run as a service,
+			// with output going to a log, redrawing it every few seconds
+			// would only fill the log; one line every few minutes says the
+			// node is alive.
+			if !dashboardOnScreen {
+				logMutex.Lock()
+				if len(liveTerminalEventLogs) > 12 {
+					liveTerminalEventLogs = liveTerminalEventLogs[len(liveTerminalEventLogs)-12:]
+				}
+				logMutex.Unlock()
+				if loopCounter%75 == 1 {
+					log.Printf("💓 Running. Height #%d.\n", actualBlocksHeight)
+				}
+				continue
 			}
 			logMutex.Lock()
 			var cmd *exec.Cmd

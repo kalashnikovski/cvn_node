@@ -102,6 +102,20 @@ type ChainParams struct {
 	KeyLagBlocks   int64
 }
 
+// publicSeedHosts are the always-on nodes of the public networks. They keep
+// the chain and pass blocks on; all but the first do not mine. They are
+// spread over several regions so that no single outage takes them all away
+// and so that a miner anywhere has one nearby.
+var publicSeedHosts = []string{
+	"202.137.175.220", // Melbourne, Australia (also mines)
+	"207.148.67.11",   // Singapore
+	"64.177.44.185",   // Atlanta, United States
+	"149.28.69.173",   // Los Angeles, United States
+	"149.248.54.9",    // Toronto, Canada
+	"95.179.179.191",  // Amsterdam, Netherlands
+	"65.20.67.25",     // Mumbai, India
+}
+
 var testnet1Params = ChainParams{
 	Name:        "testnet-1",
 	Description: "The test network running since 29 September 2026",
@@ -116,7 +130,7 @@ var testnet1Params = ChainParams{
 	DatabaseFile:  "cvn_mainnet.db",
 	PeerCacheFile: "peers.json",
 
-	SeedHosts:           []string{"202.137.175.220", "207.148.67.11", "64.177.45.153"},
+	SeedHosts:           publicSeedHosts,
 	ExtraSyncURLs:       []string{"http://202.137.175.220:9091"},
 	WindowsSelfSkipHost: "202.137.175.220",
 
@@ -197,7 +211,7 @@ var cvnTestnetParams = ChainParams{
 	DatabaseFile:  "cvn_testnet.db",
 	PeerCacheFile: "peers_testnet.json",
 
-	SeedHosts:           []string{"202.137.175.220", "207.148.67.11", "64.177.45.153"},
+	SeedHosts:           publicSeedHosts,
 	WindowsSelfSkipHost: "202.137.175.220",
 
 	// The genesis block's date is the anchor block's own timestamp, set when

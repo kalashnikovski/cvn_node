@@ -66,7 +66,7 @@ A miner receives a separate coin for every block won, and one transfer can spend
 | Sync and wallet | 8081 | Block download, balances, sending transfers |
 | Status | 8082 | Height and tip of this node |
 
-Seed nodes: `202.137.175.220`, `207.148.67.11`, `64.177.45.153`.
+Seed nodes: Melbourne `202.137.175.220`, Singapore `207.148.67.11`, Atlanta `64.177.44.185`, Los Angeles `149.28.69.173`, Toronto `149.248.54.9`, Amsterdam `95.179.179.191`, Mumbai `65.20.67.25`.
 
 Any node answers these in a browser:
 

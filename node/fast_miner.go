@@ -165,6 +165,13 @@ func miningSwitchedOff(args []string) bool {
 	return false
 }
 
+// stdoutIsTerminal reports whether what this program prints goes to a
+// terminal a person can see, and not to a file, a pipe or a service log.
+func stdoutIsTerminal() bool {
+	info, err := os.Stdout.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
 // chosenMiner returns which miner was asked for: on the command line first,
 // then in CVN_MINER, then in miner_config.json. Nothing chosen means the
 // built-in miner.

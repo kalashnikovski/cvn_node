@@ -98,6 +98,8 @@ PROGRAM = [
     "LaunchMiner.bat",
     "LaunchWallet.bat",
     "build_clean.bat",
+    "deploy/install_seed.sh",
+    "deploy/update_seed.sh",
     ".github/workflows/tests.yml",
     ".github/workflows/release.yml",
     "go.mod",

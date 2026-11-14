@@ -117,6 +117,14 @@ A node does not have to mine. Started with `--no-mining` it keeps the whole chai
 ./cvn_node --no-mining
 ```
 
+On a server you will want it to start by itself when the server boots and to restart if it stops. One command sets that up on a fresh Ubuntu server, run as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kalashnikovski/cvn_node/main/deploy/install_seed.sh | bash
+```
+
+It installs what is needed, builds the program in `/opt/cvn_node`, opens the network's two ports and installs a service. To update the server later: `bash /opt/cvn_node/deploy/update_seed.sh`.
+
 This is the right way to run a small rented server. On one shared processor, mining would earn next to nothing and get in the way of the server's real use to the network, which is being online and reachable. Open the network's two ports in the server's firewall so that other nodes can reach it (8080 and 8081 on `testnet-1`; see section 7 for the others).
 
 ---

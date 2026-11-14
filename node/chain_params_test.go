@@ -29,15 +29,20 @@ func TestTestnet1SettingsArePinned(t *testing.T) {
 	if Params.AmountsAsUnits {
 		t.Error("testnet-1 writes amounts as decimal numbers; changing that breaks every existing block hash")
 	}
-	wantSync := []string{"http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
+	hosts := []string{"202.137.175.220", "207.148.67.11", "64.177.44.185", "149.28.69.173", "149.248.54.9", "95.179.179.191", "65.20.67.25"}
+	var wantSync, wantGossip []string
+	wantWallet := []string{"http://localhost:8081", "http://localhost:9091"}
+	for _, host := range hosts {
+		wantSync = append(wantSync, "http://"+host+":8081")
+		wantGossip = append(wantGossip, host+":8080")
+		wantWallet = append(wantWallet, "http://"+host+":8081")
+	}
 	if got := seedSyncURLs(); !reflect.DeepEqual(got, wantSync) {
 		t.Errorf("seed download addresses changed: %v", got)
 	}
-	wantGossip := []string{"202.137.175.220:8080", "207.148.67.11:8080", "64.177.45.153:8080"}
 	if got := seedGossipAddresses(); !reflect.DeepEqual(got, wantGossip) {
 		t.Errorf("seed node addresses changed: %v", got)
 	}
-	wantWallet := []string{"http://localhost:8081", "http://localhost:9091", "http://202.137.175.220:8081", "http://207.148.67.11:8081", "http://64.177.45.153:8081"}
 	if got := walletNodeGateways(); !reflect.DeepEqual(got, wantWallet) {
 		t.Errorf("wallet node list changed: %v", got)
 	}
