@@ -283,9 +283,20 @@ func runRelayUplink(address string, announcedID string) {
 			if json.Unmarshal([]byte(strings.TrimPrefix(msg, "BLOCK_BROADCAST:")), &incomingBlock) != nil {
 				continue
 			}
-			if VerifyIncomingWireBlock(incomingBlock) {
-				go ProcessIncomingWireBlockWithDelay(incomingBlock)
+			if !VerifyIncomingWireBlock(incomingBlock) {
+				continue
 			}
+			if blockCarriesBadWork(incomingBlock) {
+				// Drop this feed and do not open it again while the ban lasts.
+				if host, _, err := net.SplitHostPort(address); err == nil {
+					banPeer(host, "sent a block with invalid proof of work")
+				}
+				relayUplinkMutex.Lock()
+				relayRetryNotUntil[address] = time.Now().Add(peerBanDuration)
+				relayUplinkMutex.Unlock()
+				return
+			}
+			go ProcessIncomingWireBlockWithDelay(incomingBlock)
 
 		case strings.HasPrefix(msg, "TX_BROADCAST:"):
 			var incomingTx Transaction

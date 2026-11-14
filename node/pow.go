@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"cvn_node/internal/randomx"
 )
@@ -277,6 +278,76 @@ func randomXVerify(key []byte, input []byte) (string, bool) {
 	}
 	rxVerifier.results[cacheKey] = work
 	return work, true
+}
+
+// warmNextVerifyKey prepares the checking engine for the RandomX key that
+// comes into use within the next KeyLagBlocks blocks, if it is not ready
+// yet. The key block is that far behind the tip, so the next key is always
+// known well before the first block that uses it. Preparing it ahead means
+// the first block after the daily change is checked as fast as any other.
+// It reports whether an engine was prepared.
+//
+// The mining table is not prepared ahead: a second one would need another
+// 2 GB of memory, and on most machines would not get large pages. It is
+// rebuilt at the change, a pause of about a second on a desktop processor.
+func warmNextVerifyKey() bool {
+	if !networkUsesRandomX() || Params.KeyLagBlocks <= 0 {
+		return false
+	}
+	ahead := GetLatestBlockInternal().Index + Params.KeyLagBlocks
+	if powAlgorithmAt(ahead) != PowRandomX {
+		return false
+	}
+	key, ok := powKeyFor(ahead)
+	if !ok || len(key) == 0 {
+		return false
+	}
+	rxVerifier.Lock()
+	for _, engine := range rxVerifier.engines {
+		if engine.key == string(key) {
+			rxVerifier.Unlock()
+			return false
+		}
+	}
+	rxVerifier.Unlock()
+
+	// Built without holding the lock, so blocks go on being checked meanwhile.
+	created, err := newRxLight(key)
+	if err != nil {
+		return false
+	}
+	rxVerifier.Lock()
+	defer rxVerifier.Unlock()
+	for _, engine := range rxVerifier.engines {
+		if engine.key == string(key) {
+			created.close()
+			return false
+		}
+	}
+	// It goes behind the engine in use, so the one in use is not the one
+	// dropped to make room.
+	if len(rxVerifier.engines) == 0 {
+		rxVerifier.engines = []*rxLight{created}
+	} else {
+		rest := append([]*rxLight{created}, rxVerifier.engines[1:]...)
+		rxVerifier.engines = append(rxVerifier.engines[:1:1], rest...)
+	}
+	for len(rxVerifier.engines) > 2 {
+		last := len(rxVerifier.engines) - 1
+		rxVerifier.engines[last].close()
+		rxVerifier.engines = rxVerifier.engines[:last]
+	}
+	return true
+}
+
+// runVerifyKeyWarmer keeps the next key's checking engine ready.
+func runVerifyKeyWarmer() {
+	for {
+		time.Sleep(30 * time.Second)
+		if atomic.LoadInt32(&IsSyncingActive) == 0 && warmNextVerifyKey() {
+			noteNetworkEvent("⚙️ [RANDOMX] The checking engine for the next daily key is ready.")
+		}
+	}
 }
 
 // rxMiner holds what the mining threads share: for the current key, either

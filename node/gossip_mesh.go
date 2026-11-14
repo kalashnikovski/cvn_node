@@ -295,9 +295,16 @@ func handleIncomingPeerStream(conn net.Conn) {
 				flagMalformedIP(remoteIP)
 				continue
 			}
-			if VerifyIncomingWireBlock(incomingBlock) {
-				go ProcessIncomingWireBlockWithDelay(incomingBlock)
+			if !VerifyIncomingWireBlock(incomingBlock) {
+				continue
 			}
+			if blockCarriesBadWork(incomingBlock) {
+				// Checking a proof costs real time. A peer that makes us do it
+				// for nothing is cut off before it can do so again.
+				banPeer(remoteIP, "sent a block with invalid proof of work")
+				return
+			}
+			go ProcessIncomingWireBlockWithDelay(incomingBlock)
 			continue
 		}
 

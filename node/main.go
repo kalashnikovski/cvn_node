@@ -471,6 +471,7 @@ func Run(frontendAssets embed.FS) {
 	// If the fast miner was chosen, start it; the built-in miner below then
 	// stays idle unless the fast miner cannot run (see fast_miner.go).
 	StartChosenMiner(StartMiningWorkServer())
+	go runVerifyKeyWarmer()
 	StartContextMinerEngine()
 	ticker := time.NewTicker(4 * time.Second)
 	defer ticker.Stop()

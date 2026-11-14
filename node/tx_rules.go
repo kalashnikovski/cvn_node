@@ -543,27 +543,72 @@ func MempoolPendingSpends() map[string]bool {
 	return pending
 }
 
-// SelectMempoolTransactionsForBlock returns the waiting transfers that are
-// valid on top of the current chain, highest fee first, with their total fee
-// in units.
-// Transfers that have become invalid (confirmed, double-spent or too old) are
-// dropped from the mempool on the way.
+// HOW A MINER FILLS A BLOCK
+//
+// This is the behaviour of this program's miner, not a rule of the network:
+// which transfers go into a block is the miner's choice and cannot be
+// checked from the block.
+//
+// A block's transfer slots, and its bytes, are split into two lanes.
+//
+//   - The paid lane, four fifths of the block: transfers that pay a fee,
+//     highest fee first.
+//   - The free lane, one fifth: transfers that pay no fee, longest-waiting
+//     first, and only if every coin they spend is at least a day old
+//     (freeLaneMinAgeBlocks). The age condition stops the free lane being
+//     used to flood the chain by passing the same coins back and forth.
+//
+// Space one lane does not use goes to the other. Whatever is still free after
+// that takes fee-less transfers of younger coins, so that on a quiet network
+// every transfer confirms in the next block, as it always has.
+//
+// The free lane needs coin ages, which only networks with the Sabbatical
+// sweep record. On other networks blocks are filled highest fee first.
+
+// freeLaneShare is the part of a block kept for fee-less transfers: one in
+// this many slots and bytes.
+const freeLaneShare = 5
+
+// freeLaneMinAgeBlocks is how old every coin a fee-less transfer spends must
+// be for the free lane: one day of blocks. A variable so tests can shorten it.
+var freeLaneMinAgeBlocks = int64(1920)
+
+// mempoolCandidate is a waiting transfer that is valid on the current chain.
+type mempoolCandidate struct {
+	tx      Transaction
+	fee     int64
+	spent   []SpentRecord
+	arrived time.Time
+	size    int
+}
+
+// spendsOnlySettledCoins reports whether every coin the transfer spends is
+// at least freeLaneMinAgeBlocks old at the given height.
+func (c mempoolCandidate) spendsOnlySettledCoins(height int64) bool {
+	for _, record := range c.spent {
+		if height-record.Record.Age < freeLaneMinAgeBlocks {
+			return false
+		}
+	}
+	return true
+}
+
+// SelectMempoolTransactionsForBlock returns the waiting transfers a miner
+// puts in its next block, at most `limit` of them, with their total fee in
+// units. Transfers that have become invalid (confirmed, double-spent or too
+// old) are dropped from the mempool on the way.
 func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, int64) {
 	if GlobalBoltEngine == nil {
 		return nil, 0
 	}
+	nextHeight := GetLatestBlockInternal().Index + 1
 	MempoolMatrix.Lock()
 	defer MempoolMatrix.Unlock()
 	if len(MempoolMatrix.Transactions) == 0 {
 		return nil, 0
 	}
 
-	type candidate struct {
-		tx    Transaction
-		fee   int64
-		spent []SpentRecord
-	}
-	var candidates []candidate
+	var candidates []mempoolCandidate
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		bUTXO := dbTx.Bucket(utxoBucket)
 		if bUTXO == nil {
@@ -582,46 +627,88 @@ func SelectMempoolTransactionsForBlock(limit int) ([]Transaction, int64) {
 				delete(mempoolArrival, id)
 				continue
 			}
-			candidates = append(candidates, candidate{tx: tx, fee: fee, spent: spent})
+			candidates = append(candidates, mempoolCandidate{tx: tx, fee: fee, spent: spent, arrived: mempoolArrival[id], size: transactionSizeBytes(tx)})
 		}
 		return nil
 	})
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].fee != candidates[j].fee {
-			return candidates[i].fee > candidates[j].fee
+	return fillBlockFromCandidates(candidates, limit, blockTransferBudgetBytes(), nextHeight, sweepEnabled())
+}
+
+// fillBlockFromCandidates chooses which of the valid waiting transfers go
+// into a block of at most `limit` transfers and `budgetBytes` bytes (zero
+// meaning no byte limit). With `lanes` off it is highest fee first.
+func fillBlockFromCandidates(candidates []mempoolCandidate, limit, budgetBytes int, nextHeight int64, lanes bool) ([]Transaction, int64) {
+	var paid, freeSettled, freeYoung []mempoolCandidate
+	for _, entry := range candidates {
+		switch {
+		case entry.fee > 0 || !lanes:
+			paid = append(paid, entry)
+		case entry.spendsOnlySettledCoins(nextHeight):
+			freeSettled = append(freeSettled, entry)
+		default:
+			freeYoung = append(freeYoung, entry)
 		}
-		return candidates[i].tx.ID < candidates[j].tx.ID
+	}
+	sort.Slice(paid, func(i, j int) bool {
+		if paid[i].fee != paid[j].fee {
+			return paid[i].fee > paid[j].fee
+		}
+		return paid[i].tx.ID < paid[j].tx.ID
 	})
+	longestWaitingFirst := func(list []mempoolCandidate) {
+		sort.Slice(list, func(i, j int) bool {
+			if !list[i].arrived.Equal(list[j].arrived) {
+				return list[i].arrived.Before(list[j].arrived)
+			}
+			return list[i].tx.ID < list[j].tx.ID
+		})
+	}
+	longestWaitingFirst(freeSettled)
+	longestWaitingFirst(freeYoung)
 
 	var selected []Transaction
 	var totalFeeUnits int64
+	usedBytes := 0
+	chosen := make(map[string]bool)
 	taken := make(map[string]bool)
-	budgetBytes, usedBytes := blockTransferBudgetBytes(), 0
-	for _, entry := range candidates {
-		if len(selected) >= limit {
-			break
-		}
-		size := transactionSizeBytes(entry.tx)
-		if budgetBytes > 0 && usedBytes+size > budgetBytes {
-			continue // too big for what is left of this block; a smaller one may still fit
-		}
-		conflict := false
-		for _, record := range entry.spent {
-			if taken[record.Key] {
-				conflict = true
-				break
+	// fill adds transfers from a list until the block holds countLimit
+	// transfers; one that would take it past byteLimit is passed over, since
+	// a smaller one further down may still fit.
+	fill := func(list []mempoolCandidate, countLimit, byteLimit int) {
+		for _, entry := range list {
+			if len(selected) >= countLimit {
+				return
 			}
+			if chosen[entry.tx.ID] || (byteLimit > 0 && usedBytes+entry.size > byteLimit) {
+				continue
+			}
+			conflict := false
+			for _, record := range entry.spent {
+				if taken[record.Key] {
+					conflict = true
+					break
+				}
+			}
+			if conflict {
+				continue
+			}
+			for _, record := range entry.spent {
+				taken[record.Key] = true
+			}
+			chosen[entry.tx.ID] = true
+			selected = append(selected, entry.tx)
+			totalFeeUnits += entry.fee
+			usedBytes += entry.size
 		}
-		if conflict {
-			continue
-		}
-		for _, record := range entry.spent {
-			taken[record.Key] = true
-		}
-		selected = append(selected, entry.tx)
-		totalFeeUnits += entry.fee
-		usedBytes += size
 	}
+	if !lanes {
+		fill(paid, limit, budgetBytes)
+		return selected, totalFeeUnits
+	}
+	fill(paid, limit-limit/freeLaneShare, budgetBytes-budgetBytes/freeLaneShare) // the paid lane
+	fill(freeSettled, limit, budgetBytes)                                        // the free lane, plus what the paid lane left
+	fill(paid, limit, budgetBytes)                                               // paid transfers into what the free lane left
+	fill(freeYoung, limit, budgetBytes)                                          // anything still free
 	return selected, totalFeeUnits
 }
 

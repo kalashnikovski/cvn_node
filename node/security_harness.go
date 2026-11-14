@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // 👑 SYSTEM SCALING INFRASTRUCTURE: AUTHENTICATION SECRETS
@@ -83,4 +84,43 @@ func VerifyIncomingWireBlock(b Block) bool {
 		return false
 	}
 	return true
+}
+
+// peerBanDuration is how long a peer that sent a block with invalid work is
+// refused.
+const peerBanDuration = 10 * time.Minute
+
+// blockCarriesBadWork reports whether a block that claims to extend this
+// node's own tip is certainly invalid in a way no honest node could relay:
+// its identifier is not its own, it claims the wrong difficulty, or its
+// proof of work does not meet that difficulty. All three follow from the
+// block and its parent alone, never from this node's clock, and honest nodes
+// only pass on blocks they have checked and stored. A block that does not
+// attach to our tip cannot be judged here and is never held against a peer.
+func blockCarriesBadWork(b Block) bool {
+	tip := GetLatestBlockInternal()
+	if tip.Hash == "" || b.Index != tip.Index+1 || b.PrevHash != tip.Hash || !IsHeartbeatHeight(b.Index) {
+		return false
+	}
+	expected := CalculateNextDifficulty(tip, b.Timestamp)
+	return b.Difficulty != expected || b.Hash != CalculateHash(b) || !BlockProofValid(b, expected)
+}
+
+// banPeer refuses a peer's connections for peerBanDuration.
+func banPeer(ip, reason string) {
+	if ip == "" {
+		return
+	}
+	BlacklistMutex.Lock()
+	MaliciousIPBlacklist[ip] = time.Now().Add(peerBanDuration)
+	BlacklistMutex.Unlock()
+	noteNetworkEvent(fmt.Sprintf("🚫 [PEERS] %s %s. Refusing it for %d minutes.", ip, reason, int(peerBanDuration/time.Minute)))
+}
+
+// peerIsBanned reports whether a peer is currently refused.
+func peerIsBanned(ip string) bool {
+	BlacklistMutex.Lock()
+	defer BlacklistMutex.Unlock()
+	until, banned := MaliciousIPBlacklist[ip]
+	return banned && time.Now().Before(until)
 }
