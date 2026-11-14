@@ -135,8 +135,12 @@ func TestDevnetChainRuns(t *testing.T) {
 	if got := balanceOf("CVN_someone_else"); got != cvn("75.5") {
 		t.Errorf("recipient has %s, want 75.5", FormatUnits(got))
 	}
-	if got := balanceOf("CVN_other_miner"); got != cvn("50.25") {
-		t.Errorf("miner of the block has %s, want 50.25 (reward plus fee)", FormatUnits(got))
+	// A fifth of the 0.25 fee goes to the vault; the miner keeps the rest.
+	if got := balanceOf("CVN_other_miner"); got != cvn("50.2") {
+		t.Errorf("miner of the block has %s, want 50.2 (reward plus four fifths of the fee)", FormatUnits(got))
+	}
+	if got := VaultBalanceUnits(); got != cvn("0.05") {
+		t.Errorf("vault holds %s, want 0.05 (a fifth of the fee)", FormatUnits(got))
 	}
 	if got := balanceOf(address); got != cvn("524.25") {
 		t.Errorf("sender has %s, want 524.25", FormatUnits(got))

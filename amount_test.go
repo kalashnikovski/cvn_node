@@ -271,7 +271,7 @@ func TestRewardRules(t *testing.T) {
 				"less than the reward":      block(cvn("49.5")),
 			}
 			for name, b := range accept {
-				if _, _, err := ValidateBlockTransactions(b, nothing); err != nil {
+				if _, _, err := ValidateBlockTransactions(b, nothing, 0); err != nil {
 					t.Errorf("%s: refused: %v", name, err)
 				}
 			}
@@ -282,7 +282,7 @@ func TestRewardRules(t *testing.T) {
 				"a reward output of zero":       block(cvn("50"), 0),
 			}
 			for name, b := range refuse {
-				if _, _, err := ValidateBlockTransactions(b, nothing); err == nil {
+				if _, _, err := ValidateBlockTransactions(b, nothing, 0); err == nil {
 					t.Errorf("%s: accepted", name)
 				}
 			}

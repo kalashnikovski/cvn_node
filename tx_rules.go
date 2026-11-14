@@ -199,8 +199,8 @@ func CheckTransferStandalone(tx Transaction) (string, error) {
 		if !validRecipient(output.Recipient) {
 			return "", fmt.Errorf("invalid recipient address")
 		}
-		if !output.Amount.Spendable() {
-			return "", fmt.Errorf("an output must be at least 0.00000001 CVN and no more than can exist")
+		if !output.Amount.Spendable() || output.Amount.Units() < minimumOutputUnits() {
+			return "", fmt.Errorf("an output must be at least %s CVN and no more than can exist", FormatUnits(minimumOutputUnits()))
 		}
 	}
 	if len(tx.PublicKey) != 128 {
@@ -272,40 +272,41 @@ func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent m
 
 // ValidateBlockTransactions applies the transaction rules to every
 // transaction in a block. lookup must describe the coin set as it is just
-// before this block. It returns the total fees in units and the coins the
-// block consumes.
-func ValidateBlockTransactions(b Block, lookup utxoLookup) (int64, []SpentRecord, error) {
+// before this block, and vaultBeforeUnits the vault balance at that point. It
+// returns the block's accounting and the coins the block consumes.
+func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int64) (blockAccounting, []SpentRecord, error) {
+	var none blockAccounting
 	if len(b.Transactions) == 0 {
-		return 0, nil, fmt.Errorf("block has no reward transaction")
+		return none, nil, fmt.Errorf("block has no reward transaction")
 	}
 	if len(b.Transactions) > TxMaxPerBlock {
-		return 0, nil, fmt.Errorf("block has %d transactions (limit %d)", len(b.Transactions), TxMaxPerBlock)
+		return none, nil, fmt.Errorf("block has %d transactions (limit %d)", len(b.Transactions), TxMaxPerBlock)
 	}
 
 	coinbase := b.Transactions[0]
 	if len(coinbase.Inputs) != 0 {
-		return 0, nil, fmt.Errorf("reward transaction must not spend coins")
+		return none, nil, fmt.Errorf("reward transaction must not spend coins")
 	}
 	if !strings.HasPrefix(coinbase.ID, fmt.Sprintf("TX_COINBASE_H%d_", b.Index)) || len(coinbase.ID) > 200 {
-		return 0, nil, fmt.Errorf("reward transaction ID does not name height %d", b.Index)
+		return none, nil, fmt.Errorf("reward transaction ID does not name height %d", b.Index)
 	}
 	// Under the launch schedule the reward eventually reaches zero, and a block
 	// with no fees then has nothing to pay out, so no outputs is allowed there.
 	if len(coinbase.Outputs) > 2 || (len(coinbase.Outputs) == 0 && Params.Economics == nil) {
-		return 0, nil, fmt.Errorf("reward transaction must have one or two outputs")
+		return none, nil, fmt.Errorf("reward transaction must have one or two outputs")
 	}
 	var coinbaseUnits int64
 	var err error
 	for _, output := range coinbase.Outputs {
 		if !validRecipient(output.Recipient) || !output.Amount.Spendable() {
-			return 0, nil, fmt.Errorf("invalid reward output")
+			return none, nil, fmt.Errorf("invalid reward output")
 		}
 		if coinbaseUnits, err = addUnits(coinbaseUnits, output.Amount.Units()); err != nil {
-			return 0, nil, err
+			return none, nil, err
 		}
 	}
 	if _, exists := lookup(utxoKey(coinbase.ID, 0)); exists {
-		return 0, nil, fmt.Errorf("reward transaction ID already used")
+		return none, nil, fmt.Errorf("reward transaction ID already used")
 	}
 
 	seenIDs := map[string]bool{coinbase.ID: true}
@@ -314,29 +315,30 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup) (int64, []SpentRecord
 	var consumed []SpentRecord
 	for _, tx := range b.Transactions[1:] {
 		if seenIDs[tx.ID] {
-			return 0, nil, fmt.Errorf("transaction %s appears twice", tx.ID)
+			return none, nil, fmt.Errorf("transaction %s appears twice", tx.ID)
 		}
 		seenIDs[tx.ID] = true
 		feeUnits, spent, err := checkTransferAgainstCoins(tx, lookup, spentInBlock)
 		if err != nil {
-			return 0, nil, fmt.Errorf("transfer %.20s rejected: %w", tx.ID, err)
+			return none, nil, fmt.Errorf("transfer %.20s rejected: %w", tx.ID, err)
 		}
 		for _, record := range spent {
 			spentInBlock[record.Key] = true
 		}
 		if totalFeeUnits, err = addUnits(totalFeeUnits, feeUnits); err != nil {
-			return 0, nil, err
+			return none, nil, err
 		}
 		consumed = append(consumed, spent...)
 	}
 
-	// The reward outputs may pay at most the newly issued reward plus the
-	// fees of this block's transfers. Exact, with no tolerance.
-	allowedUnits := BlockRewardUnits(b.Index) + totalFeeUnits
-	if coinbaseUnits > allowedUnits {
-		return 0, nil, fmt.Errorf("reward of %s exceeds the allowed %s", FormatUnits(coinbaseUnits), FormatUnits(allowedUnits))
+	// The reward outputs may pay at most the newly issued reward, the vault's
+	// payout for this block, and the miner's share of the transfers' fees.
+	// Exact, with no tolerance.
+	accounting := accountForBlock(b.Index, totalFeeUnits, vaultBeforeUnits)
+	if coinbaseUnits > accounting.MinerAllowanceUnits() {
+		return none, nil, fmt.Errorf("reward of %s exceeds the allowed %s", FormatUnits(coinbaseUnits), FormatUnits(accounting.MinerAllowanceUnits()))
 	}
-	return totalFeeUnits, consumed, nil
+	return accounting, consumed, nil
 }
 
 // bucketLookup reads coins straight from the utxo bucket.
@@ -656,8 +658,8 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 	if !validRecipient(recipient) {
 		return Transaction{}, fmt.Errorf("invalid recipient address")
 	}
-	if amountUnits < 1 {
-		return Transaction{}, fmt.Errorf("amount must be at least 0.00000001 CVN")
+	if amountUnits < minimumOutputUnits() {
+		return Transaction{}, fmt.Errorf("amount must be at least %s CVN", FormatUnits(minimumOutputUnits()))
 	}
 	if feeUnits < 0 {
 		return Transaction{}, fmt.Errorf("fee cannot be negative")
@@ -692,8 +694,12 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 		return Transaction{}, fmt.Errorf("insufficient spendable balance: need %s, have %s", FormatUnits(requiredUnits), FormatUnits(gatheredUnits))
 	}
 	outputs := []UTXOOutput{{Recipient: recipient, Amount: UnitsAmount(amountUnits)}}
-	if changeUnits := gatheredUnits - requiredUnits; changeUnits > 0 {
+	// Change too small to be a valid output is left for the miner as part of
+	// the fee, so the wallet never builds a transfer the network would refuse.
+	if changeUnits := gatheredUnits - requiredUnits; changeUnits >= minimumOutputUnits() {
 		outputs = append(outputs, UTXOOutput{Recipient: senderAddress, Amount: UnitsAmount(changeUnits)})
+	} else {
+		feeUnits += changeUnits
 	}
 	tx := Transaction{
 		Version:          1,

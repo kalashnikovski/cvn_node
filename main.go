@@ -272,6 +272,8 @@ func main() {
 				"transactions":   latest.Transactions,
 				// Total mining work in this node's chain; peers compare chains by it.
 				"total_work": chainWorkThrough(latest.Index).String(),
+				// Units held by the vault (always 0 on a network without one).
+				"vault_units": VaultBalanceUnits(),
 			}
 			json.NewEncoder(w).Encode(payload)
 		})
@@ -704,9 +706,12 @@ templateTransfers, feeUnits = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 
 }
 // If the tip won a same-height race, name the losing block as an uncle and
 // split this block's reward 80/20 with its miner. Total emission is unchanged.
-// Reward and fees are whole units, so the amounts written into the block
-// are exact.
-rewardUnits := BlockRewardUnits(nextIndex)
+// Everything is whole units, so the amounts written into the block are
+// exact. rewardUnits is the new reward plus the vault's payout for this
+// block; feeUnits becomes the miner's share of the fees.
+accounting := accountForBlock(nextIndex, feeUnits, VaultBalanceUnits())
+rewardUnits := accounting.SubsidyUnits()
+feeUnits = accounting.MinerFeeUnits
 templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 templateUncleMiner := "NONE"
 if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle && rewardUnits/5 > 0 {

@@ -61,7 +61,7 @@ func mineTestBlock(t *testing.T, timestamp int64, miner string, transfers []Tran
 		}
 		return nil
 	})
-	reward := BlockRewardUnits(index) + feeUnits
+	reward := accountForBlock(index, feeUnits, VaultBalanceUnits()).MinerAllowanceUnits()
 	if rewardOverrideUnits > 0 {
 		reward = rewardOverrideUnits
 	}

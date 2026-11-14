@@ -321,10 +321,18 @@ func SaveBlockToStorageInternal(block Block) bool {
 					return fmt.Errorf("block #%d does not attach to the stored parent", block.Index)
 				}
 			}
-			_, consumed, validationErr := ValidateBlockTransactions(block, bucketLookup(bUTXO))
+			vaultBefore, vaultErr := readVaultUnits(tx, block.Index-1, block.PrevHash)
+			if vaultErr != nil {
+				fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: %v\n", block.Index, vaultErr)
+				return vaultErr
+			}
+			accounting, consumed, validationErr := ValidateBlockTransactions(block, bucketLookup(bUTXO), vaultBefore)
 			if validationErr != nil {
 				fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: %v\n", block.Index, validationErr)
 				return validationErr
+			}
+			if vaultErr := storeVaultUnits(tx, block, accounting.VaultAfterUnits); vaultErr != nil {
+				return vaultErr
 			}
 			if undoErr := storeUndoRecords(tx, block.Index, consumed); undoErr != nil {
 				return undoErr

@@ -27,6 +27,19 @@ A box is ticked only when the feature is built **and** has been seen working on 
   - *Have:* comfortable for roughly 100–150 nodes.
   - *Missing:* persistent connections and announce-then-fetch block relay, needed before a large public launch.
 - [ ] **Block size limit enforced.** Transfer-count limits are enforced; a byte limit is not.
+- [ ] **Automatic router port mapping (UPnP).**
+  - *Have:* the node finds the router, maps its ports, renews the mapping and detects carrier-grade NAT.
+  - *Missing:* only one machine per router can hold the ports; a second falls back to relay mode (it still mines, but nobody can sync from it). No NAT-PMP/PCP fallback for routers without UPnP.
+- [ ] **Peer discovery without the seeds.**
+  - *Have:* nodes exchange peer lists and reuse remembered peers on restart.
+  - *Missing:* not yet proven with the seeds actually down; a brand-new node still depends on the built-in seed addresses.
+- [ ] **Wire protocol.**
+  - *Have:* length-prefixed frames with a size limit and a message key.
+  - *Missing:* payloads are uncompressed text, and the key is shared by every node, so it filters noise but does not authenticate peers.
+- [ ] **Peer banning and scoring.**
+  - *Have:* per-address rate limiting and a 5-minute ban after repeated malformed messages.
+  - *Missing:* no ban for sending invalid blocks or transfers, no preference for reliable peers, and bans are lost on restart.
+- [x] **Mempool safeguards.** A transfer is checked for a valid signature and real coins before it is stored or passed on; the mempool has a size limit and a 2-hour expiry.
 
 ## Phase 3: Launch rules (in development)
 
@@ -42,9 +55,13 @@ These are being built on a separate development network (`--network devnet`), wh
 - [ ] **Exact 45-second average.**
   - *Have:* built on devnet. The difficulty rule applies from block 1 and also steers by how far the chain is from its schedule. In a simulation of 300,000 blocks it averages 45.00 seconds, including through large swings in mining power; the test network's rule averages about 43.5 in the same simulation.
   - *Missing:* a long run on a real network; a realistic starting difficulty for launch.
-- [ ] **Recycling of long-unmoved coins** to miners. Designed, not built.
+- [ ] **The vault and the fee split.**
+  - *Have:* built on devnet. The vault is a counter kept by the rules; no key can spend from it. While new coins are still being issued, a fifth of every block's fees goes into it and the miner keeps the rest. Every block, the vault pays a fixed fraction of what it holds to that block's miner.
+  - *Missing:* its main source, the recycling of long-unmoved coins (next item).
+- [ ] **Minimum output size.** Built on devnet: a transfer output must be at least 0.0001 CVN, and wallets leave smaller change to the miner.
+- [ ] **Recycling of long-unmoved coins** into the vault. Designed, not built.
 - [ ] **RandomX mining algorithm** tuned for home processors. A Go implementation has been verified against the official test values; not yet integrated.
-- [ ] **Limit on deep reorganisations.**
+- [ ] **Limit on deep reorganisations.** Built on devnet: a node will not replace more than 100 of its own blocks, however much work a competing chain shows. Not yet seen in action on a real network.
 - [ ] **Proof that nobody mined early:** the genesis block will contain a value nobody can know before the announced launch time.
 
 ## Phase 4: Launch
@@ -54,3 +71,13 @@ These are being built on a separate development network (`--network devnet`), wh
 - [ ] **Independent review.**
 - [ ] **Whitepaper rewritten** to match what is built.
 - [ ] **Launch at a pre-announced time**, from a new genesis block, with every setting published in advance.
+
+## Phase 5: After launch
+
+These were on the roadmap before the launch rules were designed and are still planned. None has been started.
+
+- [ ] **ASIC-neutral proof of work, long term.** RandomX (Phase 3) is the starting point. The mining check is being built so that the algorithm can be changed at a chosen block height without restarting the chain, so a later algorithm designed specifically for CVN can replace it if specialised hardware ever appears.
+- [ ] **Indexed database.** Wallets currently ask a node to scan for their coins; an index would make that fast on a large chain.
+- [ ] **Standalone light client (SPV).** A wallet that verifies its own transactions without holding the whole chain.
+- [ ] **Scripting engine.** Spending conditions beyond a single signature.
+- [ ] **Network alert protocol.** A way to tell every node operator about an urgent upgrade.

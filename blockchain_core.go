@@ -649,6 +649,11 @@ StateMutex.Lock()
 shadowTip := GetLatestBlockInternal()
 var removedLocalBlocks []Block
 if commonAncestorHeight < shadowTip.Index {
+if depth := shadowTip.Index - commonAncestorHeight; !reorgDepthAllowed(depth) {
+StateMutex.Unlock()
+log.Printf("🛑 [REORG LIMIT] %s offers a chain that parts from ours %d blocks back. This node does not replace more than %d of its own blocks, so it keeps its chain. If this node was left behind on a dead branch, stop it, delete %s and start again.\n", chosenTargetSeedURL, depth, Params.Economics.ReorgLimitBlocks, Params.DatabaseFile)
+return
+}
 // Switching would discard our blocks above the shared one. Do it only if the
 // peer's branch proves more work than those blocks hold.
 localBranchWork := new(big.Int).Sub(chainWorkThrough(shadowTip.Index), chainWorkThrough(commonAncestorHeight))
@@ -970,7 +975,9 @@ if len(b.Transactions) == 0 {
 return false
 }
 isBlockValid := true
-var forkBlockFeeUnits int64
+// Without transfers to check (blocks before the transaction rules), the
+// accounting is the reward alone.
+accounting := accountForBlock(b.Index, 0, 0)
 if IsTxForkHeight(b.Index) {
 // Transfers can only be judged against the coin set just before this
 // block. That is known when the block sits on our tip, or competes with
@@ -996,13 +1003,20 @@ fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d does not attach to the local tip
 isBlockValid = false
 return nil
 }
-fees, _, err := ValidateBlockTransactions(b, lookup)
+// In both cases above the block's parent is stored at the height below it.
+vaultBefore, vaultErr := readVaultUnits(dbTx, b.Index-1, b.PrevHash)
+if vaultErr != nil {
+fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, vaultErr)
+isBlockValid = false
+return nil
+}
+checked, _, err := ValidateBlockTransactions(b, lookup, vaultBefore)
 if err != nil {
 fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, err)
 isBlockValid = false
 return nil
 }
-forkBlockFeeUnits = fees
+accounting = checked
 return nil
 })
 } else if GlobalBoltEngine != nil {
@@ -1039,9 +1053,11 @@ return false
 }
 totalCoinbaseUnits += out.Amount.Units()
 }
-rewardUnits := BlockRewardUnits(b.Index)
-// Once the reward has reached zero there is no share to give an uncle, and
-// such a block is checked like any other.
+// What the block pays apart from fees: the new reward plus the vault's payout.
+rewardUnits := accounting.SubsidyUnits()
+forkBlockFeeUnits := accounting.MinerFeeUnits
+// When there is nothing to share, no uncle share is paid, and such a block is
+// checked like any other.
 if rewardUnits/5 > 0 && b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
 if len(coinbaseOutputs) != 2 {
 fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
@@ -1052,8 +1068,8 @@ if strings.TrimSpace(b.UncleHash) == strings.TrimSpace(b.PrevHash) {
 fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash must not equal the parent block hash.")
 return false
 }
-// The uncle's miner receives a fifth of the new reward; this block's miner
-// receives the rest and may add the transfers' fees.
+// The uncle's miner receives a fifth of the reward and vault payout; this
+// block's miner receives the rest and may add its share of the fees.
 uncleShareUnits := rewardUnits / 5
 mainShareUnits := rewardUnits - uncleShareUnits
 mainPayoutUnits := coinbaseOutputs[0].Amount.Units()
