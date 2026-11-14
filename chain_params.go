@@ -152,11 +152,32 @@ func SelectNetwork(name string) error {
 		Params = testnet1Params
 	case devnetParams.Name:
 		Params = devnetParams
+		applyDevnetOverrides()
 	default:
 		return fmt.Errorf("unknown network %q (known: %s)", name, strings.Join(KnownNetworks(), ", "))
 	}
 	applyParams()
 	return nil
+}
+
+// applyDevnetOverrides lets a developer shorten the sweep interval and the
+// vault's payout period on devnet, so that behaviour which takes years on the
+// launch schedule can be watched in minutes:
+//
+//	CVN_DEVNET_SWEEP_BLOCKS=30   sweep a coin after 30 blocks instead of 7 years
+//	CVN_DEVNET_VAULT_BLOCKS=100  pay out 1/100 of the vault per block
+//
+// Every node on a devnet must use the same values, and a database made with
+// one setting is not valid under another. No other network reads these.
+func applyDevnetOverrides() {
+	economics := *devnetParams.Economics
+	if blocks, err := strconv.ParseInt(os.Getenv("CVN_DEVNET_SWEEP_BLOCKS"), 10, 64); err == nil && blocks > 0 {
+		economics.SweepIntervalBlocks = blocks
+	}
+	if blocks, err := strconv.ParseInt(os.Getenv("CVN_DEVNET_VAULT_BLOCKS"), 10, 64); err == nil && blocks > 0 {
+		economics.VaultPayoutBlocks = blocks
+	}
+	Params.Economics = &economics
 }
 
 // applyParams copies the chosen network's values into the variables the rest

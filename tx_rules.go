@@ -371,6 +371,10 @@ func lookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) u
 	for _, record := range loadUndoRecords(dbTx, applied.Index) {
 		restored[record.Key] = record.Record
 	}
+	// Coins its sweep reduced or removed are seen as they were before it.
+	for _, swept := range loadSweepRecords(dbTx, applied.Index) {
+		restored[swept.Key] = swept.Before
+	}
 	direct := bucketLookup(bUTXO)
 	return func(key string) (UTXORecord, bool) {
 		if record, ok := restored[key]; ok {
@@ -417,9 +421,12 @@ func storeUndoRecords(dbTx *bbolt.Tx, height int64, records []SpentRecord) error
 }
 
 // undoBlockCoinChanges reverses what storing `block` did to the coin set:
-// the coins it created are removed and the coins it spent are put back.
+// coins its sweep touched are restored, the coins it created are removed and
+// the coins it spent are put back.
 // Must run inside the write transaction that removes or replaces the block.
 func undoBlockCoinChanges(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) {
+	// The sweep was the last thing the block did, so it is undone first.
+	undoSweep(dbTx, bUTXO, block.Index)
 	for _, tx := range block.Transactions {
 		for outIdx := range tx.Outputs {
 			_ = bUTXO.Delete([]byte(utxoKey(tx.ID, outIdx)))
@@ -603,6 +610,9 @@ type SpendableCoin struct {
 	TxID   string `json:"tx_id"`
 	Index  int    `json:"output_index"`
 	Amount Amount `json:"amount"`
+	// SweepAt is the block at whose end this coin will be swept if it has
+	// not been spent by then (0 on a network that does not sweep).
+	SweepAt int64 `json:"sweep_at,omitempty"`
 }
 
 // ListSpendableCoins returns the unspent coins of an address, leaving out
@@ -637,7 +647,7 @@ func ListSpendableCoins(address string) []SpendableCoin {
 			if err != nil {
 				continue
 			}
-			coins = append(coins, SpendableCoin{TxID: key[:separator], Index: index, Amount: record.Amount})
+			coins = append(coins, SpendableCoin{TxID: key[:separator], Index: index, Amount: record.Amount, SweepAt: nextSweepHeight(record.Age)})
 		}
 		return nil
 	})

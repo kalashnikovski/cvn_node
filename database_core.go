@@ -268,6 +268,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 	// is empty. That race left the first block's coinbase outputs in the UTXO
 	// set after the second block overwrote it.
 	replacedExistingBlock := false
+	sweptCoins := false
 	var keptLowerHashSibling *Block
 	var displacedHigherHashSibling *Block
 
@@ -310,6 +311,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			}
 		}
 
+		var blockAccount blockAccounting
 		if IsTxForkHeight(block.Index) {
 			// Final gate: check every transfer against the coin set exactly as
 			// it stands inside this write transaction, and remember what the
@@ -331,9 +333,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 				fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: %v\n", block.Index, validationErr)
 				return validationErr
 			}
-			if vaultErr := storeVaultUnits(tx, block, accounting.VaultAfterUnits); vaultErr != nil {
-				return vaultErr
-			}
+			blockAccount = accounting
 			if undoErr := storeUndoRecords(tx, block.Index, consumed); undoErr != nil {
 				return undoErr
 			}
@@ -365,8 +365,41 @@ func SaveBlockToStorageInternal(block Block) bool {
 			for outIdx, output := range txPayload.Outputs {
 				sanitizedRecipient := strings.TrimSpace(output.Recipient)
 				utxoRecord := UTXORecord{Amount: output.Amount, Recipient: sanitizedRecipient}
+				if sweepEnabled() {
+					utxoRecord.Age = block.Index
+				}
 				utxoData, _ := json.Marshal(utxoRecord)
 				_ = bUTXO.Put([]byte(fmt.Sprintf("%s_%d", txPayload.ID, outIdx)), utxoData)
+			}
+		}
+
+		if vaultEnabled() {
+			// Last, once the block's own coins are in place: sweep the coins
+			// that reach the sweep age at this block, and settle the vault.
+			// Whatever the block was entitled to pay its miner but did not
+			// goes into the vault, so nothing issued is ever destroyed.
+			sweptUnits, sweepErr := applySweep(tx, bUTXO, block)
+			if sweepErr != nil {
+				return sweepErr
+			}
+			sweptCoins = sweptUnits > 0
+			var claimedUnits int64
+			for _, output := range block.Transactions[0].Outputs {
+				claimedUnits += output.Amount.Units()
+			}
+			unclaimedUnits := blockAccount.MinerAllowanceUnits() - claimedUnits
+			if unclaimedUnits < 0 {
+				return fmt.Errorf("block #%d pays more than it is allowed", block.Index)
+			}
+			vaultAfter, addErr := addUnits(blockAccount.VaultAfterUnits, sweptUnits)
+			if addErr == nil {
+				vaultAfter, addErr = addUnits(vaultAfter, unclaimedUnits)
+			}
+			if addErr != nil {
+				return addErr
+			}
+			if vaultErr := storeVaultUnits(tx, block, vaultAfter); vaultErr != nil {
+				return vaultErr
 			}
 		}
 		return nil
@@ -390,7 +423,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 		RecordUncleCandidate(block, *displacedHigherHashSibling)
 	}
 	RemoveConfirmedFromMempool(block)
-	if replacedExistingBlock || len(block.Transactions) > 1 {
+	if replacedExistingBlock || sweptCoins || len(block.Transactions) > 1 {
 		// A block at this height was already counted in the balance cache, or
 		// the block moves coins between addresses: recompute from the UTXO set
 		// instead of applying a delta.

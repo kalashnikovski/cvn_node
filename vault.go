@@ -15,13 +15,16 @@ import (
 // rule:
 //
 //   - In: while new coins are still being issued, a fixed share of every
-//     block's fees. (The share of long-unmoved coins is added by the sweep.)
+//     block's fees; the swept share of long-unmoved coins (see sweep.go); and
+//     anything a block was entitled to pay its miner but did not. Nothing
+//     the schedule issues is ever destroyed.
 //   - Out: every block pays out vault / VaultPayoutBlocks, added to that
 //     block's reward for its miner.
 //
 // Order within a block, so every node computes the same figures: the payout
 // is worked out from the vault as it stood after the previous block and taken
-// out; then this block's share of fees is put in.
+// out; then this block's share of fees, its sweep and anything it left
+// unclaimed are put in.
 //
 // This applies on networks that run the launch rules (Params.Economics set).
 // On testnet-1 there is no vault and miners keep every fee.

@@ -94,11 +94,17 @@ func textWalletShowBalance(ask func(string) string, ownAddress string) {
 	balance, _ := data["balance"].(float64)
 	fmt.Printf("\n💰 Balance of %s\n   %s CVN\n", address, formatFloatExact(balance))
 	if coins, _, err := FetchSpendableCoinsOverHTTP(address); err == nil {
-		var spendable int64
+		var spendable, earliestSweep int64
 		for _, coin := range coins {
 			spendable += coin.Amount.Units()
+			if coin.SweepAt > 0 && (earliestSweep == 0 || coin.SweepAt < earliestSweep) {
+				earliestSweep = coin.SweepAt
+			}
 		}
 		fmt.Printf("   Ready to spend now: %s CVN in %d coin(s)\n", FormatUnits(spendable), len(coins))
+		if earliestSweep > 0 {
+			fmt.Printf("   Oldest coin: a fifth of it moves to the vault at the end of block #%d unless it is spent before then.\n", earliestSweep)
+		}
 	}
 }
 

@@ -63,6 +63,9 @@ type UTXOOutput struct {
 type UTXORecord struct {
 	Amount    Amount `json:"amount"`
 	Recipient string `json:"recipient"`
+	// Age is the height of the block that created the coin, or that last
+	// swept it. Only kept on networks that sweep long-unmoved coins.
+	Age int64 `json:"age,omitempty"`
 }
 
 type MempoolType struct {
