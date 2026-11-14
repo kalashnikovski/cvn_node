@@ -13,7 +13,13 @@ Changes from the original:
   extra dataset size) moved from `config.go` into `config_cvn.go`, with CVN's
   own values. `config_reference.go` holds the published RandomX values.
 
-Nothing else was changed. To confirm that, the engine can be built with the
+- Large memory pages on Windows (`internal/memory/large_windows.go`). The
+  original supports them on Linux only.
+- With the large-pages flag set, each mining thread's working memory is also
+  placed in large pages when the system grants them (`vm.go`, `NewVMState`).
+
+Neither of the last two changes what the engine computes; they change where
+its memory comes from. To confirm that, the engine can be built with the
 published values and checked against RandomX's official test values:
 
     go test -tags randomx_reference ./internal/randomx/

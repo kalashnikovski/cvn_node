@@ -56,16 +56,21 @@ func RunRandomXBenchmark() {
 	mode := "low-memory"
 	var dataset *randomx.Dataset
 	if os.Getenv("CVN_RANDOMX_LIGHT") == "" {
-		fullFlags := flags | randomx.RANDOMX_FLAG_FULL_MEM
-		if created, err := randomx.NewDataset(fullFlags); err == nil {
+		if created, fullFlags, largePages, err := newMiningDataset(flags); err == nil {
 			created.InitDatasetParallel(cache, threads)
 			dataset, flags, mode = created, fullFlags, "full-memory"
+			if largePages {
+				mode = "full-memory, large pages"
+			}
 			defer dataset.Close()
 		} else {
 			fmt.Println(" Not enough memory for the full dataset; measuring low-memory mode.")
 		}
 	}
 	fmt.Printf(" Mode: %s   Set-up time: %v\n", mode, time.Since(started).Round(100*time.Millisecond))
+	if os.Getenv("CVN_NO_PINNING") == "" {
+		fmt.Println(" Threads pinned to processor threads: yes")
+	}
 	fmt.Println(" Measuring...")
 
 	var total atomic.Int64
@@ -76,6 +81,7 @@ func RunRandomXBenchmark() {
 		wait.Add(1)
 		go func(thread int) {
 			defer wait.Done()
+			pinMiningThread(thread)
 			var vm *randomx.VM
 			var err error
 			if dataset != nil {

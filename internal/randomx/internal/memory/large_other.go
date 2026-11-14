@@ -1,4 +1,4 @@
-//go:build openbsd || netbsd || dragonfly || (darwin && !amd64) || ios || !unix || purego
+//go:build openbsd || netbsd || dragonfly || (darwin && !amd64) || ios || (!unix && !windows) || purego
 
 package memory
 

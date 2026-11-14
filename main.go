@@ -635,6 +635,7 @@ func SignalMinerReset() {}
 func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 defer miningWg.Done()
 var nonce int64 = workerID * 100000000
+pinned := false
 var floorTipHash string
 var floorTipFirstSeen int64
 for {
@@ -709,6 +710,10 @@ candidateTransactions, templateUncleHash, templateUncleMiner := buildBlockConten
 // The transactions are fixed for this template, so digest them once.
 templateTxDigest := BlockTransactionsDigest(nextIndex, candidateTransactions)
 randomXTemplate := powAlgorithmAt(nextIndex) == PowRandomX
+if randomXTemplate && !pinned {
+pinned = true
+pinMiningThread(int(workerID))
+}
 var randomXKey []byte
 randomXCommitment := ""
 if randomXTemplate {
@@ -728,13 +733,18 @@ UncleHash: templateUncleHash, UncleMiner: templateUncleMiner,
 for i := 0; i < 100000; i++ {
 nonce++
 atomic.AddUint64(&globalHashCount, 1)
+// Abandon the template if the tip moved or was replaced by a competing
+// block at the same height; otherwise we would mine on a stale parent.
+// A RandomX hash takes milliseconds, so there the tip is looked at every
+// few hashes: often enough to react at once, without a database read
+// per hash.
+if !randomXTemplate || i%4 == 0 {
 StateMutex.RLock()
 actualTipCheck := GetLatestBlockInternal()
 StateMutex.RUnlock()
-// Abandon the template if the tip moved or was replaced by a competing
-// block at the same height; otherwise we would mine on a stale parent.
 if actualTipCheck.Index != (nextIndex-1) || actualTipCheck.Hash != parentBlockTipHash {
 break
+}
 }
 // Under RandomX the nonce is four bytes.
 templateNonce := nonce
@@ -755,13 +765,21 @@ UncleHash:    templateUncleHash,
 UncleMiner:   templateUncleMiner,
 }
 // 👑 ABSOLUTE CONGRUENCE PASS: Calculate hash using canonical method blueprint safely
-computedHashHex := CalculateHashWithTxDigest(mockTemplateBlock, templateTxDigest)
+// Under RandomX the identifier is only needed for a nonce that has the
+// work, so it is computed then; under SHA-256 it is the work itself.
+computedHashHex := ""
+if !randomXTemplate {
+computedHashHex = CalculateHashWithTxDigest(mockTemplateBlock, templateTxDigest)
+}
 solved := false
 if randomXTemplate {
 // The work is the RandomX hash of the mining blob under this height's key.
 blob, blobOK := powBlob(randomXCommitment, uint32(templateNonce))
 if workHex, ok := randomXMine(workerID, randomXKey, blob); ok && blobOK {
 solved = workHex <= heartbeatTargetHex
+if solved {
+computedHashHex = CalculateHashWithTxDigest(mockTemplateBlock, templateTxDigest)
+}
 } else {
 time.Sleep(200 * time.Millisecond)
 }

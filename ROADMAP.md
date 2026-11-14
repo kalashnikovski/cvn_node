@@ -68,7 +68,8 @@ These are being built on a separate development network (`--network devnet`), wh
   - *Missing:* a public testnet; a realistic starting difficulty for launch.
 - [ ] **A miner as fast as the best available.**
   - *Have:* a CVN edition of XMRig, the most widely used RandomX miner, published at https://github.com/kalashnikovski/cvn-xmrig with Windows and Linux builds. It differs from XMRig only in CVN's two RandomX settings and in having no built-in donation. A CVN node on a RandomX network runs a work server that such a miner connects to; the node builds and checks every block the miner finds, and pauses its own miner meanwhile. Measured on one 16-core desktop processor: 15,570 hashes per second with the CVN edition against 9,770 for the miner built into the node. A built-in speed test is included (`--randomx-bench`).
-  - *Missing:* the CVN node does not yet start the fast miner by itself; the two are run side by side. Not yet tried on Linux or across several machines.
+  - *Also have:* the built-in miner now uses large memory pages when the system grants them, which on the same processor raised it from about 12,800 to about 16,400 hashes per second. Miners who do nothing special still get the ordinary speed; those who enable large pages get most of the way to a tuned miner without installing anything else.
+  - *Missing:* the CVN node does not yet start the fast miner by itself; the two are run side by side. Not yet tried on Linux or across several machines. A plain guide to enabling large pages.
 - [ ] **Limit on deep reorganisations.** Built on devnet: a node will not replace more than 100 of its own blocks, however much work a competing chain shows. Not yet seen in action on a real network.
 - [ ] **Proof that nobody mined early:** the genesis block will contain a value nobody can know before the announced launch time.
 

@@ -325,17 +325,52 @@ func prepareRxMiner(key []byte) bool {
 		return false
 	}
 	cache.Init(key)
-	rxMiner.cache, rxMiner.flags, rxMiner.mode = cache, flags, "light"
+	rxMiner.cache, rxMiner.flags, rxMiner.mode = cache, flags, "low memory"
 	if os.Getenv("CVN_RANDOMX_LIGHT") == "" {
-		fullFlags := flags | randomx.RANDOMX_FLAG_FULL_MEM
-		if dataset, err := randomx.NewDataset(fullFlags); err == nil {
+		if dataset, fullFlags, largePages, err := newMiningDataset(flags); err == nil {
 			dataset.InitDatasetParallel(cache, runtime.GOMAXPROCS(0))
-			rxMiner.dataset, rxMiner.flags, rxMiner.mode = dataset, fullFlags, "full"
+			rxMiner.dataset, rxMiner.flags, rxMiner.mode = dataset, fullFlags, "full memory"
+			if largePages {
+				rxMiner.mode = "full memory, large pages"
+			}
 		}
 	}
 	rxMiner.key = string(key)
-	announceNetworkStatus("⚙️ [RANDOMX] Mining engine ready (" + rxMiner.mode + " memory mode).")
+	announceNetworkStatus("⚙️ [RANDOMX] Mining engine ready (" + rxMiner.mode + " mode).")
 	return true
+}
+
+// newMiningDataset allocates the full RandomX dataset for mining. It asks for
+// large memory pages first, which make RandomX markedly faster, and falls
+// back to ordinary memory when the system does not grant them (on Windows
+// the account needs the "Lock pages in memory" right; on Linux huge pages
+// must be reserved). CVN_NO_LARGE_PAGES=1 skips the attempt.
+//
+// The returned flags are the ones to create mining threads' engines with:
+// when large pages were granted for the dataset, each thread's working
+// memory is requested in large pages too.
+func newMiningDataset(flags randomx.Flags) (*randomx.Dataset, randomx.Flags, bool, error) {
+	fullFlags := flags | randomx.RANDOMX_FLAG_FULL_MEM
+	if os.Getenv("CVN_NO_LARGE_PAGES") == "" {
+		largeFlags := fullFlags | randomx.RANDOMX_FLAG_LARGE_PAGES
+		if dataset, err := randomx.NewDataset(largeFlags); err == nil {
+			return dataset, largeFlags, true, nil
+		}
+	}
+	dataset, err := randomx.NewDataset(fullFlags)
+	return dataset, fullFlags, false, err
+}
+
+// pinMiningThread ties the calling goroutine to its own operating-system
+// thread and that thread to one processor thread, so the 2 MiB of working
+// memory each mining thread uses stays in one core's cache instead of
+// following the thread around. CVN_NO_PINNING=1 turns it off.
+func pinMiningThread(worker int) bool {
+	if os.Getenv("CVN_NO_PINNING") != "" {
+		return false
+	}
+	runtime.LockOSThread()
+	return setCurrentThreadCPU(worker % runtime.NumCPU())
 }
 
 // randomXMine returns the work value of a mining blob for a mining thread,

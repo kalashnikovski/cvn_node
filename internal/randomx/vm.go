@@ -62,6 +62,10 @@ type VMState struct {
 
 	Program    ByteCode
 	JITProgram VMProgramFunc
+
+	// largePages records that this state was allocated in large pages
+	// (CVN addition; see README_CVN.md).
+	largePages bool
 }
 
 func (s *VMState) Close() error {
@@ -70,13 +74,28 @@ func (s *VMState) Close() error {
 			return err
 		}
 	}
+	if s.largePages {
+		return memory.Free(largePageAllocator, s)
+	}
 	return memory.Free(cacheLineAlignedAllocator, s)
 }
 
 func NewVMState(vm *VM) (*VMState, error) {
-	s, err := memory.Allocate[VMState](cacheLineAlignedAllocator)
-	if err != nil {
-		return nil, err
+	// CVN addition: with RANDOMX_FLAG_LARGE_PAGES the state, which is mostly
+	// the 2 MiB scratchpad every hash works in, is placed in large pages when
+	// the system grants them, and in ordinary memory otherwise.
+	var s *VMState
+	var err error
+	if vm.flags.Has(RANDOMX_FLAG_LARGE_PAGES) && largePageAllocator != nil {
+		if s, err = memory.Allocate[VMState](largePageAllocator); err == nil {
+			s.largePages = true
+		}
+	}
+	if s == nil {
+		s, err = memory.Allocate[VMState](cacheLineAlignedAllocator)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if vm.flags.HasJIT() {
