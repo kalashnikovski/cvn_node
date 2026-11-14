@@ -101,6 +101,14 @@ func main() {
 		}
 	}
 
+	// `--randomx-bench` measures this machine's RandomX speed and exits.
+	for _, arg := range os.Args {
+		if arg == "--randomx-bench" {
+			RunRandomXBenchmark()
+			return
+		}
+	}
+
 	// `--wallet` opens the text wallet in this terminal and never starts a
 	// node, so it can run beside the miner.
 	for _, arg := range os.Args {

@@ -65,7 +65,10 @@ These are being built on a separate development network (`--network devnet`), wh
 - [ ] **Combine my coins (wallet).** Planned, not started. One action that sends a wallet's balance back to itself in batches, turning many small coins (a miner collects one per block won) into a few large ones. It removes the 200-coins-per-transfer limit as a practical obstacle and is also how a long-term holder refreshes coins before the 7-year sweep.
 - [ ] **RandomX mining algorithm**, tuned for home processors.
   - *Have:* built on devnet. The engine is kept inside the repository and reproduces RandomX's official test values; CVN runs it with its own identifying settings, so mining software built for other coins does not produce valid CVN work, while the memory settings that keep graphics cards and custom chips at bay are untouched. The key changes once a day and always sits beyond the reorganisation limit. The algorithm is chosen by block height, so it can be replaced later without restarting the chain; a test chain switches algorithm part-way and carries on.
-  - *Missing:* a public testnet; a speed comparison with other RandomX miners; a realistic starting difficulty for launch.
+  - *Missing:* a public testnet; a realistic starting difficulty for launch.
+- [ ] **A miner as fast as the best available.**
+  - *Have:* a built-in speed test (`--randomx-bench`). Measured on one 16-core desktop processor: the built-in miner reaches about 63% of the speed of XMRig, the most widely used RandomX miner. Roughly half of the gap is large memory pages, which the built-in engine does not use on Windows.
+  - *Missing:* closing the gap, by adding large-page support and thread pinning to the built-in miner, by publishing a CVN edition of XMRig, or both. Without this, anyone able to adapt XMRig themselves would out-mine everyone using the standard miner.
 - [ ] **Limit on deep reorganisations.** Built on devnet: a node will not replace more than 100 of its own blocks, however much work a competing chain shows. Not yet seen in action on a real network.
 - [ ] **Proof that nobody mined early:** the genesis block will contain a value nobody can know before the announced launch time.
 
