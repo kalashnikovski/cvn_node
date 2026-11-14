@@ -36,8 +36,12 @@ These are being built on a separate development network (`--network devnet`), wh
 - [ ] **Amounts stored as whole units.**
   - *Have:* built. Inside the program every amount is a whole number of units, and on devnet that is also how it is written into blocks and hashed. The test network keeps its original decimal format so its existing blocks stay valid. The whole real chain replays through the new code with identical hashes and balances.
   - *Missing:* not yet running on the live test network.
-- [ ] **Supply schedule:** 50 CVN per block, halving every 7 years for 49 years; 486,727,500 CVN in total. Written into the settings with tests; not yet used by consensus.
-- [ ] **Exact 45-second average.** Test-network blocks run about 6% fast; the launch rule corrects this.
+- [ ] **Supply schedule:** 50 CVN per block, halving every 7 years for 49 years; 486,727,500 CVN in total.
+  - *Have:* built and enforced on devnet, including what happens after the last reward: a block may then pay its miner only the fees of the transfers it contains.
+  - *Missing:* a public testnet of the launch rules.
+- [ ] **Exact 45-second average.**
+  - *Have:* built on devnet. The difficulty rule applies from block 1 and also steers by how far the chain is from its schedule. In a simulation of 300,000 blocks it averages 45.00 seconds, including through large swings in mining power; the test network's rule averages about 43.5 in the same simulation.
+  - *Missing:* a long run on a real network; a realistic starting difficulty for launch.
 - [ ] **Recycling of long-unmoved coins** to miners. Designed, not built.
 - [ ] **RandomX mining algorithm** tuned for home processors. A Go implementation has been verified against the official test values; not yet integrated.
 - [ ] **Limit on deep reorganisations.**

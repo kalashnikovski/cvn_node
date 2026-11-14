@@ -88,15 +88,112 @@ func HashMeetsDifficulty(hashHex string, height int64, difficulty int) bool {
 // CalculateHeartbeatDifficulty returns the difficulty required of the block that
 // follows lastBlock and is dated nextBlockTimestamp.
 func CalculateHeartbeatDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
+	gapSeconds := nextBlockTimestamp - lastBlock.Timestamp
 	if !IsHeartbeatHeight(lastBlock.Index) {
-		// lastBlock still carries an old leading-zeros difficulty.
-		return int(heartbeatRetarget(HeartbeatInitialDifficulty, HeartbeatTargetSeconds, nextBlockTimestamp-lastBlock.Timestamp))
+		// lastBlock is not a heartbeat block (the genesis block, or one that
+		// still carries an old leading-zeros difficulty): start from the
+		// network's initial difficulty.
+		initial := Params.HeartbeatInitialDifficulty
+		if initial < HeartbeatMinDifficulty {
+			initial = HeartbeatInitialDifficulty
+		}
+		return int(heartbeatRetarget(initial, HeartbeatTargetSeconds, gapSeconds))
 	}
 	solveSeconds := HeartbeatTargetSeconds
 	if grandParent := GetBlockByHeightFromDB(lastBlock.Index - 1); grandParent.Hash != "" {
 		solveSeconds = lastBlock.Timestamp - grandParent.Timestamp
 	}
-	return int(heartbeatRetarget(int64(lastBlock.Difficulty), solveSeconds, nextBlockTimestamp-lastBlock.Timestamp))
+	if !Params.ScheduleAnchored {
+		return int(heartbeatRetarget(int64(lastBlock.Difficulty), solveSeconds, gapSeconds))
+	}
+	if lastBlock.Index <= 1 {
+		// Block 1 follows the genesis block, whose date says nothing about how
+		// long block 1 took to find.
+		solveSeconds = HeartbeatTargetSeconds
+	}
+	return int(heartbeatRetargetAnchored(int64(lastBlock.Difficulty), solveSeconds, gapSeconds, scheduleDriftSeconds(lastBlock)))
+}
+
+// scheduleDriftSeconds says how far the chain is from its schedule at
+// lastBlock: the time actually taken since block 1, minus the time the blocks
+// since block 1 should have taken. Negative means the chain is ahead (blocks
+// have come too fast); positive means it is behind.
+//
+// The schedule is counted from block 1, not from the genesis block, so it
+// starts when mining starts.
+func scheduleDriftSeconds(lastBlock Block) int64 {
+	if lastBlock.Index <= 1 {
+		return 0
+	}
+	firstBlock := GetBlockByHeightFromDB(1)
+	if firstBlock.Hash == "" {
+		return 0
+	}
+	elapsed := lastBlock.Timestamp - firstBlock.Timestamp
+	scheduled := (lastBlock.Index - 1) * HeartbeatTargetSeconds
+	return elapsed - scheduled
+}
+
+const (
+	// HeartbeatDriftDamping sets how gently the schedule correction acts: a
+	// drift of one block interval moves difficulty by 1/(window*damping).
+	HeartbeatDriftDamping = int64(200)
+	// HeartbeatDriftLimitPercent caps the correction at this share of
+	// difficulty per block, so that catching up after a long stall, or
+	// slowing down after a burst, never moves block times far from target.
+	HeartbeatDriftLimitPercent = int64(1)
+)
+
+// heartbeatRetargetAnchored is heartbeatRetarget with one more term. The plain
+// rule looks only at the parent block, and over a long run its blocks come a
+// few percent faster than the target. This form also looks at how far the
+// whole chain is from its schedule and leans against that, so the long-run
+// average is the target exactly.
+//
+//	difficulty * (1 + (target - solve)/(target*window)
+//	                - drift/(target*window*damping))      drift term capped
+func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds, driftSeconds int64) int64 {
+	if parentSolveSeconds < 1 {
+		parentSolveSeconds = 1
+	}
+	if parentSolveSeconds > HeartbeatMaxSolveSeconds {
+		parentSolveSeconds = HeartbeatMaxSolveSeconds
+	}
+	scale := HeartbeatTargetSeconds * HeartbeatWindow * HeartbeatDriftDamping
+	driftLimit := scale * HeartbeatDriftLimitPercent / 100
+	correction := -driftSeconds
+	if correction > driftLimit {
+		correction = driftLimit
+	}
+	if correction < -driftLimit {
+		correction = -driftLimit
+	}
+	adjustment := (HeartbeatTargetSeconds-parentSolveSeconds)*HeartbeatDriftDamping + correction
+
+	// Whole-number arithmetic on big numbers: exact, identical on every
+	// machine, and accurate even at the lowest difficulty.
+	change := new(big.Int).Mul(big.NewInt(parentDifficulty), big.NewInt(adjustment))
+	change.Quo(change, big.NewInt(scale))
+	result := new(big.Int).Add(big.NewInt(parentDifficulty), change)
+	if !result.IsInt64() || result.Int64() > HeartbeatMaxDifficulty {
+		result.SetInt64(HeartbeatMaxDifficulty)
+	}
+	difficulty := result.Int64()
+
+	if gapSeconds >= HeartbeatStallAfterSeconds {
+		halvings := (gapSeconds-HeartbeatStallAfterSeconds)/HeartbeatStallStepSeconds + 1
+		if halvings > 40 {
+			halvings = 40
+		}
+		difficulty >>= uint(halvings)
+	}
+	if difficulty < HeartbeatMinDifficulty {
+		difficulty = HeartbeatMinDifficulty
+	}
+	if difficulty > HeartbeatMaxDifficulty {
+		difficulty = HeartbeatMaxDifficulty
+	}
+	return difficulty
 }
 
 // heartbeatRetarget is the pure arithmetic of the rule. parentDifficulty and

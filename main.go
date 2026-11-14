@@ -709,7 +709,7 @@ templateTransfers, feeUnits = SelectMempoolTransactionsForBlock(TxMaxPerBlock - 
 rewardUnits := BlockRewardUnits(nextIndex)
 templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
 templateUncleMiner := "NONE"
-if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle {
+if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(currentBlock); hasUncle && rewardUnits/5 > 0 {
 templateUncleHash = pendingUncleHash
 templateUncleMiner = pendingUncleMiner
 // Whole units: the uncle gets a fifth of the new reward, rounded down, and
@@ -717,7 +717,7 @@ templateUncleMiner = pendingUncleMiner
 uncleUnits := rewardUnits / 5
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsAmount(rewardUnits - uncleUnits + feeUnits)})
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsAmount(uncleUnits)})
-} else {
+} else if rewardUnits+feeUnits > 0 {
 coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: CustomMinerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
 }
 candidateTransactions := []Transaction{

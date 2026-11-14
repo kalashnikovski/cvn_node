@@ -85,7 +85,7 @@ func TestDevnetIsSeparateFromTestnet1(t *testing.T) {
 	if genesis.Hash == "" || genesis.Hash == testnet1GenesisHash {
 		t.Errorf("devnet genesis hash %q must exist and differ from testnet-1's", genesis.Hash)
 	}
-	if !IsTxForkHeight(1) || !Params.AmountsAsUnits || IsHeartbeatHeight(10) || !IsHeartbeatHeight(11) {
+	if !IsTxForkHeight(1) || !Params.AmountsAsUnits || !IsHeartbeatHeight(1) {
 		t.Error("devnet rule heights were not applied")
 	}
 }

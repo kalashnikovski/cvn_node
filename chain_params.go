@@ -65,6 +65,19 @@ type ChainParams struct {
 	// Heights at which rule changes switch on.
 	HeartbeatHeight int64
 	TxForkHeight    int64
+
+	// HeartbeatInitialDifficulty is the difficulty the first heartbeat block
+	// starts from.
+	HeartbeatInitialDifficulty int64
+
+	// ScheduleAnchored makes the difficulty rule also steer the chain toward
+	// exactly one block per target interval, counted from block 1, so that
+	// block heights line up with the calendar over the long run.
+	ScheduleAnchored bool
+
+	// Economics, when set, is the launch reward schedule. When nil the
+	// network uses testnet-1's original schedule.
+	Economics *GenesisEconomics
 }
 
 var testnet1Params = ChainParams{
@@ -89,6 +102,8 @@ var testnet1Params = ChainParams{
 
 	HeartbeatHeight: 2500,
 	TxForkHeight:    6100,
+
+	HeartbeatInitialDifficulty: 40000000,
 }
 
 var devnetParams = ChainParams{
@@ -109,10 +124,16 @@ var devnetParams = ChainParams{
 
 	AmountsAsUnits: true,
 
-	// The first ten blocks still use the old fixed start-up difficulty, so the
-	// heartbeat begins at block 11. Transfers are validated from block 1.
-	HeartbeatHeight: 11,
+	// Launch rules: the heartbeat difficulty rule and transfer validation
+	// apply from the first block, the chain is steered to an exact 45-second
+	// average, and rewards follow the launch schedule.
+	HeartbeatHeight: 1,
 	TxForkHeight:    1,
+
+	// The lowest difficulty, so a single development machine can mine.
+	HeartbeatInitialDifficulty: HeartbeatMinDifficulty,
+	ScheduleAnchored:           true,
+	Economics:                  &NewGenesisEconomics,
 }
 
 // Params is the network this process runs on.

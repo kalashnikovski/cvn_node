@@ -150,6 +150,9 @@ func addUnits(a, b int64) (int64, error) {
 
 // BlockRewardUnits is the newly issued reward for a height, in units.
 func BlockRewardUnits(height int64) int64 {
+	if Params.Economics != nil {
+		return Params.Economics.RewardUnitsAt(height)
+	}
 	units, _ := decimalToUnits(CalculateBlockReward(height))
 	return units
 }

@@ -946,7 +946,7 @@ return false
 }
 }
 var expectedDiff int
-if b.Index <= 10 {
+if b.Index <= 10 && !IsHeartbeatHeight(b.Index) {
 expectedDiff = 2
 } else {
 parentBlock := GetBlockByHeightFromDB(b.Index - 1)
@@ -1040,7 +1040,9 @@ return false
 totalCoinbaseUnits += out.Amount.Units()
 }
 rewardUnits := BlockRewardUnits(b.Index)
-if b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
+// Once the reward has reached zero there is no share to give an uncle, and
+// such a block is checked like any other.
+if rewardUnits/5 > 0 && b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
 if len(coinbaseOutputs) != 2 {
 fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
 return false

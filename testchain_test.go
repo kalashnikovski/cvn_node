@@ -47,7 +47,7 @@ func mineTestBlock(t *testing.T, timestamp int64, miner string, transfers []Tran
 	tip := GetLatestBlockInternal()
 	index := tip.Index + 1
 	difficulty := 2
-	if index > 10 {
+	if index > 10 || IsHeartbeatHeight(index) {
 		difficulty = CalculateNextDifficulty(tip, timestamp)
 	}
 	var feeUnits int64
@@ -69,7 +69,10 @@ func mineTestBlock(t *testing.T, timestamp int64, miner string, transfers []Tran
 	coinbase := Transaction{
 		Version: 1, ID: fmt.Sprintf("TX_COINBASE_H%d_%d", index, testCoinbaseCounter), Witness: miner,
 		PublicKey: CoinbasePublicKeyMarker, Signature: CoinbaseSignatureMarker, Timestamp: timestamp,
-		Inputs: []UTXOInput{}, Outputs: []UTXOOutput{{Recipient: miner, Amount: UnitsAmount(reward)}},
+		Inputs: []UTXOInput{},
+	}
+	if reward > 0 {
+		coinbase.Outputs = []UTXOOutput{{Recipient: miner, Amount: UnitsAmount(reward)}}
 	}
 	block := Block{
 		Version: 1, Index: index, Timestamp: timestamp, PrevHash: tip.Hash, Difficulty: difficulty,
