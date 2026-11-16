@@ -93,7 +93,7 @@ These are being built on a separate development network (`--network devnet`), wh
 
 These were on the roadmap before the launch rules were designed and are still planned. None has been started.
 
-- [ ] **ASIC-neutral proof of work, long term.** RandomX (Phase 3) is the starting point. The mining check is being built so that the algorithm can be changed at a chosen block height without restarting the chain, so a later algorithm designed specifically for CVN can replace it if specialised hardware ever appears.
+- [ ] **ASIC-neutral proof of work, long term.** RandomX (Phase 3) is the starting point. The mining check is being built so that the algorithm can be changed at a chosen block height without restarting the chain, so a later algorithm designed specifically for CVN can replace it if specialised hardware ever appears. Short of a full replacement, CVN's own RandomX settings can themselves be changed and switched on at a chosen height, the way Monero periodically tweaks RandomX to retire any hardware built for the old settings. **We can and will tweak the proof of work if specialised hardware appears**, so the chain stays mineable on ordinary home processors.
 - [ ] **Indexed database.** Wallets currently ask a node to scan for their coins; an index would make that fast on a large chain.
 - [ ] **Standalone light client (SPV).** A wallet that verifies its own transactions without holding the whole chain.
 - [ ] **Scripting engine.** Spending conditions beyond a single signature.

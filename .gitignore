@@ -63,3 +63,6 @@ genesis_anchor_*.txt
 
 # The fast miner, downloaded separately; never part of this repository.
 xmrig-cvn/
+
+# Private test kit for testers (GPU vs CPU RandomX); never pushed.
+/CVN_GPU_vs_CPU_Test.zip
