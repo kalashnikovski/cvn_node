@@ -16,9 +16,13 @@ How to get an independent review of the Covenant Standard (CVN) code from severa
 
    | Reviewer | Give it |
    |---|---|
-   | Takes a file of 650,000 characters whole | `cvn_audit_full.txt`, attached, with the prompt |
-   | Cuts a long file or paste short | The three parts, one message each, as described under "Sending the pack in parts" below |
-   | Cannot read about 60,000 tokens at once | It cannot review this code usefully. A model that only sees part of a file will invent the rest. |
+   | Takes a file of about 950,000 characters whole | `cvn_audit_full.txt`, attached, with the prompt |
+   | Cuts a long file or paste short | The three parts (each about 300,000 to 350,000 characters), one message each, as described under "Sending the pack in parts" below |
+   | Takes about 275,000 characters at most | `cvn_audit_focus.txt`: the rules only. A narrower review; see Prompt 5B |
+   | Takes about 80,000 characters at most | `cvn_audit_rule_b.txt`: one rule only; see Prompt 5C |
+   | Less than that | It cannot review this code usefully. A model that only sees part of a file will invent the rest. |
+
+   The script prints the size of every pack in characters. Compare those figures with what the tool accepts before you start; a tool's limit on typed or pasted text is often far lower than its limit on an attached file, so attach where you can.
 
    **Check every time that the reviewer saw all of it.** Each pack numbers its files and ends with the line `END OF PACK`, and the prompts ask the reviewer to say which file it saw last. If its answer does not name the last file, or says the copy was cut short, its review covers only part of the code: start again, in parts.
 
@@ -38,7 +42,7 @@ Some tools cut a long file or paste short without saying so. One reviewer report
 
 1. `cvn_audit_1_rules.txt` with the first message below.
 2. `cvn_audit_2_program.txt` with the second message below.
-3. `cvn_audit_3_tests.txt` together with the review prompt itself (Prompt 1 or Prompt 3).
+3. `cvn_audit_3_tests.txt` together with the review prompt itself (Prompt 1, Prompt 3 or Prompt 5A).
 
 Attach each file if the tool allows it; paste it only if it does not. Wait for the reply before sending the next.
 
@@ -454,6 +458,237 @@ After every reviewer has answered Prompt 4, run Prompt 2 with their answers as b
 ```text
 The findings below are answers to a fair-launch scorecard with items numbered A1 to G6. Where two reviewers give the same item different judgements, say which is right and quote the code that settles it.
 ```
+
+---
+
+## Prompt 5: the fourth round, after a rule change and a large removal
+
+Use this for the round that follows commit `a3c8c9f`. Two things changed that every node enforces: the difficulty rule ("rule B"), and the removal of the first test network together with every rule that existed only for it. Both are described, as claims to be tested, in `audit/CHANGES_FOR_ROUND_4.md`, which is in every pack.
+
+Rebuild the packs first, so they name the commit. Start a **new conversation** with each reviewer. There are three versions of the prompt, for three sizes of input:
+
+| Reviewer can take | Pack | Prompt |
+|---|---|---|
+| About 950,000 characters in one file | `cvn_audit_full.txt` | Prompt 5A |
+| That much only in pieces | `cvn_audit_1_rules.txt`, `_2_program.txt`, `_3_tests.txt`, sent as under "Sending the pack in parts" | Prompt 5A |
+| About 275,000 characters | `cvn_audit_focus.txt` | Prompt 5B |
+| About 80,000 characters | `cvn_audit_rule_b.txt` | Prompt 5C |
+
+A review made with 5B or 5C covers only what its pack holds. Record which version each reviewer was given; their findings are not comparable across versions without that.
+
+`python audit/make_audit_pack.py` also writes each prompt below to its own file in `audit/out/` (`PROMPT_5A.txt`, `PROMPT_5B.txt`, `PROMPT_5C.txt`), ready to paste.
+
+### Prompt 5A: the whole code
+
+```text
+You are reviewing the source code of a proof-of-work blockchain before it launches. Real people will mine it on their own computers. Your job is to find what is wrong with it. You are not being asked to summarise it, explain it, or say what is good about it.
+
+This is the FOURTH round of review. Earlier rounds found real problems, including one that let any peer replace the first block and create coins. Since the last round the authors have made two changes to the rules every node enforces, and they have not been reviewed by anyone. Your job has three parts, in this order.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below (or three parts, if you were sent it in pieces). It starts with a list of what it contains:
+
+- WHITEPAPER.md: what the rules are meant to be. Read this first.
+- audit/CHANGES_FOR_ROUND_4.md: what changed for this round, written by the authors as claims. Read this second. Do not accept any of it without reading the code.
+- README.md, Installation_Guide.md, MINING_GUIDE.md, ROADMAP.md: what the public is told.
+- audit/FINDINGS_*.md: what earlier rounds found and what was done.
+- Source code in Go, then its tests.
+
+Read all of it before you answer. The material numbers its files ("FILE n OF N") and ends with the line "END OF PACK". Begin your answer by stating the number of the last file you can see and whether you can see that last line. If you cannot, your copy was cut short: say so plainly, review only what you have, and do not guess at code you did not see.
+
+WHAT THE PROJECT IS
+
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Blocks are meant to come every 45 seconds; difficulty is adjusted on every block. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so nobody can mine early.
+
+Two networks are defined, "cvn_testnet" (about to launch) and "devnet" (for development). They run the same rules and differ only in names, keys, ports, files, seeds and starting difficulty (node/chain_params.go). An older network, "testnet-1", has been removed.
+
+PART 1: THE NEW DIFFICULTY RULE ("rule B")
+
+Read section 1 of audit/CHANGES_FOR_ROUND_4.md, then node/heartbeat_difficulty.go in full, then node/relief_not_inherited_test.go and node/hopping_sim_test.go.
+
+The rule: a block dated six minutes or more after its parent is mined at a halved difficulty (halved again per further three minutes). That relief now belongs to the late block alone; the next block is worked out from the difficulty its parent would have had without relief, found by walking back through consecutive late blocks and working forward again, with answers remembered by block identifier.
+
+Try to break it:
+
+1. Disagreement. Find any way for two honest nodes to compute different difficulties for the same block. Look at the remembered table (unrelievedCache), at what happens when an ancestor is missing or is not the block's real parent (the "exact" flag), at a node that has just restarted, at a reorganisation, and at two rival blocks at one height. A single disagreement splits the network.
+2. Cost. Can anyone build a chain, or send blocks, that make the walk back through late blocks expensive for every node that checks them?
+3. The burst it was meant to stop. Is there still a pattern of stopping and starting, or of dating blocks within the 120 seconds a block may be dated ahead of the clock, that hands a miner cheap blocks? The authors' simulations assume honest dates. Yours need not.
+4. The start of the chain. For blocks 1 to 20 no relief is given and difficulty cannot fall below its starting value; over the next 40 blocks relief returns one halving at a time (launchRampGap). Does the new rule behave correctly across both boundaries? At the first block after an algorithm change (powEraStartingAt)?
+5. Recovery. After most of the hashrate really leaves, does the chain still recover, and how long does it take? Is there a state from which it cannot?
+6. The tests. Do they test the rule, or only that the code agrees with itself? Name a case they miss.
+7. The authors say a miner who mines only when difficulty dips still earns 10% to 30% more per hash and that this was left alone. Is leaving it alone defensible for a launch? Is it worse than they say?
+
+PART 2: THE REMOVAL
+
+Read section 2 of audit/CHANGES_FOR_ROUND_4.md. The authors say that removing the older network's rules changed nothing for the launch networks, and offer as evidence that 2,944 real blocks replay identically. That evidence covers only blocks that were accepted.
+
+1. Find a block or a transfer that the launch rules refused before and that this code accepts, or the reverse. Look hardest at ValidateBlockSignatures (node/blockchain_core.go), where the median-time check, the two-hour check and the uncle branch were taken out, and at SaveBlockToStorageInternal (node/database_core.go).
+2. The claim "a date later than the parent's makes the median-of-eleven rule unnecessary": is it true in every case, including the first eleven blocks and a reorganisation?
+3. Find any place where a removed setting was the only thing standing between today's data and code written for the older format.
+4. Find anything left behind: a branch, a default, a message, a file name or a document that still behaves or reads as if the older network existed. Check that what users are told (the guides) matches the code.
+5. The genesis block is not mined and is treated specially in several places (its work, its transaction digest, IsHeartbeatHeight(0), IsTxForkHeight(0)). Is every one of those cases still safe now that the surrounding code is gone? Can anything other than the program's own genesis block reach them?
+6. The block header keeps two "uncle" fields that must hold fixed values. Is that enforced on every path by which a block can be stored?
+
+PART 3: EVERYTHING ELSE, AGAIN
+
+The rest of the code was reviewed in earlier rounds, but a large edit can break what it did not mean to touch. With the time you have left, look for, most important first:
+
+1. Creating coins: any way for the total of all coins plus the vault to exceed what the schedule has issued.
+2. Taking or double-spending coins.
+3. Honest nodes disagreeing about any block or transfer, for any reason: clocks, operating systems, map order, encodings, memory pools, arrival order.
+4. Bookkeeping across a reorganisation: spent coins, swept coins, the vault, total work, balances, and now the remembered difficulty table.
+5. Stalling the chain or pushing difficulty very high or very low.
+6. The launch: mining before the Bitcoin anchor block exists; gains from choosing dates; the first block's difficulty.
+7. Attacks through the network that cost a node work, memory or its honest peers.
+8. Wallets and keys.
+
+WHAT IS ALREADY KNOWN - do not report these
+
+- Everything under "What it costs, and what it does not fix" and "Open, known to the authors" in audit/CHANGES_FOR_ROUND_4.md, unless you can show it is worse than described.
+- Everything under "Not changed, and why" in the audit/FINDINGS files, on the same condition.
+- A proof-of-work network with little mining power can be attacked by anyone with more.
+- All balances and transfers are public. A lost private key means lost coins.
+- Which transfers a miner includes is the miner's choice and is not a network rule.
+- The RandomX engine is third-party code and is not included; only CVN's changes to it are.
+- Signatures use ECDSA on the P-256 curve. Report this only if you find an actual weakness in how it is used.
+- Style, naming, comments, and the wording of messages.
+
+HOW TO ANSWER
+
+Start with one line: how much of the material you read, and anything you could not check.
+
+Then, for PART 1 and PART 2, go through the numbered questions in order and answer each in a line or two: what you checked and what you concluded. "Did not check" is an acceptable answer; silence is not.
+
+Then your findings from all three parts together, most serious first. For each one:
+
+  Title: one line.
+  Severity: Critical (coins can be created or taken, or the chain can be split or stopped) / High / Medium / Low.
+  Confidence: Certain (you traced it through the code) / Likely / Possible (you suspect it but could not confirm).
+  Where: the file and the function.
+  What happens: the exact steps. Who does what, with what values, and what each node then does. For a difficulty finding, give block heights, dates and difficulties. A finding without concrete steps is a suspicion, and should be marked Possible.
+  Why the code allows it: quote the lines that matter.
+  What to change: the smallest fix you can see.
+
+Then a short list titled "Checked and found sound": the specific things you examined and believe are correct, with one line each saying what you checked.
+
+Then a short list titled "Could not determine": things you wanted to check and could not, and what you would need.
+
+Rules for your answer:
+- Be specific or say nothing. "Consider adding more validation" is not a finding.
+- Do not report something as a problem unless you can say what an attacker or an unlucky honest user would do.
+- If you are unsure whether the code does what you think, say so and say what you assumed.
+- Do not soften findings, and do not pad the answer with praise or a summary.
+- A short answer with three real problems is better than a long one with thirty doubtful ones.
+```
+
+### Prompt 5B: the rules only, for a smaller input
+
+For `cvn_audit_focus.txt`. The pack leaves out networking, wallets and most tests, and the prompt says so.
+
+```text
+You are reviewing part of the source code of a proof-of-work blockchain before it launches. Your job is to find what is wrong with it. Do not summarise it, explain it or praise it.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below. It is a SELECTION from a larger code base: the design paper (WHITEPAPER.md), the authors' record of what changed for this review (audit/CHANGES_FOR_ROUND_4.md), every source file that decides whether a block or a transfer is valid, the miner (node/main.go), and three test files. Networking, block download, wallets and most tests are NOT included. Do not guess at code you cannot see; if a finding depends on it, say so and mark the finding Possible.
+
+The material numbers its files ("FILE n OF N") and ends with the line "END OF PACK". Begin your answer by stating the number of the last file you can see and whether you can see that last line. If you cannot, your copy was cut short: say so, and review only what you have.
+
+WHAT THE PROJECT IS
+
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, no pre-mine. Coins are unspent outputs owned by addresses, spent with ECDSA signatures. Blocks are meant to come every 45 seconds and difficulty is adjusted on every block. Coins unmoved for seven years have a fifth moved to a "vault" that pays a little to miners each block; a fifth of fees also goes there. Two networks, "cvn_testnet" and "devnet", run the same rules. An older network, "testnet-1", has been removed from the code.
+
+Since the last review the authors made two changes to the rules every node enforces. Nobody else has checked them.
+
+PART 1: THE NEW DIFFICULTY RULE ("rule B")
+
+Read section 1 of audit/CHANGES_FOR_ROUND_4.md, then node/heartbeat_difficulty.go in full, then the two test files about it.
+
+A block dated six minutes or more after its parent is mined at a halved difficulty (halved again per further three minutes). That relief now belongs to the late block alone: the next block is worked out from the difficulty its parent would have had without relief, found by walking back through consecutive late blocks and forward again, with answers remembered by block identifier.
+
+1. Find any way for two honest nodes to compute different difficulties for the same block: through the remembered table, a missing or wrong ancestor (the "exact" flag), a restart, a reorganisation, or two rival blocks at one height.
+2. Can a chain be built that makes the walk back expensive for every node?
+3. Is there still a pattern of stopping and starting, or of dating blocks up to 120 seconds ahead, that hands a miner cheap blocks? The authors' simulations assume honest dates.
+4. Does the rule behave correctly across the first 20 blocks (no relief, difficulty cannot fall below its start), the next 40 (relief returns one halving at a time), and an algorithm change?
+5. After most hashrate really leaves, does the chain recover? Is there a state from which it cannot?
+6. Do the tests test the rule, or only that the code agrees with itself? Name a case they miss.
+
+PART 2: THE REMOVAL
+
+Read section 2 of audit/CHANGES_FOR_ROUND_4.md. The authors claim that removing the older network's rules changed nothing for the remaining networks; their evidence is that 2,944 accepted blocks replay identically, which says nothing about refused blocks.
+
+1. Find a block or transfer the rules refused before and now accept, or the reverse. Look hardest at ValidateBlockSignatures (node/blockchain_core.go) and SaveBlockToStorageInternal (node/database_core.go).
+2. Is "a date later than the parent's makes the median-of-eleven rule unnecessary" true in every case?
+3. The genesis block is not mined and has special cases (its work, its transaction digest, IsHeartbeatHeight(0), IsTxForkHeight(0)). Can anything but the program's own genesis block reach them?
+4. The header keeps two "uncle" fields that must hold fixed values. Is that enforced on every path you can see?
+5. Find anything left behind that still behaves as the older rules did.
+
+PART 3: IF YOU HAVE TIME
+
+In the files you have: any way to create coins beyond the schedule, spend a coin twice or without owning it, or leave the vault, the swept coins or the balances wrong after blocks are removed and others applied.
+
+DO NOT REPORT
+
+What the authors list under "What it costs, and what it does not fix" and "Open, known to the authors", unless it is worse than they say. That weak networks can be out-mined. That balances are public. Style and wording.
+
+HOW TO ANSWER
+
+One line first: how much you read and what you could not check.
+
+Then answer each numbered question of PART 1 and PART 2 in a line or two: what you checked and what you concluded. "Did not check" is acceptable; silence is not.
+
+Then your findings, most serious first, each with: Title; Severity (Critical / High / Medium / Low); Confidence (Certain / Likely / Possible); Where (file and function); What happens (exact steps, with block heights, dates and difficulties where they matter); the lines that allow it, quoted; the smallest fix.
+
+Then "Checked and found sound": what you examined and believe is correct, one line each.
+
+Be specific or say nothing. Do not soften findings or add a summary. Three real problems are worth more than thirty doubtful ones.
+```
+
+### Prompt 5C: the difficulty rule only, for a small input
+
+For `cvn_audit_rule_b.txt`, about 75,000 characters. It asks one question well instead of many badly.
+
+```text
+You are reviewing ONE rule of a proof-of-work blockchain before it launches: how the difficulty of each block is set. Your job is to find what is wrong with it. Do not summarise, explain or praise.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below, holding six files from a larger code base: the authors' description of the change (audit/CHANGES_FOR_ROUND_4.md; only section 1 matters here), the difficulty rule (node/heartbeat_difficulty.go), the network settings (node/chain_params.go), block validation (node/blockchain_core.go), and two test files. Everything else is missing. Do not guess at code you cannot see; where a finding depends on it, say so.
+
+The material numbers its files ("FILE n OF 6") and ends with the line "END OF PACK". Begin by stating the number of the last file you can see and whether you can see that line. If you cannot, your copy was cut short: say so.
+
+THE RULE
+
+Blocks are meant to come every 45 seconds. Each block's difficulty is its parent's, moved up by at most 5% if the parent was found quickly and down by at most half if slowly, with a small correction (at most 1%) toward the chain's schedule. If no block arrives for six minutes, the difficulty of the block being mined is halved, and halved again for every further three minutes.
+
+The change under review: that halving now belongs to the late block alone. The next block is worked out from the difficulty its parent WOULD have had without the halving. That figure cannot be read from the block, so it is recomputed by walking back through consecutive late blocks to the first one that was on time and working forward again; answers are remembered by block identifier (unrelievedDifficulty and unrelievedCache).
+
+It was made because one long gap used to leave about seventy-five nearly free blocks for whoever held the most hashrate.
+
+QUESTIONS
+
+1. Can two honest nodes ever compute different difficulties for the same block? Consider the remembered table, a node that has just restarted, an ancestor that is missing or is not the block's real parent (the "exact" flag), a reorganisation, and two rival blocks at one height. One disagreement splits the network.
+2. Can a chain be built that makes the walk back expensive for every node that checks it?
+3. A block may be dated up to 120 seconds ahead of the clock and must be dated after its parent. Using dates, or by stopping and starting, can a miner still obtain cheap blocks? Give heights, dates and difficulties.
+4. For blocks 1 to 20 no halving is given and difficulty cannot fall below its starting value; over the next 40 blocks the halvings return one at a time (launchRampGap). Is the new rule right across both boundaries?
+5. If most miners really leave, does the chain recover, and is there a state from which it cannot?
+6. Do the tests test the rule, or only that the code agrees with itself? Name a case they miss.
+
+DO NOT REPORT
+
+What the authors list under "What it costs, and what it does not fix". Style and wording.
+
+HOW TO ANSWER
+
+Answer each question in order, in a few lines: what you checked and what you concluded. "Did not check" is acceptable.
+
+Then any findings, most serious first, each with: Title; Severity (Critical / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps with numbers; the lines that allow it, quoted; the smallest fix.
+
+Be specific or say nothing. Do not add a summary.
+```
+
+After every reviewer has answered, run Prompt 2 as before, with each reviewer given the pack it had and the others' findings. Findings from a reviewer that had a smaller pack may rest on code another reviewer could see: say which pack each finding came from.
 
 ---
 

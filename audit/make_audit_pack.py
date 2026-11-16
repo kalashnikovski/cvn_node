@@ -4,7 +4,7 @@ Run from anywhere:
 
     python audit/make_audit_pack.py
 
-It writes four text files into audit/out/ (which is not kept in the
+It writes six text files into audit/out/ (which is not kept in the
 repository):
 
     cvn_audit_full.txt        everything in one file
@@ -14,9 +14,21 @@ repository):
                               whether a block or a transfer is valid
     cvn_audit_2_program.txt   part 2: networking, mining, wallets, start-up
     cvn_audit_3_tests.txt     part 3: the tests
+    cvn_audit_focus.txt       for a reviewer that cannot take the full file:
+                              the design paper, the record of what changed
+                              for this round, every file that decides whether
+                              a block or a transfer is valid, the miner, and
+                              the tests of the newest rule
+    cvn_audit_rule_b.txt      smaller still: only what the newest change to
+                              the difficulty rule needs
+
+and each prompt of audit/AUDIT_PROMPT.md as its own file (PROMPT_1.txt and so
+on), ready to paste.
 
 The three parts together hold exactly what the full file holds. They exist
-because some tools cut a long paste short without saying so.
+because some tools cut a long paste short without saying so. The last two
+packs are selections from the full file, for tools with a small input limit;
+a review made from one of them covers only what is in it.
 
 Each pack begins with the commit it was made from and a list of its files,
 numbers every file, and ends with a line saying it is whole.
@@ -47,6 +59,7 @@ RULES = [
     "audit/FINDINGS_ROUND_2.md",
     "audit/FINDINGS_ROUND_3.md",
     "audit/FINDINGS_FAIR_LAUNCH.md",
+    "audit/CHANGES_FOR_ROUND_4.md",
     "node/chain_params.go",
     "node/amount.go",
     "node/block_format.go",
@@ -113,6 +126,41 @@ PROGRAM = [
 ]
 
 
+# Selections for reviewers with a small input limit. Every file here is also
+# in the full pack.
+FOCUS = [
+    "audit/CHANGES_FOR_ROUND_4.md",
+    "WHITEPAPER.md",
+    "node/chain_params.go",
+    "node/heartbeat_difficulty.go",
+    "node/blockchain_core.go",
+    "node/tx_rules.go",
+    "node/block_format.go",
+    "node/amount.go",
+    "node/vault.go",
+    "node/sweep.go",
+    "node/pow.go",
+    "node/chain_work.go",
+    "node/genesis.go",
+    "node/database_core.go",
+    "node/security_harness.go",
+    "node/crypto_auth.go",
+    "node/main.go",
+    "node/relief_not_inherited_test.go",
+    "node/hopping_sim_test.go",
+    "node/log_noise_test.go",
+]
+
+RULE_B = [
+    "audit/CHANGES_FOR_ROUND_4.md",
+    "node/heartbeat_difficulty.go",
+    "node/chain_params.go",
+    "node/blockchain_core.go",
+    "node/relief_not_inherited_test.go",
+    "node/hopping_sim_test.go",
+]
+
+
 def git(*args):
     try:
         return subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True, text=True, check=True).stdout.strip()
@@ -164,6 +212,10 @@ def build(title, purpose, files):
 
 def main():
     listed = set(RULES + PROGRAM)
+    for name, selection in (("FOCUS", FOCUS), ("RULE_B", RULE_B)):
+        stray = [path for path in selection if path not in listed and not path.endswith("_test.go")]
+        if stray:
+            sys.exit(name + " names files that are not in the full pack: " + ", ".join(stray))
     tests = sorted("node/" + name for name in os.listdir(os.path.join(ROOT, "node")) if name.endswith("_test.go"))
     tests.append("internal/randomx/cvn_test.go")
     tests.append("internal/randomx/reference_test.go")
@@ -191,6 +243,15 @@ def main():
         ("cvn_audit_3_tests.txt", "PART 3 OF 3 - THE TESTS",
          ["The tests. They show what the authors checked, and by omission what they did not."],
          tests),
+        ("cvn_audit_focus.txt", "A SELECTION - WHAT DECIDES VALIDITY",
+         ["For a reviewer that cannot take the full pack. The design paper, the record of what",
+          "changed for this round, every file that decides whether a block or a transfer is valid,",
+          "the miner, and the tests of the newest rule. Networking, wallets and most tests are NOT here."],
+         FOCUS),
+        ("cvn_audit_rule_b.txt", "A SMALL SELECTION - THE NEWEST DIFFICULTY RULE ONLY",
+         ["For a reviewer with a small input limit. Only what is needed to judge the change to the",
+          "difficulty rule described in audit/CHANGES_FOR_ROUND_4.md, section 1. Nothing else is here."],
+         RULE_B),
     ]
     os.makedirs(OUT, exist_ok=True)
     for name, title, purpose, files in packs:
@@ -198,7 +259,29 @@ def main():
         with open(os.path.join(OUT, name), "w", encoding="utf-8", newline=NEWLINE) as handle:
             handle.write(text)
         print("%-26s %4d files  %7d characters  about %6d tokens" % (name, len(files), len(text), len(text) // 4))
+    write_prompts()
     print("Written to " + OUT)
+
+
+def write_prompts():
+    """Each prompt in AUDIT_PROMPT.md is the first fenced block after a
+    heading that begins "Prompt N". Written out one per file, ready to paste."""
+    fence = chr(96) * 3
+    heading, inside, body = None, False, []
+    for text_line in read("audit/AUDIT_PROMPT.md").split(NEWLINE):
+        stripped = text_line.strip()
+        if not inside and stripped.lstrip("#").strip().startswith("Prompt ") and stripped.startswith("#"):
+            heading = stripped.lstrip("#").strip().split(":")[0].replace("Prompt ", "PROMPT_").replace(" ", "_")
+        elif not inside and heading and stripped == fence + "text":
+            inside, body = True, []
+        elif inside and stripped == fence:
+            text = NEWLINE.join(body) + NEWLINE
+            with open(os.path.join(OUT, heading + ".txt"), "w", encoding="utf-8", newline=NEWLINE) as handle:
+                handle.write(text)
+            print("%-26s             %7d characters" % (heading + ".txt", len(text)))
+            heading, inside = None, False
+        elif inside:
+            body.append(text_line)
 
 
 if __name__ == "__main__":
