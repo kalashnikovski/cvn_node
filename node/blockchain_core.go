@@ -186,6 +186,20 @@ func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
 	_ = bUTXO.Delete(key)
 }
 
+// blockAlreadyStored reports whether this exact block is the one stored at
+// its height, as seen by the open database view.
+func blockAlreadyStored(dbTx *bbolt.Tx, b Block) bool {
+	bBlocks := dbTx.Bucket(blocksBucket)
+	if bBlocks == nil || b.Hash == "" {
+		return false
+	}
+	var stored Block
+	if raw := bBlocks.Get([]byte(fmt.Sprintf("%016d", b.Index))); raw == nil || json.Unmarshal(raw, &stored) != nil {
+		return false
+	}
+	return stored.Hash == b.Hash
+}
+
 func ProcessIncomingNetworkBlock(incomingBlock Block) {
 	if incomingBlock.Index <= 0 {
 		return // the genesis block is never taken from the network
@@ -305,6 +319,11 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 // because some callers already hold it.
 func RecordUncleCandidate(winner Block, loser Block) {
 	if GlobalBoltEngine == nil || winner.Hash == "" || loser.Hash == "" || winner.Hash == loser.Hash {
+		return
+	}
+	// A network without the uncle share never pays a losing block, so there
+	// is nothing to queue, and saying "queued for payout" would be untrue.
+	if Params.NoUncles {
 		return
 	}
 	var uncleMiner string
@@ -606,7 +625,14 @@ func ValidateBlockSignatures(b Block) bool {
 			}
 			checked, _, err := ValidateBlockTransactions(b, lookup, vaultBefore)
 			if err != nil {
-				fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, err)
+				// The same block often arrives from several peers at once. If
+				// another copy was stored between our reading the tip and
+				// opening this view, this copy is judged against a coin set
+				// that already holds its own coins and fails. That is a
+				// duplicate, not a bad block, and is not reported as one.
+				if !blockAlreadyStored(dbTx, b) {
+					fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, err)
+				}
 				isBlockValid = false
 				return nil
 			}
