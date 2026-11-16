@@ -65,4 +65,7 @@ genesis_anchor_*.txt
 xmrig-cvn/
 
 # Private test kit for testers (GPU vs CPU RandomX); never pushed.
+# The .txt kit files are already covered by *.txt above.
 /CVN_GPU_vs_CPU_Test.zip
+/benchmark_cpu_windows.bat
+/benchmark_cpu_linux.sh
