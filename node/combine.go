@@ -38,7 +38,7 @@ func (r CombineResult) CoinsAfter() int {
 
 // Summary is one sentence for the person using the wallet.
 func (r CombineResult) Summary() string {
-	text := fmt.Sprintf("Combined %d coins into %d with %d transfer(s) to %s. The wallet will hold %d coin(s) once they confirm in the next blocks.",
+	text := fmt.Sprintf("Combined %d coins into %d with %d transfer(s) to %s. The wallet will hold %d coin(s) once they confirm in the next blocks. Wait for that before sending: until then these coins are not ready to spend.",
 		r.CoinsCombined, len(r.Transfers), len(r.Transfers), r.Address, r.CoinsAfter())
 	if r.CoinsAfter() > len(r.Transfers) && len(r.Transfers) == combineMaxTransfers {
 		text += " Run it again after that to combine the rest."

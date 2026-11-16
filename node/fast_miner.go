@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -29,14 +30,15 @@ import (
 //	         faster. This program starts it, feeds it work through the work
 //	         server, keeps showing its own dashboard, and stops it on exit.
 //
-// Choose with `--miner builtin` or `--miner xmrig` on the command line, or
-// with a line in miner_config.json:
+// Nobody has to choose. When the fast miner has been unpacked into a folder
+// named xmrig-cvn beside this program, it is used; when it has not, the
+// built-in miner is. `--miner builtin` or `--miner xmrig` on the command
+// line, or a line in miner_config.json, says otherwise:
 //
-//	{ "miner_address": "CVN_...", "miner": "xmrig" }
+//	{ "miner_address": "CVN_...", "miner": "builtin" }
 //
-// The fast miner is looked for in a folder named xmrig-cvn beside this
-// program (or in the folder it is started from). `--xmrig-path FILE`, or
-// "xmrig_path" in miner_config.json, points somewhere else. Only the CVN
+// `--xmrig-path FILE`, or "xmrig_path" in miner_config.json, points to a
+// fast miner kept somewhere else. Only the CVN
 // edition works: the standard XMRig computes a different RandomX and every
 // result it sends would be refused, so it is not accepted here.
 //
@@ -102,6 +104,35 @@ func readMinerConfig() map[string]string {
 		}
 	}
 	return settings
+}
+
+// minerConfigProblem says what is wrong with miner_config.json when it is
+// there and cannot be read. People are told they may edit that file, and a
+// missing comma is easily made; reading it as empty, without a word, leaves
+// them wondering why their settings do nothing.
+func minerConfigProblem() error {
+	raw, err := os.ReadFile("miner_config.json")
+	if err != nil || strings.TrimSpace(string(raw)) == "" {
+		return nil
+	}
+	var anything map[string]interface{}
+	err = json.Unmarshal(raw, &anything)
+	if err == nil {
+		return nil
+	}
+	where := ""
+	var syntax *json.SyntaxError
+	if errors.As(err, &syntax) {
+		where = fmt.Sprintf(" The mistake is on or just before line %d.", 1+strings.Count(string(raw[:min(int(syntax.Offset), len(raw))]), "\n"))
+	}
+	return fmt.Errorf("miner_config.json is not written correctly, so none of it can be used.%s\n"+
+		"   The usual cause is a missing comma: every line between the { and the } ends with a comma, except the last.\n"+
+		"   It should look like this:\n"+
+		"       {\n"+
+		"         \"miner_address\": \"CVN_your_address\",\n"+
+		"         \"miner\": \"xmrig\"\n"+
+		"       }\n"+
+		"   (what the program said: %v)", where, err)
 }
 
 // saveMinerAddress writes a new mining address to miner_config.json and
@@ -210,9 +241,38 @@ func stdoutIsTerminal() bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-// chosenMiner returns which miner was asked for: on the command line first,
-// then in CVN_MINER, then in miner_config.json. Nothing chosen means the
-// built-in miner.
+// programFolder is the folder this program's own file is in.
+var programFolder = func() string {
+	program, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(program)
+}
+
+func fastMinerFileName() string {
+	if runtime.GOOS == "windows" {
+		return "xmrig.exe"
+	}
+	return "xmrig"
+}
+
+// fastMinerUnpacked reports whether a fast miner sits in the folder named
+// xmrig-cvn beside this program, which is where the guide says to put it.
+func fastMinerUnpacked() bool {
+	folder := programFolder()
+	if folder == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(folder, "xmrig-cvn", fastMinerFileName()))
+	return err == nil && !info.IsDir()
+}
+
+// chosenMiner returns which miner to use: what was asked for on the command
+// line first, then in CVN_MINER, then in miner_config.json. With nothing
+// asked for it is the fast miner if one has been unpacked beside this
+// program, and the built-in miner if not. Putting the folder there is the
+// choice; nobody should have to edit a file as well.
 func chosenMiner(args []string) (string, error) {
 	choice := argumentValue(args, "--miner")
 	if choice == "" {
@@ -220,6 +280,9 @@ func chosenMiner(args []string) (string, error) {
 	}
 	if choice == "" {
 		choice = readMinerConfig()["miner"]
+	}
+	if choice == "" && fastMinerUnpacked() {
+		return MinerXMRig, nil
 	}
 	switch strings.ToLower(strings.ReplaceAll(choice, "-", "")) {
 	case "", "builtin", "cvn":
@@ -244,10 +307,7 @@ func miningThreads(args []string) int {
 
 // locateFastMiner finds the CVN edition of XMRig on this machine.
 func locateFastMiner(args []string) (string, error) {
-	name := "xmrig"
-	if runtime.GOOS == "windows" {
-		name = "xmrig.exe"
-	}
+	name := fastMinerFileName()
 	if given := argumentValue(args, "--xmrig-path"); given != "" {
 		return usableFastMiner(given, name)
 	}
@@ -255,8 +315,8 @@ func locateFastMiner(args []string) (string, error) {
 		return usableFastMiner(given, name)
 	}
 	var folders []string
-	if program, err := os.Executable(); err == nil {
-		folders = append(folders, filepath.Dir(program))
+	if folder := programFolder(); folder != "" {
+		folders = append(folders, folder)
 	}
 	// Only beside the program itself. Looking in the folder the program was
 	// started from as well would run whatever file of that name happened to
@@ -268,7 +328,7 @@ func locateFastMiner(args []string) (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("the CVN edition of XMRig was not found. Download it from https://github.com/kalashnikovski/cvn-xmrig/releases and unpack it into a folder named xmrig-cvn beside this program, or point to it with --xmrig-path")
+	return "", fmt.Errorf("the CVN edition of XMRig was not found. Download it from https://github.com/kalashnikovski/cvn-xmrig/releases and unpack it so that %s is in a folder named xmrig-cvn inside the folder this program is in (%s), or point to it with --xmrig-path", name, programFolder())
 }
 
 // usableFastMiner checks that a path leads to a program and that the

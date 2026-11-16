@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -324,5 +325,65 @@ func TestMiningCanBeSwitchedOff(t *testing.T) {
 	// A seed needs no mining address; a mining node still does.
 	if _, err := resolveMinerAddress([]string{"cvn_node"}); err == nil {
 		t.Error("a node with no address would have been allowed to mine")
+	}
+}
+
+// Unpacking the fast miner into the folder the guide names is all it takes
+// to use it. Nobody has to edit a settings file as well.
+func TestTheFastMinerIsUsedWhenItsFolderIsThere(t *testing.T) {
+	folder := t.TempDir()
+	t.Chdir(folder)
+	t.Setenv("CVN_MINER", "")
+	saved := programFolder
+	programFolder = func() string { return folder }
+	defer func() { programFolder = saved }()
+
+	if choice, _ := chosenMiner([]string{"cvn_node"}); choice != MinerBuiltIn {
+		t.Fatalf("with no fast miner unpacked the built-in miner must run: %q", choice)
+	}
+	if err := os.MkdirAll(filepath.Join(folder, "xmrig-cvn"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "xmrig-cvn", fastMinerFileName()), []byte("x"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if choice, _ := chosenMiner([]string{"cvn_node"}); choice != MinerXMRig {
+		t.Errorf("the fast miner is unpacked beside the program and was not chosen: %q", choice)
+	}
+	// Asking for the built-in miner still wins, either way of asking.
+	if choice, _ := chosenMiner([]string{"cvn_node", "--miner", "builtin"}); choice != MinerBuiltIn {
+		t.Errorf("--miner builtin did not win: %q", choice)
+	}
+	if err := os.WriteFile("miner_config.json", []byte(`{"miner": "builtin"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if choice, _ := chosenMiner([]string{"cvn_node"}); choice != MinerBuiltIn {
+		t.Errorf("\"miner\": \"builtin\" in miner_config.json did not win: %q", choice)
+	}
+}
+
+// From the rehearsal: a settings file with a comma missing was read as if it
+// were empty, without a word, so the miner asked for in it never started.
+func TestASettingsFileThatCannotBeReadIsSaidSo(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := minerConfigProblem(); err != nil {
+		t.Fatalf("no file is no problem: %v", err)
+	}
+	broken := "{\n  \"miner_address\": \"CVN_abc\"\n  \"miner\": \"xmrig\"\n}\n"
+	if err := os.WriteFile("miner_config.json", []byte(broken), 0644); err != nil {
+		t.Fatal(err)
+	}
+	err := minerConfigProblem()
+	if err == nil {
+		t.Fatal("a settings file with a comma missing was passed over")
+	}
+	if !strings.Contains(err.Error(), "line 3") || !strings.Contains(err.Error(), "comma") {
+		t.Errorf("the message should name the line and the likely cause: %v", err)
+	}
+	if err := os.WriteFile("miner_config.json", []byte(strings.Replace(broken, "\"CVN_abc\"", "\"CVN_abc\",", 1)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := minerConfigProblem(); err != nil {
+		t.Errorf("a correct file was refused: %v", err)
 	}
 }

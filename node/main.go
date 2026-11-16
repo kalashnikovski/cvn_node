@@ -101,6 +101,12 @@ func Run(frontendAssets embed.FS) {
 	// is refused once the wallets have had their turn.
 	anchorErr := resolveGenesisAnchor(os.Args)
 	anchorRefused := anchorErr != nil && !errors.Is(anchorErr, errAnchorNotYetKnown)
+	// A settings file that cannot be read is refused, not passed over: its
+	// owner wrote it to be used.
+	if err := minerConfigProblem(); err != nil {
+		fmt.Println("🚨 " + err.Error())
+		os.Exit(1)
+	}
 	// A mistyped miner choice is better refused now than discovered later.
 	if _, err := chosenMiner(os.Args); err != nil {
 		fmt.Println("🚨 " + err.Error())

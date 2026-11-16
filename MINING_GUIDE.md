@@ -9,48 +9,82 @@ This guide applies to CVN networks that mine with RandomX: the development netwo
 | What it is | Part of the CVN program | A separate program the CVN program starts for you |
 | To install | Nothing | Download and unpack one folder |
 | Speed on a 16-core desktop (Ryzen 9 7950X3D, large pages on) | about 16,400 hashes per second | about 17,900 hashes per second |
-| Chosen with | nothing, or `--miner builtin` | `--miner xmrig` |
+| To use it | Nothing to do | Put its folder in the right place (below) |
 
-The built-in miner is what runs unless you ask for the other one. Both pay the same address, show the same dashboard and follow the same rules; the fast miner is roughly a tenth quicker.
+Both pay the same address, show the same dashboard and follow the same rules; the fast miner is roughly a tenth quicker. You start mining the same way with either: the CVN program uses the fast miner when it finds it and its own miner when it does not.
 
 ### Using the fast miner
 
-1. Download the CVN edition for your system from https://github.com/kalashnikovski/cvn-xmrig/releases. The current release is `cvn-6.26.0-2`. Its complete source is in that repository under the same tag (it is XMRig with CVN's two RandomX settings and no donation, under the GNU GPL version 3), so anyone can build it and compare what it does and how fast it runs. It is built exactly as XMRig is: follow XMRig's own instructions at https://xmrig.com/docs/miner/build on the tagged source. A build of your own will not have the same SHA-256 as the published one, because XMRig's builds are not repeatable bit for bit; the sums below check a download, not a rebuild. To check a download, compare its SHA-256 with the release's `SHA256SUMS` file, which reads:
+There is nothing to type and no file to edit. You download one folder, put it inside your CVN folder, and start the miner the way you always do.
+
+**Windows**
+
+1. Close the miner if it is running.
+2. Go to https://github.com/kalashnikovski/cvn-xmrig/releases and download `xmrig-cvn-windows-x64.zip` from the newest release (currently `cvn-6.26.0-2`).
+3. Open your CVN folder: the one that contains `cvn_miner.exe` and `LaunchMiner.bat`.
+4. Inside it, make a new folder named exactly `xmrig-cvn`.
+5. Unpack the ZIP and move its contents into that folder. When you are done it must look like this, with `xmrig.exe` directly inside `xmrig-cvn` and not one folder further down:
 
    ```
-   7782052f46500678aa06d5e798ea8e9b0e9ff0febc51a1048559cb280b67fd8d  xmrig-cvn-linux-static-x64.tar.gz
-   60c081d09fdeb3628995d5ce28a13c000372cf93b26dbf55922f2081d5f72a4b  xmrig-cvn-windows-x64.zip
+   cvn_node\                  (your CVN folder; yours may have another name)
+       cvn_miner.exe
+       LaunchMiner.bat
+       xmrig-cvn\
+           xmrig.exe
+           WinRing0x64.sys
+           ...
    ```
 
-   On Windows: `certutil -hashfile xmrig-cvn-windows-x64.zip SHA256`. On Linux: `sha256sum xmrig-cvn-linux-static-x64.tar.gz`.
-2. Unpack it into a folder named `xmrig-cvn` beside the CVN program, so that the folder contains `xmrig.exe` (Windows) or `xmrig` (Linux).
-3. Start the CVN program with `--miner xmrig`:
+6. Double-click `LaunchMiner.bat` as usual.
 
-   ```
-   cvn_miner.exe --network NAME --miner-address YOUR_CVN_ADDRESS --miner xmrig
-   ```
+**Linux**
 
-   Or make it permanent by adding one line to `miner_config.json`:
+1. Stop the miner if it is running.
+2. Download `xmrig-cvn-linux-static-x64.tar.gz` from the newest release at https://github.com/kalashnikovski/cvn-xmrig/releases.
+3. Make a folder named `xmrig-cvn` inside your CVN folder (the one that contains `cvn_node`) and unpack into it, so that the miner is at `cvn_node/xmrig-cvn/xmrig`:
 
-   ```json
-   {
-     "miner_address": "CVN_...",
-     "miner": "xmrig"
-   }
+   ```bash
+   cd cvn_node
+   mkdir -p xmrig-cvn
+   tar -xzf ~/Downloads/xmrig-cvn-linux-static-x64.tar.gz -C xmrig-cvn
+   ls xmrig-cvn
    ```
 
-   If you type an address into that file yourself, write it in full, exactly as your wallet shows it. On the launch networks an address ends with 8 check characters, and the program refuses a typed address without them: it cannot otherwise tell a typing mistake from an address.
+   If `ls` shows another folder and not a file named `xmrig`, move that folder's contents up one level into `xmrig-cvn`.
+4. Start the miner as usual.
 
-The CVN program starts the fast miner, gives it work, shows its speed on the usual dashboard and stops it when you close the program. You never run or configure XMRig yourself.
+**How to tell it is running.** Among the first lines the miner window prints, look for:
+
+```
+[MINER] Starting the fast miner: C:\cvn_node\xmrig-cvn\xmrig.exe
+```
+
+and, a little later, lines beginning `[FAST MINER]`. If you see `[RANDOMX] Mining engine ready` and no `[FAST MINER]` lines, the built-in miner is running: check step 5 (Windows) or step 3 (Linux), and look just above for a line beginning `[MINER]` that says why the fast miner was not used.
+
+The CVN program starts the fast miner, gives it work, shows its speed on the usual dashboard and stops it when you close the program. You never run or configure XMRig yourself, and you do not need to double-click anything inside `xmrig-cvn`.
+
+**To go back to the built-in miner,** rename or delete the `xmrig-cvn` folder, or start with `--miner builtin` (how to add an option like that is in [Installation_Guide.md](Installation_Guide.md), "Typing a command").
+
+**Checking the download (optional).** Compare the file's SHA-256 with the release's `SHA256SUMS` file, which for `cvn-6.26.0-2` reads:
+
+```
+7782052f46500678aa06d5e798ea8e9b0e9ff0febc51a1048559cb280b67fd8d  xmrig-cvn-linux-static-x64.tar.gz
+60c081d09fdeb3628995d5ce28a13c000372cf93b26dbf55922f2081d5f72a4b  xmrig-cvn-windows-x64.zip
+```
+
+On Windows: `certutil -hashfile xmrig-cvn-windows-x64.zip SHA256`. On Linux: `sha256sum xmrig-cvn-linux-static-x64.tar.gz`.
+
+**Where it comes from.** Its complete source is in that repository under the same tag: it is XMRig with CVN's two RandomX settings and no donation, under the GNU GPL version 3, so anyone can build it and compare what it does and how fast it runs. It is built exactly as XMRig is: follow XMRig's own instructions at https://xmrig.com/docs/miner/build on the tagged source. A build of your own will not have the same SHA-256 as the published one, because XMRig's builds are not repeatable bit for bit; the sums above check a download, not a rebuild.
 
 Things to know:
 
 - **Only the CVN edition works.** The standard XMRig computes a different RandomX. The CVN program asks the miner for its name before using it and will not use one that does not say it is the CVN edition. That check is against mistakes, not against a forged program: only put a miner there that you downloaded from the project page yourself.
-- **It is looked for beside the CVN program only**, never in whatever folder you happen to start the program from.
-- **If the fast miner is missing or keeps failing, the built-in miner takes over** and the dashboard says so. Your machine does not sit idle.
+- **It is looked for inside the CVN folder only**, never in whatever folder you happen to start the program from.
+- **If the fast miner keeps failing, the built-in miner takes over** and the dashboard says so. Your machine does not sit idle.
 - **A different location:** `--xmrig-path FOLDER_OR_FILE`, or `"xmrig_path"` in `miner_config.json`.
 - **Fewer threads:** `--threads N` limits either miner to N processor threads.
 - **Antivirus programs often flag mining software**, including XMRig and programs that start it, because the same software is abused by malware. If yours removes the files, you will need to allow the CVN folder in your antivirus settings. Only do this for files you downloaded from the two project pages yourself.
+- **If you edit `miner_config.json` by hand,** every line between the `{` and the `}` ends with a comma except the last, and an address is written in full, exactly as your wallet shows it. The program refuses to start if the file cannot be read, and says which line to look at.
 
 ### A small machine is a good node and a poor miner
 
@@ -85,8 +119,8 @@ Windows only gives large pages to an account that holds the "Lock pages in memor
 
 **Windows Home** (which has no `secpol.msc`)
 
-1. Unpack the CVN edition of XMRig as in section 1.
-2. Right-click `xmrig.exe`, choose **Run as administrator**, wait a few seconds and close it. When run as administrator it gives your account the right by itself.
+1. Put the fast miner in place as in section 1.
+2. Open the `xmrig-cvn` folder, right-click `xmrig.exe`, choose **Run as administrator**, wait a few seconds and close it. When run as administrator it gives your account the right by itself.
 3. Restart the computer.
 
 After that, start the miner normally. Administrator rights are not needed again.
@@ -127,11 +161,13 @@ If the built-in miner says only `full memory mode`, or the fast miner shows `hug
 - The computer has been running for a long time and its free memory is in small scattered pieces. Restart, and start the miner soon after.
 - Less than about 3 GB of memory is free.
 
-You can measure your machine at any time, without mining, with:
+You can measure your machine at any time with the miner stopped (how to type a command is in [Installation_Guide.md](Installation_Guide.md), "Typing a command"):
 
 ```
 cvn_miner.exe --randomx-bench
 ```
+
+On Linux: `./cvn_node --randomx-bench`.
 
 ### A warning about unstable machines
 

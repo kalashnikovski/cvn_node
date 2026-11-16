@@ -20,11 +20,11 @@ Full step-by-step instructions are in [Installation_Guide.md](Installation_Guide
 
 ### Windows
 
-1. Install the current version of [Go](https://go.dev/dl/).
-2. Download this repository and unpack it.
-3. Run `build_clean.bat`.
-4. Run `LaunchMiner.bat` to create a wallet and start mining. If it shows a mining address that is not yours, choose "Create a new wallet".
-5. Run `LaunchWallet.bat` for the desktop wallet.
+1. Download `cvn_node_windows.zip` from the newest [release](https://github.com/kalashnikovski/cvn_node/releases) and unpack it.
+2. In the unpacked folder, double-click `LaunchMiner.bat` to create a wallet and start mining. **Write the private key down when it is shown.** If it shows a mining address that is not yours, choose "Create a new wallet".
+3. Double-click `LaunchWallet.bat` for the desktop wallet.
+
+To build from the source instead: install [Go](https://go.dev/dl/), download this repository, and run `build_clean.bat`. Every step is spelled out in [Installation_Guide.md](Installation_Guide.md).
 
 ### Linux
 
@@ -44,7 +44,7 @@ To limit how many processor threads the miner uses:
 ./cvn_node --miner-address YOUR_CVN_ADDRESS --threads 4
 ```
 
-On networks that mine with RandomX you can choose between the built-in miner and a faster separate one, and a one-time system setting (large pages) makes either of them about a quarter faster. See [MINING_GUIDE.md](MINING_GUIDE.md).
+A one-time system setting (large pages) makes mining about a quarter faster, and an optional separate fast miner adds about a tenth more: you unpack one folder into your CVN folder and the program uses it by itself. Both are in [MINING_GUIDE.md](MINING_GUIDE.md).
 
 ### The wallet
 

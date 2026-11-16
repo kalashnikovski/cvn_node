@@ -23,12 +23,22 @@ One program does everything: it is the node, the miner and the text wallet. On W
 
 ### Install
 
+**The easy way: download the ready-made package.**
+
+1. Go to https://github.com/kalashnikovski/cvn_node/releases and open the newest release.
+2. Under **Assets**, download `cvn_node_windows.zip`.
+3. Right-click the downloaded file, choose **Extract All**, and pick a place of your own, for example `C:\`. You get a folder named `cvn_node`. This is your **CVN folder**; the rest of this guide refers to it by that name.
+
+The folder contains `cvn_miner.exe` (the node, miner and text wallet), `cvn_node.exe` (the desktop wallet) and two files to start them with, `LaunchMiner.bat` and `LaunchWallet.bat`. Nothing is installed anywhere else on your computer. To check the download, see section 10.
+
+Windows may show "Windows protected your PC" the first time you start a program from the folder, because the programs are not signed by a company. Click **More info**, then **Run anyway**.
+
+**The other way: build it yourself from the source.**
+
 1. Install Go from https://go.dev/dl/ (the Windows installer, a file ending in `.msi`). Accept the defaults.
-2. Download this project: on https://github.com/kalashnikovski/cvn_node click **Code**, then **Download ZIP**.
-3. Unpack the ZIP into a folder of your own, for example `C:\cvn_node`.
-4. In that folder, double-click **`build_clean.bat`**. It builds two programs:
-   - `cvn_miner.exe`, the node, miner and text wallet;
-   - `cvn_node.exe`, the desktop wallet.
+2. On https://github.com/kalashnikovski/cvn_node click **Code**, then **Download ZIP**.
+3. Unpack the ZIP into a folder of your own, for example `C:\cvn_node`. This is your CVN folder.
+4. In that folder, double-click **`build_clean.bat`**. It builds `cvn_miner.exe` and `cvn_node.exe`.
 
 ### Mine
 
@@ -43,21 +53,33 @@ Creating a wallet prints your address and your private key. **Write the private 
 
 The miner downloads the chain first (a progress bar), then starts mining. The dashboard shows the network height, your balance and your mining speed.
 
-Useful options are added after the file name, in a Command Prompt opened in the folder:
+To stop the miner, press `Ctrl+C` or close its window.
 
-| To do this | Run |
+### Typing a command
+
+Double-clicking is enough for ordinary use. A few things in this guide need an option added, such as `--threads 8`, and that means typing a command. This is how:
+
+1. Open your CVN folder in File Explorer.
+2. Click the address bar at the top (where the folder's path is shown), type `cmd` and press Enter. A black window opens, already in your CVN folder. It is called the Command Prompt.
+3. Type the command exactly as this guide shows it and press Enter.
+
+| To do this | Type |
 |---|---|
 | Mine to a wallet you already have | `LaunchMiner.bat --miner-address CVN_your_address` |
 | Use only some processor threads | `LaunchMiner.bat --threads 8` |
+| Mine on another network | `LaunchMiner.bat --network devnet` |
+| Several at once | `LaunchMiner.bat --network devnet --threads 8` |
 
-To stop the miner, press `Ctrl+C` or close its window.
+Commands in this guide that begin with `cvn_miner.exe` are typed the same way. Where one is shown beginning with `cvn_miner.exe` and you normally start the miner with `LaunchMiner.bat`, you can use `LaunchMiner.bat` in its place: it passes everything after its name on to the program.
+
+**If you use PowerShell** (the blue or black window Windows 11 opens with "Open in Terminal"), put `.\` in front of the file name: `.\LaunchMiner.bat --threads 8`, `.\cvn_miner.exe --wallet`. PowerShell does not run a program from the current folder without it.
 
 ### The wallet
 
 The wallet runs alongside the miner; leave the miner running.
 
 - **Desktop wallet:** double-click **`LaunchWallet.bat`**. If the window does not open on Windows 10, install Microsoft's WebView2 runtime ("Evergreen") from https://developer.microsoft.com/microsoft-edge/webview2/ . Windows 11 already has it.
-- **Text wallet:** in a Command Prompt opened in the folder, run `cvn_miner.exe --wallet`.
+- **Text wallet:** type `cvn_miner.exe --wallet` (see "Typing a command" above).
 
 ---
 
@@ -146,11 +168,16 @@ Both wallets do the same things.
 
 **Why combine?** A miner receives one separate coin for every block won, and one transfer can spend at most 200 coins. A wallet holding hundreds of mining rewards therefore cannot send them all at once. Combining sends them back to your own address as a few large coins. Your balance does not change, apart from any fee you choose to pay.
 
+**After combining or sending, wait for the next block before sending again.** The coins involved are tied up until a block confirms the transfer, usually within a minute or two. A transfer attempted before that is refused with "not enough coins are ready to spend". Nothing is lost: the balance shown is still yours, and the same transfer goes through after the next block.
+
 ---
 
 ## 5. Mining faster
 
-On networks that mine with RandomX, two things make a large difference: a one-time system setting called large pages, and an optional faster miner. Both are covered in [MINING_GUIDE.md](MINING_GUIDE.md).
+Two things make a large difference, and both are covered step by step in [MINING_GUIDE.md](MINING_GUIDE.md):
+
+- **Large pages**, a one-time system setting: about a quarter faster.
+- **The fast miner**, an optional separate program: about a tenth faster again. You download one folder and put it inside your CVN folder; the CVN program then uses it by itself.
 
 ---
 
@@ -158,7 +185,7 @@ On networks that mine with RandomX, two things make a large difference: a one-ti
 
 Stop the miner first.
 
-**Windows:** download the ZIP again, unpack it over your folder, and run `build_clean.bat`. The download does not contain a `miner_config.json` or a chain database, so yours are kept. If `LaunchMiner.bat` then shows you a mining address and asks whether it is yours, check it before answering: it asks whenever the saved address is not the one you confirmed.
+**Windows:** download the newest `cvn_node_windows.zip` and unpack it over your CVN folder, replacing the files it asks about. (If you build from the source: download the source ZIP again, unpack it over your folder, and run `build_clean.bat`.) The download does not contain a `miner_config.json` or a chain database, so yours are kept. If `LaunchMiner.bat` then shows you a mining address and asks whether it is yours, check it before answering: it asks whenever the saved address is not the one you confirmed.
 
 **Linux:**
 
@@ -257,6 +284,9 @@ That is the port on the CVN Testnet. On `devnet` it is 28081.
 | "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within two minutes if no other node can be reached, or if another node says it is ahead and then does not deliver. |
 | The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
+| "miner_config.json is not written correctly" | The file was edited by hand and has a mistake, most often a missing comma. The message names the line. Fix it, or delete the file and start `LaunchMiner.bat` with `--miner-address CVN_your_address`. |
+| "not enough coins are ready to spend" just after combining or sending | Wait for the next block and try again. See section 4. |
+| The fast miner does not start | See "How to tell it is running" in [MINING_GUIDE.md](MINING_GUIDE.md). |
 | The desktop wallet shows no balance | Check that the miner is running and that both were started on the same network. |
 
 ---

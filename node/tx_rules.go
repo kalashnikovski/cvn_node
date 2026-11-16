@@ -1021,7 +1021,9 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 		if len(inputs) >= TxMaxInputs {
 			return Transaction{}, fmt.Errorf("this amount needs more than %d coins in one transfer; the largest %d add up to %s CVN, so send it in smaller parts", TxMaxInputs, TxMaxInputs, FormatUnits(gatheredUnits))
 		}
-		return Transaction{}, fmt.Errorf("insufficient spendable balance: need %s, have %s", FormatUnits(requiredUnits), FormatUnits(gatheredUnits))
+		return Transaction{}, fmt.Errorf("not enough coins are ready to spend: this needs %s CVN and %s CVN are ready. "+
+			"If you have just combined your coins or sent a transfer, your coins are tied up in it until the next block confirms it, usually within a minute or two. "+
+			"Your balance is not lost; try again after the next block", FormatUnits(requiredUnits), FormatUnits(gatheredUnits))
 	}
 	outputs := []UTXOOutput{{Recipient: recipient, Amount: UnitsAmount(amountUnits)}}
 	// Change too small to be a valid output is left for the miner as part of
