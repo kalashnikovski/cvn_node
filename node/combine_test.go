@@ -85,18 +85,11 @@ func TestCombineRefusals(t *testing.T) {
 	}
 }
 
-// Twelve mining rewards become one coin, on the launch rules and on the rules
-// of the first test network.
+// Twelve mining rewards become one coin.
 func TestCombineOnAChain(t *testing.T) {
-	for _, network := range []string{"devnet", "testnet-1"} {
+	for _, network := range []string{"devnet"} {
 		t.Run(network, func(t *testing.T) {
-			startTestChain(t, network, func() {
-				Params.TxForkHeight = 1
-				if Params.HeartbeatHeight > 11 {
-					Params.HeartbeatHeight = 11
-				}
-				applyParams()
-			})
+			startTestChain(t, network)
 			privateKey, publicKey, owner, err := GenerateKeyPair()
 			if err != nil {
 				t.Fatal(err)

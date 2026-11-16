@@ -143,10 +143,10 @@ func buildStratumJob(address string) (*stratumJob, bool) {
 		return nil, false
 	}
 	serial := atomic.AddInt64(&stratumSerial, 1)
-	transactions, uncleHash, uncleMiner := buildBlockContents(tip, address, timestamp, fmt.Sprintf("external-%d-%d", serial, time.Now().UnixNano()))
+	transactions := buildBlockContents(tip, address, timestamp, fmt.Sprintf("external-%d-%d", serial, time.Now().UnixNano()))
 	template := Block{
 		Version: 1, Index: nextIndex, Timestamp: timestamp, Transactions: transactions, PrevHash: tip.Hash,
-		Difficulty: CalculateNextDifficulty(tip, timestamp), UncleHash: uncleHash, UncleMiner: uncleMiner,
+		Difficulty: CalculateNextDifficulty(tip, timestamp), UncleHash: emptyUncleHash, UncleMiner: emptyUncleMiner,
 	}
 	txDigest := BlockTransactionsDigest(nextIndex, transactions)
 	return &stratumJob{

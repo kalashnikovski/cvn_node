@@ -122,30 +122,3 @@ func TestATransferHasOneForm(t *testing.T) {
 		}
 	}
 }
-
-// The first test network keeps its looser rules: its old transfers must stay valid.
-func TestTestnet1TransfersAreUnchanged(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	privateKey, publicKey, owner, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	coins := map[string]UTXORecord{"TX_A_0": {Amount: UnitsAmount(cvn("50")), Recipient: owner}}
-	lookup := func(key string) (UTXORecord, bool) { record, ok := coins[key]; return record, ok }
-	tx, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("0.5"), []SpendableCoin{{TxID: "TX_A", Index: 0, Amount: UnitsAmount(cvn("50"))}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tx.Inputs[0].AmountUnits != 0 {
-		t.Error("a testnet-1 transfer gained a field its format does not have")
-	}
-	if fee, _, err := checkTransferAgainstCoins(tx, lookup, nil); err != nil || fee != cvn("0.5") {
-		t.Fatalf("a testnet-1 transfer: fee %d, err %v", fee, err)
-	}
-	// A signature in the short form older wallets produced is still accepted there.
-	parts := strings.Split(tx.Signature, "|")
-	tx.Signature = strings.TrimLeft(parts[0], "0") + "|" + strings.TrimLeft(parts[1], "0")
-	if _, _, err := checkTransferAgainstCoins(tx, lookup, nil); err != nil {
-		t.Errorf("testnet-1 refused a signature without leading zeros: %v", err)
-	}
-}

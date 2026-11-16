@@ -81,18 +81,14 @@ func workAboveAncestor(ancestor Block) *big.Int {
 }
 
 func TestBlockWork(t *testing.T) {
-	saved := HeartbeatActivationHeight
-	HeartbeatActivationHeight = 100
-	defer func() { HeartbeatActivationHeight = saved }()
-
 	if got := BlockWork(Block{Index: 100, Difficulty: 90000000}); got.Int64() != 90000000 {
-		t.Errorf("heartbeat block work = %s, want its difficulty", got)
+		t.Errorf("block work = %s, want its difficulty", got)
 	}
-	if got := BlockWork(Block{Index: 50, Difficulty: 5}); got.Int64() != 16*16*16*16*16 {
-		t.Errorf("five leading zeros = %s hashes, want 16^5", got)
+	if got := BlockWork(Block{Index: 1, Difficulty: 5000}); got.Int64() != 5000 {
+		t.Errorf("the first block's work = %s, want its difficulty", got)
 	}
-	if got := BlockWork(Block{Index: 3, Difficulty: 9}); got.Int64() != 256 {
-		t.Errorf("the first ten blocks count as two leading zeros, got %s", got)
+	if got := BlockWork(Block{Index: 0, Difficulty: 2}); got.Int64() != 256 {
+		t.Errorf("the genesis block counts for a fixed 256, got %s", got)
 	}
 }
 
@@ -260,10 +256,6 @@ func TestPeerComparison(t *testing.T) {
 }
 
 func TestSameHeightRace(t *testing.T) {
-	saved := HeartbeatActivationHeight
-	HeartbeatActivationHeight = 1
-	defer func() { HeartbeatActivationHeight = saved }()
-
 	low := Block{Index: 50, Difficulty: 70000, Hash: "0000aaaa"}
 	high := Block{Index: 50, Difficulty: 70000, Hash: "0000bbbb"}
 	if !siblingWins(low, high) || siblingWins(high, low) {
@@ -292,7 +284,7 @@ func TestStoringTheSameBlockTwice(t *testing.T) {
 // alone and before checking it, and then could not attach the other block.
 func TestBlockFromAnotherBranchDoesNotRemoveOurTip(t *testing.T) {
 	t.Chdir(t.TempDir())
-	for _, network := range []string{"devnet", "testnet-1"} {
+	for _, network := range []string{"devnet"} {
 		t.Run(network, func(t *testing.T) {
 			startTestChain(t, network)
 			timestamp := Params.GenesisTimestamp + 100

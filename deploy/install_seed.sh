@@ -9,8 +9,6 @@
 #
 #   bash install_seed.sh                  the CVN Testnet
 #   bash install_seed.sh cvn_testnet      the same, by name
-#   bash install_seed.sh testnet-1        the first test network (no longer
-#                                         maintained)
 #   bash install_seed.sh devnet HOST,HOST,...
 #                                         the development network, which has
 #                                         no seeds of its own and must be
@@ -39,10 +37,9 @@ DIR=/opt/cvn_node
 REPO=https://github.com/kalashnikovski/cvn_node
 
 case "$NETWORK" in
-  testnet-1)   PORTS=8080:8081 ;;
   cvn_testnet) PORTS=18080:18081 ;;
   devnet)      PORTS=28080:28081 ;;
-  *) echo "Unknown network: $NETWORK (use testnet-1, cvn_testnet or devnet)"; exit 1 ;;
+  *) echo "Unknown network: $NETWORK (use cvn_testnet or devnet)"; exit 1 ;;
 esac
 if [ -n "$HEIGHT" ]; then
   if [ "$NETWORK" != devnet ]; then

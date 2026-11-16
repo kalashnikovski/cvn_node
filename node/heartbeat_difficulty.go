@@ -3,22 +3,19 @@ package node
 import (
 	"fmt"
 	"math/big"
-	"strings"
 	"sync"
 )
 
-// HEARTBEAT DIFFICULTY
+// THE DIFFICULTY RULE
 //
-// From HeartbeatActivationHeight onward the chain stops spacing blocks with a
-// 45-second wait inside the miner (which any custom miner can simply delete)
-// and spaces them with proof-of-work instead:
+// Blocks are spaced by proof of work alone:
 //
-//   - Difficulty becomes a fine-grained number: the average count of hashes a
-//     block needs. A hash is valid when hash <= (2^256 - 1) / Difficulty. The
-//     old rule counted leading zero digits, so every step was a 16x jump.
+//   - Difficulty is a fine-grained number: the average count of hashes a
+//     block needs. A hash is valid when hash <= (2^256 - 1) / Difficulty.
 //   - Difficulty is re-tuned on every block from how long the parent took:
-//     faster than 45 s nudges it up, slower nudges it down. Over any long run
-//     the chain's own timestamps therefore average 45 s per block, whatever
+//     faster than 45 s nudges it up, slower nudges it down. It also leans
+//     against how far the whole chain is from its schedule, so over any long
+//     run the chain's own timestamps average 45 s per block, whatever
 //     hashrate joins or leaves.
 //   - A block found 3 seconds after its parent is still valid. It just cost
 //     real work, and it makes the next block harder. Nobody can keep producing
@@ -27,10 +24,9 @@ import (
 //     difficulty of the block being mined halves, and halves again every
 //     further 3 minutes, so the chain cannot flatline.
 //
-// Every node must run this rule before the activation height. A node that does
-// not will reject the first heartbeat block and stay behind on its own chain.
-// A variable only so tests can activate the rule early; treat it as a constant.
-var HeartbeatActivationHeight = int64(2500)
+// The rule applies from the first block after the genesis block. (Its name in
+// the code, "heartbeat", comes from the first test network, where it replaced
+// an earlier rule part-way through the chain.)
 
 const (
 	HeartbeatTargetSeconds = int64(45)
@@ -39,10 +35,10 @@ const (
 	// A parent slower than this is treated as this slow, capping one step at -50%.
 	HeartbeatMaxSolveSeconds = 11 * HeartbeatTargetSeconds
 
-	// Difficulty of the very first heartbeat block. The retarget corrects a
+	// Starting difficulty for a network that names none. The rule corrects a
 	// wrong guess within a few dozen blocks in either direction.
 	HeartbeatInitialDifficulty = 40000000
-	// 65536 equals the old four-leading-zeros floor.
+	// The lowest difficulty where a network's mining schedule names none.
 	HeartbeatMinDifficulty = 65536
 	HeartbeatMaxDifficulty = 1 << 55
 
@@ -57,9 +53,11 @@ const (
 
 var heartbeatMaxHash = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
 
-// IsHeartbeatHeight reports whether the block at this height follows the heartbeat rules.
+// IsHeartbeatHeight reports whether the block at this height is mined under
+// the difficulty rule: every block except the genesis block, which the
+// program builds itself.
 func IsHeartbeatHeight(height int64) bool {
-	return height >= HeartbeatActivationHeight
+	return height >= 1
 }
 
 // HeartbeatTargetHex returns the largest valid hash for a difficulty as 64
@@ -72,13 +70,11 @@ func HeartbeatTargetHex(difficulty int) string {
 	return fmt.Sprintf("%064x", target)
 }
 
-// HashMeetsDifficulty is the single proof-of-work check for both rule sets.
+// HashMeetsDifficulty is the proof-of-work check: the hash, read as a number,
+// must be at or below the target for the difficulty.
 func HashMeetsDifficulty(hashHex string, height int64, difficulty int) bool {
 	if !IsHeartbeatHeight(height) {
-		if difficulty < 0 {
-			return false
-		}
-		return strings.HasPrefix(hashHex, strings.Repeat("0", difficulty))
+		return false // the genesis block is not mined
 	}
 	if len(hashHex) != 64 || int64(difficulty) < minDifficultyAt(height) {
 		return false
@@ -166,9 +162,6 @@ const HeartbeatRampBlocks = 40
 // first block after the window, two for the second, and so on, until after
 // HeartbeatRampBlocks blocks the rule is the ordinary one.
 func launchRampGap(height, gapSeconds int64) int64 {
-	if !Params.ScheduleAnchored {
-		return gapSeconds
-	}
 	allowed := height - HeartbeatLaunchBlocks
 	if allowed < 1 || allowed >= HeartbeatRampBlocks {
 		return gapSeconds
@@ -182,7 +175,7 @@ func launchRampGap(height, gapSeconds int64) int64 {
 // inLaunchWindow reports whether a block at this height is one of the first
 // blocks of a network that starts the launch way.
 func inLaunchWindow(height int64) bool {
-	return Params.ScheduleAnchored && height >= 1 && height <= HeartbeatLaunchBlocks
+	return height >= 1 && height <= HeartbeatLaunchBlocks
 }
 
 // launchDifficulty is the network's starting difficulty.
@@ -198,7 +191,7 @@ func launchDifficulty() int64 {
 // relief.
 func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
 	base := int64(lastBlock.Difficulty)
-	if Params.ScheduleAnchored && Params.ReliefNotInherited {
+	if Params.ReliefNotInherited {
 		base = unrelievedDifficulty(lastBlock)
 	}
 	return heartbeatDifficultyFromBase(lastBlock, base, gapSeconds)
@@ -210,17 +203,13 @@ func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
 // is not inherited, the difficulty it would have carried without relief.
 func heartbeatDifficultyFromBase(lastBlock Block, base int64, gapSeconds int64) int {
 	if !IsHeartbeatHeight(lastBlock.Index) {
-		// lastBlock is not a heartbeat block (the genesis block, or one that
-		// still carries an old leading-zeros difficulty): start from the
-		// network's initial difficulty.
+		// lastBlock is the genesis block: start from the network's starting
+		// difficulty.
 		initial := Params.HeartbeatInitialDifficulty
 		if initial < 1 {
 			initial = HeartbeatInitialDifficulty
 		}
-		if Params.ScheduleAnchored {
-			return int(heartbeatRetargetAnchored(initial, HeartbeatTargetSeconds, gapSeconds, 0, minDifficultyAt(lastBlock.Index+1)))
-		}
-		return int(heartbeatRetarget(initial, HeartbeatTargetSeconds, gapSeconds))
+		return int(heartbeatRetargetAnchored(initial, HeartbeatTargetSeconds, gapSeconds, 0, minDifficultyAt(lastBlock.Index+1)))
 	}
 	minimum := minDifficultyAt(lastBlock.Index + 1)
 	if era := powEraStartingAt(lastBlock.Index + 1); era != nil && era.StartDifficulty > 0 {
@@ -231,9 +220,6 @@ func heartbeatDifficultyFromBase(lastBlock Block, base int64, gapSeconds int64) 
 	solveSeconds := HeartbeatTargetSeconds
 	if grandParent := GetBlockByHeightFromDB(lastBlock.Index - 1); grandParent.Hash != "" {
 		solveSeconds = difficultyClock(lastBlock.Timestamp) - difficultyClock(grandParent.Timestamp)
-	}
-	if !Params.ScheduleAnchored {
-		return int(heartbeatRetarget(int64(lastBlock.Difficulty), solveSeconds, gapSeconds))
 	}
 	if lastBlock.Index <= 1 {
 		// Block 1 follows the genesis block, whose date says nothing about how
@@ -394,11 +380,11 @@ const (
 	HeartbeatDriftLimitPercent = int64(1)
 )
 
-// heartbeatRetargetAnchored is heartbeatRetarget with one more term. The plain
-// rule looks only at the parent block, and over a long run its blocks come a
-// few percent faster than the target. This form also looks at how far the
-// whole chain is from its schedule and leans against that, so the long-run
-// average is the target exactly.
+// heartbeatRetargetAnchored is the arithmetic of the rule. Looking only at
+// the parent block, blocks would come a few percent faster than the target
+// over a long run (the first test network's did). So the rule also looks at
+// how far the whole chain is from its schedule and leans against that, and
+// the long-run average is the target exactly.
 //
 //	difficulty * (1 + (target - solve)/(target*window)
 //	                - drift/(target*window*damping))      drift term capped
@@ -442,37 +428,6 @@ func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds,
 	}
 	if difficulty < minimumDifficulty {
 		difficulty = minimumDifficulty
-	}
-	if difficulty > HeartbeatMaxDifficulty {
-		difficulty = HeartbeatMaxDifficulty
-	}
-	return difficulty
-}
-
-// heartbeatRetarget is the pure arithmetic of the rule. parentDifficulty and
-// parentSolveSeconds describe the parent block; gapSeconds is how long after
-// the parent the new block is dated.
-func heartbeatRetarget(parentDifficulty int64, parentSolveSeconds int64, gapSeconds int64) int64 {
-	difficulty := parentDifficulty
-	if parentSolveSeconds < 1 {
-		parentSolveSeconds = 1
-	}
-	if parentSolveSeconds > HeartbeatMaxSolveSeconds {
-		parentSolveSeconds = HeartbeatMaxSolveSeconds
-	}
-	// difficulty * (1 + (target - solve) / (target * window)), in whole numbers.
-	difficulty += difficulty / (HeartbeatTargetSeconds * HeartbeatWindow) * (HeartbeatTargetSeconds - parentSolveSeconds)
-
-	if gapSeconds >= HeartbeatStallAfterSeconds {
-		halvings := (gapSeconds-HeartbeatStallAfterSeconds)/HeartbeatStallStepSeconds + 1
-		if halvings > 40 {
-			halvings = 40
-		}
-		difficulty >>= uint(halvings)
-	}
-
-	if difficulty < HeartbeatMinDifficulty {
-		difficulty = HeartbeatMinDifficulty
 	}
 	if difficulty > HeartbeatMaxDifficulty {
 		difficulty = HeartbeatMaxDifficulty

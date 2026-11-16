@@ -293,11 +293,12 @@ func TestWorkServerRefusesAMinerWithoutAnAddress(t *testing.T) {
 }
 
 func TestWorkServerOnlyRunsOnRandomXNetworks(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	if networkUsesRandomX() || Params.StratumPort != 0 || StartMiningWorkServer() != "" {
-		t.Error("testnet-1 mines with SHA-256 and must not start a work server")
-	}
 	onNetwork(t, "devnet")
+	Params.PowSchedule = nil
+	if networkUsesRandomX() || StartMiningWorkServer() != "" {
+		t.Error("a network that mines with SHA-256 must not start a work server")
+	}
+	Params.PowSchedule = devnetParams.PowSchedule
 	if !networkUsesRandomX() || Params.StratumPort != 28083 {
 		t.Error("devnet must offer mining work on port 28083")
 	}

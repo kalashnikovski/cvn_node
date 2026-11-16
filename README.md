@@ -2,7 +2,7 @@
 
 Covenant Standard is a proof-of-work blockchain written from scratch in Go. It is built for fair, open mining on ordinary home computers: no pre-mine, no founder allocation, no investor sale.
 
-> **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`). The first test network (`testnet-1`) is no longer maintained. Coins on all of these have no value. Mine to help test, not to accumulate.
+> **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`). The first test network (`testnet-1`) has been retired. Coins on all of these have no value. Mine to help test, not to accumulate.
 
 ## What works today
 
@@ -83,7 +83,7 @@ Any node answers these in a browser:
 From the maintainer, who wrote this software and runs its seed nodes:
 
 - **No coins have been sold, promised or set aside** for anyone, by any arrangement, and none will be. The first block pays nothing. Every coin there will ever be is paid by the rules to whoever mines a block.
-- **Coins on the test networks carry over to nothing.** `testnet-1`, the CVN Testnet and `devnet` are for testing. Their coins have no value and no claim on any later network, which will start from zero for everyone.
+- **Coins on the test networks carry over to nothing.** The CVN Testnet and `devnet` are for testing, as was the first test network (`testnet-1`, now retired). Their coins have no value and no claim on any later network, which will start from zero for everyone.
 - **I will mine from the first block, like anyone else,** with one home computer (a 16-core desktop processor) running the programs published here. Its mining address will be published before the start, so that anyone can see what it earned.
 - **The seed nodes do not mine.** They are rented servers that keep the chain and pass blocks on. The computer I mine with is not a seed and has no better place on the network than yours.
 - **The start is announced in advance** as a Bitcoin block height fixed in a tagged release of this software, together with the packages, their SHA-256 sums and the source of the faster miner, so that everybody has the same programs and nobody can begin early. How that works, and how to check it afterwards, is in section 11 of the [design paper](WHITEPAPER.md).
@@ -92,15 +92,15 @@ What reviewers found when they tested these claims against the code, and what wa
 
 ## Design in brief
 
-| | Test network today | Planned for launch |
-|---|---|---|
-| Block time | 45 seconds | 45 seconds |
-| Mining algorithm | SHA-256 | RandomX, tuned for home processors |
-| Block reward | 50 CVN | 50 CVN, halving every 7 years for 49 years |
-| Total supply | — | 486,727,500 CVN |
-| Fees | Voluntary; zero is allowed | Voluntary; zero is allowed |
-| Lost coins | — | 20% of any coin unmoved for 7 years returns to miners over time |
-| Pre-mine | None | None |
+| | |
+|---|---|
+| Block time | 45 seconds |
+| Mining algorithm | RandomX, tuned for home processors |
+| Block reward | 50 CVN, halving every 7 years for 49 years |
+| Total supply | 486,727,500 CVN |
+| Fees | Voluntary; zero is allowed |
+| Lost coins | 20% of any coin unmoved for 7 years returns to miners over time |
+| Pre-mine | None |
 
 The launch rules run on a separate development network (`--network devnet`). The public test of them, the CVN Testnet (`--network cvn_testnet`), is defined but not started; its start will be announced as a Bitcoin block height.
 

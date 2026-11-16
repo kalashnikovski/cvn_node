@@ -237,14 +237,11 @@ func TestWorkServerPaysOnlyARealAddress(t *testing.T) {
 	}
 }
 
-// Round 2 finding: under the first test network's rules a block's identifier
-// was not checked to be its own before the node acted on it.
+// Round 2 finding: where blocks are mined with SHA-256 (as every test chain
+// here is), a block's identifier was not checked to be its own before the
+// node acted on it.
 func TestAnIdentifierThatIsNotTheBlocksOwnIsRefusedOnArrival(t *testing.T) {
-	startTestChain(t, "testnet-1", func() {
-		Params.HeartbeatHeight = 1
-		Params.HeartbeatInitialDifficulty = HeartbeatMinDifficulty // so the test blocks mine in a moment
-		applyParams()
-	})
+	startTestChain(t, "devnet")
 	timestamp := Params.GenesisTimestamp + 100
 	for i := 0; i < 3; i++ {
 		timestamp += 45

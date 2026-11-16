@@ -35,6 +35,10 @@ func TestMiningHoldDecision(t *testing.T) {
 
 func TestHeartbeatRetarget(t *testing.T) {
 	const difficulty = int64(90000000)
+	// The rule with the chain exactly on schedule.
+	heartbeatRetarget := func(parentDifficulty, parentSolveSeconds, gapSeconds int64) int64 {
+		return heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds, 0, HeartbeatMinDifficulty)
+	}
 	if got := heartbeatRetarget(difficulty, HeartbeatTargetSeconds, 10); got != difficulty {
 		t.Errorf("a parent solved exactly on target changed difficulty to %d", got)
 	}

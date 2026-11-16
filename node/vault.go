@@ -25,9 +25,6 @@ import (
 // is worked out from the vault as it stood after the previous block and taken
 // out; then this block's share of fees, its sweep and anything it left
 // unclaimed are put in.
-//
-// This applies on networks that run the launch rules (Params.Economics set).
-// On testnet-1 there is no vault and miners keep every fee.
 
 var vaultBucket = []byte("vault")
 
@@ -47,13 +44,14 @@ type blockAccounting struct {
 }
 
 // SubsidyUnits is what the block pays apart from fees: the new reward plus
-// the vault's payout. When an uncle is named, this is what is split 80/20.
+// the vault's payout.
 func (a blockAccounting) SubsidyUnits() int64 { return a.RewardUnits + a.VaultPayoutUnits }
 
 // MinerAllowanceUnits is the most the block's reward outputs may add up to.
 func (a blockAccounting) MinerAllowanceUnits() int64 { return a.SubsidyUnits() + a.MinerFeeUnits }
 
-// vaultEnabled reports whether this network has a vault.
+// vaultEnabled reports whether this network has a vault. Every network does;
+// the question remains for a database opened before any network is chosen.
 func vaultEnabled() bool { return Params.Economics != nil }
 
 // accountForBlock works out the accounting of a block at `height` whose

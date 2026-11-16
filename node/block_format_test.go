@@ -5,17 +5,14 @@ import (
 	"testing"
 )
 
-// The old header was a line of text with its fields joined by dashes, so
-// text could be moved from one field to the next without changing the line.
-// Under the launch format each of those headers has its own identifier.
+// An earlier header format was a line of text with its fields joined by
+// dashes, so text could be moved from one field to the next without changing
+// the line: these two headers had the same identifier. Each field is now
+// written with its length, and each header has its own identifier.
 func TestHeaderFieldsCannotBleedIntoEachOther(t *testing.T) {
 	first := Block{Version: 1, Index: 5, Timestamp: 100, PrevHash: "p", Difficulty: 7, GuardMatrix: "a", Nonce: 1, UncleHash: "h", UncleMiner: "m-2-x-y"}
 	second := Block{Version: 1, Index: 5, Timestamp: 100, PrevHash: "p", Difficulty: 7, GuardMatrix: "a-1-h-m", Nonce: 2, UncleHash: "x", UncleMiner: "y"}
 
-	onNetwork(t, "testnet-1")
-	if CalculateHashWithTxDigest(first, "d") != CalculateHashWithTxDigest(second, "d") {
-		t.Fatal("this pair no longer shows the weakness of the old format; the test needs a new example")
-	}
 	onNetwork(t, "devnet")
 	if CalculateHashWithTxDigest(first, "d") == CalculateHashWithTxDigest(second, "d") {
 		t.Error("two different headers have the same identifier under the launch format")
@@ -231,23 +228,5 @@ func TestBlockSizeLimit(t *testing.T) {
 	MempoolMatrix.Unlock()
 	if err := AdmitTransactionToMempool(transfers[5]); err == nil || !strings.Contains(err.Error(), "more than a block can hold") {
 		t.Errorf("a transfer too large for any block was not refused for that reason: %v", err)
-	}
-}
-
-// The first test network keeps its original format, uncles and all.
-func TestTestnet1FormatIsUnchanged(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	if Params.StrictFormat || Params.NoUncles || Params.MaxBlockBytes != 0 {
-		t.Fatal("testnet-1 must not take on the launch format")
-	}
-	loose := Block{Index: 5, Version: 2, GuardMatrix: "anything", UncleHash: "", UncleMiner: ""}
-	if err := checkBlockFormat(loose); err != nil {
-		t.Errorf("testnet-1 refused a block for its format: %v", err)
-	}
-	if err := checkTransferFormat(Transaction{DataSizeKB: 1, Extra: []byte("x")}); err != nil {
-		t.Errorf("testnet-1 refused a transfer for its format: %v", err)
-	}
-	if blockTransferBudgetBytes() != 0 {
-		t.Error("testnet-1 has no block size limit")
 	}
 }

@@ -2,9 +2,7 @@ package node
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 )
@@ -15,20 +13,10 @@ import (
 // units, 100,000,000 to one CVN. All arithmetic and every comparison in the
 // rules is done on those whole numbers. Nothing in the rules uses fractions.
 //
-// How an amount is written into a block depends on the network:
-//
-//   - On a network with AmountsAsUnits set (devnet, and the launch network),
-//     it is written as the whole number of units, in blocks, in the coin
-//     database and in what is hashed and signed.
-//
-//   - testnet-1 began before this and writes amounts as decimal CVN numbers.
-//     Its block hashes and transfer IDs were computed from those decimal
-//     numbers exactly as written, so an Amount read on testnet-1 also keeps
-//     the original decimal number and reproduces it when hashing or writing.
-//     That is the only use of the decimal form; the rules never read it.
-//
-// The testnet-1 handling is confined to this file and can be deleted when
-// that network is retired.
+// An amount is written as that whole number of units everywhere: in blocks,
+// in the coin database, and in what is hashed and signed. Decimal CVN
+// numbers appear only where a person reads or types one (FormatUnits and
+// the wallets).
 
 // UnitsPerCVN is the number of smallest units in one CVN.
 const UnitsPerCVN = int64(100000000)
@@ -39,15 +27,13 @@ const MaxAmountUnits = int64(2100000000) * UnitsPerCVN
 // Amount is a quantity of CVN held as whole units.
 type Amount struct {
 	units int64
-	// decimal is the number as written on a network that stores decimals.
-	decimal float64
 	// invalid marks a value that was not a usable amount when read.
 	invalid bool
 }
 
 // UnitsAmount makes an Amount from a whole number of units.
 func UnitsAmount(units int64) Amount {
-	return Amount{units: units, decimal: float64(units) / float64(UnitsPerCVN)}
+	return Amount{units: units}
 }
 
 // Units is the amount as a whole number of units.
@@ -73,44 +59,24 @@ func (a Amount) ValidFee() bool {
 
 // hashText is the form of the amount that goes into hashes and signatures.
 func (a Amount) hashText() string {
-	if Params.AmountsAsUnits {
-		return strconv.FormatInt(a.units, 10)
-	}
-	return strconv.FormatFloat(a.decimal, 'g', -1, 64)
+	return strconv.FormatInt(a.units, 10)
 }
 
-// MarshalJSON writes the amount the way the current network stores it.
+// MarshalJSON writes the amount as its whole number of units.
 func (a Amount) MarshalJSON() ([]byte, error) {
-	if Params.AmountsAsUnits {
-		return []byte(strconv.FormatInt(a.units, 10)), nil
-	}
-	if math.IsNaN(a.decimal) || math.IsInf(a.decimal, 0) {
-		return []byte("0"), nil
-	}
-	return json.Marshal(a.decimal)
+	return []byte(strconv.FormatInt(a.units, 10)), nil
 }
 
-// UnmarshalJSON reads an amount the way the current network stores it. It
-// never fails on a badly formed number; it marks the amount invalid, and the
-// rules then refuse whatever carries it.
+// UnmarshalJSON reads an amount written as a whole number of units. It never
+// fails on a badly formed number; it marks the amount invalid, and the rules
+// then refuse whatever carries it.
 func (a *Amount) UnmarshalJSON(data []byte) error {
-	text := string(bytes.TrimSpace(data))
-	if Params.AmountsAsUnits {
-		units, err := parseWholeUnits(text)
-		if err != nil {
-			*a = Amount{invalid: true}
-			return nil
-		}
-		*a = UnitsAmount(units)
-		return nil
-	}
-	decimal, err := strconv.ParseFloat(text, 64)
+	units, err := parseWholeUnits(string(bytes.TrimSpace(data)))
 	if err != nil {
 		*a = Amount{invalid: true}
 		return nil
 	}
-	units, ok := decimalToUnits(decimal)
-	*a = Amount{units: units, decimal: decimal, invalid: !ok}
+	*a = UnitsAmount(units)
 	return nil
 }
 
@@ -132,14 +98,6 @@ func parseWholeUnits(text string) (int64, error) {
 	return units, nil
 }
 
-// decimalToUnits rounds a decimal CVN number to the nearest unit.
-func decimalToUnits(decimal float64) (int64, bool) {
-	if math.IsNaN(decimal) || math.IsInf(decimal, 0) || decimal < 0 || decimal > float64(MaxAmountUnits/UnitsPerCVN) {
-		return 0, false
-	}
-	return int64(math.Round(decimal * float64(UnitsPerCVN))), true
-}
-
 // addUnits adds two unit amounts and refuses totals no real balance can reach.
 func addUnits(a, b int64) (int64, error) {
 	if a < 0 || b < 0 || a > MaxAmountUnits || b > MaxAmountUnits || a+b > MaxAmountUnits {
@@ -150,11 +108,7 @@ func addUnits(a, b int64) (int64, error) {
 
 // BlockRewardUnits is the newly issued reward for a height, in units.
 func BlockRewardUnits(height int64) int64 {
-	if Params.Economics != nil {
-		return Params.Economics.RewardUnitsAt(height)
-	}
-	units, _ := decimalToUnits(CalculateBlockReward(height))
-	return units
+	return Params.Economics.RewardUnitsAt(height)
 }
 
 // FormatUnits writes a unit amount as a CVN number with up to eight decimals.

@@ -1,6 +1,6 @@
 # Mining guide: choosing a miner, large pages and processor tuning
 
-This guide applies to CVN networks that mine with RandomX: the development network today, and the public test network and mainnet when they launch. The first test network (testnet-1) mines with SHA-256 and needs none of this.
+This guide applies to every CVN network: the development network today, and the public test network and mainnet when they launch. All of them mine with RandomX.
 
 ## 1. Two miners to choose from
 

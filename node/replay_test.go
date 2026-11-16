@@ -30,7 +30,7 @@ import (
 //
 // The file is copied first; the original is never opened for writing, and it
 // may belong to a running node. Set CVN_REPLAY_NETWORK for a network other
-// than testnet-1.
+// than devnet.
 func TestReplayRealChain(t *testing.T) {
 	sourcePath := os.Getenv("CVN_REPLAY_DB")
 	if sourcePath == "" {
@@ -43,10 +43,20 @@ func TestReplayRealChain(t *testing.T) {
 	}
 	network := os.Getenv("CVN_REPLAY_NETWORK")
 	if network == "" {
-		// Not the program's default network, which is the CVN Testnet: the
-		// chain this replay was written for is the first test network's.
-		network = "testnet-1"
+		// Not the program's default network, which is the CVN Testnet and
+		// has no chain until it is scheduled: the chain there is to replay
+		// is the development network's.
+		network = "devnet"
 	}
+
+	// The network is chosen before anything is read: how a stored block's
+	// amounts are decoded depends on it.
+	beforeReplay := Params
+	t.Cleanup(func() { Params = beforeReplay; applyParams() })
+	if err := SelectNetwork(network); err != nil {
+		t.Fatalf("select network: %v", err)
+	}
+	asRun := Params
 
 	copyPath := filepath.Join(t.TempDir(), "source_copy.db")
 	if err := copyFileForTest(sourcePath, copyPath); err != nil {
@@ -89,7 +99,27 @@ func TestReplayRealChain(t *testing.T) {
 		t.Fatalf("source holds %d block(s); nothing to replay", len(blocks))
 	}
 
-	startTestChain(t, network)
+	// A replay must judge the blocks exactly as a node does, so the settings
+	// startTestChain simplifies for ordinary tests are put back: the real
+	// proof of work, and the Bitcoin block the network started from.
+	startTestChain(t, network, func() {
+		Params.PowSchedule = asRun.PowSchedule
+		Params.HeartbeatInitialDifficulty = asRun.HeartbeatInitialDifficulty
+		if Params.Anchor.required() && Params.Anchor.BitcoinHeader == "" {
+			header, err := os.ReadFile(filepath.Join(filepath.Dir(sourcePath), genesisAnchorFileName()))
+			if err != nil {
+				t.Fatalf("this network starts from a Bitcoin block; its header file is needed beside the database: %v", err)
+			}
+			if err := useAnchorHeader(string(header)); err != nil {
+				t.Fatalf("anchor header: %v", err)
+			}
+		}
+		// A chain mined before late-block relief stopped being inherited can
+		// still be replayed, to check that nothing else has changed.
+		if os.Getenv("CVN_REPLAY_RELIEF_INHERITED") != "" {
+			Params.ReliefNotInherited = false
+		}
+	})
 	genesis := GetBlockByHeightFromDB(0)
 	if genesis.Hash != blocks[0].Hash {
 		t.Fatalf("genesis mismatch: this build makes %s, the source has %s", genesis.Hash, blocks[0].Hash)

@@ -140,18 +140,3 @@ func TestAnOlderMiningAddressIsCompleted(t *testing.T) {
 		t.Errorf("the wallet accepted an address without its check: %v", err)
 	}
 }
-
-// The first test network's addresses are as they always were.
-func TestTestnet1AddressesAreUnchanged(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	_, _, address, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(address) != len("CVN_")+40 || !looksLikeWalletAddress(address) {
-		t.Errorf("a testnet-1 address should be CVN_ and 40 characters: %s", address)
-	}
-	if !validRecipient("CVN_anything") {
-		t.Error("testnet-1 must go on accepting the recipients it always has")
-	}
-}

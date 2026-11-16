@@ -194,14 +194,6 @@ func resolveMinerAddress(args []string) (string, error) {
 		address = full
 	}
 	if !looksLikeWalletAddress(address) {
-		// The commonest cause is not a bad address but the wrong network:
-		// addresses are written differently on the launch networks and on
-		// the first test network.
-		if other := networkThisAddressBelongsTo(address); other != "" {
-			return "", fmt.Errorf("%q is an address in the form used on %s, and this program was started on %s, where addresses are written differently.\n"+
-				"   If you meant to mine on another network, start with --network NAME (for example: --network devnet).\n"+
-				"   On %s an address is %s", address, other, Params.Name, Params.Name, addressFormDescription())
-		}
 		return "", fmt.Errorf("%q is not a CVN wallet address. Nobody holds a key for it, so coins mined to it could never be spent.\n"+
 			"   Create a wallet with --generate-wallet (or --wallet), or start with --miner-address CVN_...", address)
 	}
@@ -554,22 +546,4 @@ func runFastMinerOnce(path string, arguments []string) error {
 		err = fmt.Errorf("it never connected to this node")
 	}
 	return err
-}
-
-// networkThisAddressBelongsTo says, in words, which networks write addresses
-// the way this one is written, if it is well formed for some network but not
-// for the one in use. It returns nothing if the text is no address anywhere.
-func networkThisAddressBelongsTo(address string) string {
-	if !strings.HasPrefix(address, addressPrefix) {
-		return ""
-	}
-	rest := strings.TrimPrefix(address, addressPrefix)
-	switch {
-	case !Params.StrictFormat && isLowerHex(rest, addressBodyDigits+addressSumDigits) &&
-		rest[addressBodyDigits:] == addressChecksum(rest[:addressBodyDigits]):
-		return "the launch networks (devnet and the CVN Testnet)"
-	case Params.StrictFormat && isLowerHex(rest, addressBodyDigits):
-		return "the first test network (testnet-1)"
-	}
-	return ""
 }

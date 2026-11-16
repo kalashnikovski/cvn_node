@@ -6,8 +6,10 @@ A box is ticked only when the feature is built **and** has been seen working on 
 
 ## Phase 1: A working chain (test network)
 
+The block heights in this phase are those of the first test network (`testnet-1`), where these features were first built and run. That network has been retired; the development network and the CVN Testnet run all of them from the first block.
+
 - [x] **45-second blocks with per-block difficulty adjustment.** Live since block 2,500.
-- [x] **Uncle rewards.** When two miners solve the same height, the next block pays the loser 20% of the reward.
+- [x] **Uncle rewards: tried, then dropped.** On the first test network, when two miners solved the same height the next block paid the loser 20% of the reward. Nodes could not verify that share, so it was removed: a block pays its own miner only.
 - [x] **Sending CVN between wallets.** Live since block 6,100. Every transfer is signed by its owner; nodes reject transfers that spend coins that do not exist, belong to someone else, or pay out more than they take in.
 - [x] **Block contents locked by proof of work.** The block hash covers every transaction in full.
 - [x] **Whole-number amounts.** Live since block 6,600. Every amount is checked as a whole number of units (1 CVN = 100,000,000 units) with no rounding tolerance.
@@ -26,7 +28,7 @@ A box is ticked only when the feature is built **and** has been seen working on 
 - [ ] **Capacity for a large network.**
   - *Have:* comfortable for roughly 100–150 nodes.
   - *Missing:* persistent connections and announce-then-fetch block relay, needed before a large public launch.
-- [ ] **Block size limit enforced.** On `testnet-1`, transfer-count limits are enforced; a byte limit is not. On the launch rules a block may not exceed 300,000 bytes, and every node enforces it.
+- [ ] **Block size limit enforced.** A block may not exceed 300,000 bytes, and every node enforces it. Not yet seen at the limit on a live network.
 - [ ] **Automatic router port mapping (UPnP).**
   - *Have:* the node finds the router, maps its ports, renews the mapping and detects carrier-grade NAT.
   - *Missing:* only one machine per router can hold the ports; a second falls back to relay mode (it still mines, but nobody can sync from it). No NAT-PMP/PCP fallback for routers without UPnP.
@@ -71,7 +73,7 @@ These are being built on a separate development network (`--network devnet`), wh
   - *Also have:* the built-in miner now uses large memory pages when the system grants them, which on that processor raised it from about 12,800 hashes per second, without large pages, to about 16,400. Miners who do nothing special still get the ordinary speed; those who enable large pages get most of the way to a tuned miner without installing anything else.
   - *Also have:* a choice of miner. `--miner xmrig` (or a line in `miner_config.json`) makes the node start the CVN edition of XMRig itself, feed it work, show its speed on the usual dashboard and stop it on exit; the built-in miner remains the default and takes over if the fast miner is missing or keeps failing. `--threads N` limits either. A guide covers both miners and how to enable large pages: [MINING_GUIDE.md](MINING_GUIDE.md).
   - *Missing:* not yet tried on Linux or across several machines. Antivirus programs may flag a program that starts mining software; this needs checking on testers' machines.
-- [ ] **One way to write a block or a transfer.** Built on devnet after checking the specification against the code. The block identifier is the hash of the header's fields each written with its length, so two different headers can never share an identifier (the first test network's format joined text with dashes, and a test shows two headers that collide there). Every header field has one permitted form. A transfer carries nothing its sender did not sign, and what is signed includes the network's name, so a transfer made for one CVN network is invalid on any other. Reward coins obey the same minimum as every other coin. Blocks are limited to 300,000 bytes, and miners fill them accordingly. The uncle share is off on the launch rules: nodes never verified the named uncle, so it was voluntary in practice.
+- [ ] **One way to write a block or a transfer.** Built on devnet after checking the specification against the code. The block identifier is the hash of the header's fields each written with its length, so two different headers can never share an identifier (an earlier format joined text with dashes, and two different headers could collide there). Every header field has one permitted form. A transfer carries nothing its sender did not sign, and what is signed includes the network's name, so a transfer made for one CVN network is invalid on any other. Reward coins obey the same minimum as every other coin. Blocks are limited to 300,000 bytes, and miners fill them accordingly. The uncle share is off on the launch rules: nodes never verified the named uncle, so it was voluntary in practice.
   - *Missing:* a public testnet. To decide: the block size figure, and whether a verified uncle share is wanted later.
 - [ ] **How a miner fills a block.** Built: four fifths of a block goes to transfers that pay a fee, highest first; one fifth is kept for fee-less transfers of coins at least a day old, longest-waiting first; space one lane does not use goes to the other. So a fee buys priority, and moving your own coins for free still gets through when blocks are full, while passing coins back and forth to flood the chain does not. This is the published miner's behaviour, not a network rule.
 - [ ] **Peers that send bad work are cut off.** Built: a peer that sends a block claiming to extend a node's tip with invalid proof of work is disconnected and refused for 10 minutes. Checking a RandomX proof costs real time, so this stops a peer making nodes do it for nothing. Only what is certain counts: a block from another branch is never held against its sender.

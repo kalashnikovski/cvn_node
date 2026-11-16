@@ -33,8 +33,8 @@ Never post a private key.
 
 **What your node reports**
 
-<!-- Open http://localhost:8081/block in a browser on the machine running the
-     node (18081 on the CVN Testnet, 28081 on devnet) and paste the first few lines. -->
+<!-- Open http://localhost:18081/block in a browser on the machine running the
+     node (28081 on devnet) and paste the first few lines. -->
 
 ```
 ```

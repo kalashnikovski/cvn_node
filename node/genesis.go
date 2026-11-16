@@ -64,9 +64,6 @@ import (
 // with a different header build a different genesis block and simply never
 // meet the real network. Later releases carry the header, and nobody has to
 // supply it again.
-//
-// testnet-1 began before this existed. Its genesis block has no anchor and is
-// left exactly as it is.
 
 // GenesisAnchor describes how a network's genesis block is tied to a moment
 // in time.
@@ -179,7 +176,7 @@ func useAnchorHeader(headerHex string) error {
 	if earliest := Params.Anchor.NotBefore; earliest > 0 && timestamp < earliest {
 		return fmt.Errorf("this is the header of a Bitcoin block mined before this network's start was announced, so it cannot be block %d (its hash is %s)", Params.Anchor.BitcoinHeight, hash)
 	}
-	Params.Anchor.BitcoinHeader =strings.ToLower(strings.TrimSpace(headerHex))
+	Params.Anchor.BitcoinHeader = strings.ToLower(strings.TrimSpace(headerHex))
 	Params.Anchor.BitcoinHash = hash
 	Params.GenesisTimestamp = timestamp - bitcoinClockAllowance
 	return nil
@@ -221,8 +218,7 @@ func resolveGenesisAnchor(args []string) error {
 	return nil
 }
 
-// genesisStatement is the text written into the genesis block's header. It
-// is empty for testnet-1, whose genesis block predates anchors.
+// genesisStatement is the text written into the genesis block's header.
 func genesisStatement() string {
 	anchor := Params.Anchor
 	switch {

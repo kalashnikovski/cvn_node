@@ -63,18 +63,6 @@ func TestSweepAmounts(t *testing.T) {
 	}
 }
 
-func TestTestnet1DoesNotSweep(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	if sweepEnabled() || nextSweepHeight(100) != 0 {
-		t.Error("testnet-1 must not sweep coins")
-	}
-	// Its coin records carry no age, so their stored form is unchanged.
-	raw, _ := json.Marshal(UTXORecord{Amount: UnitsAmount(cvn("50")), Recipient: testAddress("a")})
-	if string(raw) != `{"amount":50,"recipient":"`+testAddress("a")+`"}` {
-		t.Errorf("testnet-1 coin record is written as %s", raw)
-	}
-}
-
 func TestUnmovedCoinsAreSwept(t *testing.T) {
 	timestamp := startSweepChain(t)
 	mineNext(t, timestamp, testAddress("idle")) // block 1: the coin we watch
@@ -267,7 +255,7 @@ func TestDevnetShortcuts(t *testing.T) {
 	if NewGenesisEconomics.SweepIntervalBlocks != 4905600 || NewGenesisEconomics.VaultPayoutBlocks != 9811200 {
 		t.Error("the shortcuts changed the launch settings themselves")
 	}
-	if err := SelectNetwork("testnet-1"); err != nil || Params.Economics != nil {
-		t.Error("the shortcuts must not affect testnet-1")
+	if err := SelectNetwork("cvn_testnet"); err != nil || Params.Economics != &NewGenesisEconomics {
+		t.Error("the shortcuts must not affect the CVN Testnet")
 	}
 }

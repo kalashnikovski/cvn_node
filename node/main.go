@@ -597,8 +597,6 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 	defer miningWg.Done()
 	var nonce int64 = workerID * 100000000
 	pinned := false
-	var floorTipHash string
-	var floorTipFirstSeen int64
 	for {
 		if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 || atomic.LoadInt32(&externalMinersConnected) > 0 || atomic.LoadInt32(&fastMinerActive) == 1 {
 			time.Sleep(100 * time.Millisecond)
@@ -609,69 +607,23 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 		StateMutex.RUnlock()
 		nextIndex := currentBlock.Index + 1
 		parentBlockTipHash := currentBlock.Hash
-		currentUnixTime := time.Now().Unix()
-		const GlobalTargetBlockTimeFloor = int64(45)
-		// 45-second floor. It is measured from the tip's timestamp, or from when this
-		// worker first saw the tip if that timestamp is ahead of our clock. A tip dated
-		// even one second in the future used to skip the wait entirely; the next block
-		// was then dated one second later still, and the miner ran away producing a
-		// block per second until difficulty choked the chain.
-		if currentBlock.Hash != floorTipHash {
-			floorTipHash = currentBlock.Hash
-			floorTipFirstSeen = currentUnixTime
-		}
-		floorReference := currentBlock.Timestamp
-		if floorReference > floorTipFirstSeen {
-			floorReference = floorTipFirstSeen
-		}
-		// Heartbeat blocks are spaced by proof-of-work, not by waiting, so the floor
-		// only applies to heights before the heartbeat activates.
-		if !IsHeartbeatHeight(nextIndex) && currentBlock.Index > 0 && currentUnixTime-floorReference < GlobalTargetBlockTimeFloor {
-			// Wait in short slices and restart the pass, so the floor is always
-			// re-checked against whatever the tip is when this worker wakes.
-			time.Sleep(250 * time.Millisecond)
-			continue
-		}
-		// The tip that passed the floor check above is the one we mine on. It is not
-		// re-read here: a re-read could pick up a block saved a moment ago and mine
-		// on top of it without that block ever being checked against the floor.
+		// Blocks are spaced by proof of work, not by waiting. The tip read
+		// above is the one mined on; it is not read again here.
 		simulatedTime := time.Now().Unix()
 		if simulatedTime <= currentBlock.Timestamp {
 			simulatedTime = currentBlock.Timestamp + 1
 		}
-		var workerTargetDifficulty int
-		heartbeatTemplate := IsHeartbeatHeight(nextIndex)
 		// Peers reject blocks dated too far ahead of their clock. If the tip is
 		// already dated ahead, wait for real time to catch up instead of stacking
 		// another future-dated block on it.
-		if heartbeatTemplate && mustWaitForClock(simulatedTime, time.Now().Unix()) {
+		if mustWaitForClock(simulatedTime, time.Now().Unix()) {
 			time.Sleep(250 * time.Millisecond)
 			continue
 		}
-		heartbeatTargetHex := ""
-		targetPrefix := ""
-		if heartbeatTemplate {
-			workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-			heartbeatTargetHex = HeartbeatTargetHex(workerTargetDifficulty)
-		} else {
-			if currentBlock.Index <= 9 {
-				workerTargetDifficulty = 2
-			} else {
-				workerTargetDifficulty = CalculateNextDifficulty(currentBlock, simulatedTime)
-				if workerTargetDifficulty < 4 {
-					workerTargetDifficulty = 4
-				}
-			}
-			if workerTargetDifficulty < 1 {
-				workerTargetDifficulty = 1
-			}
-			if workerTargetDifficulty > 8 {
-				workerTargetDifficulty = 8
-			}
-			targetPrefix = strings.Repeat("0", workerTargetDifficulty)
-		}
+		workerTargetDifficulty := CalculateNextDifficulty(currentBlock, simulatedTime)
+		heartbeatTargetHex := HeartbeatTargetHex(workerTargetDifficulty)
 		var guardMatrixPlaceholder = ""
-		candidateTransactions, templateUncleHash, templateUncleMiner := buildBlockContents(currentBlock, CustomMinerAddress, simulatedTime, fmt.Sprintf("%d", nonce))
+		candidateTransactions := buildBlockContents(currentBlock, CustomMinerAddress, simulatedTime, fmt.Sprintf("%d", nonce))
 		// The transactions are fixed for this template, so digest them once.
 		templateTxDigest := BlockTransactionsDigest(nextIndex, candidateTransactions)
 		randomXTemplate := powAlgorithmAt(nextIndex) == PowRandomX
@@ -692,7 +644,7 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			randomXCommitment = CalculateHashWithTxDigest(Block{
 				Version: 1, Index: nextIndex, Timestamp: simulatedTime, PrevHash: parentBlockTipHash,
 				Difficulty: workerTargetDifficulty, GuardMatrix: guardMatrixPlaceholder,
-				UncleHash: templateUncleHash, UncleMiner: templateUncleMiner,
+				UncleHash: emptyUncleHash, UncleMiner: emptyUncleMiner,
 			}, templateTxDigest)
 		}
 		templateBuilt := time.Now()
@@ -733,8 +685,8 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				Difficulty:   workerTargetDifficulty,
 				Nonce:        templateNonce,
 				GuardMatrix:  guardMatrixPlaceholder,
-				UncleHash:    templateUncleHash,
-				UncleMiner:   templateUncleMiner,
+				UncleHash:    emptyUncleHash,
+				UncleMiner:   emptyUncleMiner,
 			}
 			// 👑 ABSOLUTE CONGRUENCE PASS: Calculate hash using canonical method blueprint safely
 			// Under RandomX the identifier is only needed for a nonce that has the
@@ -756,7 +708,7 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 					time.Sleep(200 * time.Millisecond)
 				}
 			} else {
-				solved = (heartbeatTemplate && computedHashHex <= heartbeatTargetHex) || (!heartbeatTemplate && strings.HasPrefix(computedHashHex, targetPrefix))
+				solved = computedHashHex <= heartbeatTargetHex
 			}
 			if solved {
 				StateMutex.RLock()
@@ -805,41 +757,25 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 }
 
 // buildBlockContents assembles what goes into a new block on top of `tip`:
-// the reward transaction paying minerAddress (and the uncle's miner when one
-// is owed), followed by the waiting transfers. It is used by the built-in
+// the reward transaction paying minerAddress, followed by the waiting transfers. It is used by the built-in
 // miner and by the work server for external miners, so both build identical
 // blocks. `uniqueness` only has to differ between attempts; it keeps reward
 // transaction IDs distinct.
-func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniqueness string) ([]Transaction, string, string) {
+func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniqueness string) []Transaction {
 	nextIndex := tip.Index + 1
 	coinbaseTxID := rewardTransactionID(nextIndex, uniqueness)
 	var coinbaseOutputs []UTXOOutput
 	// From the transaction fork on, waiting transfers that are valid on top of
 	// this tip go into the block, and their fees are added to the miner's reward.
 	var templateTransfers []Transaction
-	var feeUnits int64
-	if IsTxForkHeight(nextIndex) {
-		templateTransfers, feeUnits = selectionForTip(tip.Hash, TxMaxPerBlock-1)
-	}
-	// If the tip won a same-height race, name the losing block as an uncle and
-	// split this block's reward 80/20 with its miner. Total emission is unchanged.
+	templateTransfers, feeUnits := selectionForTip(tip.Hash, TxMaxPerBlock-1)
 	// Everything is whole units, so the amounts written into the block are
 	// exact. rewardUnits is the new reward plus the vault's payout for this
 	// block; feeUnits becomes the miner's share of the fees.
 	accounting := accountForBlock(nextIndex, feeUnits, vaultUnitsAfter(tip))
 	rewardUnits := accounting.SubsidyUnits()
 	feeUnits = accounting.MinerFeeUnits
-	templateUncleHash := "0000000000000000000000000000000000000000000000000000000000000000"
-	templateUncleMiner := "NONE"
-	if pendingUncleHash, pendingUncleMiner, hasUncle := GetPendingUncleForTip(tip); hasUncle && rewardUnits/5 > 0 && !Params.NoUncles {
-		templateUncleHash = pendingUncleHash
-		templateUncleMiner = pendingUncleMiner
-		// Whole units: the uncle gets a fifth of the new reward, rounded down, and
-		// the miner the rest plus the fees, so the two always add up exactly.
-		uncleUnits := rewardUnits / 5
-		coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits - uncleUnits + feeUnits)})
-		coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: pendingUncleMiner, Amount: UnitsAmount(uncleUnits)})
-	} else if rewardUnits+feeUnits >= minimumOutputUnits() {
+	if rewardUnits+feeUnits >= minimumOutputUnits() {
 		// An amount too small to be a coin is not paid; it stays in the vault.
 		coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
 	}
@@ -856,5 +792,5 @@ func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniquen
 		},
 	}
 	candidateTransactions = append(candidateTransactions, templateTransfers...)
-	return candidateTransactions, templateUncleHash, templateUncleMiner
+	return candidateTransactions
 }

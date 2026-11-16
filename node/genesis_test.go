@@ -103,17 +103,10 @@ func TestLaunchNetworkWillNotStartWithoutItsAnchor(t *testing.T) {
 }
 
 func TestNetworksWithoutAnAnchorNeedNothing(t *testing.T) {
-	for _, network := range []string{"testnet-1", "devnet"} {
-		onNetwork(t, network)
-		if err := resolveGenesisAnchor([]string{"cvn_node"}); err != nil {
-			t.Errorf("%s should start without an anchor: %v", network, err)
-		}
-	}
-	onNetwork(t, "testnet-1")
-	if genesisStatement() != "" || buildGenesisBlock().Hash != testnet1GenesisHash {
-		t.Error("the genesis block of testnet-1 must stay exactly as it is")
-	}
 	onNetwork(t, "devnet")
+	if err := resolveGenesisAnchor([]string{"cvn_node"}); err != nil {
+		t.Errorf("devnet should start without an anchor: %v", err)
+	}
 	if !strings.Contains(genesisStatement(), "no anchor") {
 		t.Errorf("the genesis block of devnet should say plainly that it has no anchor: %q", genesisStatement())
 	}
@@ -222,18 +215,17 @@ func TestCVNTestnet(t *testing.T) {
 	if BlockchainFile != "cvn_testnet.db" || len(Params.SeedHosts) != 6 {
 		t.Errorf("database %q, %d seeds", BlockchainFile, len(Params.SeedHosts))
 	}
-	// Every launch rule is on.
-	if !Params.StrictFormat || !Params.NoUncles || !Params.AmountsAsUnits || !Params.ScheduleAnchored || !Params.ReliefNotInherited ||
-		Params.Economics == nil || Params.MaxBlockBytes != 300000 || !networkUsesRandomX() ||
-		Params.HeartbeatHeight != 1 || Params.TxForkHeight != 1 || Params.KeyEpochBlocks != 1920 || Params.KeyLagBlocks != 100 {
+	// Its rule settings.
+	if !Params.ReliefNotInherited || Params.Economics != &NewGenesisEconomics || Params.MaxBlockBytes != 300000 || !networkUsesRandomX() ||
+		!IsHeartbeatHeight(1) || !IsTxForkHeight(1) || Params.KeyEpochBlocks != 1920 || Params.KeyLagBlocks != 100 {
 		t.Error("the CVN Testnet must run every launch rule")
 	}
 	if Params.HeartbeatInitialDifficulty != 1000000 || minDifficultyAt(1) != 5000 {
 		t.Errorf("starting difficulty %d, minimum %d", Params.HeartbeatInitialDifficulty, minDifficultyAt(1))
 	}
 	// It shares no port, database or message key with another network, so
-	// all three can run on one machine and never hear each other.
-	for _, other := range []ChainParams{testnet1Params, devnetParams} {
+	// both can run on one machine and never hear each other.
+	for _, other := range []ChainParams{devnetParams} {
 		mine := []int{Params.GossipPort, Params.SyncPort, Params.SyncFallbackPort, Params.StatusPort, Params.StratumPort}
 		theirs := map[int]bool{other.GossipPort: true, other.SyncPort: true, other.SyncFallbackPort: true, other.StatusPort: true, other.StratumPort: true}
 		for _, port := range mine {

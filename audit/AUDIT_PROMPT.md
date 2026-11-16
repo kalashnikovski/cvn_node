@@ -81,12 +81,12 @@ WHAT THE PROJECT IS
 
 Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block so nobody can mine early.
 
-The code runs on more than one network, and they do not have the same rules:
+The code runs on two networks, and both have the same rules:
 
-- "testnet-1" is an older test network with looser rules. It is being retired. Problems that exist ONLY under testnet-1's rules are low priority.
-- "cvn_testnet" and "devnet" run the LAUNCH RULES: the settings StrictFormat, NoUncles, MaxBlockBytes, AmountsAsUnits, ScheduleAnchored, a PowSchedule with RandomX, and an Economics block. These are what will launch. Review these.
+- "testnet-1" was an older test network with looser rules. It has been retired and its rules removed from the code; a few comments still mention it as history.
+- "cvn_testnet" and "devnet" run the LAUNCH RULES, which are now the only rules in the code. The settings that differ between them are names, keys, ports, files, seeds and starting difficulty (node/chain_params.go). These are what will launch. Review these.
 
-One thing to look for in particular: places where a network on the launch rules still passes through old code written for testnet-1, and behaves in a way the launch rules did not intend.
+One thing to look for in particular: anything left over from the older network's rules that the removal missed, and any place where taking those rules out changed what the launch rules do.
 
 WHAT TO LOOK FOR, MOST IMPORTANT FIRST
 
@@ -205,10 +205,10 @@ WHAT THE PROJECT IS
 
 Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so nobody can mine early.
 
-The code runs on more than one network, and they do not have the same rules:
+The code runs on two networks, and both have the same rules:
 
-- "testnet-1" is an older test network with looser rules. It is being retired. Problems that exist ONLY under testnet-1's rules are low priority.
-- "cvn_testnet" and "devnet" run the LAUNCH RULES: the settings StrictFormat, NoUncles, MaxBlockBytes, AmountsAsUnits, ScheduleAnchored, a PowSchedule with RandomX, and an Economics block. These are what will launch. Review these.
+- "testnet-1" was an older test network with looser rules. It has been retired and its rules removed from the code; a few comments still mention it as history.
+- "cvn_testnet" and "devnet" run the LAUNCH RULES, which are now the only rules in the code. The settings that differ between them are names, keys, ports, files, seeds and starting difficulty (node/chain_params.go). These are what will launch. Review these.
 
 PART 1: ARE THE FIXES REAL?
 
@@ -332,8 +332,8 @@ Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordin
 
 The code runs on more than one network:
 
-- "testnet-1": an older test network with looser rules, being retired. Ignore problems that exist only under its rules.
-- "cvn_testnet" (the CVN Testnet, about to launch) and "devnet" (for development): these run the LAUNCH RULES, the settings StrictFormat, NoUncles, MaxBlockBytes, AmountsAsUnits, ScheduleAnchored, a PowSchedule with RandomX, and an Economics block. The real network ("mainnet") will run these same rules and is not yet defined in the code. Assess the launch rules, and assess the CVN Testnet's launch as the dress rehearsal for mainnet's: whatever would be unfair in one would be unfair in the other.
+- "testnet-1": an older test network with looser rules. It has been retired and its rules removed from the code.
+- "cvn_testnet" (the CVN Testnet, about to launch) and "devnet" (for development): these run the LAUNCH RULES, which are now the only rules in the code. The real network ("mainnet") will run these same rules and is not yet defined in the code. Assess the launch rules, and assess the CVN Testnet's launch as the dress rehearsal for mainnet's: whatever would be unfair in one would be unfair in the other.
 
 The project is run by one person, who also runs the six "seed" computers that new nodes first connect to. The seeds do not mine. That person will mine from the first block like anyone else, with one computer that is not a seed, and has published a statement to that effect in README.md.
 

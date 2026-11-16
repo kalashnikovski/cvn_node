@@ -181,11 +181,6 @@ func TestReliefReturnsGraduallyAfterTheLaunchWindow(t *testing.T) {
 	if got := launchRampGap(HeartbeatLaunchBlocks+HeartbeatRampBlocks, hoursLate); got != hoursLate {
 		t.Errorf("after the ramp a block %d s late is counted as %d s late", hoursLate, got)
 	}
-	// Networks that do not start the launch way are untouched.
-	onNetwork(t, "testnet-1")
-	if got := launchRampGap(21, hoursLate); got != hoursLate {
-		t.Errorf("testnet-1: a late block is counted as %d s late, want %d", got, hoursLate)
-	}
 }
 
 // fillPool puts made-up entries straight into the pool, for the tests of

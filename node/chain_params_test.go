@@ -6,36 +6,28 @@ import (
 	"testing"
 )
 
-// The values of the running test network must never change by accident: a
-// different key, port or genesis block would cut a node off from everyone
-// else. This test pins them.
-func TestTestnet1SettingsArePinned(t *testing.T) {
-	if Params.Name != "testnet-1" {
-		t.Fatalf("default network is %q, want testnet-1", Params.Name)
-	}
+// The values of the public test network must never change by accident: a
+// different key, port or file would cut a node off from everyone else. This
+// test pins them. (Its rules are pinned in genesis_test.go.)
+func TestCVNTestnetSettingsArePinned(t *testing.T) {
+	onNetwork(t, "cvn_testnet")
 	t.Setenv("CVN_NETWORK_AUTH_TOKEN", "")
-	if got := string(getNetworkAuthSecret()); got != "COVENANT_STANDARD_MAINNET_IGNITION_AUTHENTICATION_KEY_TOKEN_2026" {
+	if got := string(getNetworkAuthSecret()); got != "CVN_TESTNET_NODE_MESSAGE_KEY_COINS_HAVE_NO_VALUE_2026" {
 		t.Errorf("message key changed: %q", got)
 	}
-	if Params.GossipPort != 8080 || Params.SyncPort != 8081 || Params.SyncFallbackPort != 9091 || Params.StatusPort != 8082 {
-		t.Errorf("ports changed: %d %d %d %d", Params.GossipPort, Params.SyncPort, Params.SyncFallbackPort, Params.StatusPort)
+	if Params.GossipPort != 18080 || Params.SyncPort != 18081 || Params.SyncFallbackPort != 19091 || Params.StatusPort != 18082 || Params.StratumPort != 18083 {
+		t.Errorf("ports changed: %d %d %d %d %d", Params.GossipPort, Params.SyncPort, Params.SyncFallbackPort, Params.StatusPort, Params.StratumPort)
 	}
-	if Params.DatabaseFile != "cvn_mainnet.db" || Params.PeerCacheFile != "peers.json" {
+	if Params.DatabaseFile != "cvn_testnet.db" || Params.PeerCacheFile != "peers_testnet.json" {
 		t.Errorf("file names changed: %q %q", Params.DatabaseFile, Params.PeerCacheFile)
-	}
-	if Params.HeartbeatHeight != 2500 || Params.TxForkHeight != 6100 {
-		t.Errorf("rule heights changed: %d %d", Params.HeartbeatHeight, Params.TxForkHeight)
-	}
-	if Params.AmountsAsUnits {
-		t.Error("testnet-1 writes amounts as decimal numbers; changing that breaks every existing block hash")
 	}
 	hosts := []string{"207.148.67.11", "64.177.44.185", "149.28.69.173", "149.248.54.9", "95.179.179.191", "65.20.67.25"}
 	var wantSync, wantGossip []string
-	wantWallet := []string{"http://localhost:8081", "http://localhost:9091"}
+	wantWallet := []string{"http://localhost:18081", "http://localhost:19091"}
 	for _, host := range hosts {
-		wantSync = append(wantSync, "http://"+host+":8081")
-		wantGossip = append(wantGossip, host+":8080")
-		wantWallet = append(wantWallet, "http://"+host+":8081")
+		wantSync = append(wantSync, "http://"+host+":18081")
+		wantGossip = append(wantGossip, host+":18080")
+		wantWallet = append(wantWallet, "http://"+host+":18081")
 	}
 	if got := seedSyncURLs(); !reflect.DeepEqual(got, wantSync) {
 		t.Errorf("seed download addresses changed: %v", got)
@@ -46,53 +38,38 @@ func TestTestnet1SettingsArePinned(t *testing.T) {
 	if got := walletNodeGateways(); !reflect.DeepEqual(got, wantWallet) {
 		t.Errorf("wallet node list changed: %v", got)
 	}
-	if localStatusURL() != "http://localhost:8082/status" {
+	if localStatusURL() != "http://localhost:18082/status" {
 		t.Errorf("status address changed: %s", localStatusURL())
 	}
-	if Params.gossipAddress("10.1.2.3") != "10.1.2.3:8080" || Params.syncURL("10.1.2.3") != "http://10.1.2.3:8081" {
+	if Params.gossipAddress("10.1.2.3") != "10.1.2.3:18080" || Params.syncURL("10.1.2.3") != "http://10.1.2.3:18081" {
 		t.Errorf("address formatting changed")
 	}
 }
 
-// The genesis block of testnet-1 as every node on that network holds it.
-const testnet1GenesisHash = "50371f1749e88e38d339bdfa21bf40d8a96f4997bd7c3a68335bed6344de8369"
-
-func TestTestnet1GenesisBlockIsPinned(t *testing.T) {
-	startTestChain(t, "testnet-1")
-	genesis := GetBlockByHeightFromDB(0)
-	if genesis.Hash != testnet1GenesisHash {
-		t.Fatalf("testnet-1 genesis hash is %s, want %s", genesis.Hash, testnet1GenesisHash)
+func TestDevnetIsSeparateFromTheCVNTestnet(t *testing.T) {
+	if cvnTestnetParams.AuthKey == devnetParams.AuthKey {
+		t.Error("devnet shares the CVN Testnet's message key")
 	}
-	if balanceOf("COVENANT_STEWARD_ASSEMBLY") != 0 {
-		t.Errorf("genesis block pays something; it must pay nothing")
-	}
-}
-
-func TestDevnetIsSeparateFromTestnet1(t *testing.T) {
-	if testnet1Params.AuthKey == devnetParams.AuthKey {
-		t.Error("devnet shares testnet-1's message key")
-	}
-	for _, port := range []int{devnetParams.GossipPort, devnetParams.SyncPort, devnetParams.SyncFallbackPort, devnetParams.StatusPort} {
-		for _, other := range []int{testnet1Params.GossipPort, testnet1Params.SyncPort, testnet1Params.SyncFallbackPort, testnet1Params.StatusPort} {
+	for _, port := range []int{devnetParams.GossipPort, devnetParams.SyncPort, devnetParams.SyncFallbackPort, devnetParams.StatusPort, devnetParams.StratumPort} {
+		for _, other := range []int{cvnTestnetParams.GossipPort, cvnTestnetParams.SyncPort, cvnTestnetParams.SyncFallbackPort, cvnTestnetParams.StatusPort, cvnTestnetParams.StratumPort} {
 			if port == other {
-				t.Errorf("devnet reuses testnet-1 port %d", port)
+				t.Errorf("devnet reuses CVN Testnet port %d", port)
 			}
 		}
 	}
-	if devnetParams.DatabaseFile == testnet1Params.DatabaseFile || devnetParams.PeerCacheFile == testnet1Params.PeerCacheFile {
-		t.Error("devnet shares a file with testnet-1")
+	if devnetParams.DatabaseFile == cvnTestnetParams.DatabaseFile || devnetParams.PeerCacheFile == cvnTestnetParams.PeerCacheFile {
+		t.Error("devnet shares a file with the CVN Testnet")
 	}
 	if len(devnetParams.SeedHosts) != 0 {
 		t.Error("devnet must not have public seeds")
 	}
 
 	startTestChain(t, "devnet")
-	genesis := GetBlockByHeightFromDB(0)
-	if genesis.Hash == "" || genesis.Hash == testnet1GenesisHash {
-		t.Errorf("devnet genesis hash %q must exist and differ from testnet-1's", genesis.Hash)
+	if genesis := GetBlockByHeightFromDB(0); genesis.Hash == "" {
+		t.Error("devnet has no genesis block")
 	}
-	if !IsTxForkHeight(1) || !Params.AmountsAsUnits || !IsHeartbeatHeight(1) {
-		t.Error("devnet rule heights were not applied")
+	if !IsTxForkHeight(1) || !IsHeartbeatHeight(1) || IsTxForkHeight(0) || IsHeartbeatHeight(0) {
+		t.Error("the rules apply from block 1, and the genesis block is not a mined block")
 	}
 }
 
@@ -103,13 +80,14 @@ func TestSelectNetwork(t *testing.T) {
 	if err := SelectNetwork("no-such-network"); err == nil {
 		t.Error("an unknown network name was accepted")
 	}
+	// The first test network is retired, and asking for it says so.
 	for _, name := range []string{"testnet-1", " Testnet-1 "} {
-		if err := SelectNetwork(name); err != nil || Params.Name != "testnet-1" {
-			t.Errorf("%q should select testnet-1 (got %q, %v)", name, Params.Name, err)
+		if err := SelectNetwork(name); err == nil || !strings.Contains(err.Error(), "retired") {
+			t.Errorf("%q should be refused as retired (got %v)", name, err)
 		}
 	}
 	// With no network named the program runs on the CVN Testnet, the network
-	// being launched, and not on the first test network.
+	// being launched.
 	if err := SelectNetwork(""); err != nil || Params.Name != "cvn_testnet" || BlockchainFile != "cvn_testnet.db" {
 		t.Errorf("no network named should select cvn_testnet (got %q, %q, %v)", Params.Name, BlockchainFile, err)
 	}
@@ -215,10 +193,10 @@ func TestSeedsGivenAtStart(t *testing.T) {
 		t.Errorf("seed download addresses: %v", got)
 	}
 	// A network that has its own seeds keeps them.
-	onNetwork(t, "testnet-1")
+	onNetwork(t, "cvn_testnet")
 	before := strings.Join(Params.SeedHosts, " ")
 	applySeedOverride([]string{"cvn_node", "--seeds", "10.9.9.9"})
-	if strings.Join(Params.SeedHosts, " ") != before {
-		t.Error("testnet-1's seeds were replaced from the command line")
+	if before == "" || strings.Join(Params.SeedHosts, " ") != before {
+		t.Error("the CVN Testnet's seeds were replaced from the command line")
 	}
 }

@@ -119,9 +119,8 @@ func extendTestChain(t *testing.T, timestamp int64, miner string, transfers []Tr
 }
 
 // buildSharedHistory mines blocks 1 to 12 and returns the last one and its
-// timestamp. Block 11 is the first heartbeat block on a chain whose heartbeat
-// starts at 11; the long gap before it brings its difficulty down to the
-// minimum so tests run quickly.
+// timestamp. The first ten come from one miner and, after a long gap, the
+// last two from another.
 func buildSharedHistory(t *testing.T, earlyMiner, lateMiner string) (Block, int64) {
 	t.Helper()
 	timestamp := Params.GenesisTimestamp + 100

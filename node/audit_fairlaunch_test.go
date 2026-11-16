@@ -401,28 +401,6 @@ func TestConnectTakesSeveralNodes(t *testing.T) {
 	}
 }
 
-// An address for one network given on another is the commonest slip, and
-// the program says so instead of calling it no address at all.
-func TestAnAddressForAnotherNetworkIsNamedAsSuch(t *testing.T) {
-	t.Chdir(t.TempDir())
-	t.Setenv("CVN_MINER_ADDRESS", "")
-	onNetwork(t, "devnet")
-	_, _, full, err := GenerateKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	onNetwork(t, "testnet-1")
-	_, err = resolveMinerAddress([]string{"cvn_node", "--miner-address", full})
-	if err == nil || !strings.Contains(err.Error(), "--network") || !strings.Contains(err.Error(), "launch networks") {
-		t.Errorf("a launch-network address on testnet-1 should point to --network: %v", err)
-	}
-	// Something that is an address nowhere still gets the plain answer.
-	_, err = resolveMinerAddress([]string{"cvn_node", "--miner-address", "CVN_my_wallet"})
-	if err == nil || strings.Contains(err.Error(), "--network NAME") {
-		t.Errorf("text that is no address anywhere was blamed on the network: %v", err)
-	}
-}
-
 // Third review: a rival branch was checked with RandomX keys read from the
 // node's own chain. For a newcomer, which is not held back by the
 // reorganisation limit, the two chains can part below a key block; every
@@ -553,7 +531,7 @@ func TestDatesFromBeforeTheLaunchBuyNothing(t *testing.T) {
 // passed off as the anchor. A release that names a height must name that
 // date too.
 func TestAScheduledNetworkNamesItsEarliestDate(t *testing.T) {
-	for _, network := range []ChainParams{testnet1Params, cvnTestnetParams, devnetParams} {
+	for _, network := range []ChainParams{cvnTestnetParams, devnetParams} {
 		if network.Anchor.BitcoinHeight > 0 && network.Anchor.NotBefore <= 0 {
 			t.Errorf("%s names Bitcoin block %d as its start and no earliest date (Anchor.NotBefore)", network.Name, network.Anchor.BitcoinHeight)
 		}

@@ -18,13 +18,7 @@ import (
 	"go.etcd.io/bbolt"
 )
 
-// TRANSACTION RULES (hard fork)
-//
-// Before this fork a block was checked for its proof of work and its reward
-// amount only. Transfers inside it were accepted unseen, and the block hash
-// covered transaction IDs but not their contents.
-//
-// From TxForkActivationHeight on:
+// TRANSACTION RULES
 //
 //  1. The block hash commits to the full contents of every transaction, so
 //     nothing in a block (including who the reward pays) can be changed
@@ -35,13 +29,6 @@ import (
 //  3. A transfer's ID is the hash of its contents, so it cannot be forged or
 //     replayed under another ID.
 //  4. The miner may add the transfers' fees to its reward.
-//
-// Nodes that have not updated by the activation height will reject the new
-// blocks and stay behind until they update.
-
-// TxForkActivationHeight is the first block that must follow the rules above.
-// A variable so tests can activate it early.
-var TxForkActivationHeight = int64(6100)
 
 const (
 	TxMaxPerBlock      = 500
@@ -56,9 +43,10 @@ const (
 var undoBucket = []byte("undo") // height -> coins that block spent, for rollbacks
 
 // IsTxForkHeight reports whether a block at this height follows the
-// transaction rules.
+// transaction rules: every block except the genesis block, which carries
+// nothing but its own empty reward transaction.
 func IsTxForkHeight(height int64) bool {
-	return height >= TxForkActivationHeight
+	return height >= 1
 }
 
 // SpentRecord is one coin a block consumed. It is kept so that removing the
@@ -94,14 +82,10 @@ func writeField(builder *strings.Builder, value string) {
 // coins are spent, who receives how much. It excludes the ID and signatures.
 func transactionSigningBody(tx Transaction) string {
 	var builder strings.Builder
-	if Params.StrictFormat {
-		// The network's name is part of what is signed, so a transfer made
-		// for one CVN network is worthless on every other.
-		writeField(&builder, "CVN_TX_V2")
-		writeField(&builder, Params.Name)
-	} else {
-		writeField(&builder, "CVN_TX_V1")
-	}
+	// The network's name is part of what is signed, so a transfer made for
+	// one CVN network is worthless on every other.
+	writeField(&builder, "CVN_TX_V2")
+	writeField(&builder, Params.Name)
 	writeField(&builder, strconv.FormatUint(uint64(tx.Version), 10))
 	writeField(&builder, tx.PublicKey)
 	writeField(&builder, strconv.FormatInt(tx.Timestamp, 10))
@@ -111,9 +95,7 @@ func transactionSigningBody(tx Transaction) string {
 	for _, input := range tx.Inputs {
 		writeField(&builder, input.SourceTxID)
 		writeField(&builder, strconv.Itoa(input.Index))
-		if Params.StrictFormat {
-			writeField(&builder, strconv.FormatInt(input.AmountUnits, 10))
-		}
+		writeField(&builder, strconv.FormatInt(input.AmountUnits, 10))
 	}
 	writeField(&builder, strconv.Itoa(len(tx.Outputs)))
 	for _, output := range tx.Outputs {
@@ -136,23 +118,14 @@ func transactionContentDigest(tx Transaction) string {
 	writeField(&builder, tx.ID)
 	writeField(&builder, transactionSigningBody(tx))
 	writeField(&builder, tx.Signature)
-	if Params.StrictFormat {
-		// Under the launch format a transaction has no other fields.
-		digest := sha256.Sum256([]byte(builder.String()))
-		return hex.EncodeToString(digest[:])
-	}
-	for _, input := range tx.Inputs {
-		writeField(&builder, input.Signature)
-	}
-	writeField(&builder, formatFloatExact(tx.DataSizeKB))
-	writeField(&builder, hex.EncodeToString(tx.Extra))
+	// A transaction has no other fields (see checkTransferFormat).
 	digest := sha256.Sum256([]byte(builder.String()))
 	return hex.EncodeToString(digest[:])
 }
 
-// BlockTransactionsDigest is the transaction part of the block hash. Before
-// the fork it covers IDs only (unchanged, so old blocks keep their hashes);
-// from the fork on it covers full contents.
+// BlockTransactionsDigest is the transaction part of the block hash. It
+// covers the full contents of every transaction. (The genesis block's is
+// built from its one transaction's ID alone, as it always was.)
 func BlockTransactionsDigest(height int64, transactions []Transaction) string {
 	var builder strings.Builder
 	if IsTxForkHeight(height) {
@@ -170,18 +143,10 @@ func BlockTransactionsDigest(height int64, transactions []Transaction) string {
 }
 
 func validRecipient(recipient string) bool {
-	// On the launch rules a coin can only be made out to a well-formed
-	// address. Anything else could never be spent, and a field that took any
-	// text would be a place to store data in the chain at no cost.
-	if Params.StrictFormat {
-		return looksLikeWalletAddress(recipient)
-	}
-	if recipient == "" || len(recipient) > TxMaxAddressLength {
-		return false
-	}
-	// Stored balances are keyed by the trimmed address, so an address that
-	// changes when trimmed could never be spent by its owner.
-	return recipient == strings.TrimSpace(recipient) && !strings.ContainsAny(recipient, " \t\r\n")
+	// A coin can only be made out to a well-formed address. Anything else
+	// could never be spent, and a field that took any text would be a place
+	// to store data in the chain at no cost.
+	return looksLikeWalletAddress(recipient)
 }
 
 // CheckTransferStandalone checks everything about a transfer that does not
@@ -235,7 +200,7 @@ func CheckTransferStandalone(tx Transaction) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if Params.StrictFormat && tx.Witness != senderAddress {
+	if tx.Witness != senderAddress {
 		return "", fmt.Errorf("the sender field must hold the sender's address and nothing else")
 	}
 	if tx.ID != ComputeTransactionID(tx) {
@@ -281,7 +246,7 @@ func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent m
 		if !record.Amount.ValidFee() {
 			return 0, nil, fmt.Errorf("coin %s has an unusable amount", key)
 		}
-		if Params.StrictFormat && input.AmountUnits != record.Amount.Units() {
+		if input.AmountUnits != record.Amount.Units() {
 			return 0, nil, fmt.Errorf("coin %s holds %s CVN, not the %s CVN the sender signed for", key, FormatUnits(record.Amount.Units()), FormatUnits(input.AmountUnits))
 		}
 		if inputUnits, err = addUnits(inputUnits, record.Amount.Units()); err != nil {
@@ -298,9 +263,9 @@ func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent m
 	if outputUnits > inputUnits {
 		return 0, nil, fmt.Errorf("transfer pays out %s but only takes in %s", FormatUnits(outputUnits), FormatUnits(inputUnits))
 	}
-	// On the launch rules the fee a sender signs is the fee that is taken:
-	// no more can leave the sender's coins than they agreed to.
-	if Params.StrictFormat && tx.FreeWillOffering.Units() != inputUnits-outputUnits {
+	// The fee a sender signs is the fee that is taken: no more can leave the
+	// sender's coins than they agreed to.
+	if tx.FreeWillOffering.Units() != inputUnits-outputUnits {
 		return 0, nil, fmt.Errorf("transfer states a fee of %s CVN but leaves %s CVN unaccounted for", FormatUnits(tx.FreeWillOffering.Units()), FormatUnits(inputUnits-outputUnits))
 	}
 	return inputUnits - outputUnits, consumed, nil
@@ -1036,14 +1001,10 @@ func BuildSignedTransfer(privateKeyHex, publicKeyHex, recipient string, amountUn
 	return signTransfer(privateKeyHex, publicKeyHex, senderAddress, inputs, outputs, feeUnits)
 }
 
-// walletInput names a coin to spend. On the launch rules it also states the
-// coin's amount, which the sender signs.
+// walletInput names a coin to spend and states its amount, which the sender
+// signs.
 func walletInput(coin SpendableCoin) UTXOInput {
-	input := UTXOInput{SourceTxID: coin.TxID, Index: coin.Index}
-	if Params.StrictFormat {
-		input.AmountUnits = coin.Amount.Units()
-	}
-	return input
+	return UTXOInput{SourceTxID: coin.TxID, Index: coin.Index, AmountUnits: coin.Amount.Units()}
 }
 
 // signTransfer turns chosen inputs and outputs into a signed transfer.
@@ -1055,11 +1016,7 @@ func signTransfer(privateKeyHex, publicKeyHex, senderAddress string, inputs []UT
 		PublicKey:        publicKeyHex,
 		Timestamp:        time.Now().Unix(),
 		FreeWillOffering: UnitsAmount(feeUnits),
-		DataSizeKB:       1.0,
 		Witness:          senderAddress,
-	}
-	if Params.StrictFormat {
-		tx.DataSizeKB = 0 // the launch format has no such field
 	}
 	tx.ID = ComputeTransactionID(tx)
 	r, s, err := SignTransactionPayload(privateKeyHex, tx.ID)

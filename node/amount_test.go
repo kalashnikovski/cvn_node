@@ -92,47 +92,6 @@ func TestAmountsAsWholeUnits(t *testing.T) {
 	}
 }
 
-// On testnet-1 an amount is written as the decimal number it always was, and
-// the exact number is kept so old hashes can be reproduced.
-func TestAmountsOnTestnet1KeepTheirDecimalForm(t *testing.T) {
-	onNetwork(t, "testnet-1")
-
-	// A reward output from a real block on that network, mined before
-	// amounts were built from units: 50 plus a 0.01 fee, as floating point.
-	const realBlockText = `{"recipient":"CVN_a","amount":50.00999999999999}`
-	var output UTXOOutput
-	if err := json.Unmarshal([]byte(realBlockText), &output); err != nil {
-		t.Fatal(err)
-	}
-	if output.Amount.Units() != cvn("50.01") {
-		t.Errorf("worth %s CVN to the rules, want 50.01", FormatUnits(output.Amount.Units()))
-	}
-	if output.Amount.hashText() != "50.00999999999999" {
-		t.Errorf("hashed as %q; the original text must be reproduced exactly", output.Amount.hashText())
-	}
-	rewritten, _ := json.Marshal(output)
-	if string(rewritten) != realBlockText {
-		t.Errorf("written back as %s, want %s", rewritten, realBlockText)
-	}
-
-	// New amounts made by this build are exact and written as plain decimals.
-	fresh, _ := json.Marshal(UTXOOutput{Recipient: testAddress("a"), Amount: UnitsAmount(cvn("50.01"))})
-	if string(fresh) != `{"recipient":"`+testAddress("a")+`","amount":50.01}` {
-		t.Errorf("new amount written as %s", fresh)
-	}
-	if UnitsAmount(cvn("50")).hashText() != "50" {
-		t.Errorf("50 CVN hashed as %q", UnitsAmount(cvn("50")).hashText())
-	}
-
-	for _, bad := range []string{`-1`, `1e30`, `"abc"`, `null`} {
-		var amount Amount
-		_ = json.Unmarshal([]byte(bad), &amount)
-		if amount.Spendable() {
-			t.Errorf("%s was accepted as a spendable amount", bad)
-		}
-	}
-}
-
 func TestAddUnitsRefusesImpossibleTotals(t *testing.T) {
 	if _, err := addUnits(MaxAmountUnits, 1); err == nil {
 		t.Error("a total above everything that can exist was accepted")
@@ -149,19 +108,15 @@ func TestAddUnitsRefusesImpossibleTotals(t *testing.T) {
 func signedTestTransfer(t *testing.T, privateKey, publicKey, sender, sourceTx string, units int64) Transaction {
 	t.Helper()
 	tx := Transaction{
-		Version: 1, PublicKey: publicKey, Timestamp: 1, DataSizeKB: 1, Witness: sender,
+		Version: 1, PublicKey: publicKey, Timestamp: 1, Witness: sender,
 		Inputs:  []UTXOInput{{SourceTxID: sourceTx, Index: 0}},
 		Outputs: []UTXOOutput{{Recipient: testAddress("recipient"), Amount: UnitsAmount(units)}},
 	}
-	if Params.StrictFormat {
-		// The launch format has no size field, and the sender signs the
-		// amount of the coin spent (50 CVN in every test that uses this)
-		// and the fee.
-		tx.DataSizeKB = 0
-		tx.Inputs[0].AmountUnits = cvn("50")
-		if fee := cvn("50") - units; fee >= 0 {
-			tx.FreeWillOffering = UnitsAmount(fee)
-		}
+	// The sender signs the amount of the coin spent (50 CVN in every test
+	// that uses this) and the fee.
+	tx.Inputs[0].AmountUnits = cvn("50")
+	if fee := cvn("50") - units; fee >= 0 {
+		tx.FreeWillOffering = UnitsAmount(fee)
 	}
 	tx.ID = ComputeTransactionID(tx)
 	r, s, err := SignTransactionPayload(privateKey, tx.ID)
@@ -173,7 +128,7 @@ func signedTestTransfer(t *testing.T, privateKey, publicKey, sender, sourceTx st
 }
 
 func TestTransferAmountRules(t *testing.T) {
-	for _, network := range []string{"testnet-1", "devnet"} {
+	for _, network := range []string{"devnet"} {
 		t.Run(network, func(t *testing.T) {
 			onNetwork(t, network)
 			privateKey, publicKey, address, err := GenerateKeyPair()
@@ -263,7 +218,7 @@ func TestWalletBuildsExactTransfers(t *testing.T) {
 }
 
 func TestRewardRules(t *testing.T) {
-	for _, network := range []string{"testnet-1", "devnet"} {
+	for _, network := range []string{"devnet"} {
 		t.Run(network, func(t *testing.T) {
 			onNetwork(t, network)
 			block := func(rewards ...int64) Block {
@@ -282,11 +237,10 @@ func TestRewardRules(t *testing.T) {
 				"exactly the reward":   block(cvn("50")),
 				"less than the reward": block(cvn("49.5")),
 			}
-			// Two reward outputs are the uncle split, which only the first
-			// test network has.
+			// A reward has one output. (Two were once the "uncle" split.)
 			split := block(cvn("40"), cvn("10"))
-			if _, _, err := ValidateBlockTransactions(split, nothing, 0); (err == nil) == Params.NoUncles {
-				t.Errorf("a reward split in two on %s: err %v", network, err)
+			if _, _, err := ValidateBlockTransactions(split, nothing, 0); err == nil {
+				t.Error("a reward split in two was accepted")
 			}
 			for name, b := range accept {
 				if _, _, err := ValidateBlockTransactions(b, nothing, 0); err != nil {

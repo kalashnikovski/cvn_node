@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,10 +46,9 @@ type UTXOInput struct {
 	Index      int    `json:"output_index"`
 	Signature  string `json:"signature"`
 	// AmountUnits is the amount of the coin being spent, as the sender
-	// believed it to be when signing. On the launch rules it is part of what
-	// is signed and must match the coin exactly, so a wallet that was told
-	// the wrong amount cannot be made to sign away the difference as a fee.
-	// The first test network does not have this field.
+	// believed it to be when signing. It is part of what is signed and must
+	// match the coin exactly, so a wallet that was told the wrong amount
+	// cannot be made to sign away the difference as a fee.
 	AmountUnits int64 `json:"amount_units,omitempty"`
 }
 
@@ -73,7 +70,7 @@ type MempoolType struct {
 	Transactions map[string]Transaction
 }
 
-var BlockchainFile = "cvn_mainnet.db"
+var BlockchainFile = "cvn_testnet.db"
 var CustomMinerAddress string
 var IsSyncingActive int32 = 0
 
@@ -84,16 +81,6 @@ var StateBalanceCache = make(map[string]int64)
 var MempoolMatrix = &MempoolType{Transactions: make(map[string]Transaction)}
 var StateMutex sync.RWMutex
 
-func cleanAddr(a string) string {
-	return strings.TrimSpace(a)
-}
-
-// ValidateBlockByVersion accepts the block versions the first test network
-// has always accepted. The launch format is stricter (see block_format.go).
-func ValidateBlockByVersion(b Block) bool {
-	return b.Version <= 2
-}
-
 func CalculateHash(b Block) string {
 	return CalculateHashWithTxDigest(b, BlockTransactionsDigest(b.Index, b.Transactions))
 }
@@ -102,88 +89,8 @@ func CalculateHash(b Block) string {
 // transactions. The miner computes that digest once per template instead of
 // once per nonce.
 func CalculateHashWithTxDigest(b Block, txHashStr string) string {
-	if Params.StrictFormat {
-		digest := sha256.Sum256([]byte(blockHeaderEncoding(b, txHashStr)))
-		return hex.EncodeToString(digest[:])
-	}
-
-	uHash := strings.TrimSpace(b.UncleHash)
-	if uHash == "" {
-		uHash = "0000000000000000000000000000000000000000000000000000000000000000"
-	}
-	uMiner := strings.TrimSpace(b.UncleMiner)
-	if uMiner == "" {
-		uMiner = "NONE"
-	}
-	gMatrix := strings.TrimSpace(b.GuardMatrix)
-	if gMatrix == "" {
-		gMatrix = "NONE"
-	}
-
-	inputStr := fmt.Sprintf("%d-%d-%d-%s-%s-%d-%s-%d-%s-%s",
-		int(b.Version),
-		int64(b.Index),
-		int64(b.Timestamp),
-		strings.TrimSpace(b.PrevHash),
-		txHashStr,
-		int64(b.Difficulty),
-		gMatrix,
-		int64(b.Nonce),
-		uHash,
-		uMiner,
-	)
-
-	h := sha256.New()
-	h.Write([]byte(inputStr))
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-func CalculateBlockReward(blockIndex int64) float64 {
-	if blockIndex < 0 {
-		return 0.0
-	}
-	if blockIndex <= 5256000 {
-		return 50.0
-	} else if blockIndex <= 10512000 {
-		return 25.0
-	} else if blockIndex <= 15768000 {
-		return 12.5
-	} else if blockIndex <= 21024000 {
-		return 6.25
-	}
-	return 5.00
-}
-
-func GetGlobalMeshMaxHeight(seedURL string) int64 {
-	cleanURL := strings.TrimSuffix(seedURL, "/") + "/block"
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(cleanURL)
-	if err != nil {
-		return 0
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return 0
-	}
-	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return 0
-	}
-	if heightVal, exists := data["current_height"]; exists {
-		if h, ok := heightVal.(float64); ok {
-			return int64(h)
-		}
-	}
-	return 0
-}
-
-func deleteUncleUTXO(bUTXO *bbolt.Bucket, height int64, uncleMiner string) {
-	trimmed := cleanAddr(uncleMiner)
-	if trimmed == "" || trimmed == "NONE" {
-		return
-	}
-	key := []byte(fmt.Sprintf("UNCLE_%d_%s", height, trimmed))
-	_ = bUTXO.Delete(key)
+	digest := sha256.Sum256([]byte(blockHeaderEncoding(b, txHashStr)))
+	return hex.EncodeToString(digest[:])
 }
 
 // blockAlreadyStored reports whether this exact block is the one stored at
@@ -280,119 +187,26 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	}
 	if incomingBlock.Index == currentTip.Index && incomingBlock.Hash != currentTip.Hash &&
 		incomingBlock.PrevHash == currentTip.PrevHash {
-		var winner, loser Block
+		// Two blocks on the same parent. More work wins, then the lower hash;
+		// every node applies the same rule, so they all settle on one block.
+		// If the incoming block wins, replace our tip with it now instead of
+		// staying on our own block until the next height forces a re-sync.
+		// The loser is simply dropped: there is no uncle share.
 		if siblingWins(currentTip, incomingBlock) {
-			winner = currentTip
-			loser = incomingBlock
-		} else {
-			winner = incomingBlock
-			loser = currentTip
-		}
-		// Deterministic tie-break: more work wins, then the lower hash. If the incoming
-		// block wins, replace our tip with it now instead of staying on our own
-		// block until the next height forces a re-sync.
-		if winner.Hash == incomingBlock.Hash {
-			StateMutex.Lock()
-			liveTip := GetLatestBlockInternal()
-			adopted := liveTip.Hash == currentTip.Hash &&
-				ValidateBlockSignatures(incomingBlock) &&
-				SaveBlockToStorageInternal(incomingBlock)
-			StateMutex.Unlock()
-			if !adopted {
-				return
-			}
-			fmt.Printf("🔄 [TIP SWITCH] Height %d: adopted competing block %.16s (more work or lower hash) over local %.16s\n", incomingBlock.Index, incomingBlock.Hash, currentTip.Hash)
-		} else if !ValidateBlockSignatures(incomingBlock) {
-			// The losing block earns its miner the uncle share, so it must be a fully
-			// valid block, not just something with the right hash prefix.
 			return
 		}
-		RecordUncleCandidate(winner, loser)
+		StateMutex.Lock()
+		liveTip := GetLatestBlockInternal()
+		adopted := liveTip.Hash == currentTip.Hash &&
+			ValidateBlockSignatures(incomingBlock) &&
+			SaveBlockToStorageInternal(incomingBlock)
+		StateMutex.Unlock()
+		if adopted {
+			fmt.Printf("🔄 [TIP SWITCH] Height %d: adopted competing block %.16s (more work or lower hash) over local %.16s\n", incomingBlock.Index, incomingBlock.Hash, currentTip.Hash)
+		}
 		return
 	}
 	ProcessIncomingNetworkBlock(incomingBlock)
-}
-
-// RecordUncleCandidate queues the losing block of a same-height race so the
-// miner of the next block can pay its 20% share. It only writes a local note;
-// no coins move until a block's coinbase says so. It takes no StateMutex,
-// because some callers already hold it.
-func RecordUncleCandidate(winner Block, loser Block) {
-	if GlobalBoltEngine == nil || winner.Hash == "" || loser.Hash == "" || winner.Hash == loser.Hash {
-		return
-	}
-	// A network without the uncle share never pays a losing block, so there
-	// is nothing to queue, and saying "queued for payout" would be untrue.
-	if Params.NoUncles {
-		return
-	}
-	var uncleMiner string
-	if len(loser.Transactions) > 0 {
-		uncleMiner = strings.TrimSpace(loser.Transactions[0].Witness)
-	}
-	if uncleMiner == "" && len(loser.Transactions) > 0 && len(loser.Transactions[0].Outputs) > 0 {
-		uncleMiner = strings.TrimSpace(loser.Transactions[0].Outputs[0].Recipient)
-	}
-	if uncleMiner == "" || uncleMiner == "GENESIS_VOID_REWARD_POOL" {
-		uncleMiner = "NONE"
-	}
-	if uncleMiner != "NONE" && uncleMiner != "" {
-		_ = GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
-			bUncle := tx.Bucket([]byte("uncle_ledger"))
-			if bUncle == nil {
-				return nil
-			}
-			uncleKey := []byte(fmt.Sprintf("UNCLE_METADATA_%d", winner.Index))
-			// Keep the first uncle seen for a given winner; replace the record if the
-			// winner at this height has changed (a lower hash arrived later).
-			var existing map[string]string
-			if raw := bUncle.Get(uncleKey); raw != nil {
-				_ = json.Unmarshal(raw, &existing)
-			}
-			if existing["winning_hash"] != winner.Hash {
-				metadataPayload := map[string]string{
-					"winning_hash": winner.Hash,
-					"uncle_hash":   loser.Hash,
-					"uncle_miner":  uncleMiner,
-				}
-				metaBytes, _ := json.Marshal(metadataPayload)
-				_ = bUncle.Put(uncleKey, metaBytes)
-				// Record only. No coins are credited here; the uncle is paid by the next
-				// block's coinbase (see GetPendingUncleForTip), which every node validates.
-				fmt.Printf("💾 [UNCLE RECORDED] Height %d: losing block %.16s by %s queued for payout in block #%d\n", winner.Index, loser.Hash, uncleMiner, winner.Index+1)
-			}
-			return nil
-		})
-	}
-}
-
-// GetPendingUncleForTip returns the losing sibling of the current tip, if this
-// node witnessed one. The miner of the next block names it in the header and
-// pays its miner 20% of the block reward, keeping 80% for itself.
-func GetPendingUncleForTip(tip Block) (uncleHash string, uncleMiner string, found bool) {
-	if GlobalBoltEngine == nil || tip.Index <= 0 || tip.Hash == "" {
-		return "", "", false
-	}
-	var meta map[string]string
-	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
-		bUncle := tx.Bucket(uncleLedgerBucket)
-		if bUncle == nil {
-			return nil
-		}
-		if raw := bUncle.Get([]byte(fmt.Sprintf("UNCLE_METADATA_%d", tip.Index))); raw != nil {
-			_ = json.Unmarshal(raw, &meta)
-		}
-		return nil
-	})
-	uncleHash = strings.TrimSpace(meta["uncle_hash"])
-	uncleMiner = cleanAddr(meta["uncle_miner"])
-	// Only valid while the recorded winner is still our tip.
-	if meta["winning_hash"] != tip.Hash || uncleHash == "" || uncleHash == tip.Hash ||
-		uncleHash == "0000000000000000000000000000000000000000000000000000000000000000" ||
-		uncleMiner == "" || uncleMiner == "NONE" {
-		return "", "", false
-	}
-	return uncleHash, uncleMiner, true
 }
 
 // runChainLagWatchdog is a safety net for a node that has silently fallen
@@ -429,152 +243,42 @@ func runChainLagWatchdog() {
 		}
 	}
 }
-func GetMedianTimePast(lastBlock Block) int64 {
-	var timestamps []int64
-	currentScanBlock := lastBlock
-	for i := 0; i < 11; i++ {
-		timestamps = append(timestamps, currentScanBlock.Timestamp)
-		if currentScanBlock.Index == 0 {
-			break
-		}
-		currentScanBlock = GetBlockByHeightFromDB(currentScanBlock.Index - 1)
-		if currentScanBlock.Hash == "" {
-			break
-		}
-	}
-	for i := 0; i < len(timestamps)-1; i++ {
-		for j := 0; j < len(timestamps)-i-1; j++ {
-			if timestamps[j] > timestamps[j+1] {
-				timestamps[j], timestamps[j+1] = timestamps[j+1], timestamps[j]
-			}
-		}
-	}
-	if len(timestamps) == 0 {
-		return time.Now().Unix()
-	}
-	return timestamps[len(timestamps)/2]
-}
 
-const (
-	RetargetWindowSize    = 15
-	DampeningPercentage   = 20
-	TargetBlockTimeWindow = 45
-)
-
-func CalculateMedianElapsedTime(lastBlock Block) int64 {
-	var intervals []int64
-	currentScanBlock := lastBlock
-	for i := 0; i < RetargetWindowSize; i++ {
-		if currentScanBlock.Index == 0 {
-			break
-		}
-		parentBlock := GetBlockByHeightFromDB(currentScanBlock.Index - 1)
-		if parentBlock.Hash == "" {
-			break
-		}
-		delta := currentScanBlock.Timestamp - parentBlock.Timestamp
-		if delta > 0 {
-			intervals = append(intervals, delta)
-		}
-		currentScanBlock = parentBlock
-	}
-	if len(intervals) == 0 {
-		return TargetBlockTimeWindow
-	}
-	for i := 0; i < len(intervals)-1; i++ {
-		for j := 0; j < len(intervals)-i-1; j++ {
-			if intervals[j] > intervals[j+1] {
-				intervals[j], intervals[j+1] = intervals[j+1], intervals[j]
-			}
-		}
-	}
-	return intervals[len(intervals)/2]
-}
+// CalculateNextDifficulty returns the difficulty required of the block that
+// follows lastBlock and is dated nextBlockTimestamp.
 func CalculateNextDifficulty(lastBlock Block, nextBlockTimestamp int64) int {
-	if IsHeartbeatHeight(lastBlock.Index + 1) {
-		return CalculateHeartbeatDifficulty(lastBlock, nextBlockTimestamp)
-	}
-	if lastBlock.Index < 10 {
-		return 2
-	}
-	currentDiff := int(lastBlock.Difficulty)
-	if currentDiff < 4 {
-		return 4
-	}
-	mtpFloor := GetMedianTimePast(lastBlock)
-	if nextBlockTimestamp <= mtpFloor {
-		return currentDiff + 1
-	}
-	medianElapsed := CalculateMedianElapsedTime(lastBlock)
-	lowThreshold := int64((TargetBlockTimeWindow * (100 - DampeningPercentage)) / 100)
-	highThreshold := int64((TargetBlockTimeWindow * (100 + DampeningPercentage)) / 100)
-	if medianElapsed < lowThreshold {
-		return currentDiff + 1
-	} else if medianElapsed > highThreshold {
-		decreasedDiff := currentDiff - 1
-		if decreasedDiff < 4 {
-			return 4
-		}
-		return decreasedDiff
-	}
-	return currentDiff
+	return CalculateHeartbeatDifficulty(lastBlock, nextBlockTimestamp)
 }
+
 func ValidateBlockSignatures(b Block) bool {
 	// There is exactly one genesis block, and the program builds it itself
 	// (see genesis.go). Nothing else at height 0, or below it, is a block.
-	// Without this, a block at height 0 was judged by the rules for the
-	// first test network's earliest blocks, which check almost nothing.
 	if b.Index <= 0 {
 		return b.Index == 0 && b.Hash == buildGenesisBlock().Hash && b.Hash == CalculateHash(b)
-	}
-	if !ValidateBlockByVersion(b) {
-		fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d rejected by version dispatcher gateway rule.\n", b.Index)
-		return false
 	}
 	if err := checkBlockFormat(b); err != nil {
 		fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d: %v\n", b.Index, err)
 		return false
 	}
-	if b.Index > 0 {
-		parentBlock := GetBlockByHeightFromDB(b.Index - 1)
-		if parentBlock.Hash != "" {
-			mtpFloor := GetMedianTimePast(parentBlock)
-			if b.Timestamp <= mtpFloor {
-				fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d timestamp (%d) is behind historical MTP floor (%d). Exploit blocked.\n", b.Index, b.Timestamp, mtpFloor)
-				return false
-			}
-			if b.Timestamp > time.Now().Unix()+7200 {
-				fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d timestamp drifted too far into the future. Exploit blocked.\n", b.Index)
-				return false
-			}
-			if IsHeartbeatHeight(b.Index) {
-				// Heartbeat blocks must move time forward, and may not be dated far
-				// ahead of the clock: a later date is what eases difficulty.
-				if b.Timestamp <= parentBlock.Timestamp {
-					fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d is not dated after its parent.\n", b.Index)
-					return false
-				}
-				if b.Timestamp > time.Now().Unix()+HeartbeatMaxFutureDriftSeconds {
-					fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d is dated more than %d s ahead of this node's clock.\n", b.Index, HeartbeatMaxFutureDriftSeconds)
-					return false
-				}
-			}
-		}
+	// A block is judged against its parent, which must be the block we hold
+	// at the height below.
+	parentBlock := GetBlockByHeightFromDB(b.Index - 1)
+	if parentBlock.Hash == "" {
+		return false
 	}
-	var expectedDiff int
-	if b.Index <= 10 && !IsHeartbeatHeight(b.Index) {
-		expectedDiff = 2
-	} else {
-		parentBlock := GetBlockByHeightFromDB(b.Index - 1)
-		if parentBlock.Hash == "" {
-			if IsHeartbeatHeight(b.Index) {
-				// Heartbeat difficulty cannot be derived without the parent.
-				return false
-			}
-			parentBlock = Block{Index: b.Index - 1, Difficulty: b.Difficulty}
-		}
-		expectedDiff = CalculateNextDifficulty(parentBlock, b.Timestamp)
+	// A block must move time forward, and may not be dated far ahead of the
+	// clock: a later date is what eases difficulty. (Dates that always move
+	// forward also keep every block later than the median of those before
+	// it, the rule older chains state separately.)
+	if b.Timestamp <= parentBlock.Timestamp {
+		fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d is not dated after its parent.\n", b.Index)
+		return false
 	}
+	if b.Timestamp > time.Now().Unix()+HeartbeatMaxFutureDriftSeconds {
+		fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d is dated more than %d s ahead of this node's clock.\n", b.Index, HeartbeatMaxFutureDriftSeconds)
+		return false
+	}
+	expectedDiff := CalculateNextDifficulty(parentBlock, b.Timestamp)
 	if b.Difficulty != expectedDiff {
 		fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDiff)
 		return false
@@ -588,10 +292,8 @@ func ValidateBlockSignatures(b Block) bool {
 		return false
 	}
 	isBlockValid := true
-	// Without transfers to check (blocks before the transaction rules), the
-	// accounting is the reward alone.
-	accounting := accountForBlock(b.Index, 0, 0)
-	if IsTxForkHeight(b.Index) {
+	var accounting blockAccounting
+	{
 		// Transfers can only be judged against the coin set just before this
 		// block. That is known when the block sits on our tip, or competes with
 		// our tip for the same parent; anything else is settled by a re-sync.
@@ -639,15 +341,6 @@ func ValidateBlockSignatures(b Block) bool {
 			accounting = checked
 			return nil
 		})
-	} else if GlobalBoltEngine != nil {
-		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			bUTXO := dbTx.Bucket([]byte("utxo"))
-			if bUTXO == nil {
-				isBlockValid = false
-				return nil
-			}
-			return nil
-		})
 	}
 	if !isBlockValid {
 		return false
@@ -664,44 +357,13 @@ func ValidateBlockSignatures(b Block) bool {
 		}
 		totalCoinbaseUnits += out.Amount.Units()
 	}
-	// What the block pays apart from fees: the new reward plus the vault's payout.
+	// What the block pays apart from fees: the new reward plus the vault's
+	// payout. Its miner may add the miner's share of the fees.
 	rewardUnits := accounting.SubsidyUnits()
-	forkBlockFeeUnits := accounting.MinerFeeUnits
-	// When there is nothing to share, no uncle share is paid, and such a block is
-	// checked like any other.
-	if rewardUnits/5 > 0 && b.UncleHash != "" && b.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" && cleanAddr(b.UncleMiner) != "NONE" && cleanAddr(b.UncleMiner) != "" {
-		if len(coinbaseOutputs) != 2 {
-			fmt.Println("🚨 CONSENSUS REJECTION: Uncle transaction layout requires exactly two coinbase outputs.")
-			return false
-		}
-		// An uncle is a sibling of this block's parent, so it can never be the parent itself.
-		if strings.TrimSpace(b.UncleHash) == strings.TrimSpace(b.PrevHash) {
-			fmt.Println("🚨 CONSENSUS REJECTION: Uncle hash must not equal the parent block hash.")
-			return false
-		}
-		// The uncle's miner receives a fifth of the reward and vault payout; this
-		// block's miner receives the rest and may add its share of the fees.
-		uncleShareUnits := rewardUnits / 5
-		mainShareUnits := rewardUnits - uncleShareUnits
-		mainPayoutUnits := coinbaseOutputs[0].Amount.Units()
-		unclePayoutUnits := coinbaseOutputs[1].Amount.Units()
-		if mainPayoutUnits < mainShareUnits || mainPayoutUnits > mainShareUnits+forkBlockFeeUnits {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Block miner's share is %s, expected %s plus fees of at most %s.\n", FormatUnits(mainPayoutUnits), FormatUnits(mainShareUnits), FormatUnits(forkBlockFeeUnits))
-			return false
-		}
-		if unclePayoutUnits != uncleShareUnits {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Uncle miner's share is %s, expected %s.\n", FormatUnits(unclePayoutUnits), FormatUnits(uncleShareUnits))
-			return false
-		}
-		if cleanAddr(coinbaseOutputs[1].Recipient) != cleanAddr(b.UncleMiner) {
-			fmt.Printf("🚨 CONSENSUS REJECTION: Second reward output pays %s, but the block names %s as the uncle's miner.\n", cleanAddr(coinbaseOutputs[1].Recipient), b.UncleMiner)
-			return false
-		}
-	} else {
-		if totalCoinbaseUnits > rewardUnits+forkBlockFeeUnits {
-			fmt.Printf("🚨 EMISSION BLOCKED: Block pays %s, allowed %s.\n", FormatUnits(totalCoinbaseUnits), FormatUnits(rewardUnits+forkBlockFeeUnits))
-			return false
-		}
+	minerFeeUnits := accounting.MinerFeeUnits
+	if totalCoinbaseUnits > rewardUnits+minerFeeUnits {
+		fmt.Printf("🚨 EMISSION BLOCKED: Block pays %s, allowed %s.\n", FormatUnits(totalCoinbaseUnits), FormatUnits(rewardUnits+minerFeeUnits))
+		return false
 	}
 	return true
 }

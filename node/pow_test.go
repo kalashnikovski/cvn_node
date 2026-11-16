@@ -173,11 +173,12 @@ func TestAlgorithmChangesAtAHeight(t *testing.T) {
 }
 
 func TestHashrateDisplay(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	if got := formatHashrate(0.47); got != "0.47 MH/s" {
-		t.Errorf("testnet-1 shows %q, want 0.47 MH/s", got)
-	}
 	onNetwork(t, "devnet")
+	Params.PowSchedule = nil // SHA-256, which is far faster per hash
+	if got := formatHashrate(0.47); got != "0.47 MH/s" {
+		t.Errorf("SHA-256 shows %q, want 0.47 MH/s", got)
+	}
+	Params.PowSchedule = devnetParams.PowSchedule
 	if got := formatHashrate(0.0012); got != "1200 H/s" {
 		t.Errorf("RandomX shows %q, want 1200 H/s", got)
 	}

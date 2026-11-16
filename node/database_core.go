@@ -31,7 +31,6 @@ var chainWriteMutex sync.Mutex
 var blocksBucket = []byte("blocks")
 var metaBucket = []byte("meta")
 var utxoBucket = []byte("utxo")
-var uncleLedgerBucket = []byte("uncle_ledger") // 👑 STANDALONE IMMUTABLE UNCLE STORAGE PARTITION
 
 // InitBoltEngine mounts the local physical bbolt storage files safely on startup
 func InitBoltEngine() {
@@ -49,7 +48,6 @@ func InitBoltEngine() {
 		bBlocks, _ := tx.CreateBucketIfNotExists(blocksBucket)
 		_, _ = tx.CreateBucketIfNotExists(metaBucket)
 		bUTXO, _ := tx.CreateBucketIfNotExists(utxoBucket)
-		_, _ = tx.CreateBucketIfNotExists(uncleLedgerBucket)
 		_, _ = tx.CreateBucketIfNotExists(undoBucket)
 
 		// 👑 THE DETERMINISTIC GENESIS BOOTSTRAPPER ENGINE: Wiped Clean of Pre-mines
@@ -100,8 +98,8 @@ func InitBoltEngine() {
 
 // reindexUTXOFromChainOnce rebuilds the utxo bucket from the canonical blocks
 // bucket a single time. Earlier builds left behind coinbase outputs of orphaned
-// blocks and locally minted UNCLE_REWARD_* entries; replaying the chain drops
-// both, so every node on the same chain ends up with the same balances.
+// blocks; replaying the chain drops
+// them, so every node on the same chain ends up with the same balances.
 func reindexUTXOFromChainOnce() {
 	const reindexFlagKey = "utxo_reindex_v2"
 	tipHeight := atomic.LoadInt64(&localHeightState)
@@ -232,17 +230,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 	chainWriteMutex.Lock()
 	defer chainWriteMutex.Unlock()
 
+	// A block carries its own difficulty; HashMeetsDifficulty enforces the
+	// network's minimum.
 	expectedDiff := block.Difficulty
-	if IsHeartbeatHeight(block.Index) {
-		// Heartbeat blocks carry their own numeric difficulty; HashMeetsDifficulty
-		// enforces its floor.
-	} else if block.Index <= 10 {
-		expectedDiff = 2
-	} else {
-		if expectedDiff < 4 {
-			return false
-		}
-	}
 
 	if block.Hash != CalculateHash(block) || !BlockProofValid(block, expectedDiff) {
 		fmt.Printf("🚨 STORAGE REFUSAL: Block #%d failed strict cryptographic verification filters!\n", block.Index)
@@ -409,21 +399,14 @@ func SaveBlockToStorageInternal(block Block) bool {
 
 	_ = ctx // Enforced contextual lifetime tracking satisfied natively inside callbacks
 	if err != nil {
-		if keptLowerHashSibling != nil {
-			// Our block lost a same-height race to one already on disk. It is still
-			// a valid block, so queue it as the uncle and let peers see it too;
-			// the next block's miner pays its 20% share.
-			RecordUncleCandidate(*keptLowerHashSibling, block)
-			go BroadcastNewBlock(block)
-		}
+		// (When keptLowerHashSibling is set, our block lost a same-height race
+		// to one already on disk. It is dropped; there is no uncle share.)
+		_ = keptLowerHashSibling
 		return false
 	}
 
 	atomic.StoreInt64(&localHeightState, block.Index)
-	if displacedHigherHashSibling != nil {
-		// We replaced a same-parent block that had the higher hash: it is the uncle.
-		RecordUncleCandidate(block, *displacedHigherHashSibling)
-	}
+	_ = displacedHigherHashSibling // the block we replaced is simply dropped
 	RemoveConfirmedFromMempool(block)
 	if replacedExistingBlock || sweptCoins || len(block.Transactions) > 1 {
 		// A block at this height was already counted in the balance cache, or
@@ -470,9 +453,6 @@ func ApplyIncrementalDeltaCacheUpdate(block Block) {
 			}
 		}
 	}
-
-	// An uncle named in the header is paid by the second coinbase output, which
-	// the loop above has already credited. Nothing further to add here.
 }
 
 // RebuildStateBalanceCache wraps our core memory map compiler inside global thread hold gates
@@ -503,9 +483,6 @@ func RebuildStateBalanceCacheInternal() {
 				}
 			}
 		}
-
-		// uncle_ledger is a local record of races this node witnessed. It is not
-		// consensus state, so it must not contribute to balances.
 
 		return nil
 	})

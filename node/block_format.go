@@ -9,10 +9,9 @@ import (
 	"strings"
 )
 
-// THE LAUNCH FORMAT
+// THE BLOCK AND TRANSFER FORMAT
 //
-// These rules apply on networks whose settings have StrictFormat on. They do
-// not change what a block or a transfer means; they make sure that each one
+// These rules do not change what a block or a transfer means; they make sure that each one
 // can be written in exactly one way, and that nothing rides along that its
 // author did not sign.
 //
@@ -25,7 +24,10 @@ import (
 //     signature covers the network's name.
 //   - A reward transaction is likewise bare.
 //
-// The first test network (testnet-1) keeps its original, looser format.
+// A block's header still has two "uncle" fields from an earlier design in
+// which the loser of a same-height race was paid a share. That share could
+// not be verified and was dropped; the fields stay in the header so that it
+// has one fixed form, and must hold their empty values.
 
 const (
 	emptyUncleHash  = "0000000000000000000000000000000000000000000000000000000000000000"
@@ -40,8 +42,7 @@ const (
 	blockRewardReserveBytes = 2000
 )
 
-// blockHeaderEncoding is the exact text whose hash is a block's identifier
-// under the launch format.
+// blockHeaderEncoding is the exact text whose hash is a block's identifier.
 func blockHeaderEncoding(b Block, transactionsDigest string) string {
 	var builder strings.Builder
 	writeField(&builder, "CVN_BLOCK_V2")
@@ -74,7 +75,7 @@ func isLowerHex(text string, length int) bool {
 // checkBlockFormat checks the shape of a block's header under the launch
 // format. The genesis block is built by the program itself and is exempt.
 func checkBlockFormat(b Block) error {
-	if !Params.StrictFormat || b.Index == 0 {
+	if b.Index == 0 {
 		return nil
 	}
 	if b.Version != 1 {
@@ -89,14 +90,8 @@ func checkBlockFormat(b Block) error {
 	if b.GuardMatrix != "" {
 		return fmt.Errorf("the header text field is used by the genesis block only")
 	}
-	if Params.NoUncles {
-		if b.UncleHash != emptyUncleHash || b.UncleMiner != emptyUncleMiner {
-			return fmt.Errorf("this network has no uncle share; the uncle fields must be empty")
-		}
-	} else {
-		if !isLowerHex(b.UncleHash, 64) || !validRecipient(b.UncleMiner) {
-			return fmt.Errorf("malformed uncle fields")
-		}
+	if b.UncleHash != emptyUncleHash || b.UncleMiner != emptyUncleMiner {
+		return fmt.Errorf("there is no uncle share; the uncle fields must be empty")
 	}
 	return nil
 }
@@ -104,9 +99,6 @@ func checkBlockFormat(b Block) error {
 // checkTransferFormat refuses a transfer that carries anything its sender
 // did not sign.
 func checkTransferFormat(tx Transaction) error {
-	if !Params.StrictFormat {
-		return nil
-	}
 	if tx.Version != 1 {
 		return fmt.Errorf("transfer version %d is not known", tx.Version)
 	}
@@ -156,9 +148,6 @@ func rewardTransactionID(height int64, uniqueness string) string {
 // checkRewardFormat checks the shape of a block's reward transaction under
 // the launch format.
 func checkRewardFormat(coinbase Transaction, b Block) error {
-	if !Params.StrictFormat {
-		return nil
-	}
 	suffix := strings.TrimPrefix(coinbase.ID, fmt.Sprintf("TX_COINBASE_H%d_", b.Index))
 	if len(suffix) == 0 || len(suffix) > rewardIDSuffixMax || !isLowerHex(suffix, len(suffix)) {
 		return fmt.Errorf("reward transaction ID must end in 1 to %d lower-case hex digits", rewardIDSuffixMax)
@@ -175,8 +164,8 @@ func checkRewardFormat(coinbase Transaction, b Block) error {
 	if !validRecipient(coinbase.Witness) {
 		return fmt.Errorf("reward transaction names no valid miner")
 	}
-	if Params.NoUncles && len(coinbase.Outputs) > 1 {
-		return fmt.Errorf("this network has no uncle share; a block pays one reward output at most")
+	if len(coinbase.Outputs) > 1 {
+		return fmt.Errorf("a block pays one reward output at most")
 	}
 	return nil
 }
@@ -223,7 +212,7 @@ func blockTransferBudgetBytes() int {
 // something that is not an address at all, which every wallet and every node
 // refuses: about one mistake in four billion still passes.
 //
-// The first test network's addresses have no checksum.
+// (Addresses once had no checksum; see completeOlderAddress.)
 
 const (
 	addressPrefix     = "CVN_"
@@ -239,10 +228,7 @@ func addressChecksum(body string) string {
 
 // addressWithBody writes the address for a key hash in this network's form.
 func addressWithBody(body string) string {
-	if Params.StrictFormat {
-		return addressPrefix + body + addressChecksum(body)
-	}
-	return addressPrefix + body
+	return addressPrefix + body + addressChecksum(body)
 }
 
 // looksLikeWalletAddress reports whether text is an address in this
@@ -253,9 +239,6 @@ func looksLikeWalletAddress(text string) bool {
 		return false
 	}
 	rest := strings.TrimPrefix(text, addressPrefix)
-	if !Params.StrictFormat {
-		return isLowerHex(rest, addressBodyDigits)
-	}
 	if !isLowerHex(rest, addressBodyDigits+addressSumDigits) {
 		return false
 	}
@@ -265,10 +248,7 @@ func looksLikeWalletAddress(text string) bool {
 // addressFormDescription says in words what an address looks like on this
 // network, for messages to people.
 func addressFormDescription() string {
-	if Params.StrictFormat {
-		return fmt.Sprintf("%s followed by %d characters, each a digit or a letter from a to f; the last %d are a check on the rest", addressPrefix, addressBodyDigits+addressSumDigits, addressSumDigits)
-	}
-	return fmt.Sprintf("%s followed by %d characters, each a digit or a letter from a to f", addressPrefix, addressBodyDigits)
+	return fmt.Sprintf("%s followed by %d characters, each a digit or a letter from a to f; the last %d are a check on the rest", addressPrefix, addressBodyDigits+addressSumDigits, addressSumDigits)
 }
 
 // completeOlderAddress turns an address written without its checksum into
@@ -277,7 +257,7 @@ func addressFormDescription() string {
 // before the checksum existed, never for an address someone has just typed:
 // there the checksum is the point.
 func completeOlderAddress(text string) (string, bool) {
-	if !Params.StrictFormat || !strings.HasPrefix(text, addressPrefix) {
+	if !strings.HasPrefix(text, addressPrefix) {
 		return text, false
 	}
 	body := strings.TrimPrefix(text, addressPrefix)

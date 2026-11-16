@@ -50,17 +50,6 @@ func TestBlockAccounting(t *testing.T) {
 	}
 }
 
-func TestTestnet1HasNoVault(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	a := accountForBlock(7000, cvn("10"), 123456)
-	if a.VaultFeeUnits != 0 || a.VaultPayoutUnits != 0 || a.VaultAfterUnits != 0 || a.MinerFeeUnits != cvn("10") || a.MinerAllowanceUnits() != cvn("60") {
-		t.Errorf("testnet-1 miners keep every fee and there is no vault: %+v", a)
-	}
-	if vaultEnabled() || minimumOutputUnits() != 1 || !reorgDepthAllowed(1000000) {
-		t.Error("testnet-1 must have no vault, no minimum output above one unit, and no reorganisation limit")
-	}
-}
-
 // A small economy with a fast vault, so its behaviour shows within a few blocks.
 func startVaultChain(t *testing.T) {
 	t.Helper()

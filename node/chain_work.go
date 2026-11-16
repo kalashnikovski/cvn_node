@@ -52,24 +52,15 @@ type chainWorkEntry struct {
 
 // BlockWork is the average number of hashes needed to find this block.
 func BlockWork(b Block) *big.Int {
-	if IsHeartbeatHeight(b.Index) {
-		if b.Difficulty < 1 {
-			return big.NewInt(1)
-		}
-		return big.NewInt(int64(b.Difficulty))
+	if b.Index <= 0 {
+		// The genesis block is not mined. It counts for a fixed 256, the
+		// figure it has always had, so totals already recorded stay right.
+		return big.NewInt(256)
 	}
-	// Older blocks: difficulty counted leading zero hex digits, 16x per digit.
-	zeros := b.Difficulty
-	if b.Index <= 10 {
-		zeros = 2
+	if b.Difficulty < 1 {
+		return big.NewInt(1)
 	}
-	if zeros < 0 {
-		zeros = 0
-	}
-	if zeros > 64 {
-		zeros = 64
-	}
-	return new(big.Int).Exp(big.NewInt(16), big.NewInt(int64(zeros)), nil)
+	return big.NewInt(int64(b.Difficulty))
 }
 
 // siblingWins reports whether block a beats block b when both sit at the same
@@ -288,14 +279,10 @@ func candidateBlockProofValid(block Block) bool {
 // block whose RandomX key block is on the same foreign branch (see
 // blockProofValidWithKeyBlock).
 func candidateBlockProofValidWithKeyBlock(block Block, keyBlockHash string) bool {
-	claimed := block.Difficulty
-	if !IsHeartbeatHeight(block.Index) {
-		if block.Index <= 10 {
-			claimed = 2
-		} else if claimed < 4 {
-			return false
-		}
+	if block.Index <= 0 {
+		return false // the genesis block is never taken from another node
 	}
+	claimed := block.Difficulty
 	return block.Hash == CalculateHash(block) && blockProofValidWithKeyBlock(block, claimed, keyBlockHash)
 }
 
@@ -387,12 +374,6 @@ func rollbackChainToHeightLocked(target int64) []Block {
 					// Newest block first, so coins spent and re-created across the
 					// removed blocks unwind in the right order.
 					undoBlockCoinChanges(tx, bUTXO, block)
-					if block.UncleHash != "" &&
-						block.UncleHash != "0000000000000000000000000000000000000000000000000000000000000000" &&
-						cleanAddr(block.UncleMiner) != "NONE" &&
-						cleanAddr(block.UncleMiner) != "" {
-						deleteUncleUTXO(bUTXO, block.Index, block.UncleMiner)
-					}
 					removed = append(removed, block)
 				}
 			}

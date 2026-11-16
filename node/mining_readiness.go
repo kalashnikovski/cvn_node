@@ -62,7 +62,7 @@ func decideMiningHold(tipHeight, tipAgeSeconds, bestPeerHeight int64, anyPeerAns
 	// blocks are slow (see heartbeat_difficulty.go), so there is no flood of
 	// cheap blocks to guard against, and a slow start is exactly when holding
 	// miners back on anyone's word would matter most.
-	if Params.ScheduleAnchored && tipHeight < HeartbeatLaunchBlocks {
+	if tipHeight < HeartbeatLaunchBlocks {
 		return false, anyPeerAnswered && bestPeerHeight > tipHeight, ""
 	}
 	if anyPeerAnswered {

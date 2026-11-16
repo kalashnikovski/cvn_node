@@ -207,11 +207,10 @@ The program runs on one network at a time.
 |---|---|---|
 | `cvn_testnet` | nothing; it is the default | The CVN Testnet: the public test of the launch rules. **Not started yet.** Its start will be announced as a Bitcoin block height. Once it is announced, start your miner on it any time beforehand: it waits, and begins by itself at the same moment as everyone else. |
 | `devnet` | add `--network devnet` | The development network for the launch rules. It has no public seeds and may be wiped at any time. |
-| `testnet-1` | add `--network testnet-1` | The first test network, on an earlier and simpler rule set. No longer maintained. |
 
 The same option works for the wallet, for example `./cvn_node --network devnet --wallet` or `LaunchWallet.bat --network devnet`. Each network keeps its own database file and uses its own ports, so they do not interfere.
 
-**For any network other than the CVN Testnet, give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on the CVN Testnet, and so does a double-click on `LaunchMiner.bat` or `LaunchWallet.bat`. Each network has its own wallet file and its own chain, and addresses on `testnet-1` are written differently (without the 8 check characters at the end). The program refuses a network name it does not know. In particular there is no network called `mainnet` or `testnet`: the CVN Testnet is `cvn_testnet`.
+**For any network other than the CVN Testnet, give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on the CVN Testnet, and so does a double-click on `LaunchMiner.bat` or `LaunchWallet.bat`. Each network has its own wallet file and its own chain. The program refuses a network name it does not know. In particular there is no network called `mainnet` or `testnet`: the CVN Testnet is `cvn_testnet`.
 
 ### On the day a network starts
 

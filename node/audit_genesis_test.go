@@ -10,7 +10,7 @@ import (
 // block, won on a lower identifier, and was stored with every output of every
 // transaction in it, unchecked. That creates coins from nothing.
 func TestGenesisBlockCannotBeReplaced(t *testing.T) {
-	for _, network := range []string{"devnet", "testnet-1"} {
+	for _, network := range []string{"devnet"} {
 		t.Run(network, func(t *testing.T) {
 			startTestChain(t, network)
 			genesis := GetBlockByHeightFromDB(0)

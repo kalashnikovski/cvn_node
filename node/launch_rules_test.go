@@ -11,8 +11,8 @@ func TestDevnetUsesLaunchRules(t *testing.T) {
 	if !IsHeartbeatHeight(1) || !IsTxForkHeight(1) {
 		t.Error("on devnet the difficulty rule and transfer validation must apply from block 1")
 	}
-	if !Params.ScheduleAnchored || !Params.ReliefNotInherited || Params.Economics == nil || !Params.AmountsAsUnits {
-		t.Error("devnet must run the launch rules: anchored schedule, launch rewards, whole-unit amounts")
+	if !Params.ReliefNotInherited || Params.Economics == nil || *Params.Economics != NewGenesisEconomics {
+		t.Error("devnet must run the launch rules: late-block relief not inherited, and the launch reward schedule")
 	}
 	if powAlgorithmAt(1) != PowRandomX || powAlgorithmAt(5000000) != PowRandomX || minDifficultyAt(1) != 5000 {
 		t.Error("devnet must mine with RandomX from block 1, with a minimum difficulty of 5,000")
@@ -25,22 +25,6 @@ func TestDevnetUsesLaunchRules(t *testing.T) {
 	}
 	if BlockRewardUnits(34339200) != cvn("0.78125") || BlockRewardUnits(34339201) != 0 {
 		t.Error("the launch schedule must end after block 34,339,200")
-	}
-}
-
-func TestTestnet1KeepsItsOriginalRules(t *testing.T) {
-	onNetwork(t, "testnet-1")
-	if Params.ScheduleAnchored || Params.ReliefNotInherited || Params.Economics != nil {
-		t.Fatal("testnet-1 must keep its original difficulty rule and reward schedule")
-	}
-	if BlockRewardUnits(7000) != cvn("50") || BlockRewardUnits(5256001) != cvn("25") {
-		t.Error("testnet-1 reward schedule changed")
-	}
-	if IsHeartbeatHeight(2499) || !IsHeartbeatHeight(2500) {
-		t.Error("testnet-1 heartbeat height changed")
-	}
-	if powAlgorithmAt(1) != PowSHA256 || powAlgorithmAt(7000) != PowSHA256 || minDifficultyAt(7000) != HeartbeatMinDifficulty {
-		t.Error("testnet-1 must keep mining with SHA-256 at its original minimum difficulty")
 	}
 }
 
@@ -100,9 +84,6 @@ func TestAnchoredRetarget(t *testing.T) {
 	if onSchedule != d {
 		t.Errorf("on target and on schedule, difficulty moved to %d", onSchedule)
 	}
-	if heartbeatRetargetAnchored(d, target, 10, 0, HeartbeatMinDifficulty) != heartbeatRetarget(d, target, 10) {
-		t.Error("with no drift the anchored rule must agree with the plain rule")
-	}
 	ahead := heartbeatRetargetAnchored(d, target, 10, -900, HeartbeatMinDifficulty) // 20 blocks ahead of schedule
 	behind := heartbeatRetargetAnchored(d, target, 10, 900, HeartbeatMinDifficulty)
 	if ahead <= d || behind >= d {
@@ -142,10 +123,10 @@ func simulateChain(anchored bool, blocks int, hashrate func(block int) float64, 
 	var elapsed int64 // seconds since block 1
 
 	next := func(gap, drift int64) int64 {
-		if anchored {
-			return heartbeatRetargetAnchored(difficulty, parentSolve, gap, drift, HeartbeatMinDifficulty)
+		if !anchored {
+			drift = 0 // the rule without its schedule term, for comparison
 		}
-		return heartbeatRetarget(difficulty, parentSolve, gap)
+		return heartbeatRetargetAnchored(difficulty, parentSolve, gap, drift, HeartbeatMinDifficulty)
 	}
 	for i := 1; i < blocks; i++ {
 		drift := elapsed - int64(i-1)*HeartbeatTargetSeconds
@@ -181,11 +162,11 @@ func TestBlockTimeAveragesExactlyTheTarget(t *testing.T) {
 
 	plainAverage, plainDrift := simulateChain(false, blocks, steady, 1)
 	anchoredAverage, anchoredDrift := simulateChain(true, blocks, steady, 1)
-	t.Logf("steady hashrate: plain rule %.2f s per block (ends %.1f days ahead of schedule); anchored rule %.3f s (ends %d s from schedule)",
+	t.Logf("steady hashrate: without the schedule term %.2f s per block (ends %.1f days ahead of schedule); with it %.3f s (ends %d s from schedule)",
 		plainAverage, -float64(plainDrift)/86400, anchoredAverage, anchoredDrift)
 
 	if plainAverage > 44.5 {
-		t.Errorf("the plain rule was expected to run fast (as on testnet-1); it averaged %.2f s", plainAverage)
+		t.Errorf("without the schedule term the rule was expected to run fast; it averaged %.2f s", plainAverage)
 	}
 	if math.Abs(anchoredAverage-45) > 0.05 {
 		t.Errorf("anchored rule averaged %.3f s per block, want 45", anchoredAverage)

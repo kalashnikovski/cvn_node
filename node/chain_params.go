@@ -15,21 +15,17 @@ import (
 // the key its nodes sign messages with, its ports, its files, its seed nodes,
 // its genesis block and the heights at which its rule changes switch on.
 //
-// Three networks are defined:
+// Two networks are defined. Both run the same rules; they differ in their
+// names, keys, ports, files, seeds and starting difficulty.
 //
 //   - cvn_testnet is the CVN Testnet, the public test of the launch rules. It
 //     is the default: a program started with no network named runs on it.
 //
-//   - testnet-1 is the first test network, which ran from 29 September 2026
-//     on an earlier and simpler rule set. It is no longer maintained and is
-//     chosen only by name. Every value of it below is exactly what was
-//     previously written into the code in many places. Earlier documents call
-//     it "mainnet"; it is a test network.
+//   - devnet is the development network, where the rules are built, tried
+//     and rehearsed. It can be wiped at any time and has no public seeds.
 //
-//   - devnet is where the rules of the new genesis (GENESIS_SPEC) are built
-//     and tried. It has its own key, ports and files, so it can run on the
-//     same machine as a testnet-1 node and can be wiped at any time. It has no
-//     public seeds.
+// An earlier network, testnet-1, ran from 29 September 2026 on a simpler
+// rule set and has been retired; this program can no longer follow it.
 //
 // Choose with `--network NAME` or the CVN_NETWORK environment variable.
 
@@ -59,39 +55,20 @@ type ChainParams struct {
 	// re-sync, beyond SeedHosts on SyncPort.
 	ExtraSyncURLs []string
 	// WindowsSelfSkipHost is a seed that Windows nodes do not download from
-	// on SyncPort (the testnet-1 seed that itself runs on Windows).
+	// on SyncPort (a seed that itself runs on Windows). Unused at present.
 	WindowsSelfSkipHost string
 
 	GenesisTimestamp int64
 	// Anchor ties the genesis block to a moment in time (see genesis.go).
 	Anchor GenesisAnchor
 
-	// AmountsAsUnits says how amounts are written into blocks: as whole
-	// units when set, as decimal CVN numbers when not (testnet-1 only; see
-	// amount.go).
-	AmountsAsUnits bool
-	// StrictFormat turns on the launch format rules (see block_format.go):
-	// an unambiguous block header, no unused or unsigned fields in a
-	// transfer, and the network's name inside everything a transfer signs.
-	StrictFormat bool
-	// NoUncles removes the uncle share: a block pays its own miner only.
-	NoUncles bool
 	// MaxBlockBytes limits the size of a block (see blockSizeBytes). Zero
 	// means the network has no such limit.
 	MaxBlockBytes int
 
-	// Heights at which rule changes switch on.
-	HeartbeatHeight int64
-	TxForkHeight    int64
-
-	// HeartbeatInitialDifficulty is the difficulty the first heartbeat block
-	// starts from.
+	// HeartbeatInitialDifficulty is the difficulty the first block starts
+	// from.
 	HeartbeatInitialDifficulty int64
-
-	// ScheduleAnchored makes the difficulty rule also steer the chain toward
-	// exactly one block per target interval, counted from block 1, so that
-	// block heights line up with the calendar over the long run.
-	ScheduleAnchored bool
 
 	// ReliefNotInherited keeps the relief given to a late block (difficulty
 	// halved after six minutes without a block) to that block alone: the
@@ -100,12 +77,12 @@ type ChainParams struct {
 	// whoever has the most hashrate (see heartbeat_difficulty.go).
 	ReliefNotInherited bool
 
-	// Economics, when set, is the launch reward schedule. When nil the
-	// network uses testnet-1's original schedule.
+	// Economics is the reward schedule, the vault, the sweep and the limits
+	// that go with them (see GenesisEconomics).
 	Economics *GenesisEconomics
 
 	// PowSchedule says which mining algorithm applies from which height
-	// (see pow.go). Empty means SHA-256 throughout.
+	// (see pow.go). Empty means SHA-256 throughout, which only tests use.
 	PowSchedule []PowEra
 	// KeyEpochBlocks is how often the RandomX key changes, and KeyLagBlocks
 	// how far behind the tip the key block must be.
@@ -127,33 +104,9 @@ var publicSeedHosts = []string{
 	"65.20.67.25",    // Mumbai, India
 }
 
-var testnet1Params = ChainParams{
-	Name:        "testnet-1",
-	Description: "The first test network (from 29 September 2026). No longer maintained",
-
-	AuthKey: "COVENANT_STANDARD_MAINNET_IGNITION_AUTHENTICATION_KEY_TOKEN_2026",
-
-	GossipPort:       8080,
-	SyncPort:         8081,
-	SyncFallbackPort: 9091,
-	StatusPort:       8082,
-
-	DatabaseFile:  "cvn_mainnet.db",
-	PeerCacheFile: "peers.json",
-
-	SeedHosts: publicSeedHosts,
-
-	GenesisTimestamp: 1790640000,
-
-	HeartbeatHeight: 2500,
-	TxForkHeight:    6100,
-
-	HeartbeatInitialDifficulty: 40000000,
-}
-
 var devnetParams = ChainParams{
 	Name:        "devnet",
-	Description: "Development network for the new genesis rules; may be wiped at any time",
+	Description: "Development network, for building and rehearsing the launch rules; may be wiped at any time",
 
 	AuthKey: "CVN_DEVNET_NODE_MESSAGE_KEY_NOT_FOR_REAL_VALUE_2026",
 
@@ -170,16 +123,7 @@ var devnetParams = ChainParams{
 	// A development network proves nothing about when it started.
 	Anchor: GenesisAnchor{Placeholder: "development network, no anchor, no value"},
 
-	AmountsAsUnits: true,
-	StrictFormat:   true,
-	NoUncles:       true,
-	MaxBlockBytes:  300000,
-
-	// Launch rules: the heartbeat difficulty rule and transfer validation
-	// apply from the first block, the chain is steered to an exact 45-second
-	// average, and rewards follow the launch schedule.
-	HeartbeatHeight: 1,
-	TxForkHeight:    1,
+	MaxBlockBytes: 300000,
 
 	// RandomX from the first block. The key changes once a day (1,920 blocks)
 	// and the key block is always more than 100 blocks behind, matching the
@@ -189,7 +133,6 @@ var devnetParams = ChainParams{
 	KeyEpochBlocks:             1920,
 	KeyLagBlocks:               100,
 	HeartbeatInitialDifficulty: 5000,
-	ScheduleAnchored:           true,
 	ReliefNotInherited:         true,
 	Economics:                  &NewGenesisEconomics,
 }
@@ -233,13 +176,7 @@ var cvnTestnetParams = ChainParams{
 	// hours, set when the anchor is supplied.
 	Anchor: GenesisAnchor{Unscheduled: true},
 
-	AmountsAsUnits: true,
-	StrictFormat:   true,
-	NoUncles:       true,
-	MaxBlockBytes:  300000,
-
-	HeartbeatHeight: 1,
-	TxForkHeight:    1,
+	MaxBlockBytes: 300000,
 
 	// The minimum is what one slow processor thread can still meet in about
 	// a block interval. The start is set for the handful of machines expected
@@ -251,23 +188,21 @@ var cvnTestnetParams = ChainParams{
 	KeyEpochBlocks:             1920,
 	KeyLagBlocks:               100,
 	HeartbeatInitialDifficulty: 1000000,
-	ScheduleAnchored:           true,
 	ReliefNotInherited:         true,
 	Economics:                  &NewGenesisEconomics,
 }
 
 // Params is the network this process runs on. The program calls
 // SelectNetwork before anything else, and with no network named that chooses
-// the CVN Testnet. The value here is only what holds before that call: the
-// first test network's settings, which is where that network's tests begin.
-var Params = testnet1Params
+// the CVN Testnet. The value here is only what holds before that call.
+var Params = cvnTestnetParams
 
 // defaultNetwork is the network a program runs on when none is named.
 var defaultNetwork = &cvnTestnetParams
 
 // KnownNetworks lists the names SelectNetwork accepts.
 func KnownNetworks() []string {
-	return []string{testnet1Params.Name, cvnTestnetParams.Name, devnetParams.Name}
+	return []string{cvnTestnetParams.Name, devnetParams.Name}
 }
 
 // SelectNetwork switches this process to the named network. It must be called
@@ -276,8 +211,8 @@ func SelectNetwork(name string) error {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "":
 		Params = *defaultNetwork
-	case testnet1Params.Name:
-		Params = testnet1Params
+	case "testnet-1", "testnet1":
+		return fmt.Errorf("testnet-1, the first test network, has been retired and this program can no longer follow it (known networks: %s)", strings.Join(KnownNetworks(), ", "))
 	case cvnTestnetParams.Name, "cvn-testnet", "cvn testnet", "cvntestnet":
 		Params = cvnTestnetParams
 	case devnetParams.Name:
@@ -323,8 +258,6 @@ func applyDevnetOverrides() {
 // of the program reads.
 func applyParams() {
 	BlockchainFile = Params.DatabaseFile
-	HeartbeatActivationHeight = Params.HeartbeatHeight
-	TxForkActivationHeight = Params.TxForkHeight
 	resetUnrelievedCache()
 }
 
