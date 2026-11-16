@@ -11,11 +11,11 @@ Each finding below was checked against the code before anything was done about i
 - The genesis block's special cases can be reached only by the program's own genesis block.
 - The two fixed "uncle" fields in the block header are enforced on every path by which a block is stored today.
 
-## Open: needs a rule change
+## Fixed by a rule change
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| 1 | **A miner with most of the hashrate gains by choosing the dates of its blocks** (Claude) | Medium | **Confirmed, not fixed.** |
+| 1 | **A miner with most of the hashrate gains by choosing the dates of its blocks** (Claude) | Medium | **Confirmed and fixed** (`ExponentialSteps`). Not yet reviewed by anyone else. |
 
 The miner dates a run of blocks one second after their parents, which raises difficulty by about 5% a block while the chain's dates fall behind the clock, then dates one block 495 seconds after its parent, which halves difficulty in one step. The rises and the halving cancel, but the dates of those blocks span less time than that many block intervals, so blocks come faster than the rule believes.
 
@@ -30,7 +30,14 @@ Reproduced against the real arithmetic (`node/chosen_dates_sim_test.go`), with h
 
 It does not come from rule B and was there before it. The cause is that each block's step is applied as `1 + x`: many small rises and one large fall multiply to less than their sum suggests.
 
-A candidate fix was tried in simulation only (`node/dates_candidates_sim_test.go`, candidate H): apply each step as `e^x`. Steps then multiply to something that depends only on how much time the blocks' dates span. Against 29 date patterns the best gain was 0.3% at any share and the chain held 45.0 seconds; under stop-start mining and honest hashrate swings it behaved as rule B does (after hashrate falls to a tenth, 52 minutes for the next 30 blocks against 49). It is a change to a rule every node enforces and needs exact whole-number arithmetic for `e^x`; it has not been built.
+**The fix.** Each step is now applied as `e^x` (`heartbeatRetargetAnchored`, setting `ExponentialSteps`, on for both networks). Steps then multiply to something that depends only on how much time the blocks' dates span.
+
+- `e^x` is worked out in whole numbers (`expStepFactor`): the series 1 + x + x²/2 + ... in 64-bit fixed point, each term rounded toward zero, until a term rounds to nothing. Seven values are pinned by a test; they were checked against a separate implementation of the same series and lie within six parts in 2^64 of the true value.
+- Against the real arithmetic, the patterns that paid before pay nothing (`TestChoosingDatesDoesNotPayTheLargestMiner`): no gain above 2% at 100%, 94% or 85% of the hashrate, and the chain holds 45 seconds. A float copy tried 29 patterns (`node/dates_candidates_sim_test.go`): 0.3% at most.
+- Elsewhere it behaves as before: stop-start mining still pays a dominant miner nothing extra; after hashrate falls to a tenth, the next 30 blocks take about 52 minutes (49 before).
+- A slow block now lowers difficulty by about 39% at most, where it was 50%.
+
+It is a change to a rule every node enforces. A development chain mined before it is not valid under it.
 
 ## Fixed
 
@@ -55,5 +62,5 @@ Tests added for cases the reviewers found missing: a late block during the forty
 ## Not covered by this round
 
 - One reviewer did not read the networking or wallet files.
-- Whether a better date pattern exists than those tried against finding 1 and against candidate H.
+- Whether a date pattern exists, beyond those tried, that still pays under exponential steps. The argument that none can is that steps now depend only on their sum; the late-block halving, which is separate from the step, is the place to look.
 - The tests still mostly check the rule against its own arithmetic; the simulations are the only check from outside it.

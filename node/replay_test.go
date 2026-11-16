@@ -119,6 +119,10 @@ func TestReplayRealChain(t *testing.T) {
 		if os.Getenv("CVN_REPLAY_RELIEF_INHERITED") != "" {
 			Params.ReliefNotInherited = false
 		}
+		// Likewise a chain mined before difficulty steps were applied as e^x.
+		if os.Getenv("CVN_REPLAY_LINEAR_STEPS") != "" {
+			Params.ExponentialSteps = false
+		}
 	})
 	genesis := GetBlockByHeightFromDB(0)
 	if genesis.Hash != blocks[0].Hash {

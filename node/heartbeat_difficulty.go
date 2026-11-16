@@ -14,7 +14,8 @@ import (
 //   - Difficulty is a fine-grained number: the average count of hashes a
 //     block needs. A hash is valid when hash <= (2^256 - 1) / Difficulty.
 //   - Difficulty is re-tuned on every block from how long the parent took:
-//     faster than 45 s nudges it up, slower nudges it down. It also leans
+//     faster than 45 s nudges it up (by 5% at most), slower nudges it down
+//     (by about 39% at most). It also leans
 //     against how far the whole chain is from its schedule, so over any long
 //     run the chain's own timestamps average 45 s per block, whatever
 //     hashrate joins or leaves.
@@ -31,9 +32,11 @@ import (
 
 const (
 	HeartbeatTargetSeconds = int64(45)
-	// Each block moves difficulty by at most 1/HeartbeatWindow upward (+5%).
+	// Each block's step is (target - solve)/(target * HeartbeatWindow): at
+	// most about +0.049, a rise of 5%.
 	HeartbeatWindow = int64(20)
-	// A parent slower than this is treated as this slow, capping one step at -50%.
+	// A parent slower than this is treated as this slow: a step of -0.5,
+	// which lowers difficulty by about 39% (e^-0.5 is 0.61).
 	HeartbeatMaxSolveSeconds = 11 * HeartbeatTargetSeconds
 
 	// Starting difficulty for a network that names none. The rule corrects a
@@ -410,14 +413,69 @@ const (
 	HeartbeatDriftLimitPercent = int64(1)
 )
 
+// EXPONENTIAL STEPS (Params.ExponentialSteps)
+//
+// Each block moves difficulty by a step x that is small and positive when
+// the parent was found quickly and larger and negative when it was slow. The
+// first form of the rule applied the step as difficulty * (1 + x). Steps
+// applied that way do not add up: twelve steps of +4.9% and one of -50%
+// leave difficulty lower than where it started, although as numbers they
+// sum to more than zero. A miner who held most of the hashrate could use
+// that. It dated a run of blocks one second after their parents, then one
+// block eight minutes after its parent, over and over; difficulty stayed
+// level while the blocks' dates advanced by less than 45 seconds a block,
+// so blocks really came faster than the rule believed: 13% more coins for a
+// miner with all the hashrate, 9% with 94% of it (audit round 4, finding 1;
+// chosen_dates_sim_test.go).
+//
+// With this setting the step is applied as difficulty * e^x. Small steps
+// come out the same (e^0.05 is 1.051). But e^a * e^b is e^(a+b): any run of
+// steps multiplies to something that depends only on their sum, which is to
+// say on how much time the blocks' dates span, and not on how that time is
+// shared out between the blocks. Dating blocks cleverly then changes
+// nothing.
+//
+// e^x is worked out in whole numbers so that every machine gets the same
+// answer to the last digit: see expStepFactor.
+
+// expFractionBits is the precision of expStepFactor: its result is e^x
+// multiplied by 2^64.
+const expFractionBits = 64
+
+// expStepFactor returns e^(numerator/denominator) * 2^64, rounded toward
+// zero at each step of the working, as a whole number. It adds up the
+// series 1 + x + x^2/2 + x^3/6 + ... until a term rounds to nothing. The
+// difficulty rule only ever asks for x between about -0.51 and +0.06,
+// where some twenty terms are enough; the loop is bounded all the same.
+//
+// Only whole-number operations on big numbers are used, each of which has
+// one defined result, so the answer is identical on every machine.
+func expStepFactor(numerator, denominator int64) *big.Int {
+	one := new(big.Int).Lsh(big.NewInt(1), expFractionBits)
+	sum := new(big.Int).Set(one)
+	term := new(big.Int).Set(one)
+	n, d := big.NewInt(numerator), new(big.Int)
+	for k := int64(1); k <= 200; k++ {
+		// term = term * x / k, with x = numerator/denominator
+		term.Mul(term, n)
+		term.Quo(term, d.SetInt64(denominator*k))
+		if term.Sign() == 0 {
+			break
+		}
+		sum.Add(sum, term)
+	}
+	return sum
+}
+
 // heartbeatRetargetAnchored is the arithmetic of the rule. Looking only at
 // the parent block, blocks would come a few percent faster than the target
 // over a long run (the first test network's did). So the rule also looks at
 // how far the whole chain is from its schedule and leans against that, and
 // the long-run average is the target exactly.
 //
-//	difficulty * (1 + (target - solve)/(target*window)
-//	                - drift/(target*window*damping))      drift term capped
+//	x = (target - solve)/(target*window) - drift/(target*window*damping)
+//	                                       (drift term capped)
+//	difficulty * e^x      (difficulty * (1 + x) without ExponentialSteps)
 func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds, driftSeconds, minimumDifficulty int64) int64 {
 	if minimumDifficulty < 1 {
 		minimumDifficulty = 1
@@ -441,9 +499,15 @@ func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds,
 
 	// Whole-number arithmetic on big numbers: exact, identical on every
 	// machine, and accurate even at the lowest difficulty.
-	change := new(big.Int).Mul(big.NewInt(parentDifficulty), big.NewInt(adjustment))
-	change.Quo(change, big.NewInt(scale))
-	result := new(big.Int).Add(big.NewInt(parentDifficulty), change)
+	var result *big.Int
+	if Params.ExponentialSteps {
+		result = new(big.Int).Mul(big.NewInt(parentDifficulty), expStepFactor(adjustment, scale))
+		result.Rsh(result, expFractionBits)
+	} else {
+		change := new(big.Int).Mul(big.NewInt(parentDifficulty), big.NewInt(adjustment))
+		change.Quo(change, big.NewInt(scale))
+		result = new(big.Int).Add(big.NewInt(parentDifficulty), change)
+	}
 	if !result.IsInt64() || result.Int64() > HeartbeatMaxDifficulty {
 		result.SetInt64(HeartbeatMaxDifficulty)
 	}

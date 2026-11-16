@@ -42,7 +42,7 @@ func storePlainBlock(t *testing.T, parent Block, timestamp int64, difficulty int
 // A block that arrives 14 minutes late is mined at an eighth of the
 // difficulty. The block after it starts from the difficulty its parent would
 // have had with no relief, lowered once for the parent's slowness; under the
-// first form of the rule it started from the eighth and was halved again.
+// first form of the rule it started from the eighth and was lowered again.
 func TestReliefForALateBlockIsNotInherited(t *testing.T) {
 	t.Chdir(t.TempDir())
 	startTestChain(t, "devnet")
@@ -65,8 +65,8 @@ func TestReliefForALateBlockIsNotInherited(t *testing.T) {
 	if int64(next) != want {
 		t.Errorf("the block after a late one is at %d, want %d", next, want)
 	}
-	if next < steady*45/100 || next > steady*55/100 {
-		t.Errorf("the block after a late one should be at about half of %d, got %d", steady, next)
+	if next < steady*55/100 || next > steady*65/100 {
+		t.Errorf("the block after a late one should be at about 0.6 of %d (one slow-parent step), got %d", steady, next)
 	}
 
 	// The same question with nothing remembered gives the same answer.
@@ -75,7 +75,8 @@ func TestReliefForALateBlockIsNotInherited(t *testing.T) {
 		t.Errorf("asked again with an empty table the answer changed: %d, then %d", next, again)
 	}
 
-	// With the setting off the old behaviour returns: about a sixteenth.
+	// With the setting off the old behaviour returns: an eighth, then the
+	// slow-parent step on top.
 	Params.ReliefNotInherited = false
 	old := CalculateNextDifficulty(late, lateDate+45)
 	Params.ReliefNotInherited = true
@@ -113,10 +114,11 @@ func TestSeveralLateBlocksInARow(t *testing.T) {
 	if want := heartbeatRetargetAnchored(unrelieved, solve, 45, scheduleDriftSeconds(previous), minimum); int64(afterRun) != want {
 		t.Errorf("after three late blocks: %d, want %d", afterRun, want)
 	}
-	// Three slow parents lower the difficulty three times by half, no more:
-	// about an eighth of where it stood, whatever relief each block had.
-	if afterRun < steady/10 || afterRun > steady/6 {
-		t.Errorf("after three late blocks difficulty is %d, want about an eighth of %d", afterRun, steady)
+	// Three slow parents lower the difficulty by three slow-parent steps,
+	// no more: about 0.6 cubed of where it stood, whatever relief each
+	// block had.
+	if afterRun < steady*18/100 || afterRun > steady*26/100 {
+		t.Errorf("after three late blocks difficulty is %d, want about 0.22 of %d", afterRun, steady)
 	}
 	resetUnrelievedCache()
 	if again := CalculateNextDifficulty(previous, previous.Timestamp+45); again != afterRun {

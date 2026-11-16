@@ -25,6 +25,9 @@ type chosenDatesResult struct {
 	secondsPerBlock float64
 	attackerCoins   float64 // coins per day against mining steadily with honest dates
 	attackerBlocks  float64 // share of all blocks
+	// stalled: the pattern drove difficulty up without end, which costs the
+	// miner who tries it everything. The other figures are then not filled in.
+	stalled bool
 }
 
 // simulateChosenDates: the attacker dates `run` blocks one second after their
@@ -48,15 +51,34 @@ func simulateChosenDates(blocks int, attackerShare float64, run int, jump int64,
 	sinceJump := 0
 	attackerWon := 0
 
+	// The difficulty of the block being mined depends on its date only
+	// through the number of late-block halvings, so the real rule is asked
+	// once for each number of halvings that comes up, not once a second.
+	var known map[int64]int64
 	difficultyAt := func(index int, date int64) int64 {
+		gap := date - parentDate
+		halvings := int64(0)
+		if gap >= HeartbeatStallAfterSeconds {
+			halvings = (gap-HeartbeatStallAfterSeconds)/HeartbeatStallStepSeconds + 1
+		}
+		if value, found := known[halvings]; found {
+			return value
+		}
 		drift := (parentDate - firstDate) - int64(index-1)*HeartbeatTargetSeconds
-		return heartbeatRetargetAnchored(base, parentSolve, date-parentDate, drift, 5000)
+		value := heartbeatRetargetAnchored(base, parentSolve, gap, drift, 5000)
+		known[halvings] = value
+		return value
 	}
 	for i := 1; i <= blocks; i++ {
+		known = make(map[int64]int64)
 		var date int64
 		byAttacker := false
+		blockStarted := now
 		for {
 			now++
+			if now-blockStarted > 200000 {
+				return chosenDatesResult{stalled: true}
+			}
 			// Honest miners date a block with the true time (or just after its parent).
 			honestDate := now
 			if honestDate <= parentDate {
@@ -135,5 +157,37 @@ func TestChosenDatesTable(t *testing.T) {
 			line += fmt.Sprintf(" | %d fast then +495 s: %.2f s/block, coins %+5.1f%%", run, r.secondsPerBlock, (r.attackerCoins-1)*100)
 		}
 		t.Log(line)
+	}
+}
+
+// Choosing block dates must not pay, whatever share of the hashrate a miner
+// has, and must not move the chain off its 45 seconds. Under the first form
+// of the rule it paid a 94% miner about 9%; that comparison is kept in view.
+func TestChoosingDatesDoesNotPayTheLargestMiner(t *testing.T) {
+	const blocks = 20000
+	for _, share := range []float64{1.0, 0.94, 0.85} {
+		for _, pattern := range []struct {
+			run  int
+			jump int64
+		}{{4, 495}, {8, 495}, {12, 495}, {6, 360}, {16, 720}} {
+			r := simulateChosenDates(blocks, share, pattern.run, pattern.jump, 5)
+			if r.stalled {
+				continue // the pattern ruins the miner who tries it
+			}
+			if r.attackerCoins > 1.02 {
+				t.Errorf("share %.0f%%, %d fast then +%d s: %.1f%% more coins than steady mining", share*100, pattern.run, pattern.jump, (r.attackerCoins-1)*100)
+			}
+			if math.Abs(r.secondsPerBlock-45) > 0.5 {
+				t.Errorf("share %.0f%%, %d fast then +%d s: the chain ran at %.2f s per block, want 45", share*100, pattern.run, pattern.jump, r.secondsPerBlock)
+			}
+		}
+	}
+	saved := Params.ExponentialSteps
+	Params.ExponentialSteps = false
+	old := simulateChosenDates(blocks, 0.94, 8, 495, 5)
+	Params.ExponentialSteps = saved
+	t.Logf("first form of the rule, for comparison: %.1f%% more coins, %.1f s per block", (old.attackerCoins-1)*100, old.secondsPerBlock)
+	if old.attackerCoins < 1.05 {
+		t.Error("the first form of the rule was expected to reward chosen dates; the simulation no longer shows what it was written to show")
 	}
 }

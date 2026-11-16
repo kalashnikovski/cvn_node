@@ -42,11 +42,13 @@ func TestHeartbeatRetarget(t *testing.T) {
 	if got := heartbeatRetarget(difficulty, HeartbeatTargetSeconds, 10); got != difficulty {
 		t.Errorf("a parent solved exactly on target changed difficulty to %d", got)
 	}
-	if got := heartbeatRetarget(difficulty, 1, 10); got <= difficulty || got > difficulty+difficulty/HeartbeatWindow {
-		t.Errorf("a fast parent should raise difficulty by at most 1/%d, got %d", HeartbeatWindow, got)
+	// The fastest parent gives a step of 44/900: e^0.0489, a rise of 5.01%.
+	if got := heartbeatRetarget(difficulty, 1, 10); got <= difficulty || got > difficulty+difficulty*502/10000 {
+		t.Errorf("a fast parent should raise difficulty by about 5%% at most, got %d", got)
 	}
-	if got := heartbeatRetarget(difficulty, 100000, 10); got < difficulty/2-difficulty/100 || got >= difficulty {
-		t.Errorf("a very slow parent should lower difficulty by about half at most, got %d", got)
+	// The slowest gives a step of -0.5: e^-0.5 is 0.6065.
+	if got := heartbeatRetarget(difficulty, 100000, 10); got < difficulty*60/100 || got > difficulty*61/100 {
+		t.Errorf("a very slow parent should lower difficulty by about 39%%, got %d", got)
 	}
 	// Stall relief: one halving at the threshold, another per further step.
 	onTarget := heartbeatRetarget(difficulty, HeartbeatTargetSeconds, 10)

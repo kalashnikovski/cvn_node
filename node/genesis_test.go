@@ -216,7 +216,7 @@ func TestCVNTestnet(t *testing.T) {
 		t.Errorf("database %q, %d seeds", BlockchainFile, len(Params.SeedHosts))
 	}
 	// Its rule settings.
-	if !Params.ReliefNotInherited || Params.Economics != &NewGenesisEconomics || Params.MaxBlockBytes != 300000 || !networkUsesRandomX() ||
+	if !Params.ReliefNotInherited || !Params.ExponentialSteps || Params.Economics != &NewGenesisEconomics || Params.MaxBlockBytes != 300000 || !networkUsesRandomX() ||
 		!IsHeartbeatHeight(1) || !IsTxForkHeight(1) || Params.KeyEpochBlocks != 1920 || Params.KeyLagBlocks != 100 {
 		t.Error("the CVN Testnet must run every launch rule")
 	}

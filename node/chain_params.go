@@ -77,6 +77,16 @@ type ChainParams struct {
 	// whoever has the most hashrate (see heartbeat_difficulty.go).
 	ReliefNotInherited bool
 
+	// ExponentialSteps applies each block's difficulty step as e^x where
+	// the first form of the rule applied 1 + x, so that a run of steps
+	// depends only on how much time the blocks' dates span and a miner
+	// gains nothing by choosing dates (see heartbeat_difficulty.go).
+	//
+	// This and ReliefNotInherited are on for every network. They remain
+	// settings only so that a chain mined before them can still be
+	// replayed, to check that nothing else has changed.
+	ExponentialSteps bool
+
 	// Economics is the reward schedule, the vault, the sweep and the limits
 	// that go with them (see GenesisEconomics).
 	Economics *GenesisEconomics
@@ -134,6 +144,7 @@ var devnetParams = ChainParams{
 	KeyLagBlocks:               100,
 	HeartbeatInitialDifficulty: 5000,
 	ReliefNotInherited:         true,
+	ExponentialSteps:           true,
 	Economics:                  &NewGenesisEconomics,
 }
 
@@ -189,6 +200,7 @@ var cvnTestnetParams = ChainParams{
 	KeyLagBlocks:               100,
 	HeartbeatInitialDifficulty: 1000000,
 	ReliefNotInherited:         true,
+	ExponentialSteps:           true,
 	Economics:                  &NewGenesisEconomics,
 }
 

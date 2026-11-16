@@ -11,8 +11,8 @@ func TestDevnetUsesLaunchRules(t *testing.T) {
 	if !IsHeartbeatHeight(1) || !IsTxForkHeight(1) {
 		t.Error("on devnet the difficulty rule and transfer validation must apply from block 1")
 	}
-	if !Params.ReliefNotInherited || Params.Economics == nil || *Params.Economics != NewGenesisEconomics {
-		t.Error("devnet must run the launch rules: late-block relief not inherited, and the launch reward schedule")
+	if !Params.ReliefNotInherited || !Params.ExponentialSteps || Params.Economics == nil || *Params.Economics != NewGenesisEconomics {
+		t.Error("devnet must run the launch rules: late-block relief not inherited, exponential difficulty steps, and the launch reward schedule")
 	}
 	if powAlgorithmAt(1) != PowRandomX || powAlgorithmAt(5000000) != PowRandomX || minDifficultyAt(1) != 5000 {
 		t.Error("devnet must mine with RandomX from block 1, with a minimum difficulty of 5,000")
@@ -89,11 +89,12 @@ func TestAnchoredRetarget(t *testing.T) {
 	if ahead <= d || behind >= d {
 		t.Errorf("ahead of schedule must raise difficulty (%d) and behind must lower it (%d)", ahead, behind)
 	}
-	// The correction is capped at 1% per block however large the drift.
+	// The correction is capped at a step of 0.01 per block however large the
+	// drift: e^0.01 and e^-0.01 times the difficulty.
 	farAhead := heartbeatRetargetAnchored(d, target, 10, -100000000, HeartbeatMinDifficulty)
 	farBehind := heartbeatRetargetAnchored(d, target, 10, 100000000, HeartbeatMinDifficulty)
-	if farAhead != d+d/100 || farBehind != d-d/100 {
-		t.Errorf("capped correction gives %d and %d, want %d and %d", farAhead, farBehind, d+d/100, d-d/100)
+	if farAhead != 90904515 || farBehind != 89104485 {
+		t.Errorf("capped correction gives %d and %d, want 90904515 and 89104485", farAhead, farBehind)
 	}
 	// It still works at the lowest difficulty, where rounding could hide it.
 	if got := heartbeatRetargetAnchored(HeartbeatMinDifficulty*2, 1, 10, 0, HeartbeatMinDifficulty); got <= HeartbeatMinDifficulty*2 {
@@ -165,7 +166,7 @@ func TestBlockTimeAveragesExactlyTheTarget(t *testing.T) {
 	t.Logf("steady hashrate: without the schedule term %.2f s per block (ends %.1f days ahead of schedule); with it %.3f s (ends %d s from schedule)",
 		plainAverage, -float64(plainDrift)/86400, anchoredAverage, anchoredDrift)
 
-	if plainAverage > 44.5 {
+	if plainAverage > 44.9 {
 		t.Errorf("without the schedule term the rule was expected to run fast; it averaged %.2f s", plainAverage)
 	}
 	if math.Abs(anchoredAverage-45) > 0.05 {

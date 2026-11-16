@@ -205,7 +205,9 @@ func TestDifficultyCandidates(t *testing.T) {
 
 	// The float copy of the present rule must behave like the real one.
 	{
+		Params.ExponentialSteps = false // the comparison is with the first form of the rule
 		real := simulateHopping(200000, 0.94, 0.5, true, 7)
+		Params.ExponentialSteps = true
 		copyRun := runCandidate(candidateRules()[0], 200000, fair, steady(totalRate*0.06), totalRate*0.94, 0.5*fair, 7, false)
 		t.Logf("check: real rule %.2f s/block and hopper wins %.1f%%; float copy %.2f s/block and %.1f%%",
 			real.averageSeconds, real.hopperBlockPart*100, copyRun.seconds/float64(copyRun.blocks), float64(copyRun.hopperBlocks)/float64(copyRun.blocks)*100)
