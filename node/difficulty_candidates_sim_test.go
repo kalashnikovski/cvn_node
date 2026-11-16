@@ -58,6 +58,12 @@ type heartbeatFamily struct {
 	reliefInherited  bool    // present rule: the next block starts from the relieved difficulty
 	solveAfterRelief bool    // present rule: a relieved parent's lateness also counts in the solve-time term
 	maxSolveSeconds  float64
+	// exponentialStep applies each block's step as e^x where the present
+	// rule applies 1+x. Small steps are the same; but steps then multiply
+	// to something that depends only on their sum, that is, on how much
+	// time the blocks' dates span, and not on how that time is shared out
+	// between them.
+	exponentialStep bool
 }
 
 func (f heartbeatFamily) at(c simChain, gap float64) float64 {
@@ -78,7 +84,11 @@ func (f heartbeatFamily) at(c simChain, gap float64) float64 {
 	if limit := scale * f.behindCapPercent / 100; correction < -limit {
 		correction = -limit
 	}
-	difficulty := base * (1 + ((simTarget-solve)*float64(HeartbeatDriftDamping)+correction)/scale)
+	step := ((simTarget-solve)*float64(HeartbeatDriftDamping) + correction) / scale
+	difficulty := base * (1 + step)
+	if f.exponentialStep {
+		difficulty = base * math.Exp(step)
+	}
 	difficulty /= math.Pow(2, simHalvings(gap))
 	return math.Max(simMinimum, difficulty)
 }
@@ -104,12 +114,18 @@ func candidateRules() []candidateRule {
 	strongAhead.aheadCapPercent = 3
 	both := notInherited
 	both.aheadCapPercent = 3
+	exponential := notInherited
+	exponential.exponentialStep = true
+	exponentialLongCap := exponential
+	exponentialLongCap.maxSolveSeconds = 1800
 	return []candidateRule{
 		{"present rule", present.at, true},
 		{"A: relief not counted twice", noDouble.at, true},
 		{"B: relief not inherited", notInherited.at, true},
 		{"C: 3% correction when ahead", strongAhead.at, true},
 		{"D: B and C together", both.at, true},
+		{"H: B with exponential steps", exponential.at, true},
+		{"I: H, slow block counted to 30 min", exponentialLongCap.at, true},
 		{"schedule rule, 10 min", scheduleRule(600), false},
 		{"schedule rule, 15 min", scheduleRule(900), false},
 		{"E: schedule rule, 30 min", scheduleRule(1800), false},

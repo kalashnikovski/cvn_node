@@ -60,6 +60,7 @@ RULES = [
     "audit/FINDINGS_ROUND_3.md",
     "audit/FINDINGS_FAIR_LAUNCH.md",
     "audit/CHANGES_FOR_ROUND_4.md",
+    "audit/FINDINGS_ROUND_4.md",
     "node/chain_params.go",
     "node/amount.go",
     "node/block_format.go",
