@@ -15,19 +15,23 @@ import (
 // the key its nodes sign messages with, its ports, its files, its seed nodes,
 // its genesis block and the heights at which its rule changes switch on.
 //
-// Two networks are defined:
+// Three networks are defined:
 //
-//   - testnet-1 is the chain that has been running since 29 September 2026.
-//     It is the default, and every value below is exactly what was previously
-//     written into the code in many places. Earlier documents call it
-//     "mainnet"; it is a test network.
+//   - cvn_testnet is the CVN Testnet, the public test of the launch rules. It
+//     is the default: a program started with no network named runs on it.
+//
+//   - testnet-1 is the first test network, which ran from 29 September 2026
+//     on an earlier and simpler rule set. It is no longer maintained and is
+//     chosen only by name. Every value of it below is exactly what was
+//     previously written into the code in many places. Earlier documents call
+//     it "mainnet"; it is a test network.
 //
 //   - devnet is where the rules of the new genesis (GENESIS_SPEC) are built
 //     and tried. It has its own key, ports and files, so it can run on the
 //     same machine as a testnet-1 node and can be wiped at any time. It has no
 //     public seeds.
 //
-// Choose with `--network devnet` or the CVN_NETWORK environment variable.
+// Choose with `--network NAME` or the CVN_NETWORK environment variable.
 
 // ChainParams is one network's settings.
 type ChainParams struct {
@@ -118,7 +122,7 @@ var publicSeedHosts = []string{
 
 var testnet1Params = ChainParams{
 	Name:        "testnet-1",
-	Description: "The test network running since 29 September 2026",
+	Description: "The first test network (from 29 September 2026). No longer maintained",
 
 	AuthKey: "COVENANT_STANDARD_MAINNET_IGNITION_AUTHENTICATION_KEY_TOKEN_2026",
 
@@ -243,8 +247,14 @@ var cvnTestnetParams = ChainParams{
 	Economics:                  &NewGenesisEconomics,
 }
 
-// Params is the network this process runs on.
+// Params is the network this process runs on. The program calls
+// SelectNetwork before anything else, and with no network named that chooses
+// the CVN Testnet. The value here is only what holds before that call: the
+// first test network's settings, which is where that network's tests begin.
 var Params = testnet1Params
+
+// defaultNetwork is the network a program runs on when none is named.
+var defaultNetwork = &cvnTestnetParams
 
 // KnownNetworks lists the names SelectNetwork accepts.
 func KnownNetworks() []string {
@@ -255,7 +265,9 @@ func KnownNetworks() []string {
 // before the database is opened or any connection is made.
 func SelectNetwork(name string) error {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "", testnet1Params.Name:
+	case "":
+		Params = *defaultNetwork
+	case testnet1Params.Name:
 		Params = testnet1Params
 	case cvnTestnetParams.Name, "cvn-testnet", "cvn testnet", "cvntestnet":
 		Params = cvnTestnetParams

@@ -7,8 +7,10 @@
 #
 # Run as root, once for each network the server should serve:
 #
-#   bash install_seed.sh                  the public test network (testnet-1)
-#   bash install_seed.sh cvn_testnet      the CVN Testnet
+#   bash install_seed.sh                  the CVN Testnet
+#   bash install_seed.sh cvn_testnet      the same, by name
+#   bash install_seed.sh testnet-1        the first test network (no longer
+#                                         maintained)
 #   bash install_seed.sh devnet HOST,HOST,...
 #                                         the development network, which has
 #                                         no seeds of its own and must be
@@ -30,7 +32,7 @@
 # a chain begun from one first block is not valid under another.
 set -euo pipefail
 
-NETWORK="${1:-testnet-1}"
+NETWORK="${1:-cvn_testnet}"
 SEEDS="${2:-}"
 HEIGHT="${3:-}"
 DIR=/opt/cvn_node

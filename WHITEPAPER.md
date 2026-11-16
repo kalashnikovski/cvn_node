@@ -4,7 +4,7 @@
 
 November 2026. This paper describes the rules Covenant Standard is intended to launch with.
 
-**Status.** These rules are built and run on a development network. They have been reviewed in several rounds by AI models, whose findings and what was done about each are recorded in the repository's `audit` folder. They have not been audited by an independent firm or person, and have not yet run as a public network. The public test network running today (`testnet-1`) uses an earlier, simpler rule set and will be reset. Nothing here is an offer or a promise of value. [ROADMAP.md](ROADMAP.md) records what is finished and what is not.
+**Status.** These rules are built and run on a development network. They have been reviewed in several rounds by AI models, whose findings and what was done about each are recorded in the repository's `audit` folder. They have not been audited by an independent firm or person, and have not yet run as a public network. The first test network (`testnet-1`) used an earlier, simpler rule set and is no longer maintained. Nothing here is an offer or a promise of value. [ROADMAP.md](ROADMAP.md) records what is finished and what is not.
 
 ---
 

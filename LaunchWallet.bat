@@ -1,6 +1,7 @@
 @echo off
-rem Opens the CVN desktop wallet. Anything you add after the file name is
-rem passed on to the wallet, for example:   LaunchWallet.bat --network devnet
+rem Opens the CVN desktop wallet on the CVN Testnet. Anything you add after
+rem the file name is passed on to the wallet. For another network:
+rem     LaunchWallet.bat --network devnet
 title Covenant Standard (CVN) Wallet
 cd /d "%~dp0"
 

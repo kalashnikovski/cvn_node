@@ -60,3 +60,6 @@ genesis_anchor_*.txt
 
 # Source packs and reviewers' answers (made by audit/make_audit_pack.py)
 /audit/out/
+
+# The fast miner, downloaded separately; never part of this repository.
+xmrig-cvn/

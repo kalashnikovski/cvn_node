@@ -27,7 +27,7 @@ Never post a private key.
 **Your set-up**
 
 - System: <!-- Windows 11, Ubuntu 24.04, ... -->
-- Network: <!-- testnet-1 (the default) or devnet -->
+- Network: <!-- cvn_testnet (the default) or devnet -->
 - Version: <!-- the date you downloaded or last ran "git pull" -->
 - How it was started: <!-- LaunchMiner.bat, or the command line you used -->
 

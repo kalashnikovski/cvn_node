@@ -164,8 +164,8 @@ func resolveMinerAddress(args []string) (string, error) {
 	}
 	if !looksLikeWalletAddress(address) {
 		// The commonest cause is not a bad address but the wrong network:
-		// addresses are written differently on the launch networks, and a
-		// program started without --network runs on the first test network.
+		// addresses are written differently on the launch networks and on
+		// the first test network.
 		if other := networkThisAddressBelongsTo(address); other != "" {
 			return "", fmt.Errorf("%q is an address in the form used on %s, and this program was started on %s, where addresses are written differently.\n"+
 				"   If you meant to mine on another network, start with --network NAME (for example: --network devnet).\n"+

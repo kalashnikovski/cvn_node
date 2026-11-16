@@ -103,10 +103,15 @@ func TestSelectNetwork(t *testing.T) {
 	if err := SelectNetwork("no-such-network"); err == nil {
 		t.Error("an unknown network name was accepted")
 	}
-	for _, name := range []string{"", "testnet-1", " Testnet-1 "} {
+	for _, name := range []string{"testnet-1", " Testnet-1 "} {
 		if err := SelectNetwork(name); err != nil || Params.Name != "testnet-1" {
 			t.Errorf("%q should select testnet-1 (got %q, %v)", name, Params.Name, err)
 		}
+	}
+	// With no network named the program runs on the CVN Testnet, the network
+	// being launched, and not on the first test network.
+	if err := SelectNetwork(""); err != nil || Params.Name != "cvn_testnet" || BlockchainFile != "cvn_testnet.db" {
+		t.Errorf("no network named should select cvn_testnet (got %q, %q, %v)", Params.Name, BlockchainFile, err)
 	}
 	if err := SelectNetwork("devnet"); err != nil || Params.Name != "devnet" || BlockchainFile != "cvn_devnet.db" {
 		t.Errorf("devnet not selected: %q %q %v", Params.Name, BlockchainFile, err)

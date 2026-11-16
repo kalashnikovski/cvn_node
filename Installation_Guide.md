@@ -2,7 +2,7 @@
 
 How to run a Covenant Standard (CVN) node, mine, and use the wallet, on Windows and Linux.
 
-> **This is a test network.** The chain running today (`testnet-1`) is for testing. Its coins have no value and the chain will be reset before any real launch. See [README.md](README.md) for the current status.
+> **These are test networks.** The CVN Testnet, the public test of the launch rules, has not started yet; its start will be announced as a Bitcoin block height. Coins on any test network have no value and carry over to nothing. See [README.md](README.md) for the current status.
 
 One program does everything: it is the node, the miner and the text wallet. On Windows there is also a desktop wallet with a window.
 
@@ -127,7 +127,7 @@ curl -fsSL https://raw.githubusercontent.com/kalashnikovski/cvn_node/main/deploy
 
 It installs what is needed, builds the program in `/opt/cvn_node`, opens the network's two ports and installs a service. To update the server later: `bash /opt/cvn_node/deploy/update_seed.sh`.
 
-This is the right way to run a small rented server. On one shared processor, mining would earn next to nothing and get in the way of the server's real use to the network, which is being online and reachable. Open the network's two ports in the server's firewall so that other nodes can reach it (8080 and 8081 on `testnet-1`; see section 7 for the others).
+This is the right way to run a small rented server. On one shared processor, mining would earn next to nothing and get in the way of the server's real use to the network, which is being online and reachable. Open the network's two ports in the server's firewall so that other nodes can reach it (18080 and 18081 on the CVN Testnet, 28080 and 28081 on `devnet`).
 
 ---
 
@@ -150,7 +150,7 @@ Both wallets do the same things.
 
 ## 5. Mining faster
 
-On networks that mine with RandomX, two things make a large difference: a one-time system setting called large pages, and an optional faster miner. Both are covered in [MINING_GUIDE.md](MINING_GUIDE.md). Neither applies to `testnet-1`.
+On networks that mine with RandomX, two things make a large difference: a one-time system setting called large pages, and an optional faster miner. Both are covered in [MINING_GUIDE.md](MINING_GUIDE.md).
 
 ---
 
@@ -176,13 +176,13 @@ The program runs on one network at a time.
 
 | Network | How to choose it | What it is |
 |---|---|---|
-| `testnet-1` | nothing; it is the default | The public test network |
-| `cvn_testnet` | add `--network cvn_testnet` | The CVN Testnet: the public test of the launch rules. **Not started yet.** Its start will be announced as a Bitcoin block height. Once it is announced, start your miner on it any time beforehand: it waits, and begins by itself at the same moment as everyone else. |
+| `cvn_testnet` | nothing; it is the default | The CVN Testnet: the public test of the launch rules. **Not started yet.** Its start will be announced as a Bitcoin block height. Once it is announced, start your miner on it any time beforehand: it waits, and begins by itself at the same moment as everyone else. |
 | `devnet` | add `--network devnet` | The development network for the launch rules. It has no public seeds and may be wiped at any time. |
+| `testnet-1` | add `--network testnet-1` | The first test network, on an earlier and simpler rule set. No longer maintained. |
 
 The same option works for the wallet, for example `./cvn_node --network devnet --wallet` or `LaunchWallet.bat --network devnet`. Each network keeps its own database file and uses its own ports, so they do not interfere.
 
-**Give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on `testnet-1`. Addresses are written differently on the launch networks (they end with 8 check characters), so a wallet for `cvn_testnet` must be created with `--network cvn_testnet`: `LaunchMiner.bat --network cvn_testnet`, or `./cvn_node --network cvn_testnet --generate-wallet`. The program refuses a network name it does not know. In particular there is no network called `mainnet` or `testnet`: the CVN Testnet is `cvn_testnet`.
+**For any network other than the CVN Testnet, give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on the CVN Testnet, and so does a double-click on `LaunchMiner.bat` or `LaunchWallet.bat`. Each network has its own wallet file and its own chain, and addresses on `testnet-1` are written differently (without the 8 check characters at the end). The program refuses a network name it does not know. In particular there is no network called `mainnet` or `testnet`: the CVN Testnet is `cvn_testnet`.
 
 ### On the day a network starts
 
@@ -192,11 +192,11 @@ A launch network starts when one particular Bitcoin block is mined. Its height i
 
 1. **Get the release that names the height.** Download its package, or build from its tag, and check it against the published sums (section 10).
 2. **Create a wallet for that network** and write its private key down on paper:
-   - Windows: `LaunchMiner.bat --network NETWORK` and choose "Create a new wallet". For the CVN Testnet, double-click `LaunchMiner_CVN_Testnet.bat`, which does the same.
+   - Windows: `LaunchMiner.bat --network NETWORK` and choose "Create a new wallet". For the CVN Testnet a double-click on `LaunchMiner.bat` does the same.
    - Linux: `./cvn_node --network NETWORK --generate-wallet`
 3. **Optional, for more speed:** switch on large pages and add the fast miner. Both are in [MINING_GUIDE.md](MINING_GUIDE.md), and both can be done later without losing anything.
 4. **Start the miner** on that network and leave it running:
-   - Windows: `LaunchMiner.bat --network NETWORK`, or for the CVN Testnet double-click `LaunchMiner_CVN_Testnet.bat`. **A double-click on plain `LaunchMiner.bat` runs the first test network, not the one that is starting.**
+   - Windows: `LaunchMiner.bat --network NETWORK`, or for the CVN Testnet just double-click `LaunchMiner.bat`.
    - Linux: `./cvn_node --network NETWORK`
 
    It shows how many Bitcoin blocks are left and waits.
@@ -241,11 +241,11 @@ Two things to know about privacy. A wallet asks a node for your balance and coin
 
 Any node answers in a web browser. On the machine running it:
 
-- `http://localhost:8081/` — a small block explorer
-- `http://localhost:8081/block` — the newest block
-- `http://localhost:8081/addresses` — every address with a balance
+- `http://localhost:18081/` — a small block explorer
+- `http://localhost:18081/block` — the newest block
+- `http://localhost:18081/addresses` — every address with a balance
 
-That is the port on `testnet-1`. On the CVN Testnet it is 18081, and on `devnet` 28081.
+That is the port on the CVN Testnet. On `devnet` it is 28081.
 
 ---
 
@@ -255,7 +255,7 @@ That is the port on `testnet-1`. On the CVN Testnet it is 18081, and on `devnet`
 |---|---|
 | "this machine has no mining address" | Create a wallet (`LaunchMiner.bat`, or `--generate-wallet` on Linux), or start with `--miner-address CVN_...` |
 | "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within two minutes if no other node can be reached, or if another node says it is ahead and then does not deliver. |
-| The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_mainnet.db` on `testnet-1`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
+| The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
 | The desktop wallet shows no balance | Check that the miner is running and that both were started on the same network. |
 
@@ -315,4 +315,4 @@ If a fingerprint does not match, first check the Go version and that you built f
 
 ---
 
-To report a problem, open an issue on GitHub with a picture of the miner window and what `http://localhost:8081/block` shows. If the problem could let someone take or create coins, contact the maintainer privately first.
+To report a problem, open an issue on GitHub with a picture of the miner window and what `http://localhost:18081/block` shows. If the problem could let someone take or create coins, contact the maintainer privately first.

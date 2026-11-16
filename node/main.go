@@ -58,11 +58,9 @@ func Run(frontendAssets embed.FS) {
 		os.Exit(1)
 	}
 	applySeedOverride(os.Args)
-	if Params.Name != testnet1Params.Name {
-		fmt.Printf("🌐 NETWORK: %s — %s\n", Params.Name, Params.Description)
-		if len(Params.SeedHosts) == 0 {
-			fmt.Println("🌐 This network has no seeds. To join other machines, start every one with --seeds HOST,HOST,...")
-		}
+	fmt.Printf("🌐 NETWORK: %s — %s\n", Params.Name, Params.Description)
+	if len(Params.SeedHosts) == 0 {
+		fmt.Println("🌐 This network has no seeds. To join other machines, start every one with --seeds HOST,HOST,...")
 	}
 
 	for _, arg := range os.Args {
@@ -96,13 +94,13 @@ func Run(frontendAssets embed.FS) {
 
 	// A launch network's genesis block needs its anchor (see genesis.go). A
 	// network that is scheduled but whose Bitcoin block has not been mined
-	// yet is waited for further down, once it is clear a node is wanted;
-	// the wallets and tools below do not need the genesis block.
+	// yet is waited for further down, once it is clear a node is wanted.
+	// The wallets below do not need the genesis block, so they open even on
+	// a network that has not been scheduled: an address can be made, and
+	// published, before the start is announced. A node cannot run there, and
+	// is refused once the wallets have had their turn.
 	anchorErr := resolveGenesisAnchor(os.Args)
-	if anchorErr != nil && !errors.Is(anchorErr, errAnchorNotYetKnown) {
-		fmt.Println("🚨 " + anchorErr.Error())
-		os.Exit(1)
-	}
+	anchorRefused := anchorErr != nil && !errors.Is(anchorErr, errAnchorNotYetKnown)
 	// A mistyped miner choice is better refused now than discovered later.
 	if _, err := chosenMiner(os.Args); err != nil {
 		fmt.Println("🚨 " + err.Error())
@@ -140,6 +138,10 @@ func Run(frontendAssets embed.FS) {
 	// The desktop wallet build opens its window here and never starts a node.
 	if RunWalletWindow() {
 		return
+	}
+	if anchorRefused {
+		fmt.Println("🚨 " + anchorErr.Error())
+		os.Exit(1)
 	}
 
 	// Decide where rewards go before anything else starts. A node never

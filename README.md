@@ -2,7 +2,7 @@
 
 Covenant Standard is a proof-of-work blockchain written from scratch in Go. It is built for fair, open mining on ordinary home computers: no pre-mine, no founder allocation, no investor sale.
 
-> **Status: public test network.** The chain running today is a test network (`testnet-1`). Its coins have no value, and it will be reset before the real launch so that everyone starts from zero at an announced time. Mine it to help test, not to accumulate.
+> **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`). The first test network (`testnet-1`) is no longer maintained. Coins on all of these have no value. Mine to help test, not to accumulate.
 
 ## What works today
 
@@ -58,23 +58,25 @@ On Windows: `cvn_miner.exe --wallet`, or `LaunchWallet.bat` for the desktop vers
 
 A miner receives a separate coin for every block won, and one transfer can spend at most 200 coins. **Combine my coins**, in both wallets, merges them into a few large coins in your own address.
 
-**These commands run on `testnet-1`.** For another network add `--network NAME` to every command, including the one that creates the wallet. For the CVN Testnet that is `--network cvn_testnet`; what to do before and on the day it starts is in [Installation_Guide.md](Installation_Guide.md), section 7.
+**These commands run on the CVN Testnet** (`cvn_testnet`). Until its start has been announced you can create a wallet and open it, but the miner says the network is not scheduled yet and stops. What to do before and on the day it starts is in [Installation_Guide.md](Installation_Guide.md), section 7. For another network add `--network NAME` to every command, including the one that creates the wallet, for example `--network devnet`.
 
 ## Network
 
 | | Port | Purpose |
 |---|---|---|
-| Node to node | 8080 | Blocks and transfers |
-| Sync and wallet | 8081 | Block download, balances, sending transfers |
-| Status | 8082 | Height and tip of this node |
+| Node to node | 18080 | Blocks and transfers |
+| Sync and wallet | 18081 | Block download, balances, sending transfers |
+| Status | 18082 | Height and tip of this node |
+
+These are the CVN Testnet's ports. On `devnet` they are 28080, 28081 and 28082.
 
 Seed nodes (all run by the project's maintainer; they are where a new node looks first, they have no say over the rules, and none of them mines): Singapore `207.148.67.11`, Atlanta `64.177.44.185`, Los Angeles `149.28.69.173`, Toronto `149.248.54.9`, Amsterdam `95.179.179.191`, Mumbai `65.20.67.25`.
 
 Any node answers these in a browser:
 
-- `http://NODE:8081/block` — current height, block hash and total work
-- `http://NODE:8081/addresses` — balances
-- `http://NODE:8081/` — a simple block explorer
+- `http://NODE:18081/block` — current height, block hash and total work
+- `http://NODE:18081/addresses` — balances
+- `http://NODE:18081/` — a simple block explorer
 
 ## Fair launch statement
 
@@ -122,7 +124,7 @@ The project depends on three libraries: [bbolt](https://github.com/etcd-io/bbolt
 
 ## Reporting problems
 
-Open an issue on GitHub with a screenshot of the miner window and the output of `http://localhost:8081/block`. For anything that could let someone take or create coins, please contact the maintainer privately first.
+Open an issue on GitHub with a screenshot of the miner window and the output of `http://localhost:18081/block`. For anything that could let someone take or create coins, please contact the maintainer privately first.
 
 ## Licence
 
