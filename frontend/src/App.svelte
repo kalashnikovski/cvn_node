@@ -4,7 +4,7 @@
 
 	let localHeight = $state(0);
 	let globalTip = $state(0); 
-	let blockHash = $state("FETCHING_MAINNET_EPOCH_SIGNATURE_MATRIX...");
+	let blockHash = $state("Waiting for a node...");
 	let activeWallet = $state("SECURE_IDENTITY_PROFILE_UNTETHERED");
 	let walletBalance = $state(0.00);
 
@@ -142,7 +142,7 @@
 			
 			<div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.4rem; color: #8a8a9e;">
 				<span>Local Height: #{localHeight}</span>
-				<span>Target Mainnet Tip: #{globalTip || localHeight}</span>
+				<span>Network Tip: #{globalTip || localHeight}</span>
 			</div>
 		</div>
 
@@ -184,7 +184,7 @@
 			<!-- Right Side Transfer Core -->
 			<div style="border: 1px solid #00ffff; padding: 1.5rem; border-radius: 4px; background: #0e0e18; box-shadow: 0 0 15px rgba(0,255,255,0.1);">
 				<h2 style="color: #00ffff; margin-top: 0;">📦 BROADCAST PAYLOAD</h2>
-				<p style="color: #8a8a9e; font-size: 0.85rem; margin-bottom: 1.5rem;">TRANSMIT CRYPTOGRAPHIC CASH VALUE OVER MAINNET WIRE</p>
+				<p style="color: #8a8a9e; font-size: 0.85rem; margin-bottom: 1.5rem;">SEND CVN TO ANOTHER ADDRESS</p>
 				
 				<form onsubmit={handleSendTransaction} style="display: flex; flex-direction: column; gap: 1rem; border-top: 1px solid #222; padding-top: 1.5rem;">
 					<div style="display: flex; flex-direction: column; gap: 0.3rem;">
