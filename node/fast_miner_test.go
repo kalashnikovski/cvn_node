@@ -83,6 +83,11 @@ func TestFastMinerOutputIsUnderstood(t *testing.T) {
 		"[2026-11-14 17:38:07.269]  randomx  allocated 2336 MB (2080+256) huge pages 100% 1168/1168 +JIT (0 ms)": "randomx allocated 2336 MB (2080+256) huge pages 100% 1168/1168 +JIT (0 ms)",
 		"[2026-11-14 17:38:07.269]  msr      FAILED TO APPLY MSR MOD, HASHRATE WILL BE LOW":                      "msr FAILED TO APPLY MSR MOD, HASHRATE WILL BE LOW",
 		"[2026-11-14 17:38:07.269]  net      127.0.0.1:18083 connect error: \"connection refused\"":              "net 127.0.0.1:18083 connect error: \"connection refused\"",
+		// The processor tuning: a success is shown as well as each kind of failure.
+		"[2026-11-16 21:40:02.118]  msr      register values for \"ryzen_19h_zen4\" preset have been set successfully (6 ms)": "msr register values for \"ryzen_19h_zen4\" preset have been set successfully (6 ms)",
+		"[2026-11-16 21:02:05.370]  msr      to access MSR registers Administrator privileges required.":                      "msr to access MSR registers Administrator privileges required.",
+		"[2026-11-16 21:02:05.370]  msr      cannot set MSR 0xc0011020 to 0x0004480000000000":                                 "msr cannot set MSR 0xc0011020 to 0x0004480000000000",
+		"[2026-11-16 21:02:05.370]  msr      msr kernel module is not available":                                              "msr msr kernel module is not available",
 	}
 	for line, want := range shown {
 		if got, ok := fastMinerMessage(line); !ok || got != want {

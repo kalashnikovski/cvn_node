@@ -1,4 +1,4 @@
-# Mining guide: choosing a miner and enabling large pages
+# Mining guide: choosing a miner, large pages and processor tuning
 
 This guide applies to CVN networks that mine with RandomX: the development network today, and the public test network and mainnet when they launch. The first test network (testnet-1) mines with SHA-256 and needs none of this.
 
@@ -169,6 +169,69 @@ cvn_miner.exe --randomx-bench
 
 On Linux: `./cvn_node --randomx-bench`.
 
-### A warning about unstable machines
+## 3. Processor tuning (optional, fast miner only)
+
+The fast miner can change a few processor settings (called MSR registers) that slow RandomX down. It tries this by itself every time it starts and carries on at the ordinary speed if the system refuses. The built-in miner does not do it.
+
+Measured on the same 16-core desktop (Ryzen 9 7950X3D, large pages on, fast miner):
+
+| | Hashes per second |
+|---|---|
+| Tuning refused | about 17,900 |
+| Tuning applied | about 19,300 |
+
+That is roughly 8% more on this processor; the gain differs from one processor to another. It is the smallest of the three gains in this guide and the only one that asks you to lower your system's defences, so treat it as optional. Large pages (section 2) matter far more.
+
+### Windows
+
+Two things must both be true.
+
+1. **The miner is started as administrator.** Right-click the Start button, choose **Terminal (Admin)**, go to your CVN folder and start the miner from there (how to type a command is in [Installation_Guide.md](Installation_Guide.md), "Typing a command"):
+
+   ```
+   cd /d C:\cvn_node
+   LaunchMiner.bat
+   ```
+
+   The fast miner is started by the CVN program and receives its rights from it.
+
+2. **Windows is not running on top of its own hypervisor.** It is whenever any of these is switched on: Memory integrity (Windows Security, Device security, Core isolation), Hyper-V, Windows Subsystem for Linux 2, Docker Desktop, or other virtual-machine features. While it is, Windows refuses the change even for an administrator. Either switch those features off and restart, or switch off virtualization in the computer's BIOS (named **SVM** on AMD, **VT-x** or **Intel Virtualization Technology** on Intel), which stops all of them at once and can be switched back on later.
+
+Know what you are giving up. Memory integrity is a protection against malicious drivers, and the tuning itself is done through a driver (`WinRing0x64.sys`, in the `xmrig-cvn` folder) that security programs warn about because other software can misuse it. If the computer holds a wallet with coins you care about, weigh that against 8%.
+
+### Linux
+
+Start the CVN program as root, so that the fast miner it starts may write the settings:
+
+```bash
+sudo ./cvn_node
+```
+
+Files the program creates while run this way belong to root; if you later run it as yourself again, give them back with `sudo chown -R "$USER" .` in the CVN folder. The project has measured the tuning on Windows only.
+
+### How to tell it worked
+
+Soon after the fast miner starts, the dashboard shows what happened:
+
+```
+[FAST MINER] msr register values for "ryzen_19h_zen4" preset have been set successfully (6 ms)
+```
+
+The name in quotes depends on your processor. If the tuning was refused you see the reason and then the result:
+
+```
+[FAST MINER] msr to access MSR registers Administrator privileges required.
+[FAST MINER] msr FAILED TO APPLY MSR MOD, HASHRATE WILL BE LOW
+```
+
+| Line | Meaning |
+|---|---|
+| `Administrator privileges required` | The miner was not started as administrator (Windows). |
+| `cannot set MSR 0x...` | Started as administrator, but Windows is running on its hypervisor (point 2 above). |
+| `msr kernel module is not available` | Not started as root, or the system has no `msr` module (Linux). |
+
+"HASHRATE WILL BE LOW" means the ordinary speed without the tuning, not a fault: the miner works normally. The settings last until the computer restarts and are applied again each time the miner starts.
+
+## 4. A warning about unstable machines
 
 RandomX uses the processor and memory harder than almost any other program. A machine whose memory is run faster than its tested settings (overclocked, or with timings set by hand) may run everything else without trouble and still crash or restart when mining starts. If that happens, return the memory to its standard profile before mining; an unstable machine also produces wrong results that the network refuses.

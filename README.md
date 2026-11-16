@@ -44,7 +44,7 @@ To limit how many processor threads the miner uses:
 ./cvn_node --miner-address YOUR_CVN_ADDRESS --threads 4
 ```
 
-A one-time system setting (large pages) makes mining about a quarter faster, and an optional separate fast miner adds about a tenth more: you unpack one folder into your CVN folder and the program uses it by itself. Both are in [MINING_GUIDE.md](MINING_GUIDE.md).
+A one-time system setting (large pages) makes mining about a quarter faster, and an optional separate fast miner adds about a tenth more: you unpack one folder into your CVN folder and the program uses it by itself. With the fast miner, an optional processor tuning adds a few percent more for those willing to run it as administrator. All three are in [MINING_GUIDE.md](MINING_GUIDE.md).
 
 ### The wallet
 

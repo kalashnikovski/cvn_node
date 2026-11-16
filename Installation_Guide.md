@@ -179,6 +179,8 @@ Two things make a large difference, and both are covered step by step in [MINING
 - **Large pages**, a one-time system setting: about a quarter faster.
 - **The fast miner**, an optional separate program: about a tenth faster again. You download one folder and put it inside your CVN folder; the CVN program then uses it by itself.
 
+A third, smaller gain is there for those who want it: with the fast miner, a processor tuning adds a few percent more (about 8% on the project's test machine). It needs the miner started as administrator and lowers some of the system's protections, so read section 3 of the mining guide before deciding.
+
 ---
 
 ## 6. Updating
@@ -287,6 +289,7 @@ That is the port on the CVN Testnet. On `devnet` it is 28081.
 | "miner_config.json is not written correctly" | The file was edited by hand and has a mistake, most often a missing comma. The message names the line. Fix it, or delete the file and start `LaunchMiner.bat` with `--miner-address CVN_your_address`. |
 | "not enough coins are ready to spend" just after combining or sending | Wait for the next block and try again. See section 4. |
 | The fast miner does not start | See "How to tell it is running" in [MINING_GUIDE.md](MINING_GUIDE.md). |
+| "FAILED TO APPLY MSR MOD, HASHRATE WILL BE LOW" | Not a fault. The fast miner is running at its ordinary speed without an optional processor tuning. See section 3 of [MINING_GUIDE.md](MINING_GUIDE.md). |
 | The desktop wallet shows no balance | Check that the miner is running and that both were started on the same network. |
 
 ---

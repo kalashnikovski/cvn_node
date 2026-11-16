@@ -413,6 +413,12 @@ func fastMinerMessage(line string) (string, bool) {
 	if strings.Contains(lower, "speed 10s/60s/15m") || strings.HasPrefix(lower, "commands") {
 		return "", false
 	}
+	// Everything the miner says about its processor tuning (lines tagged
+	// "msr") is shown, success included, so the operator can see whether the
+	// tuning was applied without having to infer it from silence.
+	if strings.HasPrefix(lower, "msr ") {
+		return text, true
+	}
 	for _, marker := range []string{"huge pages", "dataset ready", "error", "fail", "rejected", "no active pools", "permission"} {
 		if strings.Contains(lower, marker) {
 			return text, true
