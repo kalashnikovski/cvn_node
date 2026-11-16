@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"sync/atomic"
 )
 
 // THE DIFFICULTY RULE
@@ -273,6 +274,18 @@ var unrelievedCache = struct {
 
 const unrelievedCacheLimit = 4096
 
+// chainRewriteSeq counts rewrites of stored history: blocks taken off the
+// chain, or a stored block replaced by another at its height. It is odd
+// while one is under way. unrelievedDifficulty reads several blocks one
+// after another; if history was rewritten while it did so, the blocks it
+// read may not belong to one chain, and what it worked out is used once and
+// not remembered. (Adding a block to the tip changes no ancestor and does
+// not count.)
+var chainRewriteSeq uint64
+
+func beginChainRewrite() { atomic.AddUint64(&chainRewriteSeq, 1) }
+func endChainRewrite()   { atomic.AddUint64(&chainRewriteSeq, 1) }
+
 func resetUnrelievedCache() {
 	unrelievedCache.Lock()
 	unrelievedCache.byHash = make(map[string]int64)
@@ -292,8 +305,15 @@ func resetUnrelievedCache() {
 func unrelievedDifficulty(b Block) int64 {
 	type step struct{ block, parent Block }
 	var late []step // b and its late ancestors, newest first
+	// Only heights, dates, difficulties and identifiers are needed; a long
+	// run of late blocks must not hold every block's transfers in memory.
+	b.Transactions = nil
 	current := b
-	exact := true // false when an ancestor needed for the answer is not in the database
+	// exact is false when the answer cannot be trusted to be the same on
+	// every node: an ancestor was not in the database, or stored history
+	// was being rewritten while it was read.
+	rewritesAtStart := atomic.LoadUint64(&chainRewriteSeq)
+	exact := rewritesAtStart%2 == 0
 	var base int64
 	for {
 		if current.Hash != "" {
@@ -310,6 +330,7 @@ func unrelievedDifficulty(b Block) int64 {
 			break
 		}
 		parent := GetBlockByHeightFromDB(current.Index - 1)
+		parent.Transactions = nil
 		if parent.Hash == "" || parent.Hash != current.PrevHash {
 			// The parent is not the block we hold at that height (or we hold
 			// none). Nothing sound can be said from here; use what the block
@@ -325,25 +346,34 @@ func unrelievedDifficulty(b Block) int64 {
 		late = append(late, step{current, parent})
 		current = parent
 	}
-	remember := func(block Block, value int64) {
-		if !exact || block.Hash == "" {
-			return
+	// Work forward first, then remember: whether the answers may be kept is
+	// only known once every block has been read.
+	type answer struct {
+		hash  string
+		value int64
+	}
+	answers := []answer{{current.Hash, base}}
+	for i := len(late) - 1; i >= 0; i-- {
+		base = int64(heartbeatDifficultyFromBase(late[i].parent, base, 0))
+		answers = append(answers, answer{late[i].block.Hash, base})
+	}
+	if atomic.LoadUint64(&chainRewriteSeq) != rewritesAtStart {
+		exact = false
+	}
+	if !exact {
+		return base
+	}
+	unrelievedCache.Lock()
+	for _, known := range answers {
+		if known.hash == "" {
+			continue
 		}
-		unrelievedCache.Lock()
 		if len(unrelievedCache.byHash) >= unrelievedCacheLimit {
 			unrelievedCache.byHash = make(map[string]int64)
 		}
-		unrelievedCache.byHash[block.Hash] = value
-		unrelievedCache.Unlock()
+		unrelievedCache.byHash[known.hash] = known.value
 	}
-	remember(current, base)
-	// Forward again: each late block's unrelieved difficulty is the rule
-	// applied to its parent, from the parent's unrelieved difficulty, with
-	// no gap.
-	for i := len(late) - 1; i >= 0; i-- {
-		base = int64(heartbeatDifficultyFromBase(late[i].parent, base, 0))
-		remember(late[i].block, base)
-	}
+	unrelievedCache.Unlock()
 	return base
 }
 

@@ -359,6 +359,8 @@ func rollbackChainToHeightLocked(target int64) []Block {
 	if GlobalBoltEngine == nil || target >= tip.Index {
 		return removed
 	}
+	beginChainRewrite()
+	defer endChainRewrite()
 	updateErr := GlobalBoltEngine.Update(func(tx *bbolt.Tx) error {
 		bBlocks := tx.Bucket(blocksBucket)
 		bMeta := tx.Bucket(metaBucket)

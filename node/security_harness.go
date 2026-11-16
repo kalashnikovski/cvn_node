@@ -6,7 +6,6 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -40,53 +39,17 @@ func VerifyIncomingWireBlock(b Block) bool {
 	if b.Index <= 0 {
 		return false // the genesis block is never taken from the network
 	}
-	if IsHeartbeatHeight(b.Index) {
-		// Cheap pre-check only: the hash must carry the work the block claims.
-		// Whether the claimed difficulty is the right one needs the parent and
-		// is decided in ValidateBlockSignatures.
-		if powAlgorithmAt(b.Index) == PowRandomX {
-			// A RandomX proof is too costly to check for every block that
-			// arrives. Here only the cheap part is checked; the proof itself
-			// is verified in ValidateBlockSignatures, after the block has
-			// been shown to attach and to claim the right difficulty.
-			return b.Hash == CalculateHash(b) && int64(b.Difficulty) >= minDifficultyAt(b.Index)
-		}
-		if b.Hash != CalculateHash(b) || !HashMeetsDifficulty(b.Hash, b.Index, b.Difficulty) {
-			return false
-		}
-		return true
+	// Cheap pre-check only: the hash must carry the work the block claims.
+	// Whether the claimed difficulty is the right one needs the parent and
+	// is decided in ValidateBlockSignatures.
+	if powAlgorithmAt(b.Index) == PowRandomX {
+		// A RandomX proof is too costly to check for every block that
+		// arrives. Here only the cheap part is checked; the proof itself
+		// is verified in ValidateBlockSignatures, after the block has
+		// been shown to attach and to claim the right difficulty.
+		return b.Hash == CalculateHash(b) && int64(b.Difficulty) >= minDifficultyAt(b.Index)
 	}
-
-	var expectedDifficulty int
-	if b.Index <= 10 {
-		expectedDifficulty = 2
-	} else {
-		if b.Difficulty < 4 {
-			return false
-		}
-
-		// Pull parent difficulty directly from disk to prevent cross-continental drift
-		parentBlock := GetBlockByHeightFromDB(b.Index - 1)
-		if parentBlock.Hash == "" {
-			parentBlock = Block{
-				Index:      b.Index - 1,
-				Difficulty: b.Difficulty,
-			}
-		}
-		expectedDifficulty = CalculateNextDifficulty(parentBlock, b.Timestamp)
-	}
-
-	if b.Difficulty != expectedDifficulty {
-		fmt.Printf("🚨 REJECTION: Incoming block #%d uses invalid difficulty %d (Expected exactly: %d)\n", b.Index, b.Difficulty, expectedDifficulty)
-		return false
-	}
-
-	targetPrefix := strings.Repeat("0", expectedDifficulty)
-	if !strings.HasPrefix(b.Hash, targetPrefix) {
-		fmt.Printf("🚨 WIRE BLOCK FAULT: Hash signature %s missing difficulty constraints.\n", b.Hash)
-		return false
-	}
-	return true
+	return b.Hash == CalculateHash(b) && HashMeetsDifficulty(b.Hash, b.Index, b.Difficulty)
 }
 
 // peerBanDuration is how long a peer that sent a block with invalid work is

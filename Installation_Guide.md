@@ -261,7 +261,7 @@ Seed nodes are only where a new node looks first. They have no say over the rule
 - On a launch network that has not started yet, and only then: the Bitcoin block explorers mempool.space, blockstream.info, mempool.emzy.de, btcscan.org and mempool.ninja, to ask for one Bitcoin block. `--no-anchor-lookup` switches this off.
 - Nothing else. It sends no usage reports and checks for no updates.
 
-Two things to know about privacy. A wallet asks a node for your balance and coins: the node on your own machine if one is running, otherwise a seed node, which then sees your address and the address your computer connects from. And any node shows its own mining address at `http://NODE:8082/status`. Balances and transfers are public on this chain in any case.
+Two things to know about privacy. A wallet asks a node for your balance and coins: the node on your own machine if one is running, otherwise a seed node, which then sees your address and the address your computer connects from. And any node shows its own mining address at `http://NODE:18082/status` (28082 on `devnet`). Balances and transfers are public on this chain in any case.
 
 ---
 

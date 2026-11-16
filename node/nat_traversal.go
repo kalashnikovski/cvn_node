@@ -18,7 +18,7 @@ import (
 // AUTOMATIC PORT MAPPING (UPnP)
 //
 // On start the node asks the home router, over UPnP, to forward the gossip
-// port (8080) and the block-sync port (8081) to this machine, and renews the
+// port and the block-sync port (18080 and 18081 on the CVN Testnet) to this machine, and renews the
 // request while it runs. That is the same thing a user does by hand in the
 // router's port-forwarding page.
 //

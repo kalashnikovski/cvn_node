@@ -741,7 +741,11 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 				mockTemplateBlock.Hash = computedHashHex
 				fmt.Printf("\n🟩 [SUCCESS] Block #%d Mined by Worker %d | Hash: %s\n", mockTemplateBlock.Index, workerID, mockTemplateBlock.Hash[:16])
 				// 👑 FIXED SERIAL SHUTDOWN OVERRIDE: Saves block data safely without context teardowns
-				if SaveBlockToStorage(mockTemplateBlock) {
+				// Our own block is checked exactly as a peer's would be before
+				// it is stored: storing alone does not check its date or its
+				// difficulty, and a block peers would refuse must not become
+				// our tip.
+				if ValidateBlockSignatures(mockTemplateBlock) && SaveBlockToStorage(mockTemplateBlock) {
 					logMutex.Lock()
 					logLine := fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %s", time.Now().Format("15:04:05"), mockTemplateBlock.Index, mockTemplateBlock.Hash[:16], formatHashrate(currentLiveHashrateTrack))
 					liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)

@@ -101,7 +101,7 @@ The vault's share is deliberately small. A miner can avoid it by including their
 
 **One way to write everything.** A block's identifier is the SHA-256 hash of its header fields, each written with its length in front, so no two different blocks can share an identifier. Every header field has exactly one permitted form. The identifier covers the full contents of every transaction in the block.
 
-**Time.** A block must be dated later than its parent and later than the median of the last eleven blocks, and no more than two minutes ahead of the clock of the node checking it.
+**Time.** A block must be dated later than its parent, and no more than two minutes ahead of the clock of the node checking it. Because dates always move forward along a chain, every block is also later than the median of those before it, the rule older chains state separately.
 
 ## 9. Mining
 

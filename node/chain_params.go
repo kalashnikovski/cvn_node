@@ -363,9 +363,10 @@ func localStatusURL() string {
 // New-genesis economics (GENESIS_SPEC)
 // ---------------------------------------------------------------------------
 
-// GenesisEconomics holds the numbers decided for the new genesis. Nothing
-// reads them for consensus yet; they are written down here, with tests, so
-// each rule can be built against one agreed set of values.
+// GenesisEconomics holds the numbers of the reward schedule, the vault, the
+// sweep and the limits that go with them. These are the values every node
+// enforces; they are written down in one place, with tests, so each rule is
+// built against one agreed set.
 type GenesisEconomics struct {
 	BlockSeconds int64 // target seconds per block
 

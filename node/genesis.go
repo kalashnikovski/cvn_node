@@ -307,7 +307,7 @@ func ShowGenesis() {
 	case anchor.Placeholder != "":
 		fmt.Printf(" No anchor: %s\n", anchor.Placeholder)
 	default:
-		fmt.Println(" No anchor: this network began before anchors were introduced.")
+		fmt.Println(" No anchor.")
 	}
 	genesis := buildGenesisBlock()
 	fmt.Println("--------------------------------------------------------------------")

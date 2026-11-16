@@ -194,7 +194,7 @@ func cachedPeerAddresses() []string {
 	return addresses
 }
 
-// cachedPeerHTTPGateways returns sync URLs (port 8081) for the most recently
+// cachedPeerHTTPGateways returns sync URLs (the network's SyncPort) for the most recently
 // reached peers, skipping any host already in alreadyListed.
 func cachedPeerHTTPGateways(alreadyListed []string) []string {
 	var gateways []string

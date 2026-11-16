@@ -756,12 +756,6 @@ func TriggerActiveReSyncPass() {
 				refused = true
 				break
 			}
-			if block.UncleHash == "" {
-				block.UncleHash = emptyUncleHash
-			}
-			if block.UncleMiner == "" {
-				block.UncleMiner = emptyUncleMiner
-			}
 			SaveBlockToStorageInternal(block)
 		}
 		StateMutex.Unlock()

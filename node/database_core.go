@@ -113,6 +113,14 @@ func reindexUTXOFromChainOnce() {
 		if bMeta.Get([]byte(reindexFlagKey)) != nil {
 			return nil
 		}
+		// This rebuild knows nothing of coin ages or sweeps, so it must never
+		// run over a chain that has blocks: it would write every coin back
+		// without its age. A database made by this program has the flag from
+		// its first moment; one that somehow lacks it and holds blocks is
+		// left as it is.
+		if tipHeight > 0 {
+			return bMeta.Put([]byte(reindexFlagKey), []byte("skipped: chain not empty"))
+		}
 
 		if tx.Bucket(utxoBucket) != nil {
 			if err := tx.DeleteBucket(utxoBucket); err != nil {
@@ -283,6 +291,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 				}
 
 				replacedExistingBlock = true
+				beginChainRewrite() // ended once this write has finished, below
 				if historicalOldBlock.PrevHash == block.PrevHash {
 					displacedHigherHashSibling = &historicalOldBlock
 				}
@@ -398,6 +407,9 @@ func SaveBlockToStorageInternal(block Block) bool {
 	})
 
 	_ = ctx // Enforced contextual lifetime tracking satisfied natively inside callbacks
+	if replacedExistingBlock {
+		endChainRewrite()
+	}
 	if err != nil {
 		// (When keptLowerHashSibling is set, our block lost a same-height race
 		// to one already on disk. It is dropped; there is no uncle share.)

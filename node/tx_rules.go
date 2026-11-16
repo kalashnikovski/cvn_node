@@ -291,10 +291,10 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int6
 	if !strings.HasPrefix(coinbase.ID, fmt.Sprintf("TX_COINBASE_H%d_", b.Index)) || len(coinbase.ID) > 200 {
 		return none, nil, fmt.Errorf("reward transaction ID does not name height %d", b.Index)
 	}
-	// Under the launch schedule the reward eventually reaches zero, and a block
-	// with no fees then has nothing to pay out, so no outputs is allowed there.
-	if len(coinbase.Outputs) > 2 || (len(coinbase.Outputs) == 0 && Params.Economics == nil) {
-		return none, nil, fmt.Errorf("reward transaction must have one or two outputs")
+	// A reward has one output. The reward eventually reaches zero, and a
+	// block with no fees then has nothing to pay out, so none is allowed too.
+	if len(coinbase.Outputs) > 1 {
+		return none, nil, fmt.Errorf("reward transaction must have at most one output")
 	}
 	if err := checkRewardFormat(coinbase, b); err != nil {
 		return none, nil, err
