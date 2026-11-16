@@ -78,8 +78,13 @@ jobs:
             ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
             Set-Content -Encoding ascii SHA256SUMS_windows.txt
 
+      # A tag with "-rc" in it is a release candidate and is published as a
+      # pre-release, so that it is never shown as the latest version. The
+      # release's text is RELEASE_NOTES.md as it stands at the tag.
       - uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          body_path: RELEASE_NOTES.md
           files: |
             cvn_node_windows.zip
             SHA256SUMS_windows.txt
@@ -115,6 +120,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          body_path: RELEASE_NOTES.md
           files: |
             cvn_node_linux_amd64.tar.gz
             cvn_node_linux_arm64.tar.gz

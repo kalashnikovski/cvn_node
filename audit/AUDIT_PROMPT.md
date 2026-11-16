@@ -692,6 +692,68 @@ After every reviewer has answered, run Prompt 2 as before, with each reviewer gi
 
 ---
 
+## Prompt 6: the exponential difficulty step
+
+A short, narrow review of one change made after round 4: each block's difficulty step is now applied as `e^x`, worked out in whole numbers (`ExponentialSteps`, `expStepFactor` in `node/heartbeat_difficulty.go`). It answers finding 1 of `audit/FINDINGS_ROUND_4.md`.
+
+Give the reviewer `cvn_audit_rule_h.txt` (about 82,000 characters) with the prompt below, in a **new conversation**. A reviewer that can take the whole code may be given `cvn_audit_full.txt` with the same prompt; change the first sentence of "WHAT YOU HAVE" to say so.
+
+```text
+You are reviewing ONE change to a proof-of-work blockchain before it launches: the arithmetic that sets each block's difficulty. A mistake here either splits the network or lets a large miner take more than its share. Your job is to find what is wrong. Do not summarise, explain or praise.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below, holding seven files from a larger code base: the record of the last review (audit/FINDINGS_ROUND_4.md; finding 1 is what this change answers), the difficulty rule (node/heartbeat_difficulty.go), the network settings (node/chain_params.go), block validation (node/blockchain_core.go), and three test files. Everything else is missing. Do not guess at code you cannot see; where a finding depends on it, say so.
+
+The material numbers its files ("FILE n OF 7") and ends with the line "END OF PACK". Begin by stating the number of the last file you can see and whether you can see that line. If you cannot, your copy was cut short: say so.
+
+THE RULE
+
+Blocks are meant to come every 45 seconds. For each block a step x is worked out:
+
+  x = (45 - solve) / 900  -  drift / 180000
+
+where solve is how many seconds the parent block's date is after its own parent's (held between 1 and 495), and drift is how far the chain's dates are from its schedule (the second term is held between -0.01 and +0.01). So x lies between about -0.51 and +0.059.
+
+Before this change the next difficulty was difficulty * (1 + x). A reviewer showed that a miner with most of the hashrate could date a run of blocks one second after their parents (twelve steps of about +5%) and then one block 495 seconds after its parent (one step of -50%); those multiply to less than 1 although the x's sum to more than 0, so difficulty stayed level while the blocks' dates advanced by less than 45 seconds a block. That paid up to 13% more coins.
+
+Now the next difficulty is difficulty * e^x. The authors' claim: e^a * e^b = e^(a+b), so any run of steps depends only on the sum of the x's, that is, on how much time the blocks' dates span, and choosing dates gains nothing.
+
+Separately, and unchanged: if a block is dated 360 seconds or more after its parent, that block alone is mined at a halved difficulty (halved again per further 180 seconds). The next block is worked out from the difficulty its parent would have had without that halving. A block may be dated up to 120 seconds ahead of the checking node's clock and must be dated after its parent.
+
+e^x is computed by expStepFactor(numerator, denominator): the series 1 + x + x^2/2 + x^3/6 + ... in 64-bit fixed point using Go's math/big, each term found from the last as term * numerator / (denominator * k) with the division rounded toward zero, stopping when a term is zero or after 200 terms. The result is multiplied into the difficulty and shifted right by 64 bits.
+
+QUESTIONS
+
+1. Exactness. Will every correct implementation, on every machine and operating system, get the same whole number from expStepFactor and from heartbeatRetargetAnchored for the same inputs? Is there any input the rule can produce for which the series misbehaves: does not converge, overflows, goes negative, or stops early? Check the smallest and largest x, a difficulty at the network minimum (5,000) and at the maximum (2^55), and what rounding toward zero does to negative terms.
+
+2. The claim. Does difficulty * e^x really remove the gain from choosing dates? The solve time is held to at most 495 seconds and at least 1, and the drift term is capped, so the x's are not simply proportional to elapsed time. Using those limits, the 120 seconds a block may be dated ahead, or the separate late-block halving, find a pattern of dates that still gives a miner with most of the hashrate more blocks than steady honest mining would. Give heights, dates and difficulties.
+
+3. Rounding as a lever. Each step rounds the difficulty down to a whole number. At low difficulty can a miner choose steps so that rounding accumulates in its favour?
+
+4. Recovery. A slow block now lowers difficulty by about 39% at most where it was 50%. With the late-block halving not carried forward, does a chain that has really lost most of its miners still recover? Work one case through: hashrate falls to a hundredth.
+
+5. The first blocks. For blocks 1 to 20 no halving is given and difficulty cannot fall below its starting value; over the next 40 blocks halvings return one at a time (launchRampGap). Does the new step behave correctly there, and at a change of mining algorithm (powEraStartingAt), where difficulty restarts?
+
+6. The tests. node/exponential_steps_test.go pins seven values and compares the series with floating point; node/chosen_dates_sim_test.go runs five date patterns. What do they not cover? Is any pinned value wrong? (e^(8800/180000) * 2^64 should be within a few units of 19370993578904439459.)
+
+7. The switch. ExponentialSteps is a per-network setting, on for both networks. Is there any path that works out a difficulty with the setting in the wrong state, or before the network has been chosen?
+
+DO NOT REPORT
+
+What audit/FINDINGS_ROUND_4.md lists as known or not changed. That a miner who mines only when difficulty dips earns more per hash. Style and wording.
+
+HOW TO ANSWER
+
+Answer each question in order, in a few lines: what you checked and what you concluded. "Did not check" is acceptable; silence is not.
+
+Then any findings, most serious first, each with: Title; Severity (Critical: nodes can disagree, or coins can be taken / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps with numbers; the lines that allow it, quoted; the smallest fix.
+
+Be specific or say nothing. Do not add a summary.
+```
+
+---
+
 ## After the reviews
 
 Bring the findings back to the development session, with each reviewer's verdicts from Prompt 2. Each one that survives is then:

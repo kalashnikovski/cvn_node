@@ -4,7 +4,7 @@ Run from anywhere:
 
     python audit/make_audit_pack.py
 
-It writes six text files into audit/out/ (which is not kept in the
+It writes seven text files into audit/out/ (which is not kept in the
 repository):
 
     cvn_audit_full.txt        everything in one file
@@ -19,8 +19,9 @@ repository):
                               for this round, every file that decides whether
                               a block or a transfer is valid, the miner, and
                               the tests of the newest rule
-    cvn_audit_rule_b.txt      smaller still: only what the newest change to
-                              the difficulty rule needs
+    cvn_audit_rule_b.txt      smaller still: only what the change to late-
+                              block relief needs
+    cvn_audit_rule_h.txt      likewise for the exponential difficulty step
 
 and each prompt of audit/AUDIT_PROMPT.md as its own file (PROMPT_1.txt and so
 on), ready to paste.
@@ -161,6 +162,16 @@ RULE_B = [
     "node/hopping_sim_test.go",
 ]
 
+RULE_H = [
+    "audit/FINDINGS_ROUND_4.md",
+    "node/heartbeat_difficulty.go",
+    "node/chain_params.go",
+    "node/blockchain_core.go",
+    "node/exponential_steps_test.go",
+    "node/chosen_dates_sim_test.go",
+    "node/relief_not_inherited_test.go",
+]
+
 
 def git(*args):
     try:
@@ -213,7 +224,7 @@ def build(title, purpose, files):
 
 def main():
     listed = set(RULES + PROGRAM)
-    for name, selection in (("FOCUS", FOCUS), ("RULE_B", RULE_B)):
+    for name, selection in (("FOCUS", FOCUS), ("RULE_B", RULE_B), ("RULE_H", RULE_H)):
         stray = [path for path in selection if path not in listed and not path.endswith("_test.go")]
         if stray:
             sys.exit(name + " names files that are not in the full pack: " + ", ".join(stray))
@@ -253,6 +264,10 @@ def main():
          ["For a reviewer with a small input limit. Only what is needed to judge the change to the",
           "difficulty rule described in audit/CHANGES_FOR_ROUND_4.md, section 1. Nothing else is here."],
          RULE_B),
+        ("cvn_audit_rule_h.txt", "A SMALL SELECTION - THE EXPONENTIAL DIFFICULTY STEP ONLY",
+         ["For a short review of one change: each difficulty step applied as e^x, in whole numbers.",
+          "See audit/FINDINGS_ROUND_4.md, finding 1. Nothing else is here."],
+         RULE_H),
     ]
     os.makedirs(OUT, exist_ok=True)
     for name, title, purpose, files in packs:
