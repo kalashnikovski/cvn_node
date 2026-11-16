@@ -11,7 +11,7 @@ func TestDevnetUsesLaunchRules(t *testing.T) {
 	if !IsHeartbeatHeight(1) || !IsTxForkHeight(1) {
 		t.Error("on devnet the difficulty rule and transfer validation must apply from block 1")
 	}
-	if !Params.ScheduleAnchored || Params.Economics == nil || !Params.AmountsAsUnits {
+	if !Params.ScheduleAnchored || !Params.ReliefNotInherited || Params.Economics == nil || !Params.AmountsAsUnits {
 		t.Error("devnet must run the launch rules: anchored schedule, launch rewards, whole-unit amounts")
 	}
 	if powAlgorithmAt(1) != PowRandomX || powAlgorithmAt(5000000) != PowRandomX || minDifficultyAt(1) != 5000 {
@@ -30,7 +30,7 @@ func TestDevnetUsesLaunchRules(t *testing.T) {
 
 func TestTestnet1KeepsItsOriginalRules(t *testing.T) {
 	onNetwork(t, "testnet-1")
-	if Params.ScheduleAnchored || Params.Economics != nil {
+	if Params.ScheduleAnchored || Params.ReliefNotInherited || Params.Economics != nil {
 		t.Fatal("testnet-1 must keep its original difficulty rule and reward schedule")
 	}
 	if BlockRewardUnits(7000) != cvn("50") || BlockRewardUnits(5256001) != cvn("25") {

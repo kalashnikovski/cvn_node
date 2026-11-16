@@ -42,6 +42,11 @@ func TestReplayRealChain(t *testing.T) {
 		}
 	}
 	network := os.Getenv("CVN_REPLAY_NETWORK")
+	if network == "" {
+		// Not the program's default network, which is the CVN Testnet: the
+		// chain this replay was written for is the first test network's.
+		network = "testnet-1"
+	}
 
 	copyPath := filepath.Join(t.TempDir(), "source_copy.db")
 	if err := copyFileForTest(sourcePath, copyPath); err != nil {

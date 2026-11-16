@@ -93,6 +93,13 @@ type ChainParams struct {
 	// block heights line up with the calendar over the long run.
 	ScheduleAnchored bool
 
+	// ReliefNotInherited keeps the relief given to a late block (difficulty
+	// halved after six minutes without a block) to that block alone: the
+	// next block is worked out from the difficulty its parent would have had
+	// without it. Otherwise one long gap leaves dozens of cheap blocks for
+	// whoever has the most hashrate (see heartbeat_difficulty.go).
+	ReliefNotInherited bool
+
 	// Economics, when set, is the launch reward schedule. When nil the
 	// network uses testnet-1's original schedule.
 	Economics *GenesisEconomics
@@ -183,6 +190,7 @@ var devnetParams = ChainParams{
 	KeyLagBlocks:               100,
 	HeartbeatInitialDifficulty: 5000,
 	ScheduleAnchored:           true,
+	ReliefNotInherited:         true,
 	Economics:                  &NewGenesisEconomics,
 }
 
@@ -244,6 +252,7 @@ var cvnTestnetParams = ChainParams{
 	KeyLagBlocks:               100,
 	HeartbeatInitialDifficulty: 1000000,
 	ScheduleAnchored:           true,
+	ReliefNotInherited:         true,
 	Economics:                  &NewGenesisEconomics,
 }
 
@@ -316,6 +325,7 @@ func applyParams() {
 	BlockchainFile = Params.DatabaseFile
 	HeartbeatActivationHeight = Params.HeartbeatHeight
 	TxForkActivationHeight = Params.TxForkHeight
+	resetUnrelievedCache()
 }
 
 // applySeedOverride lets a network that has no built-in seeds be given some

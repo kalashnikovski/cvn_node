@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync"
 )
 
 // HEARTBEAT DIFFICULTY
@@ -196,6 +197,18 @@ func launchDifficulty() int64 {
 // long after lastBlock the next block is dated, as counted for late-block
 // relief.
 func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
+	base := int64(lastBlock.Difficulty)
+	if Params.ScheduleAnchored && Params.ReliefNotInherited {
+		base = unrelievedDifficulty(lastBlock)
+	}
+	return heartbeatDifficultyFromBase(lastBlock, base, gapSeconds)
+}
+
+// heartbeatDifficultyFromBase is the rule with the parent's difficulty given
+// separately. `base` is what the next block's difficulty is worked out from:
+// the difficulty lastBlock carries, or, on a network where late-block relief
+// is not inherited, the difficulty it would have carried without relief.
+func heartbeatDifficultyFromBase(lastBlock Block, base int64, gapSeconds int64) int {
 	if !IsHeartbeatHeight(lastBlock.Index) {
 		// lastBlock is not a heartbeat block (the genesis block, or one that
 		// still carries an old leading-zeros difficulty): start from the
@@ -227,7 +240,125 @@ func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
 		// long block 1 took to find.
 		solveSeconds = HeartbeatTargetSeconds
 	}
-	return int(heartbeatRetargetAnchored(int64(lastBlock.Difficulty), solveSeconds, gapSeconds, scheduleDriftSeconds(lastBlock), minimum))
+	return int(heartbeatRetargetAnchored(base, solveSeconds, gapSeconds, scheduleDriftSeconds(lastBlock), minimum))
+}
+
+// LATE-BLOCK RELIEF IS NOT INHERITED (Params.ReliefNotInherited)
+//
+// A block dated six minutes or more after its parent is mined at a halved
+// difficulty (halved again for every further three minutes). That keeps a
+// chain moving when miners leave. Under the first form of the rule the next
+// block then started from that halved figure, and was cut a second time for
+// the same delay through the solve-time term: one 14-minute gap left the
+// following blocks at a sixteenth of the difficulty, and it took some
+// seventy-five blocks, each raising it by at most 5%, to climb back.
+//
+// Whoever holds most of the hashrate collects those cheap blocks. Measured
+// in simulation, a miner with 94% of the hashrate who mined in bursts on
+// purpose took about a third more coins than by mining steadily, and blocks
+// came every 32 seconds instead of 45 (see difficulty_candidates_sim_test.go).
+// It was also seen on devnet when the largest miner restarted.
+//
+// So on networks with this setting the relief belongs to the late block
+// alone. The next block is worked out from the difficulty its parent would
+// have had with no relief, and is then lowered in the ordinary way for the
+// parent having been slow (by at most half). A chain that really has lost its
+// miners still comes down by half per block, with relief again for each block
+// that is late; a miner who only paused finds the difficulty close to where
+// it was.
+
+// reliefGapSeconds is how late block b counted as being when it was mined:
+// the gap the rule used to decide its late-block relief.
+func reliefGapSeconds(b Block, parent Block) int64 {
+	if inLaunchWindow(b.Index) {
+		return 0 // no relief is given inside the launch window
+	}
+	return launchRampGap(b.Index, difficultyClock(b.Timestamp)-difficultyClock(parent.Timestamp))
+}
+
+// unrelievedCache remembers the answer of unrelievedDifficulty by block
+// identifier. The answer depends only on the block and its ancestors, which
+// the identifier fixes, so it never goes stale; the table is simply emptied
+// when it grows large or the network settings change.
+var unrelievedCache = struct {
+	sync.Mutex
+	byHash map[string]int64
+}{byHash: make(map[string]int64)}
+
+const unrelievedCacheLimit = 4096
+
+func resetUnrelievedCache() {
+	unrelievedCache.Lock()
+	unrelievedCache.byHash = make(map[string]int64)
+	unrelievedCache.Unlock()
+}
+
+// unrelievedDifficulty returns the difficulty block b would have carried had
+// it been given no late-block relief. For a block that was not late that is
+// simply its difficulty. For a late block it is the rule applied to its
+// parent with no gap, which in turn needs the parent's own unrelieved
+// difficulty; so the walk goes back through consecutive late blocks to the
+// first one that was on time, and then works forward again.
+//
+// The halved figure cannot simply be doubled back: the halving discards the
+// low bits, and a difficulty that reached the network's minimum was stopped
+// there, so the figure before relief is not recoverable from the block alone.
+func unrelievedDifficulty(b Block) int64 {
+	type step struct{ block, parent Block }
+	var late []step // b and its late ancestors, newest first
+	current := b
+	exact := true // false when an ancestor needed for the answer is not in the database
+	var base int64
+	for {
+		if current.Hash != "" {
+			unrelievedCache.Lock()
+			known, found := unrelievedCache.byHash[current.Hash]
+			unrelievedCache.Unlock()
+			if found {
+				base = known
+				break
+			}
+		}
+		if current.Index <= 1 || !IsHeartbeatHeight(current.Index) || inLaunchWindow(current.Index) {
+			base = int64(current.Difficulty)
+			break
+		}
+		parent := GetBlockByHeightFromDB(current.Index - 1)
+		if parent.Hash == "" || parent.Hash != current.PrevHash {
+			// The parent is not the block we hold at that height (or we hold
+			// none). Nothing sound can be said from here; use what the block
+			// carries and remember nothing.
+			base = int64(current.Difficulty)
+			exact = false
+			break
+		}
+		if reliefGapSeconds(current, parent) < HeartbeatStallAfterSeconds {
+			base = int64(current.Difficulty)
+			break
+		}
+		late = append(late, step{current, parent})
+		current = parent
+	}
+	remember := func(block Block, value int64) {
+		if !exact || block.Hash == "" {
+			return
+		}
+		unrelievedCache.Lock()
+		if len(unrelievedCache.byHash) >= unrelievedCacheLimit {
+			unrelievedCache.byHash = make(map[string]int64)
+		}
+		unrelievedCache.byHash[block.Hash] = value
+		unrelievedCache.Unlock()
+	}
+	remember(current, base)
+	// Forward again: each late block's unrelieved difficulty is the rule
+	// applied to its parent, from the parent's unrelieved difficulty, with
+	// no gap.
+	for i := len(late) - 1; i >= 0; i-- {
+		base = int64(heartbeatDifficultyFromBase(late[i].parent, base, 0))
+		remember(late[i].block, base)
+	}
+	return base
 }
 
 // scheduleDriftSeconds says how far the chain is from its schedule at
