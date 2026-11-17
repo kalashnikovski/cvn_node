@@ -162,6 +162,7 @@ Both wallets do the same things.
 | Show a balance | The balance of any address. The text wallet also shows how many separate coins it is held in and, where it applies, when the oldest coin is due to be swept. |
 | Send CVN | Sends an amount to an address, with an optional fee |
 | Combine my coins | Merges many small coins into a few large ones in your own address |
+| Renew my coins | Gives coins that are within a year of their seven-year date a new seven-year count, by sending them back to your own address. If none is that near, it says how far off the earliest is and offers to renew them all |
 | Create a new wallet | Makes a new address and private key (text wallet) |
 
 **Sending.** You enter the recipient's address, the amount, an optional fee, and the private key of the wallet you are sending from. In the text wallet on Windows the key is visible on screen as you type or paste it, so make sure nobody is watching and close the window afterwards; on Linux it is hidden. The transfer is signed on your own computer. The key is used for that one transfer and is not saved or sent anywhere. A transfer normally confirms in the next block.

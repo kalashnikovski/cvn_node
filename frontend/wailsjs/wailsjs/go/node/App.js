@@ -17,3 +17,7 @@ export function FetchWalletBalanceQuery(arg1) {
 export function GetLocalNodeTelemetry() {
   return window['go']['node']['App']['GetLocalNodeTelemetry']();
 }
+
+export function RenewCoinsSubmit(arg1, arg2, arg3) {
+  return window['go']['node']['App']['RenewCoinsSubmit'](arg1, arg2, arg3);
+}

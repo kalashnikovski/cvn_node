@@ -60,7 +60,7 @@ Covenant Standard returns part of them.
 - If what would remain is below the minimum coin size, the whole coin is moved.
 - This repeats every seven years for as long as the coin stays unspent.
 
-An owner who still holds their key loses nothing. Spending a coin, including sending it to your own address, creates a new coin with a new count. One transfer every seven years is enough, and the wallet shows when a coin's date is approaching.
+An owner who still holds their key loses nothing. Spending a coin, including sending it to your own address, creates a new coin with a new count. One transfer every seven years is enough. The wallet shows when a coin's date is approaching, and its "Renew my coins" action makes that transfer in one step for every coin within a year of its date.
 
 A coin that is truly lost keeps 80% after 7 years, 64% after 14, about a third after 35 and about a tenth after 70.
 

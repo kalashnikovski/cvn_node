@@ -21,6 +21,10 @@ Three reviewers examined release candidate 7's new difficulty arithmetic (`audit
 - The program no longer builds for 32-bit computers, where difficulty would one day stop fitting.
 - **The miner window has colour:** the heading and figures in green, and in the log the `[PoD CORE]` tag in purple and `[SUCCESS]` in green. Set the environment variable `NO_COLOR` to switch it off.
 
+## Since release candidate 8
+
+- **Renew my coins**, in both wallets: one step gives the coins that are within a year of their seven-year date a new seven-year count. No rule changes; a node of release candidate 8 accepts everything this does.
+
 ## Other changes
 
 - The CVN Testnet is the network the program runs on when none is named. It cannot start until its Bitcoin block is announced; wallets still open.

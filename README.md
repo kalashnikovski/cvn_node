@@ -56,7 +56,7 @@ While the miner runs in one terminal, open another:
 
 On Windows: `cvn_miner.exe --wallet`, or `LaunchWallet.bat` for the desktop version.
 
-A miner receives a separate coin for every block won, and one transfer can spend at most 200 coins. **Combine my coins**, in both wallets, merges them into a few large coins in your own address.
+A miner receives a separate coin for every block won, and one transfer can spend at most 200 coins. **Combine my coins**, in both wallets, merges them into a few large coins in your own address. **Renew my coins** gives coins nearing their seven-year date a new count in one step.
 
 **These commands run on the CVN Testnet** (`cvn_testnet`). Until its start has been announced you can create a wallet and open it, but the miner says the network is not scheduled yet and stops. What to do before and on the day it starts is in [Installation_Guide.md](Installation_Guide.md), section 7. For another network add `--network NAME` to every command, including the one that creates the wallet, for example `--network devnet`.
 

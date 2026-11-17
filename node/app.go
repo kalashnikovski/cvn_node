@@ -181,6 +181,45 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, priv
 	return "SUCCESS: Transfer " + tx.ID[:19] + "... sent from " + senderAddress + ". It will confirm in one of the next blocks."
 }
 
+// RenewCoinsSubmit sends the coins of a wallet that are within a year of
+// their seven-year date back to the wallet's own address, which gives each
+// a new seven-year count. With `everything` set to "all", every coin is
+// renewed. Like a transfer, it is signed on this machine and the private
+// key is not kept.
+func (a *App) RenewCoinsSubmit(feeStr, privateKeyHex, everything string) string {
+	feeUnits := int64(0)
+	var err error
+	if strings.TrimSpace(feeStr) != "" {
+		if feeUnits, err = ParseCVN(feeStr); err != nil {
+			return "REJECTED: The fee must be zero or a positive number, with at most 8 decimal places."
+		}
+	}
+	privateKeyHex = strings.TrimSpace(privateKeyHex)
+	if privateKeyHex == "" {
+		return "REJECTED: Enter the private key of the wallet whose coins you want to renew."
+	}
+	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	if err != nil {
+		return "REJECTED: " + err.Error()
+	}
+	if len(privateKeyHex)%2 == 1 {
+		privateKeyHex = "0" + privateKeyHex
+	}
+	result, err := RenewCoinsFromWallet(privateKeyHex, publicKeyHex, feeUnits, strings.TrimSpace(everything) == "all")
+	if err != nil && len(result.Transfers) == 0 {
+		// Nothing being near its date is not a failure; say so plainly.
+		if strings.Contains(err.Error(), "Nothing needs renewing yet") {
+			return "NOTHING DUE: " + err.Error()
+		}
+		return "REJECTED: " + err.Error()
+	}
+	message := "SUCCESS: " + result.Summary()
+	if err != nil {
+		message += " Then it stopped: " + err.Error()
+	}
+	return message
+}
+
 // CombineCoinsSubmit merges the many coins of a wallet into a few large ones
 // by sending them back to the wallet's own address. Like a transfer, it is
 // signed on this machine and the private key is not kept.

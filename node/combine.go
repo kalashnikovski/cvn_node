@@ -85,8 +85,18 @@ func BuildSignedCombine(privateKeyHex, publicKeyHex string, feeUnits int64, coin
 	if len(coins) < 2 {
 		return Transaction{}, fmt.Errorf("combining needs at least two coins")
 	}
+	return buildTransferToSelf(privateKeyHex, publicKeyHex, feeUnits, coins)
+}
+
+// buildTransferToSelf builds one transfer that spends every coin given and
+// pays their total, less the fee, back to the owner's own address as one
+// coin. Combining and renewing are both this.
+func buildTransferToSelf(privateKeyHex, publicKeyHex string, feeUnits int64, coins []SpendableCoin) (Transaction, error) {
+	if len(coins) < 1 {
+		return Transaction{}, fmt.Errorf("no coins were given")
+	}
 	if len(coins) > TxMaxInputs {
-		return Transaction{}, fmt.Errorf("one transfer can combine at most %d coins", TxMaxInputs)
+		return Transaction{}, fmt.Errorf("one transfer can spend at most %d coins", TxMaxInputs)
 	}
 	if feeUnits < 0 {
 		return Transaction{}, fmt.Errorf("fee cannot be negative")

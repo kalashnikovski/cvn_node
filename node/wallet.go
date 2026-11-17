@@ -46,11 +46,12 @@ func RunTextWallet() {
 		fmt.Println(" 1. Show a balance")
 		fmt.Println(" 2. Send CVN")
 		fmt.Println(" 3. Combine my coins")
-		fmt.Println(" 4. Create a new wallet")
-		fmt.Println(" 5. Exit")
+		fmt.Println(" 4. Renew my coins (before their seven-year date)")
+		fmt.Println(" 5. Create a new wallet")
+		fmt.Println(" 6. Exit")
 		fmt.Println("====================================================================")
 
-		switch ask("Choose 1-5: ") {
+		switch ask("Choose 1-6: ") {
 		case "1":
 			textWalletShowBalance(ask, ownAddress)
 		case "2":
@@ -58,8 +59,10 @@ func RunTextWallet() {
 		case "3":
 			textWalletCombine(ask, reader)
 		case "4":
+			textWalletRenew(ask, reader)
+		case "5":
 			textWalletCreate(ask, ownAddress)
-		case "5", "q", "exit":
+		case "6", "q", "exit":
 			fmt.Println("Wallet closed.")
 			return
 		}
@@ -108,7 +111,12 @@ func textWalletShowBalance(ask func(string) string, ownAddress string) {
 			fmt.Printf("   One transfer can spend at most %d coins. \"Combine my coins\" in the menu merges them into fewer, larger coins.\n", TxMaxInputs)
 		}
 		if earliestSweep > 0 {
-			fmt.Printf("   Oldest coin: a fifth of it moves to the vault at the end of block #%d unless it is spent before then.\n", earliestSweep)
+			when := ""
+			if height, ok := walletChainHeight(); ok {
+				when = ", " + describeBlocksAway(earliestSweep-height) + " from now"
+			}
+			fmt.Printf("   Oldest coin: a fifth of it moves to the vault at the end of block #%d%s unless it is spent before then.\n", earliestSweep, when)
+			fmt.Println("   \"Renew my coins\" in the menu gives such coins a new seven-year count in one step.")
 		}
 	}
 }
@@ -164,6 +172,89 @@ func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 		return
 	}
 	fmt.Printf("✅ Sent. Transfer ID: %s\n   It will confirm in one of the next blocks.\n", tx.ID)
+}
+
+// textWalletRenew sends the coins that are near their seven-year date back
+// to their own address, which gives each a new seven-year count.
+func textWalletRenew(ask func(string) string, reader *bufio.Reader) {
+	fmt.Println()
+	fmt.Println(" A coin that has not been spent for seven years has a fifth of its value")
+	fmt.Println(" moved to the vault. Spending it, even to your own address, makes it a new")
+	fmt.Println(" coin with a new seven-year count. Renewing sends the coins that are within")
+	fmt.Println(" a year of their date back to your own address. Your balance does not")
+	fmt.Println(" change, apart from any fee you choose to pay.")
+	fmt.Println()
+
+	privateKeyHex := readSecretLine(reader, "Private key of the wallet (not shown while typing): ")
+	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	if err != nil {
+		fmt.Println("❌ " + err.Error())
+		return
+	}
+	if len(privateKeyHex)%2 == 1 {
+		privateKeyHex = "0" + privateKeyHex
+	}
+	address, err := DeriveAddressFromPublicKey(publicKeyHex)
+	if err != nil {
+		fmt.Println("❌ " + err.Error())
+		return
+	}
+	coins, _, err := FetchSpendableCoinsOverHTTP(address)
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+		return
+	}
+	earliest := earliestSweepBlock(coins)
+	if earliest == 0 {
+		fmt.Printf("\n %s holds no coin with a seven-year date. There is nothing to renew.\n", address)
+		return
+	}
+	height, ok := walletChainHeight()
+	if !ok {
+		fmt.Println("❌ No node could say what the newest block is. Start your miner or check your connection.")
+		return
+	}
+	everything := false
+	groups := planRenewal(coins, height, renewHorizonBlocks)
+	if len(groups) == 0 {
+		fmt.Printf("\n No coin of %s is within a year of its date.\n", address)
+		fmt.Printf(" The earliest is the end of block #%d, %s from now. Nothing needs renewing yet.\n", earliest, describeBlocksAway(earliest-height))
+		if answer := strings.ToLower(ask("Renew every coin anyway? (y/n): ")); answer != "y" && answer != "yes" {
+			fmt.Println("Nothing was sent.")
+			return
+		}
+		everything = true
+		groups = planRenewal(coins, height, 0)
+	}
+	feeUnits := int64(0)
+	if feeText := ask("Voluntary fee per transfer (press Enter for 0): "); feeText != "" {
+		if feeUnits, err = ParseCVN(feeText); err != nil {
+			fmt.Println("❌ The fee must be zero or a positive number, with at most 8 decimal places.")
+			return
+		}
+	}
+	renewing := 0
+	for _, group := range groups {
+		renewing += len(group)
+	}
+	fmt.Println("\n--------------------------------------------------------------------")
+	fmt.Printf(" Wallet:          %s\n", address)
+	fmt.Printf(" Coins to renew:  %d of %d\n", renewing, len(coins))
+	fmt.Printf(" Earliest date:   end of block #%d, %s from now\n", earliest, describeBlocksAway(earliest-height))
+	fmt.Printf(" Transfers:       %d, each back to this same address as one new coin\n", len(groups))
+	fmt.Printf(" Total fee:       %s CVN\n", FormatUnits(feeUnits*int64(len(groups))))
+	fmt.Println("--------------------------------------------------------------------")
+	if answer := strings.ToLower(ask("Renew these coins? (y/n): ")); answer != "y" && answer != "yes" {
+		fmt.Println("Nothing was sent.")
+		return
+	}
+	result, err := RenewCoinsFromWallet(privateKeyHex, publicKeyHex, feeUnits, everything)
+	if len(result.Transfers) > 0 {
+		fmt.Printf("✅ %s\n", result.Summary())
+	}
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+	}
 }
 
 // textWalletCombine merges a wallet's many coins into a few large ones.

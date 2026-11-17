@@ -20,7 +20,7 @@ func TestWalletScreensCallTheProgramByItsRealName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the screens' link file is missing: %v", err)
 	}
-	for _, method := range []string{"GetLocalNodeTelemetry", "FetchWalletBalanceQuery", "BroadcastLocalTransactionSubmit", "CombineCoinsSubmit"} {
+	for _, method := range []string{"GetLocalNodeTelemetry", "FetchWalletBalanceQuery", "BroadcastLocalTransactionSubmit", "CombineCoinsSubmit", "RenewCoinsSubmit"} {
 		if _, exists := reflect.TypeOf(&App{}).MethodByName(method); !exists {
 			t.Errorf("the program no longer has the wallet function %s", method)
 		}

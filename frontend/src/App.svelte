@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit, CombineCoinsSubmit } from '../wailsjs/wailsjs/go/node/App.js';
+	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit, CombineCoinsSubmit, RenewCoinsSubmit } from '../wailsjs/wailsjs/go/node/App.js';
 
 	let localHeight = $state(0);
 	let globalTip = $state(0); 
@@ -118,6 +118,42 @@
 		}
 	}
 
+	// Gives the coins that are within a year of their seven-year date a new
+	// seven-year count, by sending them back to their own address. It uses
+	// the private key and fee typed in the form. If no coin is that near its
+	// date, it says when the earliest is and offers to renew everything.
+	async function handleRenewCoins() {
+		if (!txPrivateKey) {
+			txStatusMessage = "❌ ERROR: Enter the private key of the wallet whose coins you want to renew.";
+			return;
+		}
+		if (!window.confirm(`Renew the coins of this wallet that are within a year of their seven-year date?\n\nThey are sent back to the wallet's own address, which gives each a new seven-year count. The fee above (${String(txFee || "0")} CVN) is paid for EACH transfer, up to 25.`)) {
+			txStatusMessage = "Nothing was sent.";
+			return;
+		}
+		txStatusMessage = "⏳ Renewing coins...";
+		try {
+			let resultMessage = await RenewCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim(), "");
+			if (resultMessage.startsWith("NOTHING DUE")) {
+				const explanation = resultMessage.replace("NOTHING DUE: ", "");
+				if (!window.confirm(`${explanation}.\n\nRenew every coin anyway?`)) {
+					txStatusMessage = `ℹ️ ${explanation}. Nothing was sent.`;
+					return;
+				}
+				resultMessage = await RenewCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim(), "all");
+			}
+			if (resultMessage.includes("SUCCESS")) {
+				txStatusMessage = `✅ ${resultMessage}`;
+				txPrivateKey = "";
+				updateNodeTelemetry();
+			} else {
+				txStatusMessage = `🚨 ${resultMessage}`;
+			}
+		} catch (error) {
+			txStatusMessage = `❌ The wallet could not renew the coins: ${error?.message ?? error}`;
+		}
+	}
+
 	function copyAddressToClipboard() {
 		navigator.clipboard.writeText(activeWallet);
 		txStatusMessage = "📋 Core identity wallet address copied straight to clipboard tracking channels!";
@@ -217,6 +253,12 @@
 					</button>
 					<div style="color: #8a8a9e; font-size: 0.72rem; line-height: 1.3;">
 						Combine merges many small coins (one per block mined) into a few large ones in your own wallet. It uses the private key and fee above; your balance stays the same apart from the fee.
+					</div>
+					<button type="button" onclick={handleRenewCoins} title="A coin that has not been spent for seven years has a fifth of its value moved to the vault. This sends the coins that are within a year of that date back to your own address, which gives each a new seven-year count. It needs only your private key and, if you wish, a fee." style="background: #161624; color: #00ff66; border: 1px solid #00ff66; padding: 0.6rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; text-transform: uppercase; letter-spacing: 1px;">
+						♻️ Renew My Coins
+					</button>
+					<div style="color: #8a8a9e; font-size: 0.72rem; line-height: 1.3;">
+						Renew gives coins that are within a year of their seven-year date a new seven-year count, by sending them back to your own wallet. It uses the private key and fee above; your balance stays the same apart from the fee.
 					</div>
 
 					{#if txStatusMessage}
