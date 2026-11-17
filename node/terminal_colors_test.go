@@ -5,6 +5,28 @@ import (
 	"testing"
 )
 
+// The dashboard shows as many log lines as fit under its heading, so the
+// heading stays on screen.
+func TestTheDashboardFitsItsWindow(t *testing.T) {
+	cases := map[int]int{
+		0:   12, // height not known
+		-3:  12,
+		30:  20, // thirty lines: nine of heading, one for the cursor
+		24:  14,
+		120: 110,
+		12:  5, // a very small window still shows a few lines
+		5:   5,
+	}
+	for height, want := range cases {
+		if got := dashboardLogLines(height); got != want {
+			t.Errorf("a window %d lines high shows %d log lines, want %d", height, got, want)
+		}
+		if height > 14 && dashboardLogLines(height)+dashboardHeadingLines >= height {
+			t.Errorf("in a window %d lines high the heading would scroll away", height)
+		}
+	}
+}
+
 // In the miner window's log only the tag is coloured: the time and the rest
 // of the line stay as they are, and other kinds of line are untouched.
 func TestOnlyTheTagOfALogLineIsColoured(t *testing.T) {

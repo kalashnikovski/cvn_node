@@ -564,12 +564,16 @@ func Run(frontendAssets embed.FS) {
 			fmt.Println(inGreen("================================================================================"))
 			fmt.Println(inPurple("⚡ RECENT ACTIVITY:                                                             "))
 			fmt.Println(inPurple("--------------------------------------------------------------------------------"))
+			// Only as many log lines as fit under the heading are kept and
+			// shown, newest last, so the heading never scrolls out of view
+			// however fast lines arrive. (The list used to lose one line per
+			// redraw, and a burst of blocks outran that.)
+			if keep := dashboardLogLines(terminalRows()); len(liveTerminalEventLogs) > keep {
+				liveTerminalEventLogs = liveTerminalEventLogs[len(liveTerminalEventLogs)-keep:]
+			}
 			if len(liveTerminalEventLogs) > 0 {
 				for _, event := range liveTerminalEventLogs {
 					fmt.Println(colourLogTags(event))
-				}
-				if len(liveTerminalEventLogs) > 12 {
-					liveTerminalEventLogs = liveTerminalEventLogs[1:]
 				}
 			} else {
 				fmt.Println(colourLogTags(fmt.Sprintf("[%s] ⛏️  [MINING] Mining at %s // height #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight)))

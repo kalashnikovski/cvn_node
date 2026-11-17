@@ -15,6 +15,26 @@ const (
 	ansiReset  = "\x1b[0m"
 )
 
+// dashboardHeadingLines is how many lines the dashboard's heading takes:
+// three for the title, three of figures, one rule, the "recent activity"
+// line and the rule under it.
+const dashboardHeadingLines = 9
+
+// dashboardLogLines is how many log lines the dashboard shows under its
+// heading in a terminal of the given height: all that fit, leaving one line
+// for the cursor. When the height is not known it shows twelve, and it
+// never shows fewer than five.
+func dashboardLogLines(terminalHeight int) int {
+	if terminalHeight <= 0 {
+		return 12
+	}
+	lines := terminalHeight - dashboardHeadingLines - 1
+	if lines < 5 {
+		return 5
+	}
+	return lines
+}
+
 func terminalColoursOn() bool {
 	return os.Getenv("NO_COLOR") == ""
 }

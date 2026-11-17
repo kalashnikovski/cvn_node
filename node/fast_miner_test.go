@@ -83,6 +83,8 @@ func TestFastMinerOutputIsUnderstood(t *testing.T) {
 		"[2026-11-14 17:38:07.269]  randomx  allocated 2336 MB (2080+256) huge pages 100% 1168/1168 +JIT (0 ms)": "randomx allocated 2336 MB (2080+256) huge pages 100% 1168/1168 +JIT (0 ms)",
 		"[2026-11-14 17:38:07.269]  msr      FAILED TO APPLY MSR MOD, HASHRATE WILL BE LOW":                      "msr FAILED TO APPLY MSR MOD, HASHRATE WILL BE LOW",
 		"[2026-11-14 17:38:07.269]  net      127.0.0.1:18083 connect error: \"connection refused\"":              "net 127.0.0.1:18083 connect error: \"connection refused\"",
+		// Any other refusal of the miner's work is still shown.
+		"[2026-11-18 01:20:28.101]  cpu      rejected (1/1) diff 13903 \"the block does not meet the difficulty\" (5 ms)": "cpu rejected (1/1) diff 13903 \"the block does not meet the difficulty\" (5 ms)",
 		// The processor tuning: a success is shown as well as each kind of failure.
 		"[2026-11-16 21:40:02.118]  msr      register values for \"ryzen_19h_zen4\" preset have been set successfully (6 ms)": "msr register values for \"ryzen_19h_zen4\" preset have been set successfully (6 ms)",
 		"[2026-11-16 21:02:05.370]  msr      to access MSR registers Administrator privileges required.":                      "msr to access MSR registers Administrator privileges required.",
@@ -99,6 +101,8 @@ func TestFastMinerOutputIsUnderstood(t *testing.T) {
 		" * COMMANDS     'h' hashrate, 'p' pause, 'r' resume, 's' results, 'c' connection",
 		"[2026-11-14 17:38:28.569]  miner    speed 10s/60s/15m 17859.8 n/a n/a H/s max 17859.8 H/s",
 		"[2026-11-14 17:38:07.268]  cpu      use argon2 implementation AVX-512F",
+		// Work the chain had already moved past: not a fault, and not shown.
+		"[2026-11-18 01:20:28.101]  cpu      rejected (23/14) diff 13903 \"stale job: the chain has moved on\" (56 ms)",
 	} {
 		if message, ok := fastMinerMessage(line); ok {
 			t.Errorf("a line of no interest reached the dashboard: %q", message)

@@ -411,6 +411,13 @@ func fastMinerMessage(line string) (string, bool) {
 	if strings.HasPrefix(lower, "msr ") {
 		return text, true
 	}
+	// A "stale job" is not a fault. The miner found an answer to work that
+	// the chain had already moved past, which happens constantly while
+	// blocks arrive seconds apart (at the start of a chain, for instance)
+	// and now and then at any time. It is not shown.
+	if strings.Contains(lower, "stale job") {
+		return "", false
+	}
 	for _, marker := range []string{"huge pages", "dataset ready", "error", "fail", "rejected", "no active pools", "permission"} {
 		if strings.Contains(lower, marker) {
 			return text, true
