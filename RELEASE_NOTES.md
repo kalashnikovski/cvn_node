@@ -1,44 +1,32 @@
-Release candidate 8. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
+Release candidate 9. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
 
-**This replaces release candidate 7, which should not be used.** The two do not agree about every block (see "Since release candidate 7" below), so a network must run one or the other, and it should be this one.
+**This replaces release candidates 7 and 8, which should not be used.** It does not agree with either about every block, so a network must run one release, and it should be this one.
 
 **This release changes rules every node enforces. It cannot follow a development-network (`devnet`) chain made by an earlier release, and it can no longer follow the first test network (`testnet-1`) at all.** Every machine on `devnet` must move to this release together and start from an empty chain.
 
 ## Rule changes
 
 - **Relief for a late block is no longer inherited.** A block dated six minutes or more after its parent is still mined at a halved difficulty, but the next block is worked out from the difficulty its parent would have had without that. Before, one long gap left dozens of nearly free blocks for whoever held the most mining power.
-- **Difficulty steps are applied as e^x.** Before, a miner holding most of the mining power could gain up to 13% by choosing the dates of its blocks. The same patterns now gain nothing. The arithmetic is done in whole numbers, so every node gets the same result.
+- **Difficulty steps are applied as e^x, rounded to the nearest whole number.** Before, a miner holding most of the mining power could gain up to 13% by choosing the dates of its blocks. The same patterns now gain nothing. The arithmetic is done in whole numbers, so every node gets the same result.
+- **The seven-year sweep leaves the smallest coins alone.** A coin so small that a fifth could not be taken without leaving less than the smallest coin allowed used to be taken entirely. It is now left as it is. The sweep takes a fifth from a coin or nothing; it never takes a coin whole.
+- **Plain names inside a block.** The fixed texts in a block's reward transaction, and the first block's fields, said things like "immutable consensus valid" and named a "steward assembly" that does not exist. They now say what they are: a reward with no key and no signature, and a first block that pays nothing to nobody. This changes every block's identifier.
 - **The first test network is retired.** `--network testnet-1` is refused, and every rule that existed only for it is gone from the program: the first difficulty rule, decimal amounts, the looser block format, addresses without a check, and the uncle share. Two networks remain, `cvn_testnet` (the default) and `devnet`, on the same rules.
 
-How these were found and checked is in `audit/CHANGES_FOR_ROUND_4.md` and `audit/FINDINGS_ROUND_4.md`. The change to difficulty steps has since been reviewed (`audit/FINDINGS_ROUND_5.md`); the rounding change listed below was made after that review.
-
-## Since release candidate 7
-
-Three reviewers examined release candidate 7's new difficulty arithmetic (`audit/FINDINGS_ROUND_5.md`). They agreed it gives the same result on every machine, and found smaller things, now fixed:
-
-- **Each difficulty step is rounded to the nearest whole number.** It was rounded down, which lost a little on every step, always the same way. This is the change that makes this release disagree with release candidate 7.
-- **Miners reach the six-minute halving at the same moment.** A block may be dated up to two minutes ahead of the clock, so a miner who dated ahead reached the halving before those who did not, and took about 1% more than its share. The program's miner now dates a block ahead for that purpose alone, so nobody has a head start.
-- The program no longer builds for 32-bit computers, where difficulty would one day stop fitting.
-- **The miner window has colour:** the heading and figures in green, and in the log the mining tag in purple and `[SUCCESS]` in green. Set the environment variable `NO_COLOR` to switch it off.
-
-## Since release candidate 8 (not yet released)
-
-**Two of these change rules every node enforces, so the next release will not agree with release candidate 8 about every block.**
-
-- **The smallest coins are no longer swept whole.** A coin so small that a fifth could not be taken without leaving less than the smallest coin allowed used to be taken entirely. It is now left alone. The seven-year sweep takes a fifth from a coin or nothing. (Rule change.)
-- **Plain names inside a block.** The fixed texts in a block's reward transaction, and the first block's fields, said things like "immutable consensus valid" and named a "steward assembly" that does not exist. They now say what they are: a reward with no key and no signature, and a first block that pays nothing to nobody. This changes every block's identifier. (Rule change.)
-- **Plain wording on screen.** The miner window and the desktop wallet say "mining", "recent activity", "your address" and "balance" where they said "PoD core", "live streaming consensus and hardware action regions", "public identity address" and "available coin reserve".
-- **Renew my coins**, in both wallets: one step gives the coins that are within a year of their seven-year date a new seven-year count.
+How the difficulty changes were found and checked is in `audit/FINDINGS_ROUND_4.md` and `audit/FINDINGS_ROUND_5.md`. The sweep change and the names were made after the last review and have not been reviewed by anyone but their authors.
 
 ## Other changes
 
+- **Miners reach the six-minute halving at the same moment.** A block may be dated up to two minutes ahead of the clock, so a miner who dated ahead reached the halving before those who did not, and took about 1% more than its share. The program's miner now dates a block ahead for that purpose alone, so nobody has a head start.
+- **Renew my coins**, in both wallets: one step gives the coins that are within a year of their seven-year date a new seven-year count.
+- **The miner window has colour and plain wording:** the heading and figures in green; in the log the `[MINING]` tag in purple and `[SUCCESS]` in green. It says "mining address" and "recent activity" where it said "rig identity" and "live streaming consensus and hardware action regions". Set the environment variable `NO_COLOR` to switch the colour off.
+- **The desktop wallet uses plain wording too:** "balance", "your address", "newest block", "send CVN".
 - The CVN Testnet is the network the program runs on when none is named. It cannot start until its Bitcoin block is announced; wallets still open.
 - The fast miner (the CVN edition of XMRig) is used whenever its `xmrig-cvn` folder is beside the program. No setting is needed.
 - The miner window shows whether the fast miner's processor tuning was applied. `MINING_GUIDE.md` section 3 explains the tuning, what it needs and what it costs.
 - A `miner_config.json` that cannot be read is refused, with the line at fault.
 - The built-in miner checks its own block as it would anyone else's before keeping it.
+- The program no longer builds for 32-bit computers, where difficulty would one day stop fitting.
 - Two log lines that read as faults and were not no longer appear.
-- The desktop wallet no longer says "mainnet".
 
 ## Moving a devnet machine to this release
 
