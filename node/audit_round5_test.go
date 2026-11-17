@@ -15,14 +15,23 @@ func TestTheWholeStepIsPinned(t *testing.T) {
 		difficulty, solve, drift, want int64
 	}{
 		{5000, 1, farAhead, 5303},                                     // step +10600/180000
-		{1000000, 495, farBehind, 600495},                             // step -91800/180000
-		{HeartbeatMaxDifficulty, 495, farBehind, 21635133319812409},   // the same, from the ceiling
+		{1000000, 495, farBehind, 600496},                             // step -91800/180000
+		{HeartbeatMaxDifficulty, 495, farBehind, 21635133319812410},   // the same, from the ceiling
 		{HeartbeatMaxDifficulty, 1, farAhead, HeartbeatMaxDifficulty}, // a rise from the ceiling stays there
 		{5000, 495, farBehind, 5000},                                  // a fall from the floor stays there
 		{1000000, HeartbeatTargetSeconds, 0, 1000000},                 // no step at all
-		{1000000, HeartbeatTargetSeconds - 1, 0, 1001111},             // one second fast
-		{1000000, HeartbeatTargetSeconds + 1, 0, 998889},              // one second slow
+		{1000000, HeartbeatTargetSeconds - 1, 0, 1001112},             // one second fast
+		{1000000, HeartbeatTargetSeconds + 1, 0, 998890},              // one second slow
 	}
+	// The result is rounded to the nearest whole number. At the lowest
+	// difficulty a small step up is kept (it used to be cut away) and a
+	// small step down is not enough to move it.
+	cases = append(cases, []struct {
+		difficulty, solve, drift, want int64
+	}{
+		{5000, HeartbeatTargetSeconds, -30, 5001}, // step +30/180000: 5000.83
+		{5000, HeartbeatTargetSeconds, 1, 5000},   // step -1/180000: 4999.97
+	}...)
 	for _, c := range cases {
 		if got := heartbeatRetargetAnchored(c.difficulty, c.solve, 10, c.drift, 5000); got != c.want {
 			t.Errorf("difficulty %d, parent took %d s, drift %d: got %d, want %d", c.difficulty, c.solve, c.drift, got, c.want)

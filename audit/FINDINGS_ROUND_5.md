@@ -2,7 +2,7 @@
 
 Three reviewers (Claude, Google AI, Grok) examined commit `ab485df` (release candidate 7) with Prompt 6 of `audit/AUDIT_PROMPT.md` and the small pack `cvn_audit_rule_h.txt`. The round had one subject: each block's difficulty step applied as `e^x`, in whole numbers (`ExponentialSteps`), which answered finding 1 of round 4.
 
-Each finding was checked against the code, and each date pattern was run against the real arithmetic, before anything was done. None of the fixes below changes a rule nodes enforce: a node of release candidate 7 and a node with these fixes accept exactly the same blocks.
+Each finding was checked against the code, and each date pattern was run against the real arithmetic, before anything was done. One fix below (number 5, rounding) changes a rule nodes enforce, so release candidate 7 and later versions do not agree about every block; it was made because the development network had not yet been restarted on release candidate 7. The others change no rule.
 
 ## What all three agreed on
 
@@ -20,6 +20,8 @@ Each finding was checked against the code, and each date pattern was run against
 | 3 | **The walk back through late blocks did not stop at a change of mining algorithm** (Google AI) | Low (reported as High) | The reviewer's own trace shows the answer was right: the forward pass restarts difficulty at the new algorithm's starting value. But the walk went on into the old algorithm's blocks for nothing, and was made at all where the next block restarts. Neither network has a second algorithm. | The walk ends at the first block of a new algorithm, and is skipped where the next block restarts. | `TestALateFirstBlockOfANewAlgorithm` |
 | 4 | **The tests would not catch finding 1, or a change in the final rounding** (Claude, Google AI) | Low | Only three shares and five patterns were tried, with a 2% pass mark; no value of the whole step was pinned, only the series inside it. | The dates test tries the new pattern at four more shares against the same miner dating honestly, with a 1% mark. Eight values of the whole step are pinned, at the floor, the ceiling and in between. A comment that said "within six parts in 2^64" now says eight, which is the true bound over the range. | `TestTheWholeStepIsPinned` |
 
+| 5 | **Each step rounded difficulty down, so at the 5,000 minimum a very small step up was lost while a small step down was not** (Google AI) | Low | The product of the difficulty and `e^x` was cut down to a whole number. The loss was under one unit a step (0.02% at the lowest difficulty), always in the same direction. Two reviewers looked for a way to use it and found none. | The product is rounded to the nearest whole number (a half rounds up). **This is a rule change.** The new values were worked out separately from the program and are pinned. | `TestTheWholeStepIsPinned` |
+
 ## Not confirmed
 
 | Finding | Reported as | What was found |
@@ -30,7 +32,6 @@ Each finding was checked against the code, and each date pattern was run against
 
 | Finding | Severity | Decision |
 |---|---|---|
-| **Each step rounds difficulty down, so at the 5,000 minimum a very small step up is lost** (Google AI) | Low | Left as it is. The loss is under one unit a step; at the lowest difficulty that is 0.02%, and the term that holds the chain to its schedule absorbs it. Two reviewers looked for a way to use it and found none. Rounding to the nearest instead would change the result of some steps, so nodes of release candidate 7 and later nodes would disagree about those blocks: a cost with nothing to set against it. |
 | **`SelectNetwork` changes the network settings without a lock** (Google AI, as a note) | None | It is called once, before the database is opened or any connection made. |
 
 ## Not covered by this round

@@ -457,7 +457,8 @@ const (
 // nothing.
 //
 // e^x is worked out in whole numbers so that every machine gets the same
-// answer to the last digit: see expStepFactor.
+// answer to the last digit: see expStepFactor. The new difficulty is the
+// product rounded to the nearest whole number.
 
 // expFractionBits is the precision of expStepFactor: its result is e^x
 // multiplied by 2^64.
@@ -522,7 +523,12 @@ func heartbeatRetargetAnchored(parentDifficulty, parentSolveSeconds, gapSeconds,
 	// machine, and accurate even at the lowest difficulty.
 	var result *big.Int
 	if Params.ExponentialSteps {
+		// Rounded to the nearest whole number (a half rounds up), not cut
+		// down: cutting down lost a little on every step, always the same
+		// way, and at the lowest difficulty swallowed a small step up
+		// entirely while still letting a small step down through.
 		result = new(big.Int).Mul(big.NewInt(parentDifficulty), expStepFactor(adjustment, scale))
+		result.Add(result, new(big.Int).Lsh(big.NewInt(1), expFractionBits-1))
 		result.Rsh(result, expFractionBits)
 	} else {
 		change := new(big.Int).Mul(big.NewInt(parentDifficulty), big.NewInt(adjustment))

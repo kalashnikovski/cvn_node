@@ -549,28 +549,30 @@ func Run(frontendAssets embed.FS) {
 			}
 			cmd.Stdout = os.Stdout
 			_ = cmd.Run()
-			fmt.Println("================================================================================")
-			fmt.Println("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  ")
-			fmt.Println("================================================================================")
-			fmt.Printf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %s\n", actualBlocksHeight, formatHashrate(avg15m))
-			fmt.Printf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %s\n", actualCvnBalance, formatHashrate(avg1h))
+			// The heading and the figures are green, the line above the log purple;
+			// in the log only the tags are coloured (terminal_colors.go).
+			fmt.Println(inGreen("================================================================================"))
+			fmt.Println(inGreen("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  "))
+			fmt.Println(inGreen("================================================================================"))
+			fmt.Println(inGreen(fmt.Sprintf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %s", actualBlocksHeight, formatHashrate(avg15m))))
+			fmt.Println(inGreen(fmt.Sprintf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %s", actualCvnBalance, formatHashrate(avg1h))))
 			if seedOnly {
-				fmt.Printf("🌱 SEED NODE: NOT MINING            | 📊 24h AVG HASHRATE: %s\n", formatHashrate(avg24h))
+				fmt.Println(inGreen(fmt.Sprintf("🌱 SEED NODE: NOT MINING            | 📊 24h AVG HASHRATE: %s", formatHashrate(avg24h))))
 			} else {
-				fmt.Printf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %s\n", CustomMinerAddress, formatHashrate(avg24h))
+				fmt.Println(inGreen(fmt.Sprintf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %s", CustomMinerAddress, formatHashrate(avg24h))))
 			}
-			fmt.Println("================================================================================")
-			fmt.Println("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    ")
-			fmt.Println("--------------------------------------------------------------------------------")
+			fmt.Println(inGreen("================================================================================"))
+			fmt.Println(inPurple("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    "))
+			fmt.Println(inPurple("--------------------------------------------------------------------------------"))
 			if len(liveTerminalEventLogs) > 0 {
 				for _, event := range liveTerminalEventLogs {
-					fmt.Println(event)
+					fmt.Println(colourLogTags(event))
 				}
 				if len(liveTerminalEventLogs) > 12 {
 					liveTerminalEventLogs = liveTerminalEventLogs[1:]
 				}
 			} else {
-				fmt.Printf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %s // Height: #%d\n", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight)
+				fmt.Println(colourLogTags(fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %s // Height: #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight)))
 			}
 			logMutex.Unlock()
 			os.Stdout.Sync()

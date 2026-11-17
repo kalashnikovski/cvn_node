@@ -1,4 +1,6 @@
-Release candidate 7. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
+Release candidate 8. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
+
+**This replaces release candidate 7, which should not be used.** The two do not agree about every block (see "Since release candidate 7" below), so a network must run one or the other, and it should be this one.
 
 **This release changes rules every node enforces. It cannot follow a development-network (`devnet`) chain made by an earlier release, and it can no longer follow the first test network (`testnet-1`) at all.** Every machine on `devnet` must move to this release together and start from an empty chain.
 
@@ -8,7 +10,16 @@ Release candidate 7. A test release: the CVN Testnet has not started, and coins 
 - **Difficulty steps are applied as e^x.** Before, a miner holding most of the mining power could gain up to 13% by choosing the dates of its blocks. The same patterns now gain nothing. The arithmetic is done in whole numbers, so every node gets the same result.
 - **The first test network is retired.** `--network testnet-1` is refused, and every rule that existed only for it is gone from the program: the first difficulty rule, decimal amounts, the looser block format, addresses without a check, and the uncle share. Two networks remain, `cvn_testnet` (the default) and `devnet`, on the same rules.
 
-How these were found and checked is in `audit/CHANGES_FOR_ROUND_4.md` and `audit/FINDINGS_ROUND_4.md`. The change to difficulty steps was made after the last review and has not yet been reviewed by anyone but its authors.
+How these were found and checked is in `audit/CHANGES_FOR_ROUND_4.md` and `audit/FINDINGS_ROUND_4.md`. The change to difficulty steps has since been reviewed (`audit/FINDINGS_ROUND_5.md`); the rounding change listed below was made after that review.
+
+## Since release candidate 7
+
+Three reviewers examined release candidate 7's new difficulty arithmetic (`audit/FINDINGS_ROUND_5.md`). They agreed it gives the same result on every machine, and found smaller things, now fixed:
+
+- **Each difficulty step is rounded to the nearest whole number.** It was rounded down, which lost a little on every step, always the same way. This is the change that makes this release disagree with release candidate 7.
+- **Miners reach the six-minute halving at the same moment.** A block may be dated up to two minutes ahead of the clock, so a miner who dated ahead reached the halving before those who did not, and took about 1% more than its share. The program's miner now dates a block ahead for that purpose alone, so nobody has a head start.
+- The program no longer builds for 32-bit computers, where difficulty would one day stop fitting.
+- **The miner window has colour:** the heading and figures in green, and in the log the `[PoD CORE]` tag in purple and `[SUCCESS]` in green. Set the environment variable `NO_COLOR` to switch it off.
 
 ## Other changes
 
