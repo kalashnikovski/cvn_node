@@ -19,11 +19,16 @@ Three reviewers examined release candidate 7's new difficulty arithmetic (`audit
 - **Each difficulty step is rounded to the nearest whole number.** It was rounded down, which lost a little on every step, always the same way. This is the change that makes this release disagree with release candidate 7.
 - **Miners reach the six-minute halving at the same moment.** A block may be dated up to two minutes ahead of the clock, so a miner who dated ahead reached the halving before those who did not, and took about 1% more than its share. The program's miner now dates a block ahead for that purpose alone, so nobody has a head start.
 - The program no longer builds for 32-bit computers, where difficulty would one day stop fitting.
-- **The miner window has colour:** the heading and figures in green, and in the log the `[PoD CORE]` tag in purple and `[SUCCESS]` in green. Set the environment variable `NO_COLOR` to switch it off.
+- **The miner window has colour:** the heading and figures in green, and in the log the mining tag in purple and `[SUCCESS]` in green. Set the environment variable `NO_COLOR` to switch it off.
 
-## Since release candidate 8
+## Since release candidate 8 (not yet released)
 
-- **Renew my coins**, in both wallets: one step gives the coins that are within a year of their seven-year date a new seven-year count. No rule changes; a node of release candidate 8 accepts everything this does.
+**Two of these change rules every node enforces, so the next release will not agree with release candidate 8 about every block.**
+
+- **The smallest coins are no longer swept whole.** A coin so small that a fifth could not be taken without leaving less than the smallest coin allowed used to be taken entirely. It is now left alone. The seven-year sweep takes a fifth from a coin or nothing. (Rule change.)
+- **Plain names inside a block.** The fixed texts in a block's reward transaction, and the first block's fields, said things like "immutable consensus valid" and named a "steward assembly" that does not exist. They now say what they are: a reward with no key and no signature, and a first block that pays nothing to nobody. This changes every block's identifier. (Rule change.)
+- **Plain wording on screen.** The miner window and the desktop wallet say "mining", "recent activity", "your address" and "balance" where they said "PoD core", "live streaming consensus and hardware action regions", "public identity address" and "available coin reserve".
+- **Renew my coins**, in both wallets: one step gives the coins that are within a year of their seven-year date a new seven-year count.
 
 ## Other changes
 

@@ -231,6 +231,15 @@ func genesisStatement() string {
 	}
 }
 
+// The genesis block holds one transaction, shaped like a block reward, that
+// pays nothing to nobody. Its fields say exactly that. No person, group or
+// key stands behind the name; it is not an address and nothing can ever be
+// sent to it or spent from it.
+const (
+	genesisTransactionID = "TX_GENESIS"
+	genesisRecipient     = "NOBODY"
+)
+
 // buildGenesisBlock constructs this network's genesis block. It pays nothing
 // to anyone.
 func buildGenesisBlock() Block {
@@ -241,15 +250,15 @@ func buildGenesisBlock() Block {
 		Transactions: []Transaction{
 			{
 				Version:   1,
-				ID:        "TX_GENESIS_FAIR_LAUNCH_POOL",
-				Witness:   "COVENANT_STEWARD_ASSEMBLY",
-				PublicKey: "GENESIS_VOID_REWARD_POOL",
+				ID:        genesisTransactionID,
+				Witness:   genesisRecipient,
+				PublicKey: CoinbasePublicKeyMarker,
 				Inputs:    []UTXOInput{},
 				Outputs: []UTXOOutput{
-					{Recipient: "COVENANT_STEWARD_ASSEMBLY", Amount: UnitsAmount(0)},
+					{Recipient: genesisRecipient, Amount: UnitsAmount(0)},
 				},
 				Timestamp: Params.GenesisTimestamp,
-				Signature: "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+				Signature: CoinbaseSignatureMarker,
 			},
 		},
 		PrevHash:    "0000000000000000000000000000000000000000000000000000000000000000",

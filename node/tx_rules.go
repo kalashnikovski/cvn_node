@@ -36,8 +36,11 @@ const (
 	TxMaxOutputs       = 50
 	TxMaxAddressLength = 128
 
-	CoinbasePublicKeyMarker = "GENESIS_VOID_REWARD_POOL"
-	CoinbaseSignatureMarker = "COINBASE_IMMUTABLE_CONSENSUS_VALID"
+	// A block's reward transaction is made by the rules, not by a person:
+	// it has no key and no signature. These two fixed texts stand in those
+	// fields and say so. They are part of every block's identifier.
+	CoinbasePublicKeyMarker = "NO_KEY_BLOCK_REWARD"
+	CoinbaseSignatureMarker = "NO_SIGNATURE_BLOCK_REWARD"
 )
 
 var undoBucket = []byte("undo") // height -> coins that block spent, for rollbacks

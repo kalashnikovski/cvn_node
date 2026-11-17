@@ -521,7 +521,7 @@ func Run(frontendAssets embed.FS) {
 				if seedOnly {
 					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] 🌱 [SEED] Not mining. Following the network // Ledger Height: #%d", time.Now().Format("15:04:05"), actualBlocksHeight))
 				} else {
-					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance: %s // Ledger Height: #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight))
+					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [MINING] Mining at %s // height #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight))
 				}
 				logMutex.Unlock()
 			}
@@ -552,17 +552,17 @@ func Run(frontendAssets embed.FS) {
 			// The heading and the figures are green, the line above the log purple;
 			// in the log only the tags are coloured (terminal_colors.go).
 			fmt.Println(inGreen("================================================================================"))
-			fmt.Println(inGreen("💎 COVENANT STANDARD (CVN) LAYER-1 NODE MINER MASTER DASHBOARD                  "))
+			fmt.Println(inGreen("💎 COVENANT STANDARD (CVN) MINER                                                "))
 			fmt.Println(inGreen("================================================================================"))
 			fmt.Println(inGreen(fmt.Sprintf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %s", actualBlocksHeight, formatHashrate(avg15m))))
 			fmt.Println(inGreen(fmt.Sprintf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %s", actualCvnBalance, formatHashrate(avg1h))))
 			if seedOnly {
 				fmt.Println(inGreen(fmt.Sprintf("🌱 SEED NODE: NOT MINING            | 📊 24h AVG HASHRATE: %s", formatHashrate(avg24h))))
 			} else {
-				fmt.Println(inGreen(fmt.Sprintf("🪪 RIG IDENTITY: %-18.18s...  | 📊 24h AVG HASHRATE: %s", CustomMinerAddress, formatHashrate(avg24h))))
+				fmt.Println(inGreen(fmt.Sprintf("🪪 MINING ADDRESS: %-16.16s...  | 📊 24h AVG HASHRATE: %s", CustomMinerAddress, formatHashrate(avg24h))))
 			}
 			fmt.Println(inGreen("================================================================================"))
-			fmt.Println(inPurple("⚡ LIVE STREAMING CONSENSUS & HARDWARE ACTION REGIONS BELOW:                    "))
+			fmt.Println(inPurple("⚡ RECENT ACTIVITY:                                                             "))
 			fmt.Println(inPurple("--------------------------------------------------------------------------------"))
 			if len(liveTerminalEventLogs) > 0 {
 				for _, event := range liveTerminalEventLogs {
@@ -572,7 +572,7 @@ func Run(frontendAssets embed.FS) {
 					liveTerminalEventLogs = liveTerminalEventLogs[1:]
 				}
 			} else {
-				fmt.Println(colourLogTags(fmt.Sprintf("[%s] ⛏️  [PoD CORE] Hashing active... Performance Throughput: %s // Height: #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight)))
+				fmt.Println(colourLogTags(fmt.Sprintf("[%s] ⛏️  [MINING] Mining at %s // height #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight)))
 			}
 			logMutex.Unlock()
 			os.Stdout.Sync()
@@ -787,11 +787,11 @@ func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniquen
 			Version:   1,
 			ID:        coinbaseTxID,
 			Witness:   minerAddress,
-			PublicKey: "GENESIS_VOID_REWARD_POOL",
+			PublicKey: CoinbasePublicKeyMarker,
 			Inputs:    []UTXOInput{},
 			Outputs:   coinbaseOutputs,
 			Timestamp: timestamp,
-			Signature: "COINBASE_IMMUTABLE_CONSENSUS_VALID",
+			Signature: CoinbaseSignatureMarker,
 		},
 	}
 	candidateTransactions = append(candidateTransactions, templateTransfers...)

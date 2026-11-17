@@ -81,12 +81,12 @@ func (tb *TokenBucket) Allow() bool {
 
 func StartMeshNetwork() {
 	fmt.Println("====================================================================")
-	fmt.Printf("📡 HARDENED P2P GOSSIP MESH INITIALIZING ON PORT %d...\n", Params.GossipPort)
+	fmt.Printf("📡 Listening for other nodes on port %d...\n", Params.GossipPort)
 	fmt.Println("====================================================================")
 
 	listener8080, err := net.Listen("tcp", ":"+Params.gossipPortText())
 	if err != nil {
-		log.Printf("🚨 CRITICAL MESH FAILURE: Unable to bind raw TCP socket on Port %d: %v\n", Params.GossipPort, err)
+		log.Printf("🚨 Could not listen for other nodes on port %d: %v\n", Params.GossipPort, err)
 		return
 	}
 	defer listener8080.Close()
@@ -514,7 +514,7 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 		for peer, lastSeen := range ActivePeerMap {
 			if time.Since(lastSeen) > (90 * time.Second) {
 				delete(ActivePeerMap, peer)
-				log.Printf("🔌 [GOSSIP MESH] Severed inactive channel: %s\n", peer)
+				log.Printf("🔌 [NETWORK] Closed an idle connection: %s\n", peer)
 			}
 		}
 		PeerMapMutex.Unlock()

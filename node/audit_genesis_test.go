@@ -23,7 +23,7 @@ func TestGenesisBlockCannotBeReplaced(t *testing.T) {
 				PrevHash: strings.Repeat("0", 64), Difficulty: 2,
 				UncleHash: strings.Repeat("0", 64), UncleMiner: "NONE",
 				Transactions: []Transaction{
-					{Version: 1, ID: "TX_GENESIS_FAIR_LAUNCH_POOL", Inputs: []UTXOInput{}, Outputs: []UTXOOutput{}},
+					{Version: 1, ID: genesisTransactionID, Inputs: []UTXOInput{}, Outputs: []UTXOOutput{}},
 					{Version: 1, ID: "TX_FORGED", Inputs: []UTXOInput{}, Outputs: []UTXOOutput{{Recipient: testAddress("thief"), Amount: UnitsAmount(cvn("1000000"))}}},
 				},
 			}

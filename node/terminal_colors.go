@@ -34,13 +34,13 @@ func inPurple(text string) string {
 }
 
 // colourLogTags colours the tag of a line of the miner window's log, and
-// only the tag: "[PoD CORE]" purple, "[SUCCESS]" green. The time, the rest
+// only the tag: "[MINING]" purple, "[SUCCESS]" green. The time, the rest
 // of the line and every other kind of line are left as they are.
 func colourLogTags(line string) string {
 	if !terminalColoursOn() {
 		return line
 	}
-	line = strings.Replace(line, "[PoD CORE]", inPurple("[PoD CORE]"), 1)
+	line = strings.Replace(line, "[MINING]", inPurple("[MINING]"), 1)
 	line = strings.Replace(line, "[SUCCESS]", inGreen("[SUCCESS]"), 1)
 	return line
 }

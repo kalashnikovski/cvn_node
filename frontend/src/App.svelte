@@ -52,7 +52,7 @@
 	async function handleSendTransaction(e) {
 		e.preventDefault();
 		if (!txRecipient || !txAmount) {
-			txStatusMessage = "❌ ERROR: Recipient address and transfer tokens are required.";
+			txStatusMessage = "❌ ERROR: Enter the recipient's address and an amount.";
 			return;
 		}
 		if (!txPrivateKey) {
@@ -67,7 +67,7 @@
 			return;
 		}
 
-		txStatusMessage = "⏳ SIGNING CRYPTOGRAPHIC TRANSIT BLOCKS NATIVELY...";
+		txStatusMessage = "⏳ Signing and sending...";
 
 		try {
 			const resultMessage = await BroadcastLocalTransactionSubmit(
@@ -156,7 +156,7 @@
 
 	function copyAddressToClipboard() {
 		navigator.clipboard.writeText(activeWallet);
-		txStatusMessage = "📋 Core identity wallet address copied straight to clipboard tracking channels!";
+		txStatusMessage = "📋 Address copied.";
 	}
 </script>
 
@@ -168,7 +168,7 @@
 			<div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.9rem;">
 				<span style="color: #8a8a9e;">NETWORK LIFELINE BLOCK SYNCHRONIZATION PROGRESS:</span>
 				<span style="color: {isSynced ? '#00ff66' : '#00ffff'}; font-weight: bold;">
-					{isSynced ? "✨ 100% SYNCHRONIZED" : `📡 SYNCING LAYER CHANNELS: ${syncPercentage}%`}
+					{isSynced ? "✨ 100% SYNCHRONIZED" : `📡 CATCHING UP: ${syncPercentage}%`}
 				</span>
 			</div>
 			
@@ -187,45 +187,45 @@
 			
 			<!-- Left Side Status Matrix -->
 			<div style="border: 1px solid #00ff66; padding: 1.5rem; border-radius: 4px; background: #0e0e18; box-shadow: 0 0 15px rgba(0,255,102,0.1);">
-				<h2 style="color: #00ff66; margin-top: 0;">💎 CVN MATRIX CORE</h2>
-				<p style="color: #8a8a9e; font-size: 0.85rem; margin-bottom: 1.5rem;">LAYER-1 PROTOCOL CONSENSUS ENGINE VALIDATOR</p>
+				<h2 style="color: #00ff66; margin-top: 0;">💎 CVN WALLET</h2>
+				<p style="color: #8a8a9e; font-size: 0.85rem; margin-bottom: 1.5rem;">Covenant Standard desktop wallet</p>
 				
 				<div style="display: flex; flex-direction: column; gap: 1rem; border-top: 1px solid #222; padding-top: 1.5rem;">
 					<div>
-						<span style="color: #00ffff;">[MESH MATRIX STANDING]</span> 
+						<span style="color: #00ffff;">[NODE]</span> 
 						<span style="color: {isSynced ? '#00ff66' : '#00ffff'}; font-weight: bold; background: rgba(0,255,102,0.05); padding: 0.2rem 0.5rem; border-radius: 3px;">
-							{isSynced ? "CORE_RIG // FULL_NODE" : "OPERATIONAL // MINING_ACTIVE"}
+							{isSynced ? "UP TO DATE" : "CATCHING UP"}
 						</span>
 					</div>
 					<div>
-						<span style="color: #00ffff;">[AVAILABLE COIN RESERVE]</span> 
+						<span style="color: #00ffff;">[BALANCE]</span> 
 						<span style="font-weight: bold; font-size: 1.3rem; color: #00ff66;">
 							<!-- 👑 THE DYNAMIC COMPONENT REPAIR: Robust fallback ensures 0 syntax exceptions during early loading phases -->
 							{(Number(walletBalance) || 0).toFixed(2)} CVN
 						</span>
 					</div>
 					<div>
-						<span style="color: #00ffff;">[PUBLIC IDENTITY ADDRESS]</span>
+						<span style="color: #00ffff;">[YOUR ADDRESS]</span>
 						<div style="display: flex; gap: 0.5rem; margin-top: 0.3rem;">
 							<input type="text" readonly value={activeWallet} style="background: #06060a; border: 1px solid #333; color: #e6c229; padding: 0.5rem; font-family: monospace; font-size: 0.75rem; flex: 1; border-radius: 3px;" />
 							<button onclick={copyAddressToClipboard} style="background: #222; border: 1px solid #444; color: #fff; padding: 0.5rem; cursor: pointer; border-radius: 3px;">📋</button>
 						</div>
 					</div>
 					<div style="word-break: break-all; font-size: 0.8rem; color: #8a8a9e; line-height: 1.3;">
-						<span style="color: #00ffff;">[CHAIN TIP SIGNATURE]</span> <br/>{blockHash}
+						<span style="color: #00ffff;">[NEWEST BLOCK]</span> <br/>{blockHash}
 					</div>
 				</div>
 			</div>
 
 			<!-- Right Side Transfer Core -->
 			<div style="border: 1px solid #00ffff; padding: 1.5rem; border-radius: 4px; background: #0e0e18; box-shadow: 0 0 15px rgba(0,255,255,0.1);">
-				<h2 style="color: #00ffff; margin-top: 0;">📦 BROADCAST PAYLOAD</h2>
+				<h2 style="color: #00ffff; margin-top: 0;">📦 SEND CVN</h2>
 				<p style="color: #8a8a9e; font-size: 0.85rem; margin-bottom: 1.5rem;">SEND CVN TO ANOTHER ADDRESS</p>
 				
 				<form onsubmit={handleSendTransaction} style="display: flex; flex-direction: column; gap: 1rem; border-top: 1px solid #222; padding-top: 1.5rem;">
 					<div style="display: flex; flex-direction: column; gap: 0.3rem;">
 						<label for="txRecipientInput" style="color: #8a8a9e; font-size: 0.8rem;">RECIPIENT DESTINATION ADDRESS</label>
-						<input id="txRecipientInput" type="text" bind:value={txRecipient} placeholder="Enter target cvn_address..." style="background: #06060a; border: 1px solid #333; color: #fff; padding: 0.6rem; font-family: monospace; border-radius: 3px;" />
+						<input id="txRecipientInput" type="text" bind:value={txRecipient} placeholder="The recipient's CVN address..." style="background: #06060a; border: 1px solid #333; color: #fff; padding: 0.6rem; font-family: monospace; border-radius: 3px;" />
 					</div>
 
 					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">

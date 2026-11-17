@@ -9,9 +9,9 @@ import (
 // of the line stay as they are, and other kinds of line are untouched.
 func TestOnlyTheTagOfALogLineIsColoured(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
-	core := "[22:15:21] ⛏️  [PoD CORE] Hashing active... Performance: 18.71 kH/s // Ledger Height: #3593"
-	if got, want := colourLogTags(core), "[22:15:21] ⛏️  "+ansiPurple+"[PoD CORE]"+ansiReset+" Hashing active... Performance: 18.71 kH/s // Ledger Height: #3593"; got != want {
-		t.Errorf("a [PoD CORE] line was written as %q, want %q", got, want)
+	core := "[22:15:21] ⛏️  [MINING] Mining at 18.71 kH/s // height #3593"
+	if got, want := colourLogTags(core), "[22:15:21] ⛏️  "+ansiPurple+"[MINING]"+ansiReset+" Mining at 18.71 kH/s // height #3593"; got != want {
+		t.Errorf("a [MINING] line was written as %q, want %q", got, want)
 	}
 	success := "[22:15:06] 🎉 [SUCCESS] External miner solved valid block #3593 | Hash: 30b63e03f963a106"
 	if got, want := colourLogTags(success), "[22:15:06] 🎉 "+ansiGreen+"[SUCCESS]"+ansiReset+" External miner solved valid block #3593 | Hash: 30b63e03f963a106"; got != want {

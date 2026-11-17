@@ -63,9 +63,9 @@ func InitBoltEngine() {
 				_ = bMeta.Put([]byte("height"), []byte(paddedZeroKey))
 			}
 
-			utxoRecord := UTXORecord{Amount: UnitsAmount(0), Recipient: "COVENANT_STEWARD_ASSEMBLY"}
+			utxoRecord := UTXORecord{Amount: UnitsAmount(0), Recipient: genesisRecipient}
 			utxoData, _ := json.Marshal(utxoRecord)
-			compoundOutputKey := fmt.Sprintf("TX_GENESIS_FAIR_LAUNCH_POOL_%d", 0)
+			compoundOutputKey := utxoKey(genesisTransactionID, 0)
 			_ = bUTXO.Put([]byte(compoundOutputKey), utxoData)
 		}
 		return nil
@@ -243,7 +243,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 	expectedDiff := block.Difficulty
 
 	if block.Hash != CalculateHash(block) || !BlockProofValid(block, expectedDiff) {
-		fmt.Printf("🚨 STORAGE REFUSAL: Block #%d failed strict cryptographic verification filters!\n", block.Index)
+		fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: its identifier or its proof of work is not valid.\n", block.Index)
 		return false
 	}
 
