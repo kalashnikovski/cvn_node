@@ -609,10 +609,7 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 		parentBlockTipHash := currentBlock.Hash
 		// Blocks are spaced by proof of work, not by waiting. The tip read
 		// above is the one mined on; it is not read again here.
-		simulatedTime := time.Now().Unix()
-		if simulatedTime <= currentBlock.Timestamp {
-			simulatedTime = currentBlock.Timestamp + 1
-		}
+		simulatedTime := minerBlockDate(currentBlock, time.Now().Unix())
 		// Peers reject blocks dated too far ahead of their clock. If the tip is
 		// already dated ahead, wait for real time to catch up instead of stacking
 		// another future-dated block on it.

@@ -131,10 +131,7 @@ func buildStratumJob(address string) (*stratumJob, bool) {
 	if tip.Hash == "" || powAlgorithmAt(nextIndex) != PowRandomX {
 		return nil, false
 	}
-	timestamp := time.Now().Unix()
-	if timestamp <= tip.Timestamp {
-		timestamp = tip.Timestamp + 1
-	}
+	timestamp := minerBlockDate(tip, time.Now().Unix())
 	if mustWaitForClock(timestamp, time.Now().Unix()) {
 		return nil, false // the tip is dated ahead; wait for the clock to catch up
 	}

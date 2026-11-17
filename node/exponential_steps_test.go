@@ -9,8 +9,9 @@ import (
 // expStepFactor is whole-number arithmetic that every node must agree on to
 // the last digit. These values pin it: if a change of compiler, machine or
 // code ever moved one of them, nodes would disagree about difficulty. They
-// were checked against a separate implementation of the same series, and lie
-// within six parts in 2^64 of the true e^x.
+// were checked against a separate implementation of the same series. Over
+// the whole range the rule can ask for, the series lies within eight parts
+// in 2^64 of the true e^x (rounding toward zero at each term).
 func TestExpStepFactorIsPinned(t *testing.T) {
 	scale := HeartbeatTargetSeconds * HeartbeatWindow * HeartbeatDriftDamping // 180,000
 	pinned := map[int64]string{

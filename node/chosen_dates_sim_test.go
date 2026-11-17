@@ -30,9 +30,17 @@ type chosenDatesResult struct {
 	stalled bool
 }
 
+// simHonestClaimAhead is how far ahead of the clock the honest miners of the
+// simulation will date a block in order to reach a late-block halving. Zero
+// is the first behaviour: they date with the true time.
+var simHonestClaimAhead int64
+
 // simulateChosenDates: the attacker dates `run` blocks one second after their
 // parents, then one block `jump` seconds after its parent (as far as the clock
-// allows). run = 0 means the attacker dates honestly. A jump of zero or less
+// allows). run = 0 means the attacker dates honestly. run = -1 is another
+// pattern (round 5): every block one second after its parent, except that
+// the moment the clock allows a date `jump` seconds after the parent, the
+// block is dated exactly that. A jump of zero or less
 // means "as far ahead as the clock allows, once that is at least -jump
 // seconds after the parent".
 func simulateChosenDates(blocks int, attackerShare float64, run int, jump int64, seed int64) chosenDatesResult {
@@ -84,8 +92,17 @@ func simulateChosenDates(blocks int, attackerShare float64, run int, jump int64,
 			if honestDate <= parentDate {
 				honestDate = parentDate + 1
 			}
+			if simHonestClaimAhead > 0 {
+				honestDate = dateClaimingRelief(parentDate, honestDate, now+simHonestClaimAhead)
+			}
 			// The attacker's date for this second.
 			attackerDate := honestDate
+			if run == -1 {
+				attackerDate = parentDate + 1
+				if parentDate+jump <= now+HeartbeatMaxFutureDriftSeconds {
+					attackerDate = parentDate + jump
+				}
+			}
 			if run > 0 {
 				attackerDate = parentDate + 1
 				if sinceJump >= run {
@@ -182,6 +199,34 @@ func TestChoosingDatesDoesNotPayTheLargestMiner(t *testing.T) {
 			}
 		}
 	}
+	// Round 5: a miner with part of the hashrate, dating every block one
+	// second after its parent and claiming the late-block halving the moment
+	// the clock allows. Honest miners here do what the program's miner now
+	// does (minerBlockDate): they claim that halving as early as they will.
+	// Compared with honest dating by the same miner, on the same random
+	// numbers.
+	const longRun = 60000
+	simHonestClaimAhead = HeartbeatMaxFutureDriftSeconds - minerClockMargin
+	for _, share := range []float64{0.94, 0.75, 0.60, 0.35} {
+		honest := simulateChosenDates(longRun, share, 0, 0, 5)
+		for _, jump := range []int64{360, 540} {
+			r := simulateChosenDates(longRun, share, -1, jump, 5)
+			if r.stalled {
+				continue
+			}
+			if gain := r.attackerCoins - honest.attackerCoins; gain > 0.01 {
+				t.Errorf("share %.0f%%, blocks one second apart and +%d s claimed early: %.2f%% more coins than the same miner dating honestly", share*100, jump, gain*100)
+			}
+		}
+	}
+	// Before honest miners did so, that pattern paid about 1%.
+	simHonestClaimAhead = 0
+	before := simulateChosenDates(longRun, 0.60, -1, 360, 5).attackerCoins - simulateChosenDates(longRun, 0.60, 0, 0, 5).attackerCoins
+	t.Logf("with honest miners dating by the clock alone, for comparison: %.2f%% more coins at 60%% of the hashrate", before*100)
+	if before < 0.006 {
+		t.Error("the early claim was expected to pay when honest miners do not make it; the simulation no longer shows what it was written to show")
+	}
+
 	saved := Params.ExponentialSteps
 	Params.ExponentialSteps = false
 	old := simulateChosenDates(blocks, 0.94, 8, 495, 5)
@@ -190,4 +235,35 @@ func TestChoosingDatesDoesNotPayTheLargestMiner(t *testing.T) {
 	if old.attackerCoins < 1.05 {
 		t.Error("the first form of the rule was expected to reward chosen dates; the simulation no longer shows what it was written to show")
 	}
+}
+
+// TestRound5DatePatterns prints what the date patterns of the fifth review
+// earn. CVN_CHOSEN_DATES_TABLE=1 go test -run Round5DatePatterns -v ./node
+func TestRound5DatePatterns(t *testing.T) {
+	if os.Getenv("CVN_CHOSEN_DATES_TABLE") == "" {
+		t.Skip("set CVN_CHOSEN_DATES_TABLE=1 to print the table")
+	}
+	const blocks = 60000
+	for _, claim := range []int64{0, 60, 110} {
+		simHonestClaimAhead = claim
+		t.Logf("honest miners date up to %d s ahead to reach a halving:", claim)
+		for _, share := range []float64{1.0, 0.94, 0.75, 0.60, 0.35} {
+			honest := simulateChosenDates(blocks, share, 0, 0, 5)
+			line := fmt.Sprintf("  share %3.0f%%: honest %+5.2f%% (%.2f s)", share*100, (honest.attackerCoins-1)*100, honest.secondsPerBlock)
+			for _, p := range []struct {
+				name string
+				run  int
+				jump int64
+			}{{"1 s apart, +360 early", -1, 360}, {"1 s apart, +540 early", -1, 540}, {"10 fast, +650", 10, 650}, {"10 fast, +720", 10, 720}} {
+				r := simulateChosenDates(blocks, share, p.run, p.jump, 5)
+				if r.stalled {
+					line += fmt.Sprintf(" | %s: stalls", p.name)
+				} else {
+					line += fmt.Sprintf(" | %s: %+5.2f%% (%.2f s)", p.name, (r.attackerCoins-1)*100, r.secondsPerBlock)
+				}
+			}
+			t.Log(line)
+		}
+	}
+	simHonestClaimAhead = 0
 }

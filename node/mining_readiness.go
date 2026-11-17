@@ -197,6 +197,53 @@ func mustWaitForClock(blockTimestamp, now int64) bool {
 	return blockTimestamp > now+HeartbeatMaxFutureDriftSeconds-minerClockMargin
 }
 
+// minerBlockDate is the date a miner gives the block it is working on, on
+// top of `tip`, when its clock reads `now`.
+//
+// Ordinarily that is the time by its clock (or one second after the tip, if
+// the tip is dated ahead). There is one exception. A block dated six minutes
+// or more after its parent is mined at a halved difficulty, and a block may
+// be dated up to two minutes ahead of the clock. So anyone may claim that
+// halving two minutes before six minutes have really passed, simply by
+// dating the block ahead. A miner who did so, while everyone else dated
+// their blocks truthfully, mined at half the difficulty of the others for
+// those two minutes and took about 1% more than its share (audit round 5,
+// finding 1).
+//
+// The answer is for every miner to claim it at the same moment. So when
+// dating the block ahead, by no more than a miner will go (see
+// minerClockMargin), reaches a halving that the true time does not, the
+// block is dated at exactly the moment that halving begins. Nobody then has
+// a head start. This is a choice each miner makes and not a rule nodes
+// check: the rules already allow it.
+func minerBlockDate(tip Block, now int64) int64 {
+	plain := now
+	if plain <= tip.Timestamp {
+		plain = tip.Timestamp + 1
+	}
+	claim := dateClaimingRelief(tip.Timestamp, plain, now+HeartbeatMaxFutureDriftSeconds-minerClockMargin)
+	// Only where it really lowers the difficulty: in the first blocks of a
+	// chain no relief is given, and a later date would gain nothing.
+	if claim > plain && CalculateNextDifficulty(tip, claim) < CalculateNextDifficulty(tip, plain) {
+		return claim
+	}
+	return plain
+}
+
+// dateClaimingRelief returns `plain`, or the latest moment at which a further
+// late-block halving begins if that lies after `plain` and no later than
+// `latest`.
+func dateClaimingRelief(parentDate, plain, latest int64) int64 {
+	if latest-parentDate < HeartbeatStallAfterSeconds {
+		return plain
+	}
+	steps := (latest - parentDate - HeartbeatStallAfterSeconds) / HeartbeatStallStepSeconds
+	if claim := parentDate + HeartbeatStallAfterSeconds + steps*HeartbeatStallStepSeconds; claim > plain {
+		return claim
+	}
+	return plain
+}
+
 // minerTemplateLife is how long the built-in miner works on one block
 // template before building a fresh one with the current date and transfers.
 const minerTemplateLife = 10 * time.Second

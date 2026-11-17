@@ -195,7 +195,13 @@ func launchDifficulty() int64 {
 // relief.
 func heartbeatDifficultyWithGap(lastBlock Block, gapSeconds int64) int {
 	base := int64(lastBlock.Difficulty)
-	if Params.ReliefNotInherited {
+	// Where the mining algorithm changes at the next block, difficulty
+	// restarts and the parent's is not used: there is nothing to work out.
+	restarts := false
+	if era := powEraStartingAt(lastBlock.Index + 1); era != nil && era.StartDifficulty > 0 {
+		restarts = true
+	}
+	if Params.ReliefNotInherited && !restarts {
 		base = unrelievedDifficulty(lastBlock)
 	}
 	return heartbeatDifficultyFromBase(lastBlock, base, gapSeconds)
@@ -317,6 +323,10 @@ func unrelievedDifficulty(b Block) int64 {
 	// was being rewritten while it was read.
 	rewritesAtStart := atomic.LoadUint64(&chainRewriteSeq)
 	exact := rewritesAtStart%2 == 0
+	// rememberStop is false when the walk stopped at a block whose own
+	// unrelieved difficulty was not worked out (see the change of algorithm
+	// below), so that nothing is remembered for it.
+	rememberStop := true
 	var base int64
 	for {
 		if current.Hash != "" {
@@ -347,6 +357,14 @@ func unrelievedDifficulty(b Block) int64 {
 			break
 		}
 		late = append(late, step{current, parent})
+		if era := powEraStartingAt(current.Index); era != nil && era.StartDifficulty > 0 {
+			// This late block is the first of a new mining algorithm. Its
+			// difficulty restarted from the algorithm's own starting value
+			// and owes nothing to the blocks before it, so the walk ends
+			// here: the forward pass below works it out from that value.
+			current, base, rememberStop = parent, 0, false
+			break
+		}
 		current = parent
 	}
 	// Work forward first, then remember: whether the answers may be kept is
@@ -355,7 +373,10 @@ func unrelievedDifficulty(b Block) int64 {
 		hash  string
 		value int64
 	}
-	answers := []answer{{current.Hash, base}}
+	var answers []answer
+	if rememberStop {
+		answers = append(answers, answer{current.Hash, base})
+	}
 	for i := len(late) - 1; i >= 0; i-- {
 		base = int64(heartbeatDifficultyFromBase(late[i].parent, base, 0))
 		answers = append(answers, answer{late[i].block.Hash, base})
