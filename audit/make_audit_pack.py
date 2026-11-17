@@ -77,6 +77,7 @@ RULES = [
     "node/database_core.go",
     "node/crypto_auth.go",
     "node/security_harness.go",
+    "node/needs_64_bit.go",
     "internal/randomx/LICENSE",
     "internal/randomx/README_CVN.md",
     "internal/randomx/DIFFERENCES.md",
