@@ -16,8 +16,8 @@ import (
 //   - a fixed share of it (one fifth) moves into the vault;
 //   - the coin keeps the rest and its age is reset to that block, so it is
 //     next looked at one interval later;
-//   - if what would remain is below the minimum output size, the whole coin
-//     moves into the vault and the coin ceases to exist.
+//   - a coin so small that what remained would be below the minimum output
+//     size is left alone. Nothing is taken from it, then or later.
 //
 // Spending a coin, to anyone including its own owner, creates new coins with
 // a fresh age. So an owner who still holds the key never loses anything by
@@ -39,8 +39,8 @@ var sweepBucket = []byte("sweeps")
 type SweptCoin struct {
 	Key    string     `json:"key"`
 	Before UTXORecord `json:"before"`
-	// Kept is true when the coin still exists after the sweep (with a
-	// reduced amount and a new age), false when it was swept in full.
+	// Kept is true when the coin still exists after the sweep, with a
+	// reduced amount and a new age. It always does: no coin is swept whole.
 	Kept bool `json:"kept"`
 }
 
@@ -52,6 +52,11 @@ func sweepEnabled() bool {
 
 // sweepAmounts splits a coin of `units` into the part swept into the vault
 // and the part the coin keeps.
+//
+// A coin so small that what it kept would be less than the smallest coin
+// allowed is left alone: nothing is taken from it, and it is not looked at
+// again. An earlier form of the rule took such a coin whole, which took
+// everything from the smallest holdings while taking a fifth from the rest.
 func sweepAmounts(units int64) (swept, kept int64) {
 	if units <= 0 {
 		return 0, 0
@@ -59,7 +64,7 @@ func sweepAmounts(units int64) (swept, kept int64) {
 	swept = units / Params.Economics.SweepDivisor
 	kept = units - swept
 	if kept < minimumOutputUnits() {
-		return units, 0
+		return 0, units
 	}
 	return swept, kept
 }
@@ -147,21 +152,15 @@ func applySweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) (int64, error)
 		if swept == 0 {
 			continue
 		}
-		if kept == 0 {
-			if err := bUTXO.Delete([]byte(key)); err != nil {
-				return 0, err
-			}
-		} else {
-			after, _ := json.Marshal(UTXORecord{Amount: UnitsAmount(kept), Recipient: coin.Recipient, Age: block.Index})
-			if err := bUTXO.Put([]byte(key), after); err != nil {
-				return 0, err
-			}
+		after, _ := json.Marshal(UTXORecord{Amount: UnitsAmount(kept), Recipient: coin.Recipient, Age: block.Index})
+		if err := bUTXO.Put([]byte(key), after); err != nil {
+			return 0, err
 		}
 		var addErr error
 		if total, addErr = addUnits(total, swept); addErr != nil {
 			return 0, addErr
 		}
-		records = append(records, SweptCoin{Key: key, Before: coin, Kept: kept > 0})
+		records = append(records, SweptCoin{Key: key, Before: coin, Kept: true})
 	}
 	return total, storeSweepRecords(dbTx, block.Index, records)
 }

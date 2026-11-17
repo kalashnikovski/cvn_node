@@ -57,7 +57,7 @@ Covenant Standard returns part of them.
 
 - Every coin records the block at which it was created.
 - A coin that has not been spent for 4,905,600 blocks (seven years) has **one fifth** of its value moved to the vault. It keeps the rest and starts a new seven-year count.
-- If what would remain is below the minimum coin size, the whole coin is moved.
+- A coin so small that what remained would be below the minimum coin size is left alone: nothing is taken from it. The rule takes a fifth from a coin or nothing; it never takes a coin whole.
 - This repeats every seven years for as long as the coin stays unspent.
 
 An owner who still holds their key loses nothing. Spending a coin, including sending it to your own address, creates a new coin with a new count. One transfer every seven years is enough. The wallet shows when a coin's date is approaching, and its "Renew my coins" action makes that transfer in one step for every coin within a year of its date.

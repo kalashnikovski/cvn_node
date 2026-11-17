@@ -51,8 +51,8 @@ func TestSweepAmounts(t *testing.T) {
 		{"0.00012501", "0.000025", "0.00010001"}, // a fifth rounds down, in the owner's favour
 		{"0.000125", "0.000025", "0.0001"},       // keeps exactly the minimum: stays
 		{"0.00012499", "0.00002499", "0.0001"},   // rounding down leaves exactly the minimum: stays
-		{"0.00012498", "0.00012498", "0"},        // would keep less than the minimum: swept in full
-		{"0.0001", "0.0001", "0"},
+		{"0.00012498", "0", "0.00012498"},        // would keep less than the minimum: left alone
+		{"0.0001", "0", "0.0001"},                // the smallest coin there is: left alone
 		{"0", "0", "0"},
 	}
 	for _, c := range cases {
@@ -140,7 +140,10 @@ func TestMovingACoinResetsItsAge(t *testing.T) {
 	everythingIssuedIsAccountedFor(t, "at the end", owner, testAddress("other"))
 }
 
-func TestSmallCoinsAreSweptInFull(t *testing.T) {
+// The smallest coins are not swept at all. Taking a fifth would leave less
+// than a coin may hold, and an earlier form of the rule then took the whole
+// coin: everything from the smallest holdings, a fifth from the rest.
+func TestTheSmallestCoinsAreLeftAlone(t *testing.T) {
 	timestamp := startSweepChain(t)
 	privateKey, publicKey, owner, err := GenerateKeyPair()
 	if err != nil {
@@ -156,13 +159,18 @@ func TestSmallCoinsAreSweptInFull(t *testing.T) {
 	if balanceOf(testAddress("tiny")) != cvn("0.0001") {
 		t.Fatalf("recipient has %s, want 0.0001", FormatUnits(balanceOf(testAddress("tiny"))))
 	}
-	for height := 3; height <= 7; height++ { // block 7 is five blocks after block 2
+	for height := 3; height <= 14; height++ { // blocks 7 and 12 are five and ten blocks after block 2
 		mineNext(t, timestamp, testAddress("other"))
 	}
-	if balanceOf(testAddress("tiny")) != 0 || len(ListSpendableCoins(testAddress("tiny"))) != 0 {
-		t.Fatalf("a coin at the minimum should be swept in full: %s left", FormatUnits(balanceOf(testAddress("tiny"))))
+	coins := ListSpendableCoins(testAddress("tiny"))
+	if balanceOf(testAddress("tiny")) != cvn("0.0001") || len(coins) != 1 {
+		t.Fatalf("a coin at the minimum should be left alone: %s in %d coin(s)", FormatUnits(balanceOf(testAddress("tiny"))), len(coins))
 	}
-	everythingIssuedIsAccountedFor(t, "after the full sweep", owner, testAddress("tiny"), testAddress("other"))
+	// It can still be spent like any other coin.
+	if !coins[0].Amount.Spendable() {
+		t.Error("the small coin that was left alone cannot be spent")
+	}
+	everythingIssuedIsAccountedFor(t, "after the small coin's dates passed", owner, testAddress("tiny"), testAddress("other"))
 }
 
 func TestSweepIsUndoneWithItsBlock(t *testing.T) {
