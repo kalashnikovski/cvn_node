@@ -109,6 +109,7 @@ PROGRAM = [
     "node/memory_linux.go",
     "node/memory_other.go",
     "node/ansi_windows.go",
+    "node/terminal_colors.go",
     "node/wallet.go",
     "node/combine.go",
     "node/app.go",
