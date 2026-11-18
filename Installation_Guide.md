@@ -6,7 +6,7 @@ How to run a Covenant Standard (CVN) node, mine, and use the wallet, on Windows 
 
 One program does everything: it is the node, the miner and the text wallet. On Windows there is also a desktop wallet with a window.
 
-**Build from source for now.** The packages on the GitHub Releases page from October 2026 are too old to follow the current chain. Trial packages of the current program are published as pre-releases (names ending in `-rc`); the packages meant for general use will be published with the public test network. Section 10 shows how to check any package you download.
+**Build from source for now.** The packages on the GitHub Releases page from October 2026 are too old to follow the current chain. Trial packages of the current program are published as pre-releases (names ending in `-rc`); the packages meant for general use will be published with the public test network. Section 11 shows how to check any package you download.
 
 ---
 
@@ -29,7 +29,7 @@ One program does everything: it is the node, the miner and the text wallet. On W
 2. Under **Assets**, download `cvn_node_windows.zip`.
 3. Right-click the downloaded file, choose **Extract All**, and pick a place of your own, for example `C:\`. You get a folder named `cvn_node`. This is your **CVN folder**; the rest of this guide refers to it by that name.
 
-The folder contains `cvn_miner.exe` (the node, miner and text wallet), `cvn_node.exe` (the desktop wallet) and two files to start them with, `LaunchMiner.bat` and `LaunchWallet.bat`. Nothing is installed anywhere else on your computer. To check the download, see section 10.
+The folder contains `cvn_miner.exe` (the node, miner and text wallet), `cvn_node.exe` (the desktop wallet) and two files to start them with, `LaunchMiner.bat` and `LaunchWallet.bat`. Nothing is installed anywhere else on your computer. To check the download, see section 11.
 
 Windows may show "Windows protected your PC" the first time you start a program from the folder, because the programs are not signed by a company. Click **More info**, then **Run anyway**.
 
@@ -224,7 +224,7 @@ A launch network starts when one particular Bitcoin block is mined. Its height i
 
 **Checklist, to finish before that day** (`NETWORK` is the network's name, for example `cvn_testnet`):
 
-1. **Get the release that names the height.** Download its package, or build from its tag, and check it against the published sums (section 10).
+1. **Get the release that names the height.** Download its package, or build from its tag, and check it against the published sums (section 11).
 2. **Create a wallet for that network** and write its private key down on paper:
    - Windows: `LaunchMiner.bat --network NETWORK` and choose "Create a new wallet". For the CVN Testnet a double-click on `LaunchMiner.bat` does the same.
    - Linux: `./cvn_node --network NETWORK --generate-wallet`
@@ -299,7 +299,39 @@ That is the port on the CVN Testnet. On `devnet` it is 28081.
 
 ---
 
-## 10. Checking a download, and building the same program yourself
+## 10. Backups of the chain
+
+The chain is one file in the CVN folder (`cvn_testnet.db`, or `cvn_devnet.db` on the development network). A node that loses it downloads the chain again from the other nodes, so on a network with other nodes a backup only saves time. It matters when there are no others to ask: a network of one machine, or a fault that takes every node at once.
+
+**The node makes its own backups.** Two minutes after it starts, and then once a day, it saves a copy of the chain in the folder `backups`, and says so in its window or log. It keeps the newest seven and removes older ones. Each copy is checked before it is kept: every block is there and follows from the one before, each block is what its identifier says, and the coins add up to exactly what has been issued. A copy that fails is thrown away and the fault is reported.
+
+| Option | What it does |
+|---|---|
+| `--backup-hours 6` | A backup every 6 hours (the default is 24) |
+| `--backup-keep 30` | Keep the newest 30 (the default is 7) |
+| `--no-backups` | Make none |
+
+**Do not back up by copying the chain file while the node runs.** The node may be half-way through writing it, and such a copy can open with parts missing. It looks like a backup until the day it is needed. Copy the files in `backups` instead: those are whole, and safe to copy at any time, to another disk or another machine.
+
+**Checking a backup.** This reads the file and changes nothing. It can run while the node does:
+
+```
+cvn_miner.exe --network devnet --check-backup backups\cvn_devnet_block00001468_20261119-031200.db
+```
+
+On Linux the program is `./cvn_node`. On a development network started from a Bitcoin block, set `CVN_DEVNET_ANCHOR_HEIGHT` as you do for the node, so that the backup's first block is compared with the network's.
+
+**Restoring a backup.** Stop the node first. Then:
+
+```
+cvn_miner.exe --network devnet --restore-backup backups\cvn_devnet_block00001468_20261119-031200.db
+```
+
+The backup is checked, and only if it passes is it put in place of the chain file. The file it replaces is not deleted: it is kept beside it with `.replaced-` and the time in its name. Start the node as usual afterwards; it fetches any later blocks from the network.
+
+**What a backup is and is not.** It is a copy of public data, the same chain every node holds. It contains no private key and is no substitute for writing your recovery words down. Restoring an old backup onto the only machine of a network takes that network back to the backup's block: everything mined after it is gone.
+
+## 11. Checking a download, and building the same program yourself
 
 Every release on GitHub comes with two small files, `SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt`. They list the SHA-256 of each package and of each program inside it. A SHA-256 is a fingerprint: if one byte of a file differs, so does its fingerprint.
 

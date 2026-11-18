@@ -127,6 +127,12 @@ func Run(frontendAssets embed.FS) {
 		}
 	}
 
+	// `--check-backup FILE` and `--restore-backup FILE` (see backup.go).
+	// A network whose start is refused outright is reported further down.
+	if !anchorRefused && runBackupCommand(os.Args, anchorErr == nil) {
+		return
+	}
+
 	// `--randomx-bench` measures this machine's RandomX speed and exits.
 	for _, arg := range os.Args {
 		if arg == "--randomx-bench" {
@@ -419,6 +425,10 @@ func Run(frontendAssets embed.FS) {
 	go runMiningReadinessMonitor()
 	go runGenesisWatch(anchorLookupAllowed(os.Args))
 	go runDownloadSettler()
+	// A checked copy of the chain once a day (see backup.go).
+	if every, keep, on := backupSettings(os.Args); on {
+		go runBackupSchedule(every, keep)
+	}
 	// On a RandomX network, also offer work to external mining software.
 	// If the fast miner was chosen, start it; the built-in miner below then
 	// stays idle unless the fast miner cannot run (see fast_miner.go).

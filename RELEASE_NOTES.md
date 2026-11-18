@@ -25,7 +25,7 @@ Section 4 of `Installation_Guide.md` explains both.
 ## Checking a download
 
 - **New: every file in this release is signed by GitHub** as built by this project's build recipe from this repository at this tag. With GitHub's command-line tool: `gh attestation verify cvn_node_windows.zip --repo kalashnikovski/cvn_node`.
-- As before, `SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt` list the SHA-256 of each package and of each program inside it, and anyone can rebuild the programs from the tag and compare. Section 10 of `Installation_Guide.md` says how.
+- As before, `SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt` list the SHA-256 of each package and of each program inside it, and anyone can rebuild the programs from the tag and compare. Section 11 of `Installation_Guide.md` says how.
 
 ## Updating
 

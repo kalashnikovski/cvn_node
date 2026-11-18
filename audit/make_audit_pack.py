@@ -96,6 +96,7 @@ PROGRAM = [
     "node/relay_uplink.go",
     "node/peer_cache.go",
     "node/own_address.go",
+    "node/backup.go",
     "node/recovery_words.go",
     "node/recovery_wordlist.go",
     "node/nat_traversal.go",
