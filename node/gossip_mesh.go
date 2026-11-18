@@ -281,8 +281,12 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 					delete(ActivePeerMap, oldestPeer)
 				}
 			}
-			canonicalPeerKey := Params.gossipAddress(remoteIP)
-			ActivePeerMap[canonicalPeerKey] = time.Now()
+			// A ping from one of this machine's own addresses is this node
+			// talking to itself; it is answered, and not listed as a peer.
+			if !isOwnHost(remoteIP) {
+				canonicalPeerKey := Params.gossipAddress(remoteIP)
+				ActivePeerMap[canonicalPeerKey] = time.Now()
+			}
 
 			var peers []string
 			for p := range ActivePeerMap {
@@ -483,7 +487,7 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 										if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
 											for _, ip := range receivedAddresses {
 												cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
-												if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") {
+												if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") || isOwnGossipAddress(cleanedIP) {
 													continue
 												}
 												PeerMapMutex.RLock()
@@ -514,7 +518,9 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 		for peer, lastSeen := range ActivePeerMap {
 			if time.Since(lastSeen) > (90 * time.Second) {
 				delete(ActivePeerMap, peer)
-				log.Printf("🔌 [NETWORK] Closed an idle connection: %s\n", peer)
+				// Nodes do not hold connections open to each other; this is
+				// the list of nodes that new blocks and transfers are sent to.
+				log.Printf("🔌 [NETWORK] Nothing heard from %s for 90 seconds; no longer sending to it until it is heard from again.\n", peer)
 			}
 		}
 		PeerMapMutex.Unlock()

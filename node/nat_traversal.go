@@ -81,6 +81,9 @@ func SetupAutomatedPortMapping() {
 		for {
 			externalIP, err := mapPortsViaUPnP(localIP)
 			if err == nil {
+				// The router's public address is this node's own address as
+				// others see it; a list of peers may hand it back to us.
+				noteOwnHost(externalIP)
 				if !announcedSuccess {
 					announcedSuccess, announcedFailure = true, false
 					if parsed := net.ParseIP(externalIP); parsed != nil && isBehindNATAddress(parsed) {

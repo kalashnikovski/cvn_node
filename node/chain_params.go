@@ -334,6 +334,11 @@ func seedSyncURLs() []string {
 // skipSeedOnThisMachine reports whether a block-download address should be
 // left out on this machine (see WindowsSelfSkipHost).
 func skipSeedOnThisMachine(endpoint string) bool {
+	// A seed is given the list of all the seeds, itself among them. It does
+	// not download blocks from itself.
+	if isOwnSyncURL(endpoint) {
+		return true
+	}
 	return Params.WindowsSelfSkipHost != "" && runtime.GOOS == "windows" &&
 		strings.Contains(endpoint, Params.WindowsSelfSkipHost)
 }

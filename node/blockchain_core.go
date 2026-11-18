@@ -314,7 +314,12 @@ func ValidateBlockSignatures(b Block) bool {
 			case b.Index == tipBlock.Index && b.PrevHash == tipBlock.PrevHash:
 				lookup = lookupWithBlockUndone(dbTx, bUTXO, tipBlock)
 			default:
-				fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d does not attach to the local tip, so its transfers cannot be checked.\n", b.Index)
+				// A second copy of a block we already hold, arriving after the
+				// chain has moved on past it, lands here too. That is not a
+				// bad block and is not reported as one.
+				if !blockAlreadyStored(dbTx, b) {
+					fmt.Printf("🚨 CONSENSUS REJECTION: Block #%d does not attach to the local tip, so its transfers cannot be checked.\n", b.Index)
+				}
 				isBlockValid = false
 				return nil
 			}

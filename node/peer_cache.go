@@ -231,6 +231,11 @@ func seedsAndCachedPeers() []string {
 		if address == "" || seen[address] {
 			continue
 		}
+		// This node's own address is often in the list (every seed is given
+		// the list of all the seeds). It is not another node.
+		if isOwnGossipAddress(address) {
+			continue
+		}
 		seen[address] = true
 		combined = append(combined, address)
 	}

@@ -95,6 +95,7 @@ PROGRAM = [
     "node/gossip_mesh.go",
     "node/relay_uplink.go",
     "node/peer_cache.go",
+    "node/own_address.go",
     "node/nat_traversal.go",
     "node/stratum.go",
     "node/fast_miner.go",
