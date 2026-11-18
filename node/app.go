@@ -162,7 +162,7 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, priv
 	if privateKeyHex == "" {
 		return "REJECTED: Enter the private key of the wallet you are sending from."
 	}
-	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	privateKeyHex, publicKeyHex, err := signingKeyFrom(privateKeyHex)
 	if err != nil {
 		return "REJECTED: " + err.Error()
 	}
@@ -198,7 +198,7 @@ func (a *App) RenewCoinsSubmit(feeStr, privateKeyHex, everything string) string 
 	if privateKeyHex == "" {
 		return "REJECTED: Enter the private key of the wallet whose coins you want to renew."
 	}
-	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	privateKeyHex, publicKeyHex, err := signingKeyFrom(privateKeyHex)
 	if err != nil {
 		return "REJECTED: " + err.Error()
 	}
@@ -235,7 +235,7 @@ func (a *App) CombineCoinsSubmit(feeStr, privateKeyHex string) string {
 	if privateKeyHex == "" {
 		return "REJECTED: Enter the private key of the wallet whose coins you want to combine."
 	}
-	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	privateKeyHex, publicKeyHex, err := signingKeyFrom(privateKeyHex)
 	if err != nil {
 		return "REJECTED: " + err.Error()
 	}

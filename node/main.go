@@ -78,9 +78,12 @@ func Run(frontendAssets embed.FS) {
 			fmt.Printf(" Address (safe to share):   %s\n", walletAddress)
 			fmt.Printf(" Public key:                %s\n", pubHex)
 			fmt.Printf(" PRIVATE KEY (keep secret): %s\n", privHex)
+			printRecoveryWords(privHex)
 			fmt.Println("--------------------------------------------------------------------")
-			fmt.Println(" Write the private key down now. It is shown this once and saved")
-			fmt.Println(" nowhere. Without it the coins at this address can never be spent.")
+			fmt.Println(" Write the 24 words down now, on paper, in order. They are the")
+			fmt.Println(" private key written another way, with a check that catches a wrong")
+			fmt.Println(" word. They are shown this once and saved nowhere. Without the words")
+			fmt.Println(" or the key the coins at this address can never be spent.")
 			fmt.Println(" The address has been saved in miner_config.json as this machine's")
 			fmt.Println(" mining address.")
 			fmt.Println("====================================================================")
@@ -498,6 +501,8 @@ func Run(frontendAssets embed.FS) {
 			if len(hashRateHistory15m) > 0 {
 				avg15m = sum15m / float64(len(hashRateHistory15m))
 			}
+			// The last minute: the newest fifteen readings, one every four seconds.
+			avg60s := averageOfLast(hashRateHistory15m, 15)
 			// The longer averages cover only the time since the miner started until
 			// their window has filled.
 			var avg1h, avg24h float64
@@ -557,15 +562,15 @@ func Run(frontendAssets embed.FS) {
 			fmt.Println(inGreen("================================================================================"))
 			fmt.Println(inGreen("💎 COVENANT STANDARD (CVN) MINER                                                "))
 			fmt.Println(inGreen("================================================================================"))
-			fmt.Println(inGreen(fmt.Sprintf("🛰️  NETWORK HEIGHT: #%-15d | 📊 15m AVG HASHRATE: %s", actualBlocksHeight, formatHashrate(avg15m))))
-			fmt.Println(inGreen(fmt.Sprintf("💰 WALLET BALANCE: %-16.2f CVN | 📊 60m AVG HASHRATE: %s", actualCvnBalance, formatHashrate(avg1h))))
+			fmt.Println(inGreen(fmt.Sprintf("🛰️  NETWORK HEIGHT: #%-15d | 📊 60s AVG HASHRATE: %s", actualBlocksHeight, formatHashrate(avg60s))))
+			fmt.Println(inGreen(fmt.Sprintf("💰 WALLET BALANCE: %-16.2f CVN | 📊 15m AVG HASHRATE: %s", actualCvnBalance, formatHashrate(avg15m))))
 			if seedOnly {
-				fmt.Println(inGreen(fmt.Sprintf("🌱 SEED NODE: NOT MINING            | 📊 24h AVG HASHRATE: %s", formatHashrate(avg24h))))
+				fmt.Println(inGreen(fmt.Sprintf("🌱 SEED NODE: NOT MINING            | 📊 60m AVG HASHRATE: %s", formatHashrate(avg1h))))
 			} else {
-				fmt.Println(inGreen(fmt.Sprintf("🪪 MINING ADDRESS: %-16.16s...  | 📊 24h AVG HASHRATE: %s", CustomMinerAddress, formatHashrate(avg24h))))
+				fmt.Println(inGreen(fmt.Sprintf("🪪 MINING ADDRESS: %-16.16s...  | 📊 60m AVG HASHRATE: %s", CustomMinerAddress, formatHashrate(avg1h))))
 			}
-			status, _ := minerStatus(actualBlocksHeight)
-			fmt.Println(inGreen("📶 STATUS: " + status))
+			status, working := minerStatus(actualBlocksHeight)
+			fmt.Println(inGreen(fmt.Sprintf("📶 STATUS: %-24s | 📊 24h AVG HASHRATE: %s", minerStatusShort(actualBlocksHeight), formatHashrate(avg24h))))
 			fmt.Println(inGreen("================================================================================"))
 			fmt.Println(inPurple("⚡ RECENT ACTIVITY:                                                             "))
 			fmt.Println(inPurple("--------------------------------------------------------------------------------"))
@@ -573,7 +578,14 @@ func Run(frontendAssets embed.FS) {
 			// shown, newest last, so the heading never scrolls out of view
 			// however fast lines arrive. (The list used to lose one line per
 			// redraw, and a burst of blocks outran that.)
-			if keep := dashboardLogLines(terminalRows()); len(liveTerminalEventLogs) > keep {
+			keep := dashboardLogLines(terminalRows())
+			if !working {
+				// Catching up or waiting: the whole of it, with its progress
+				// bar, on a line of its own above the log.
+				fmt.Println(inGreen("⏳ " + status))
+				keep--
+			}
+			if len(liveTerminalEventLogs) > keep {
 				liveTerminalEventLogs = liveTerminalEventLogs[len(liveTerminalEventLogs)-keep:]
 			}
 			if len(liveTerminalEventLogs) > 0 {

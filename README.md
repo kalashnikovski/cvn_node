@@ -21,7 +21,7 @@ Full step-by-step instructions are in [Installation_Guide.md](Installation_Guide
 ### Windows
 
 1. Download `cvn_node_windows.zip` from the newest [release](https://github.com/kalashnikovski/cvn_node/releases) and unpack it.
-2. In the unpacked folder, double-click `LaunchMiner.bat` to create a wallet and start mining. **Write the private key down when it is shown.** If it shows a mining address that is not yours, choose "Create a new wallet".
+2. In the unpacked folder, double-click `LaunchMiner.bat` to create a wallet and start mining. **Write the 24 recovery words down when they are shown.** If it shows a mining address that is not yours, choose "Create a new wallet".
 3. Double-click `LaunchWallet.bat` for the desktop wallet.
 
 To build from the source instead: install [Go](https://go.dev/dl/), download this repository, and run `build_clean.bat`. Every step is spelled out in [Installation_Guide.md](Installation_Guide.md).
@@ -36,7 +36,7 @@ GOTOOLCHAIN=auto go build -o cvn_node .
 ./cvn_node --miner-address YOUR_CVN_ADDRESS
 ```
 
-`--generate-wallet` prints your address and your private key once. **Write the private key down.** It is not saved anywhere, and coins mined to an address cannot be spent without it.
+`--generate-wallet` prints your address, your private key, and the same key as 24 recovery words, once. **Write the 24 words down on paper.** Nothing is saved anywhere, and coins mined to an address cannot be spent without it.
 
 To limit how many processor threads the miner uses:
 

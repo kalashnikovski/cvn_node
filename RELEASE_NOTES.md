@@ -1,42 +1,38 @@
-Release candidate 9. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
+Release candidate 10. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
 
-**This replaces release candidates 7 and 8, which should not be used.** It does not agree with either about every block, so a network must run one release, and it should be this one.
+**This release changes no rule.** It agrees with release candidate 9 about every block, so machines on the two can share a network, and a development-network (`devnet`) chain made with release candidate 9 carries on unchanged. Nothing needs deleting: update and start again.
 
-**This release changes rules every node enforces. It cannot follow a development-network (`devnet`) chain made by an earlier release, and it can no longer follow the first test network (`testnet-1`) at all.** Every machine on `devnet` must move to this release together and start from an empty chain.
+## For your wallet
 
-## Rule changes
+- **Recovery words.** A private key is now also shown as 24 ordinary English words, which are the same key written another way, with a check built in. A misspelt, missing or misplaced word is refused at once. Wherever a wallet asks for the private key, the 24 words work too. A wallet made with an earlier release has its words as well: in the text wallet, choose "Recovery words and saved key". The word list is the one Bitcoin wallets use (BIP39).
+- **A saved key.** The text wallet can keep your key on your computer in `wallet_key.json`, locked with a password. After that, either wallet takes the password where it asks for the key, so the key need not be pasted for every transfer. The file is a convenience and not a backup: keep the 24 words on paper.
 
-- **Relief for a late block is no longer inherited.** A block dated six minutes or more after its parent is still mined at a halved difficulty, but the next block is worked out from the difficulty its parent would have had without that. Before, one long gap left dozens of nearly free blocks for whoever held the most mining power.
-- **Difficulty steps are applied as e^x, rounded to the nearest whole number.** Before, a miner holding most of the mining power could gain up to 13% by choosing the dates of its blocks. The same patterns now gain nothing. The arithmetic is done in whole numbers, so every node gets the same result.
-- **The seven-year sweep leaves the smallest coins alone.** A coin so small that a fifth could not be taken without leaving less than the smallest coin allowed used to be taken entirely. It is now left as it is. The sweep takes a fifth from a coin or nothing; it never takes a coin whole.
-- **Plain names inside a block.** The fixed texts in a block's reward transaction, and the first block's fields, said things like "immutable consensus valid" and named a "steward assembly" that does not exist. They now say what they are: a reward with no key and no signature, and a first block that pays nothing to nobody. This changes every block's identifier.
-- **The first test network is retired.** `--network testnet-1` is refused, and every rule that existed only for it is gone from the program: the first difficulty rule, decimal amounts, the looser block format, addresses without a check, and the uncle share. Two networks remain, `cvn_testnet` (the default) and `devnet`, on the same rules.
+Section 4 of `Installation_Guide.md` explains both.
 
-How the difficulty changes were found and checked is in `audit/FINDINGS_ROUND_4.md` and `audit/FINDINGS_ROUND_5.md`. The sweep change and the names were made after the last review and have not been reviewed by anyone but their authors.
+## For miners
 
-## Other changes
+- **The miner window says what the node is doing.** A STATUS line in the heading reads UP TO DATE, CATCHING UP (with the block it has reached, a bar and a percentage) or WAITING. While catching up or waiting, the reason is shown on a line of its own, and the regular line says "Not mining yet" in place of "Mining at 0 H/s". The download at start-up shows the same bar.
+- **A 60-second average hashrate** heads the averages, above 15 minutes, 60 minutes and 24 hours.
+- **The heading stays on screen** however fast lines arrive, and the fast miner's "stale job" lines are no longer shown. They are not faults: they are answers to work the chain had already moved past.
+- The fast miner's repeated "not ready" errors while the node is catching up are no longer shown either. A connection lost at any other time still is.
 
-- **Miners reach the six-minute halving at the same moment.** A block may be dated up to two minutes ahead of the clock, so a miner who dated ahead reached the halving before those who did not, and took about 1% more than its share. The program's miner now dates a block ahead for that purpose alone, so nobody has a head start.
-- **Renew my coins**, in both wallets: one step gives the coins that are within a year of their seven-year date a new seven-year count.
-- **The miner window has colour and plain wording:** the heading and figures in green; in the log the `[MINING]` tag in purple and `[SUCCESS]` in green. It says "mining address" and "recent activity" where it said "rig identity" and "live streaming consensus and hardware action regions". Set the environment variable `NO_COLOR` to switch the colour off.
-- **The desktop wallet uses plain wording too:** "balance", "your address", "newest block", "send CVN".
-- The CVN Testnet is the network the program runs on when none is named. It cannot start until its Bitcoin block is announced; wallets still open.
-- The fast miner (the CVN edition of XMRig) is used whenever its `xmrig-cvn` folder is beside the program. No setting is needed.
-- The miner window shows whether the fast miner's processor tuning was applied. `MINING_GUIDE.md` section 3 explains the tuning, what it needs and what it costs.
-- A `miner_config.json` that cannot be read is refused, with the line at fault.
-- The built-in miner checks its own block as it would anyone else's before keeping it.
-- The program no longer builds for 32-bit computers, where difficulty would one day stop fitting.
-- Two log lines that read as faults and were not no longer appear.
+## For anyone running a node
 
-## Moving a devnet machine to this release
-
-1. Stop the miner or seed.
-2. Update to this release.
-3. Delete the development network's files from the CVN folder: `cvn_devnet.db`, `genesis_anchor_devnet.txt` and `peers_devnet.json`. Your wallet (`miner_config.json`) is not touched and your address does not change.
-4. Start again as before, with the Bitcoin height agreed for the restart.
-
-The fast miner itself is unchanged: `cvn-6.26.0-2` from https://github.com/kalashnikovski/cvn-xmrig/releases still works.
+- **A node no longer treats itself as a peer.** A seed given the list of all the seeds, itself among them, used to ping itself, send itself every block, and log every minute or two that it had closed an idle connection to its own address.
+- That log line now says what it means: nothing was heard from a node for 90 seconds, so nothing is sent to it until it is heard from again. Nodes do not hold connections open to each other.
+- A second copy of a block already held, arriving after the chain has moved on, is no longer reported as a rejected block.
 
 ## Checking a download
 
-`SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt` list the SHA-256 of each package and of each program inside it. Section 10 of `Installation_Guide.md` says how to check them, and how to rebuild the programs yourself and compare.
+- **New: every file in this release is signed by GitHub** as built by this project's build recipe from this repository at this tag. With GitHub's command-line tool: `gh attestation verify cvn_node_windows.zip --repo kalashnikovski/cvn_node`.
+- As before, `SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt` list the SHA-256 of each package and of each program inside it, and anyone can rebuild the programs from the tag and compare. Section 10 of `Installation_Guide.md` says how.
+
+## Updating
+
+1. Stop the miner or seed.
+2. Replace the programs with this release's (a seed: `bash /opt/cvn_node/deploy/update_seed.sh`).
+3. Start again exactly as before. Keep the chain files and, on a development network started from a Bitcoin block, the same height.
+
+The fast miner itself is unchanged: `cvn-6.26.0-2` from https://github.com/kalashnikovski/cvn-xmrig/releases still works.
+
+The recovery words, the saved key and the changes to the miner window were made after the last review and have not been reviewed by anyone but their authors.

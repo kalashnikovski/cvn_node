@@ -8,8 +8,14 @@ on:
     tags:
       - 'v*'
 
+# id-token and attestations let GitHub sign a statement, for each file
+# published, that it was built by this workflow from this repository at this
+# tag. Anyone can check a download against it:
+#     gh attestation verify FILE --repo kalashnikovski/cvn_node
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   test:
@@ -89,6 +95,16 @@ jobs:
             cvn_node_windows.zip
             SHA256SUMS_windows.txt
 
+      # After publishing, so that a fault in signing never holds a release
+      # back: the files are out, and this job shows the fault.
+      - name: Sign what was built
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            cvn_node_windows.zip
+            cvn_miner.exe
+            cvn_node.exe
+
   linux:
     name: Linux package
     needs: test
@@ -126,3 +142,12 @@ jobs:
             cvn_node_linux_amd64.tar.gz
             cvn_node_linux_arm64.tar.gz
             SHA256SUMS_linux.txt
+
+      - name: Sign what was built
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            cvn_node_linux_amd64.tar.gz
+            cvn_node_linux_arm64.tar.gz
+            package/cvn_node_linux_amd64/cvn_node
+            package/cvn_node_linux_arm64/cvn_node

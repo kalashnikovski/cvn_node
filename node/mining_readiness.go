@@ -61,6 +61,37 @@ var networkHeightHeard int64
 // window, which reads it from another goroutine.
 var miningHoldReasonShown atomic.Value
 
+// minerStatusShort is minerStatus in a word or two, for the narrow place in
+// the miner window's heading.
+func minerStatusShort(localHeight int64) string {
+	text, working := minerStatus(localHeight)
+	switch {
+	case working:
+		return text
+	case strings.HasPrefix(text, "CATCHING UP: "):
+		return "CATCHING UP " + text[strings.LastIndex(text, " ")+1:]
+	case strings.HasPrefix(text, "CATCHING UP"):
+		return "CATCHING UP"
+	}
+	return "WAITING"
+}
+
+// averageOfLast is the average of the newest count readings, or of all of
+// them if there are fewer. Nothing read yet gives zero.
+func averageOfLast(readings []float64, count int) float64 {
+	if len(readings) > count {
+		readings = readings[len(readings)-count:]
+	}
+	if len(readings) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, reading := range readings {
+		sum += reading
+	}
+	return sum / float64(len(readings))
+}
+
 // progressBar draws done out of total as a bar of the given width.
 func progressBar(done, total int64, width int) string {
 	filled := 0

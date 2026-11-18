@@ -240,8 +240,8 @@
 					</div>
 
 					<div style="display: flex; flex-direction: column; gap: 0.3rem;">
-						<label for="txPrivateKeyInput" style="color: #8a8a9e; font-size: 0.8rem;">YOUR PRIVATE KEY (used once to sign on this computer, never saved or sent)</label>
-						<input id="txPrivateKeyInput" type="password" autocomplete="off" bind:value={txPrivateKey} placeholder="Paste the secret private key of the sending wallet..." style="background: #06060a; border: 1px solid #333; color: #e6c229; padding: 0.6rem; font-family: monospace; border-radius: 3px;" />
+						<label for="txPrivateKeyInput" style="color: #8a8a9e; font-size: 0.8rem;">YOUR PRIVATE KEY, 24 RECOVERY WORDS, OR SAVED-KEY PASSWORD (used to sign on this computer, never sent)</label>
+						<input id="txPrivateKeyInput" type="password" autocomplete="off" bind:value={txPrivateKey} placeholder="Private key, or the 24 words, or your saved key's password..." style="background: #06060a; border: 1px solid #333; color: #e6c229; padding: 0.6rem; font-family: monospace; border-radius: 3px;" />
 					</div>
 
 					<button type="submit" style="background: #00ffff; color: #000; border: none; padding: 0.8rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; margin-top: 0.5rem; text-transform: uppercase; letter-spacing: 1px;">

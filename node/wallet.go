@@ -48,10 +48,11 @@ func RunTextWallet() {
 		fmt.Println(" 3. Combine my coins")
 		fmt.Println(" 4. Renew my coins (before their seven-year date)")
 		fmt.Println(" 5. Create a new wallet")
-		fmt.Println(" 6. Exit")
+		fmt.Println(" 6. Recovery words and saved key")
+		fmt.Println(" 7. Exit")
 		fmt.Println("====================================================================")
 
-		switch ask("Choose 1-6: ") {
+		switch ask("Choose 1-7: ") {
 		case "1":
 			textWalletShowBalance(ask, ownAddress)
 		case "2":
@@ -62,7 +63,9 @@ func RunTextWallet() {
 			textWalletRenew(ask, reader)
 		case "5":
 			textWalletCreate(ask, ownAddress)
-		case "6", "q", "exit":
+		case "6":
+			textWalletKeys(ask, reader)
+		case "7", "q", "exit":
 			fmt.Println("Wallet closed.")
 			return
 		}
@@ -140,8 +143,8 @@ func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 		}
 	}
 
-	privateKeyHex := readSecretLine(reader, "Private key of the sending wallet (not shown while typing): ")
-	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	privateKeyHex := readSecretLine(reader, "Private key, 24 recovery words, or the saved key's password (not shown while typing): ")
+	privateKeyHex, publicKeyHex, err := signingKeyFrom(privateKeyHex)
 	if err != nil {
 		fmt.Println("❌ " + err.Error())
 		return
@@ -185,8 +188,8 @@ func textWalletRenew(ask func(string) string, reader *bufio.Reader) {
 	fmt.Println(" change, apart from any fee you choose to pay.")
 	fmt.Println()
 
-	privateKeyHex := readSecretLine(reader, "Private key of the wallet (not shown while typing): ")
-	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	privateKeyHex := readSecretLine(reader, "Private key, 24 recovery words, or the saved key's password (not shown while typing): ")
+	privateKeyHex, publicKeyHex, err := signingKeyFrom(privateKeyHex)
 	if err != nil {
 		fmt.Println("❌ " + err.Error())
 		return
@@ -266,8 +269,8 @@ func textWalletCombine(ask func(string) string, reader *bufio.Reader) {
 	fmt.Println(" balance does not change, apart from any fee you choose to pay.")
 	fmt.Println()
 
-	privateKeyHex := readSecretLine(reader, "Private key of the wallet (not shown while typing): ")
-	publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+	privateKeyHex := readSecretLine(reader, "Private key, 24 recovery words, or the saved key's password (not shown while typing): ")
+	privateKeyHex, publicKeyHex, err := signingKeyFrom(privateKeyHex)
 	if err != nil {
 		fmt.Println("❌ " + err.Error())
 		return
@@ -334,9 +337,12 @@ func textWalletCreate(ask func(string) string, ownAddress string) {
 	fmt.Printf(" Address (safe to share):  %s\n", address)
 	fmt.Printf(" Public key:               %s\n", publicKeyHex)
 	fmt.Printf(" PRIVATE KEY (keep secret): %s\n", privateKeyHex)
+	printRecoveryWords(privateKeyHex)
 	fmt.Println("--------------------------------------------------------------------")
-	fmt.Println(" ⚠️  Write the private key down now. It is not saved anywhere, and")
-	fmt.Println("    without it the coins at this address can never be spent.")
+	fmt.Println(" ⚠️  Write the 24 words down now, on paper, in order. They are the")
+	fmt.Println("    private key written another way, with a check that catches a")
+	fmt.Println("    wrong word. Nothing is saved anywhere, and without the words or")
+	fmt.Println("    the key the coins at this address can never be spent.")
 	fmt.Println("====================================================================")
 
 	question := "Use this address for mining on this machine? (y/n): "
@@ -356,6 +362,98 @@ func textWalletCreate(ask func(string) string, ownAddress string) {
 
 // readSecretLine reads one line without showing it on screen where the
 // terminal allows that (Linux and macOS). On Windows the text stays visible.
+// printRecoveryWords shows a key's 24 recovery words, numbered, six to a line.
+func printRecoveryWords(privateKeyHex string) {
+	words, err := recoveryWordsFromKey(privateKeyHex)
+	if err != nil {
+		return
+	}
+	fmt.Println(" RECOVERY WORDS (keep secret; the same key, written as 24 words):")
+	list := strings.Fields(words)
+	for i := 0; i < len(list); i += 6 {
+		line := "   "
+		for j := i; j < i+6 && j < len(list); j++ {
+			line += fmt.Sprintf("%2d. %-10s", j+1, list[j])
+		}
+		fmt.Println(strings.TrimRight(line, " "))
+	}
+}
+
+// textWalletKeys is the menu for keeping a key: its recovery words, and a
+// copy on this computer locked with a password.
+func textWalletKeys(ask func(string) string, reader *bufio.Reader) {
+	fmt.Println()
+	if address, found := savedKeyAddress(); found {
+		fmt.Printf(" A key is saved on this computer for %s (in %s).\n", address, savedKeyFile)
+	} else {
+		fmt.Println(" No key is saved on this computer.")
+	}
+	fmt.Println(" a. Show the 24 recovery words of a private key")
+	fmt.Println(" b. Check recovery words I have written down")
+	fmt.Println(" c. Save a key on this computer, locked with a password")
+	fmt.Println(" d. Remove the saved key from this computer")
+	fmt.Println(" (anything else goes back)")
+	const prompt = "Private key, 24 recovery words, or the saved key's password (not shown while typing): "
+	switch strings.ToLower(ask("Choose a-d: ")) {
+	case "a":
+		privateKeyHex, _, err := signingKeyFrom(readSecretLine(reader, prompt))
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+		fmt.Println()
+		printRecoveryWords(privateKeyHex)
+		fmt.Println(" Write them on paper, in order. Anyone who has them has the coins.")
+	case "b":
+		privateKeyHex, err := keyFromRecoveryWords(readSecretLine(reader, "The 24 words, with spaces between them (not shown while typing): "))
+		if err != nil {
+			fmt.Printf("❌ %v.\n", err)
+			return
+		}
+		publicKeyHex, err := publicKeyFromPrivateKey(privateKeyHex)
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+		address, _ := DeriveAddressFromPublicKey(publicKeyHex)
+		fmt.Printf("✅ The words are right. They are the key of %s\n", strings.TrimSpace(address))
+	case "c":
+		privateKeyHex, _, err := signingKeyFrom(readSecretLine(reader, "Private key or 24 recovery words to save (not shown while typing): "))
+		if err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+		password := readSecretLine(reader, fmt.Sprintf("Choose a password, at least %d characters (not shown while typing): ", savedKeyMinPassword))
+		if password != readSecretLine(reader, "The same password again: ") {
+			fmt.Println("❌ The two passwords were not the same. Nothing was saved.")
+			return
+		}
+		address, err := saveKeyWithPassword(privateKeyHex, password)
+		if err != nil {
+			fmt.Printf("❌ %v. Nothing was saved.\n", err)
+			return
+		}
+		fmt.Printf("✅ Saved in %s, locked with your password, for %s\n", savedKeyFile, address)
+		fmt.Println("   From now on, where a wallet asks for the private key you can type the password.")
+		fmt.Println("   This file is not a backup. If this computer is lost, or the password forgotten,")
+		fmt.Println("   only the 24 recovery words (or the private key) on paper bring the coins back.")
+	case "d":
+		if _, found := savedKeyAddress(); !found {
+			fmt.Println("There is no saved key to remove.")
+			return
+		}
+		if answer := strings.ToLower(ask("Remove the saved key? Make sure you have the recovery words on paper first. (y/n): ")); answer != "y" && answer != "yes" {
+			fmt.Println("The saved key was left as it is.")
+			return
+		}
+		if err := os.Remove(savedKeyFile); err != nil {
+			fmt.Printf("❌ %v\n", err)
+			return
+		}
+		fmt.Println("✅ The saved key was removed from this computer.")
+	}
+}
+
 func readSecretLine(reader *bufio.Reader, prompt string) string {
 	fmt.Print(prompt)
 	hidden := false

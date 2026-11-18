@@ -15,7 +15,7 @@ One program does everything: it is the node, the miner and the text wallet. On W
 - A 64-bit computer running Windows 10 or 11, or Linux.
 - About 1 GB of free disk space.
 - An internet connection. No port forwarding is needed.
-- **Your private key is your wallet.** It is shown once, when the wallet is created, and saved nowhere. Anyone who has it can spend your coins, and without it nobody can, including you. Write it down on paper before you start mining.
+- **Your private key is your wallet.** It is shown once, when the wallet is created, and saved nowhere. Anyone who has it can spend your coins, and without it nobody can, including you. It is shown both as 64 characters and as **24 recovery words**, which are the same key written another way. Write the 24 words down on paper, in order, before you start mining.
 
 ---
 
@@ -163,9 +163,14 @@ Both wallets do the same things.
 | Send CVN | Sends an amount to an address, with an optional fee |
 | Combine my coins | Merges many small coins into a few large ones in your own address |
 | Renew my coins | Gives coins that are within a year of their seven-year date a new seven-year count, by sending them back to your own address. If none is that near, it says how far off the earliest is and offers to renew them all |
-| Create a new wallet | Makes a new address and private key (text wallet) |
+| Create a new wallet | Makes a new address and private key, shown also as 24 recovery words (text wallet) |
+| Recovery words and saved key | Shows the 24 words of a key, checks words you have written down, and saves or removes a key locked with a password (text wallet) |
 
 **Sending.** You enter the recipient's address, the amount, an optional fee, and the private key of the wallet you are sending from. In the text wallet on Windows the key is visible on screen as you type or paste it, so make sure nobody is watching and close the window afterwards; on Linux it is hidden. The transfer is signed on your own computer. The key is used for that one transfer and is not saved or sent anywhere. A transfer normally confirms in the next block.
+
+**Recovery words.** A private key is 64 characters, and one copied wrongly by hand gives no warning until the coins cannot be spent. The 24 recovery words are the same key written as ordinary English words, with a check built in: a misspelt, missing or misplaced word is refused at once, with a message saying what is wrong. Wherever a wallet asks for the private key you can give the 24 words instead, with spaces between them; capitals do not matter. The words are the key itself and nothing is derived from them, so a wallet made before this existed has its words too: "Recovery words and saved key" in the text wallet shows them. The word list is the one Bitcoin wallets use, so a card or steel plate made for recovery words fits. They are for CVN only: typing them into another coin's wallet does not open this one.
+
+**A saved key.** So that you need not paste the key for every transfer, the text wallet can save it on this computer in the file `wallet_key.json`, locked with a password of your choosing (at least 8 characters; longer is better). After that, wherever either wallet asks for the private key you can type the password. The file cannot be opened without the password, but it is a convenience and not a backup: if the computer is lost or the password forgotten, only the words on paper bring the coins back. Anyone who gets both the file and the password has the coins, so never send the file to anyone, and remove it (same menu) from a computer you are giving away.
 
 **Why combine?** A miner receives one separate coin for every block won, and one transfer can spend at most 200 coins. A wallet holding hundreds of mining rewards therefore cannot send them all at once. Combining sends them back to your own address as a few large coins. Your balance does not change, apart from any fee you choose to pay.
 
@@ -305,9 +310,19 @@ Work out the fingerprint of the file you downloaded and compare it with the line
 - Windows: `certutil -hashfile cvn_node_windows.zip SHA256`
 - Linux: `sha256sum cvn_node_linux_amd64.tar.gz`
 
+### Check that a download was built by this project
+
+From release candidate 10 on, GitHub signs a statement for every package and program in a release, saying that it was built by this project's own build recipe from this repository at that tag. With GitHub's command-line tool (`gh`) installed:
+
+```
+gh attestation verify cvn_node_windows.zip --repo kalashnikovski/cvn_node
+```
+
+It works the same for the Linux packages and for a program taken out of a package. A file that did not come from the project's build is refused. This relies on GitHub; the check below relies on nobody.
+
 ### Check that the programs were built from the published source
 
-This is the stronger check. It shows that the packaged programs contain exactly what is in the source and nothing else. You build the programs yourself from the release's tag and compare their fingerprints with the published ones.
+This is the strongest check. It shows that the packaged programs contain exactly what is in the source and nothing else. You build the programs yourself from the release's tag and compare their fingerprints with the published ones.
 
 You need git and the Go version named in the file `go.mod` (the same version: a different one gives a different program). Replace `TAG` with the release's name, for example `v5.0.0-rc1`.
 

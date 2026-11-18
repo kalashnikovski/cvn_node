@@ -55,6 +55,50 @@ func TestTheMinerWindowSaysWhatTheNodeIsDoing(t *testing.T) {
 	}
 }
 
+// The heading has room for a word or two; the full text goes on its own line.
+func TestTheShortStatusFitsTheHeading(t *testing.T) {
+	sync, hold, heard := atomic.LoadInt32(&IsSyncingActive), atomic.LoadInt32(&MiningHoldActive), atomic.LoadInt64(&networkHeightHeard)
+	defer func() {
+		atomic.StoreInt32(&IsSyncingActive, sync)
+		atomic.StoreInt32(&MiningHoldActive, hold)
+		atomic.StoreInt64(&networkHeightHeard, heard)
+	}()
+	set := func(s, h int32, n int64) {
+		atomic.StoreInt32(&IsSyncingActive, s)
+		atomic.StoreInt32(&MiningHoldActive, h)
+		atomic.StoreInt64(&networkHeightHeard, n)
+	}
+	cases := []struct {
+		syncing, held int32
+		heard         int64
+		want          string
+	}{
+		{0, 0, 0, "UP TO DATE"},
+		{1, 0, 400, "CATCHING UP 25%"},
+		{1, 0, 0, "CATCHING UP"},
+		{0, 1, 0, "WAITING"},
+	}
+	for _, c := range cases {
+		set(c.syncing, c.held, c.heard)
+		got := minerStatusShort(100)
+		if got != c.want || len(got) > 24 {
+			t.Errorf("short status %q, want %q, and no longer than 24 characters", got, c.want)
+		}
+	}
+}
+
+func TestAverageOfLast(t *testing.T) {
+	if got := averageOfLast(nil, 15); got != 0 {
+		t.Errorf("no readings average %v, want 0", got)
+	}
+	if got := averageOfLast([]float64{2, 4}, 15); got != 3 {
+		t.Errorf("two readings average %v, want 3", got)
+	}
+	if got := averageOfLast([]float64{100, 100, 1, 2, 3}, 3); got != 2 {
+		t.Errorf("the newest three average %v, want 2", got)
+	}
+}
+
 func TestProgressBar(t *testing.T) {
 	cases := []struct {
 		done, total int64
