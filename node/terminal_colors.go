@@ -16,9 +16,9 @@ const (
 )
 
 // dashboardHeadingLines is how many lines the dashboard's heading takes:
-// three for the title, three of figures, one rule, the "recent activity"
-// line and the rule under it.
-const dashboardHeadingLines = 9
+// three for the title, three of figures, the status line, one rule, the
+// "recent activity" line and the rule under it.
+const dashboardHeadingLines = 10
 
 // dashboardLogLines is how many log lines the dashboard shows under its
 // heading in a terminal of the given height: all that fit, leaving one line

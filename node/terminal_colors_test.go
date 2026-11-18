@@ -11,9 +11,9 @@ func TestTheDashboardFitsItsWindow(t *testing.T) {
 	cases := map[int]int{
 		0:   12, // height not known
 		-3:  12,
-		30:  20, // thirty lines: nine of heading, one for the cursor
-		24:  14,
-		120: 110,
+		30:  19, // thirty lines: ten of heading, one for the cursor
+		24:  13,
+		120: 109,
 		12:  5, // a very small window still shows a few lines
 		5:   5,
 	}

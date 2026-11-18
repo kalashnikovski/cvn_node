@@ -322,7 +322,7 @@ func runInitialDownload(args []string) {
 		if TotalChainWork().Cmp(before) <= 0 {
 			break // nothing gained: nobody had anything better, or it did not hold up
 		}
-		fmt.Printf("⏳ [SYNC] Now at block #%d.\n", GetLatestBlockInternal().Index)
+		printDownloadProgress()
 		if !trustedSourceClaimsBetter() {
 			break
 		}
@@ -337,10 +337,22 @@ func runInitialDownload(args []string) {
 		if TotalChainWork().Cmp(before) <= 0 {
 			break
 		}
-		fmt.Printf("⏳ [SYNC] Now at block #%d.\n", GetLatestBlockInternal().Index)
+		printDownloadProgress()
 	}
 	trySettleInitialDownload()
 	fmt.Printf("✅ [SYNC] Starting at block #%d.\n", GetLatestBlockInternal().Index)
+}
+
+// printDownloadProgress says how far the start-up download has got, with a
+// bar when the height the other node reported is known, so that a person
+// watching a long download can see it moving.
+func printDownloadProgress() {
+	height, target := GetLatestBlockInternal().Index, atomic.LoadInt64(&networkHeightHeard)
+	if target > height {
+		fmt.Printf("⏳ [SYNC] Block #%d of #%d %s %d%%\n", height, target, progressBar(height, target, 30), height*100/target)
+		return
+	}
+	fmt.Printf("⏳ [SYNC] Now at block #%d.\n", height)
 }
 
 // operatorSourcesFrom turns what was given with --connect into the nodes to
@@ -658,6 +670,7 @@ func TriggerActiveReSyncPass() {
 		return
 	}
 	log.Printf("🔎 [SYNC] Comparing our chain with %s, which reports block #%d.\n", source, claimedHeight)
+	atomic.StoreInt64(&networkHeightHeard, claimedHeight)
 
 	// A source that claimed a better chain owes us one. If the pass ends
 	// with our chain no better and the fault was not ours, it is set aside.

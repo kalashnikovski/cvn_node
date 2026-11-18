@@ -426,6 +426,25 @@ func fastMinerMessage(line string) (string, bool) {
 	return "", false
 }
 
+// fastMinerWaiting keeps the fast miner's retries off the screen while the
+// node is not handing out work (catching up, or waiting before mining). The
+// fast miner asks again every few seconds and reports each refusal as two
+// errors; the miner window already says what the node is waiting for.
+type fastMinerWaiting struct {
+	refusedAt time.Time
+}
+
+// hides reports whether a line is one of those retries: the node's "not
+// ready" answer, or the closed connection that follows it within seconds.
+func (w *fastMinerWaiting) hides(line string, now time.Time) bool {
+	lower := strings.ToLower(line)
+	if strings.Contains(lower, "not ready to hand out work") {
+		w.refusedAt = now
+		return true
+	}
+	return strings.Contains(lower, "end of file") && now.Sub(w.refusedAt) < 10*time.Second
+}
+
 // fastMinerHashrate returns the speed the fast miner last reported, while it
 // is connected and the figure is recent.
 func fastMinerHashrate() (float64, bool) {
@@ -511,8 +530,12 @@ func runFastMinerOnce(path string, arguments []string) error {
 	go func() {
 		scanner := bufio.NewScanner(reader)
 		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		var waiting fastMinerWaiting
 		for scanner.Scan() {
 			line := scanner.Text()
+			if waiting.hides(line, time.Now()) {
+				continue
+			}
 			if speed, ok := parseFastMinerSpeed(line); ok {
 				fastMinerSpeed.Lock()
 				fastMinerSpeed.hashesPerSecond, fastMinerSpeed.at = speed, time.Now()

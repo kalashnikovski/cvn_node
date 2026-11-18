@@ -520,6 +520,9 @@ func Run(frontendAssets embed.FS) {
 				logMutex.Lock()
 				if seedOnly {
 					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] 🌱 [SEED] Not mining. Following the network // Ledger Height: #%d", time.Now().Format("15:04:05"), actualBlocksHeight))
+				} else if status, working := minerStatus(actualBlocksHeight); !working {
+					// Not mining for now. Say why, and not "Mining at 0 H/s".
+					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⏳ [SYNC] Not mining yet. %s // height #%d", time.Now().Format("15:04:05"), status, actualBlocksHeight))
 				} else {
 					liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] ⛏️  [MINING] Mining at %s // height #%d", time.Now().Format("15:04:05"), formatHashrate(realHashrateMH), actualBlocksHeight))
 				}
@@ -561,6 +564,8 @@ func Run(frontendAssets embed.FS) {
 			} else {
 				fmt.Println(inGreen(fmt.Sprintf("🪪 MINING ADDRESS: %-16.16s...  | 📊 24h AVG HASHRATE: %s", CustomMinerAddress, formatHashrate(avg24h))))
 			}
+			status, _ := minerStatus(actualBlocksHeight)
+			fmt.Println(inGreen("📶 STATUS: " + status))
 			fmt.Println(inGreen("================================================================================"))
 			fmt.Println(inPurple("⚡ RECENT ACTIVITY:                                                             "))
 			fmt.Println(inPurple("--------------------------------------------------------------------------------"))

@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,6 +52,49 @@ var (
 	miningHoldSinceUnix     int64
 	miningHoldLastReason    string
 )
+
+// networkHeightHeard is the block the seeds were last heard to be at. It is
+// only shown to the person at the miner window; no decision rests on it.
+var networkHeightHeard int64
+
+// miningHoldReasonShown is the reason for the current hold, for the miner
+// window, which reads it from another goroutine.
+var miningHoldReasonShown atomic.Value
+
+// progressBar draws done out of total as a bar of the given width.
+func progressBar(done, total int64, width int) string {
+	filled := 0
+	if total > 0 && done > 0 {
+		filled = int(done * int64(width) / total)
+	}
+	if filled > width {
+		filled = width
+	}
+	return "[" + strings.Repeat("#", filled) + strings.Repeat(".", width-filled) + "]"
+}
+
+// minerStatus says in a few words what the node is doing, for the miner
+// window: mining, catching up (with how far it has got), or waiting and why.
+// working is false while no mining is being done.
+func minerStatus(localHeight int64) (text string, working bool) {
+	syncing := atomic.LoadInt32(&IsSyncingActive) == 1
+	held := atomic.LoadInt32(&MiningHoldActive) == 1
+	if !syncing && !held {
+		return "UP TO DATE", true
+	}
+	if target := atomic.LoadInt64(&networkHeightHeard); target > localHeight {
+		return fmt.Sprintf("CATCHING UP: block #%d of #%d %s %d%%", localHeight, target,
+			progressBar(localHeight, target, 20), localHeight*100/target), false
+	}
+	if syncing {
+		return "CATCHING UP with the network", false
+	}
+	reason, _ := miningHoldReasonShown.Load().(string)
+	if reason == "" {
+		return "WAITING before mining", false
+	}
+	return "WAITING: " + reason, false
+}
 
 // decideMiningHold is the rule itself, kept free of clocks and network calls.
 // heldSeconds is how long the tip has been stale at its current height.
@@ -150,6 +194,9 @@ func evaluateMiningReadiness() {
 		return
 	}
 	best, answered := probePeerHeights()
+	if answered {
+		atomic.StoreInt64(&networkHeightHeard, best)
+	}
 	hold, resync, reason := decideMiningHold(tip.Index, tipAge, best, answered, now-miningHoldSinceUnix)
 	setMiningHold(hold, reason)
 	if resync {
@@ -159,6 +206,7 @@ func evaluateMiningReadiness() {
 
 func setMiningHold(hold bool, reason string) {
 	if hold {
+		miningHoldReasonShown.Store(reason)
 		if atomic.SwapInt32(&MiningHoldActive, 1) == 0 || reason != miningHoldLastReason {
 			announceNetworkStatus("⏸️ [MINER] Waiting before mining: " + reason + ".")
 		}
