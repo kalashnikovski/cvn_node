@@ -753,7 +753,11 @@ func TriggerActiveReSyncPass() {
 			break
 		}
 		if claimedHeight-next > 100 {
-			log.Printf("⏳ [SYNC] Downloading: block #%d of #%d.\n", next, claimedHeight)
+			// The bar is drawn here, as the blocks arrive. A whole chain often
+			// comes in one pass, and a bar drawn only between passes would
+			// then never be seen.
+			log.Printf("⏳ [SYNC] Downloading: block #%d of #%d %s %d%%\n", next, claimedHeight,
+				progressBar(next-1, claimedHeight, 30), (next-1)*100/claimedHeight)
 		}
 		// Only now, with blocks in hand to add, is the rest of the node
 		// asked to stand still.
