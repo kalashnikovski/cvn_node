@@ -277,9 +277,12 @@ func applyParams() {
 // when the program starts: `--seeds HOST,HOST,...` or the CVN_SEEDS
 // environment variable. It is how a development network is run across
 // several machines. A network with built-in seeds ignores it.
-func applySeedOverride(args []string) {
+//
+// It returns the entries it could not read. They are not passed over: a seed
+// left out without a word is how a newcomer ends up mining alone.
+func applySeedOverride(args []string) (unreadable []string) {
 	if len(Params.SeedHosts) > 0 {
-		return
+		return nil
 	}
 	list := argumentValue(args, "--seeds")
 	if list == "" {
@@ -288,11 +291,17 @@ func applySeedOverride(args []string) {
 	var hosts []string
 	for _, host := range strings.Split(list, ",") {
 		host = strings.TrimSpace(host)
-		if host != "" && len(host) <= 253 && !strings.ContainsAny(host, " /:@") {
+		if host == "" {
+			continue
+		}
+		if len(host) <= 253 && !strings.ContainsAny(host, " /:@") {
 			hosts = append(hosts, host)
+		} else {
+			unreadable = append(unreadable, host)
 		}
 	}
 	Params.SeedHosts = hosts
+	return unreadable
 }
 
 // requestedNetworkName reads the network asked for on the command line

@@ -6,7 +6,9 @@ How to run a Covenant Standard (CVN) node, mine, and use the wallet, on Windows 
 
 One program does everything: it is the node, the miner and the text wallet. On Windows there is also a desktop wallet with a window.
 
-**Build from source for now.** The packages on the GitHub Releases page from October 2026 are too old to follow the current chain. Trial packages of the current program are published as pre-releases (names ending in `-rc`); the packages meant for general use will be published with the public test network. Section 11 shows how to check any package you download.
+**Which download to use.** Trial packages of the current program are on the GitHub Releases page, with names ending in `-rc` (for example `v5.0.0-rc10`). Use the newest of those. The packages there from October 2026 (names beginning `v4`) are too old to follow the current chain. The packages meant for general use will be published with the public test network. Section 11 shows how to check any package you download.
+
+**New to this?** On Windows you need three parts of this guide and nothing else: section 1, then "Install" and "Mine" in section 2. If you were invited to the development network, section 7 has the one command to use in place of a double-click.
 
 ---
 
@@ -23,17 +25,23 @@ One program does everything: it is the node, the miner and the text wallet. On W
 
 ### Install
 
-**The easy way: download the ready-made package.**
+There are two ways to get the program, A and B. **You do only one of them.** Almost everyone should do A.
 
-1. Go to https://github.com/kalashnikovski/cvn_node/releases and open the newest release.
-2. Under **Assets**, download `cvn_node_windows.zip`.
-3. Right-click the downloaded file, choose **Extract All**, and pick a place of your own, for example `C:\`. You get a folder named `cvn_node`. This is your **CVN folder**; the rest of this guide refers to it by that name.
+#### Way A (recommended): download the ready-made package
 
-The folder contains `cvn_miner.exe` (the node, miner and text wallet), `cvn_node.exe` (the desktop wallet) and two files to start them with, `LaunchMiner.bat` and `LaunchWallet.bat`. Nothing is installed anywhere else on your computer. To check the download, see section 11.
+1. Go to https://github.com/kalashnikovski/cvn_node/releases. The page lists the releases one under another, newest at the top. The newest is the first one you see; its name looks like `v5.0.0-rc10`. You do not need to click its name or any link in its text. Those links lead to other things, such as the fast miner, which is optional and comes later.
+2. Scroll down to the end of that first release, to the word **Assets**. If no list of files shows under it, click **Assets** to open the list. In the list, click **`cvn_node_windows.zip`**. Your browser downloads it. That one file is all you need; leave the others.
+3. Open your Downloads folder. Right-click `cvn_node_windows.zip`, choose **Extract All**, and pick a place of your own, for example `C:\`. You get a folder named `cvn_node`. This is your **CVN folder**; the rest of this guide refers to it by that name.
+
+**That is the whole installation. Skip Way B and go straight to "Mine" below.**
+
+What you now have: the folder contains `cvn_miner.exe` (the node, miner and text wallet), `cvn_node.exe` (the desktop wallet) and two files to start them with, `LaunchMiner.bat` and `LaunchWallet.bat`. Nothing is installed anywhere else on your computer. Checking the download is optional; section 11 shows how.
 
 Windows may show "Windows protected your PC" the first time you start a program from the folder, because the programs are not signed by a company. Click **More info**, then **Run anyway**.
 
-**The other way: build it yourself from the source.**
+#### Way B (instead of A): build it yourself from the source
+
+**If you did Way A, do not do this.** It is for people who would rather make the program from its source code than download it ready-made. The result is the same program.
 
 1. Install Go from https://go.dev/dl/ (the Windows installer, a file ending in `.msi`). Accept the defaults.
 2. On https://github.com/kalashnikovski/cvn_node click **Code**, then **Download ZIP**.
@@ -42,7 +50,7 @@ Windows may show "Windows protected your PC" the first time you start a program 
 
 ### Mine
 
-Double-click **`LaunchMiner.bat`**.
+Double-click **`LaunchMiner.bat`**. (If you were invited to the development network, do not double-click: use the command in section 7, "Joining the development network". A double-click starts the CVN Testnet, which has not begun yet.)
 
 The first time, it asks about your mining address:
 
@@ -218,6 +226,38 @@ The same option works for the wallet, for example `./cvn_node --network devnet -
 
 **For any network other than the CVN Testnet, give the option every time, including when you create a wallet.** Every command in this guide that has no `--network` runs on the CVN Testnet, and so does a double-click on `LaunchMiner.bat` or `LaunchWallet.bat`. Each network has its own wallet file and its own chain. The program refuses a network name it does not know. In particular there is no network called `mainnet` or `testnet`: the CVN Testnet is `cvn_testnet`.
 
+### Joining the development network
+
+The development network (`devnet`) is run by invitation. Whoever runs it gives you two things:
+
+- **the Bitcoin block it started from**, a number such as `976283`. Below it is written `HEIGHT`;
+- **the addresses of its seeds**, the machines a new node asks for the chain. Below they are written `SEEDS`. Type them as numbers and dots with commas between them and nothing else: no spaces, no port numbers, no `http://`. For example `203.0.113.5,203.0.113.9`.
+
+**Windows.** Open your CVN folder in File Explorer, right-click an empty part of it and choose **Open in Terminal**. A window opens, already in your CVN folder. Paste this one line, with your own two values in it, and press Enter:
+
+```
+$env:CVN_DEVNET_ANCHOR_HEIGHT="HEIGHT"; .\LaunchMiner.bat --network devnet --seeds SEEDS
+```
+
+If your window is the Command Prompt instead (you opened it by typing `cmd`), that line does not work there. Type these two lines, pressing Enter after each:
+
+```
+set CVN_DEVNET_ANCHOR_HEIGHT=HEIGHT
+LaunchMiner.bat --network devnet --seeds SEEDS
+```
+
+**Linux:**
+
+```bash
+CVN_DEVNET_ANCHOR_HEIGHT=HEIGHT ./cvn_node --network devnet --seeds SEEDS
+```
+
+Use the same line every time you start the miner. The height is forgotten when the window is closed.
+
+**How to tell it worked.** After the wallet questions, the window shows `Comparing our chain with ...`, then a progress bar counting up to the network's height, then the dashboard with a network height in the thousands and `UP TO DATE`. If it shows `Starting at block #0` and a height that begins at 1, you are not on the network: stop it and see section 9.
+
+The program does not start a chain of its own when it was given seeds. If none of them answers it waits and says so, and if they are on a different chain it stops and says so. Both messages are explained in section 9. (Whoever starts a network's very first blocks adds `--start-alone`.)
+
 ### On the day a network starts
 
 A launch network starts when one particular Bitcoin block is mined. Its height is announced in advance and written into the program.
@@ -288,6 +328,10 @@ That is the port on the CVN Testnet. On `devnet` it is 28081.
 | What you see | What to do |
 |---|---|
 | "this machine has no mining address" | Create a wallet (`LaunchMiner.bat`, or `--generate-wallet` on Linux), or start with `--miner-address CVN_...` |
+| "These addresses given with --seeds could not be read" | The list of seeds has something extra in it. Give the addresses alone with commas between them: no spaces, no port numbers (`:28081`), no `http://`. |
+| "NOT MINING YET: none of the other machines answered" | The program was given seeds and none replied, so it waits and does not start a chain of its own. Check the addresses are the ones you were given, that the computer is online, and that its firewall or antivirus allows the program to connect. It carries on by itself as soon as one answers. |
+| "The other machines are on a DIFFERENT CHAIN" | The seeds answered, and their first block is not this program's. On `devnet` the usual cause is that the Bitcoin block height was not set in this window (section 7, "Joining the development network"). Otherwise check the network name and that you have the release the network runs. |
+| Your height started at 1 while the network is in the thousands | The node began a chain of its own (releases up to `v5.0.0-rc10` did this silently when no seed could be reached). Stop it, delete `cvn_devnet.db` in your CVN folder, and start again with the command from section 7. Coins mined on that chain exist nowhere else. |
 | "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within two minutes if no other node can be reached, or if another node says it is ahead and then does not deliver. |
 | The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |

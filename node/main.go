@@ -57,7 +57,12 @@ func Run(frontendAssets embed.FS) {
 		fmt.Println("🚨 " + err.Error())
 		os.Exit(1)
 	}
-	applySeedOverride(os.Args)
+	if unreadable := applySeedOverride(os.Args); len(unreadable) > 0 {
+		fmt.Printf("🚨 These addresses given with --seeds (or in CVN_SEEDS) could not be read: %s\n", strings.Join(unreadable, "   "))
+		fmt.Println("   Give each machine's address alone, with commas between them and nothing else:")
+		fmt.Println("   no spaces, no port number, no http://. For example:  --seeds 203.0.113.5,203.0.113.9")
+		os.Exit(1)
+	}
 	fmt.Printf("🌐 NETWORK: %s — %s\n", Params.Name, Params.Description)
 	if len(Params.SeedHosts) == 0 {
 		fmt.Println("🌐 This network has no seeds. To join other machines, start every one with --seeds HOST,HOST,...")
@@ -416,6 +421,9 @@ func Run(frontendAssets embed.FS) {
 		})
 	})
 	go func() { _ = serveHTTP(fmt.Sprintf(":%d", Params.StatusPort), mirrorMux) }()
+	// Before anything else, make sure the machines this node was told of are
+	// on its chain (see join_check.go).
+	joinBeforeMining(os.Args, !seedOnly)
 	// Catch up with the network before mining starts (see sync_pass.go).
 	runInitialDownload(os.Args)
 	go runChainLagWatchdog()

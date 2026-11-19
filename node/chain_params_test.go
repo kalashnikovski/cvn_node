@@ -185,9 +185,17 @@ func TestSeedsGivenAtStart(t *testing.T) {
 	if len(Params.SeedHosts) != 0 {
 		t.Fatal("devnet gained seeds without being given any")
 	}
-	applySeedOverride([]string{"cvn_node", "--seeds", "10.0.0.1, 10.0.0.2 ,,bad host,http://x,10.0.0.3:99"})
+	unreadable := applySeedOverride([]string{"cvn_node", "--seeds", "10.0.0.1, 10.0.0.2 ,,bad host,http://x,10.0.0.3:99"})
 	if got := strings.Join(Params.SeedHosts, " "); got != "10.0.0.1 10.0.0.2" {
 		t.Errorf("seeds read as %q", got)
+	}
+	// What could not be read is named, so that it can be reported.
+	if got := strings.Join(unreadable, "|"); got != "bad host|http://x|10.0.0.3:99" {
+		t.Errorf("the unreadable seeds were given as %q", got)
+	}
+	Params.SeedHosts = nil
+	if left := applySeedOverride([]string{"cvn_node", "--seeds", "10.0.0.1,10.0.0.2"}); len(left) != 0 {
+		t.Errorf("a well-written list had unreadable entries: %v", left)
 	}
 	if got := seedSyncURLs(); len(got) != 2 || got[0] != "http://10.0.0.1:28081" {
 		t.Errorf("seed download addresses: %v", got)
