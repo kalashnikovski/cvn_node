@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 )
 
@@ -454,19 +452,15 @@ func textWalletKeys(ask func(string) string, reader *bufio.Reader) {
 	}
 }
 
+// readSecretLine asks for a private key or a password and does not show it
+// as it is typed or pasted, on Windows as on Linux (see hideTyping). A key
+// left on the screen is a key in every screenshot of that screen.
 func readSecretLine(reader *bufio.Reader, prompt string) string {
 	fmt.Print(prompt)
-	hidden := false
-	if runtime.GOOS != "windows" {
-		hide := exec.Command("stty", "-echo")
-		hide.Stdin = os.Stdin
-		hidden = hide.Run() == nil
-	}
+	restore, hidden := hideTyping()
 	line, _ := reader.ReadString('\n')
+	restore()
 	if hidden {
-		show := exec.Command("stty", "echo")
-		show.Stdin = os.Stdin
-		_ = show.Run()
 		fmt.Println()
 	}
 	return strings.TrimSpace(line)

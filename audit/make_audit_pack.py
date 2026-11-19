@@ -118,6 +118,8 @@ PROGRAM = [
     "node/memory_linux.go",
     "node/memory_other.go",
     "node/ansi_windows.go",
+    "node/secret_input_windows.go",
+    "node/secret_input_other.go",
     "node/terminal_colors.go",
     "node/terminal_size_windows.go",
     "node/terminal_size_linux.go",

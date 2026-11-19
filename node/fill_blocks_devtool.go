@@ -261,8 +261,8 @@ func runFillBlocksCommand(args []string) bool {
 	fmt.Println(" many small pieces, paying a small fee each time. Use the wallet's")
 	fmt.Println(" \"Combine\" afterwards to put them back together.")
 	fmt.Println()
-	fmt.Print(" Private key, 24 recovery words, or the saved key's password: ")
-	typed, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	input := bufio.NewReader(os.Stdin)
+	typed := readSecretLine(input, " Private key, 24 recovery words, or the saved key's password (not shown while typing): ")
 	privateKeyHex, publicKeyHex, err := signingKeyFrom(typed)
 	if err != nil {
 		fmt.Println("❌ " + err.Error())
@@ -291,7 +291,7 @@ func runFillBlocksCommand(args []string) bool {
 	}
 	fmt.Printf(" Built %d transfers, %d bytes: enough for %d full block(s).\n", len(transfers), bytes, bytes/budget)
 	fmt.Print(" Type YES to send them: ")
-	if answer, _ := bufio.NewReader(os.Stdin).ReadString('\n'); strings.TrimSpace(answer) != "YES" {
+	if answer, _ := input.ReadString('\n'); strings.TrimSpace(answer) != "YES" {
 		fmt.Println(" Nothing was sent.")
 		return true
 	}
@@ -313,7 +313,7 @@ func runFillBlocksCommand(args []string) bool {
 	// spending the most coins a transfer may.
 	fmt.Println()
 	fmt.Print(" Put the pieces back together now? This fills a few more blocks. Type YES: ")
-	if answer, _ := bufio.NewReader(os.Stdin).ReadString('\n'); strings.TrimSpace(answer) != "YES" {
+	if answer, _ := input.ReadString('\n'); strings.TrimSpace(answer) != "YES" {
 		fmt.Println(" Left as they are. The wallet's \"Combine\" does the same at any time.")
 		return true
 	}

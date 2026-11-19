@@ -1,31 +1,35 @@
-Release candidate 10. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
+Release candidate 11. A test release: the CVN Testnet has not started, and coins on any CVN test network have no value and carry over to nothing.
 
-**This release changes no rule.** It agrees with release candidate 9 about every block, so machines on the two can share a network, and a development-network (`devnet`) chain made with release candidate 9 carries on unchanged. Nothing needs deleting: update and start again.
+**This release changes no rule.** It agrees with release candidates 9 and 10 about every block, so machines on any of the three can share a network, and a development-network (`devnet`) chain carries on unchanged. Nothing needs deleting: update and start again.
 
-## For your wallet
+One setting of the CVN Testnet changes before it starts: its first block's difficulty is 2,500,000 (was 1,000,000), chosen for a publicly announced start. The difficulty rule takes over from the second block either way.
 
-- **Recovery words.** A private key is now also shown as 24 ordinary English words, which are the same key written another way, with a check built in. A misspelt, missing or misplaced word is refused at once. Wherever a wallet asks for the private key, the 24 words work too. A wallet made with an earlier release has its words as well: in the text wallet, choose "Recovery words and saved key". The word list is the one Bitcoin wallets use (BIP39).
-- **A saved key.** The text wallet can keep your key on your computer in `wallet_key.json`, locked with a password. After that, either wallet takes the password where it asks for the key, so the key need not be pasted for every transfer. The file is a convenience and not a backup: keep the 24 words on paper.
+## For someone joining a network
 
-Section 4 of `Installation_Guide.md` explains both.
+- **A new node no longer starts a chain of its own by mistake.** A mining node that was given seeds asks them for their first block before anything else. If none answers and it has no blocks, it says NOT MINING YET, mines nothing, and carries on by itself as soon as one answers. If they answer and are on a different chain, it stops and says DIFFERENT CHAIN, with what to check. Earlier releases began mining alone without a word. Whoever means to mine a network's very first blocks before its other machines are up adds `--start-alone`.
+- **A seed address that cannot be read stops the program and is named.** An address written with a port number, a space or `http://` used to be left out silently.
+- **The download at start shows its progress bar** as the blocks arrive. It was drawn only between passes, and a whole chain usually arrives in one, so it was never seen.
+- **The installation guide's Windows section is rewritten** as two ways, A and B, of which you do one. It says where the download is on the releases page, and has the one command for joining the development network (section 7).
 
 ## For miners
 
-- **The miner window says what the node is doing.** A STATUS line in the heading reads UP TO DATE, CATCHING UP (with the block it has reached, a bar and a percentage) or WAITING. While catching up or waiting, the reason is shown on a line of its own, and the regular line says "Not mining yet" in place of "Mining at 0 H/s". The download at start-up shows the same bar.
-- **A 60-second average hashrate** heads the averages, above 15 minutes, 60 minutes and 24 hours.
-- **The heading stays on screen** however fast lines arrive, and the fast miner's "stale job" lines are no longer shown. They are not faults: they are answers to work the chain had already moved past.
-- The fast miner's repeated "not ready" errors while the node is catching up are no longer shown either. A connection lost at any other time still is.
+- **The built-in miner no longer slows down on top of a full block.** To see whether the newest block had changed, it re-read that whole block on every hash. For an ordinary block that costs nothing; for a full one it cost more time than the mining. It now asks for the block's identifier alone. The fast miner was not affected.
+- **The private key is not shown as you type or paste it** in the text wallet on Windows. The prompt already said so, and it was true only on Linux.
 
 ## For anyone running a node
 
-- **A node no longer treats itself as a peer.** A seed given the list of all the seeds, itself among them, used to ping itself, send itself every block, and log every minute or two that it had closed an idle connection to its own address.
-- That log line now says what it means: nothing was heard from a node for 90 seconds, so nothing is sent to it until it is heard from again. Nodes do not hold connections open to each other.
-- A second copy of a block already held, arriving after the chain has moved on, is no longer reported as a rejected block.
+- **Backups of the chain.** Two minutes after it starts, and then once a day, a node saves a copy of its chain into a `backups` folder beside the program, checks the copy (every block present and linked, each block matching its identifier, the first block this network's, and coins plus vault equal to what was issued), and keeps the newest seven. `--check-backup FILE` checks one by hand; `--restore-backup FILE` puts one back, with the node stopped, and keeps the file it replaced. `--backup-hours N`, `--backup-keep N` and `--no-backups` change the schedule. Section 10 of `Installation_Guide.md`.
+- **A block that arrives while the node is catching up is fetched as soon as the catch-up ends.** It used to be dropped and not asked for again for up to thirty seconds, which on a 45-second network left the node a block behind for a whole interval.
+- **Races are counted.** A node counts the heights at which it saw two valid blocks compete, logs each as `[RACE]` with the share of blocks so far, and reports the count with its newest block (`races`, `races_blocks`, `races_since` in the reply to `/block`). The count starts from zero when the node starts. Nothing about which block is kept has changed.
+
+## Tested since the last release
+
+- **Several real nodes on one machine.** A new set of tests starts the program several times over, each copy at its own address, and takes them through seeds, miners, a late joiner, a transfer, a seed that is killed and comes back, and a miner that returns from being cut off. At the end every node must hold the same block, the same work, the same vault and the same coins. `go test -tags multinode -run MultiNode -timeout 30m ./node/`. The network these run on exists only in a program built with that tag; this release does not contain it.
+- **Full blocks.** The block size limit is 300,000 bytes. On the development network, across six seeds on three continents, five blocks of about 296,700 bytes (76 transfers of 50 outputs each) and six of about 286,000 bytes (16 transfers of 200 inputs each) reached every seed within 5 seconds of being mined, against a block interval of 45.
 
 ## Checking a download
 
-- **New: every file in this release is signed by GitHub** as built by this project's build recipe from this repository at this tag. With GitHub's command-line tool: `gh attestation verify cvn_node_windows.zip --repo kalashnikovski/cvn_node`.
-- As before, `SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt` list the SHA-256 of each package and of each program inside it, and anyone can rebuild the programs from the tag and compare. Section 11 of `Installation_Guide.md` says how.
+Every file in this release is signed by GitHub as built by this project's build recipe from this repository at this tag: `gh attestation verify cvn_node_windows.zip --repo kalashnikovski/cvn_node`. `SHA256SUMS_windows.txt` and `SHA256SUMS_linux.txt` list the SHA-256 of each package and of each program inside it, and anyone can rebuild the programs from the tag and compare. Section 11 of `Installation_Guide.md` says how.
 
 ## Updating
 
@@ -35,4 +39,4 @@ Section 4 of `Installation_Guide.md` explains both.
 
 The fast miner itself is unchanged: `cvn-6.26.0-2` from https://github.com/kalashnikovski/cvn-xmrig/releases still works.
 
-The recovery words, the saved key and the changes to the miner window were made after the last review and have not been reviewed by anyone but their authors.
+Everything in this release was made after the last outside review and has not been reviewed by anyone but its authors.
