@@ -5,6 +5,7 @@ package node
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -128,6 +129,9 @@ func newLocalCluster(t *testing.T) *localCluster {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
+		if t.Failed() {
+			cluster.saveStacks()
+		}
 		cluster.stopAll()
 		Params = saved
 		applyParams()
@@ -165,7 +169,7 @@ func (c *localCluster) node(name string, number int, seeds []int, extra ...strin
 			"CVN_LOCALNET_HOST="+c.host(number),
 			fmt.Sprintf("CVN_LOCALNET_GENESIS=%d", c.genesis),
 			fmt.Sprintf("CVN_LOCALNET_DIFFICULTY=%d", c.start),
-			"CVN_SEEDS=", "CVN_NETWORK=", "CVN_MINER=",
+			"CVN_SEEDS=", "CVN_NETWORK=", "CVN_MINER=", "CVN_LOCALNET_DEBUG=1",
 		),
 	}
 	c.nodes = append(c.nodes, n)
@@ -245,6 +249,30 @@ func (c *localCluster) stopAll() {
 func (n *localNode) log() string {
 	data, _ := os.ReadFile(filepath.Join(n.folder, "node.log"))
 	return string(data)
+}
+
+// saveStacks asks every node still running what each part of it is doing, and
+// keeps the answers in a folder that outlives the test. A node that has
+// stopped making progress is explained by this and by nothing else.
+func (c *localCluster) saveStacks() {
+	folder, err := os.MkdirTemp("", "cvn-multinode-stacks-")
+	if err != nil {
+		return
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	for _, n := range c.nodes {
+		if !n.running() {
+			continue
+		}
+		resp, err := client.Get(fmt.Sprintf("http://%s:%d/debug/pprof/goroutine?debug=2", n.host, localnetDebugPort))
+		if err != nil {
+			continue
+		}
+		data, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		_ = os.WriteFile(filepath.Join(folder, n.name+".txt"), data, 0600)
+	}
+	c.t.Logf("what each running node was doing is saved in %s", folder)
 }
 
 func (c *localCluster) showLogs() {
@@ -676,5 +704,196 @@ func TestMultiNodeUnreadableSeedsStopTheProgram(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(n.folder, Params.DatabaseFile)); err == nil {
 		t.Error("a chain file was created before the seed list was checked")
+	}
+}
+
+// restAndCheckAccounts waits, with nobody mining, until the named nodes hold
+// the same newest block, and then requires that they count the same coins at
+// every address and that coins plus vault are exactly what was issued.
+func (c *localCluster) restAndCheckAccounts(limit time.Duration, nodes ...*localNode) (height int64) {
+	t := c.t
+	t.Helper()
+	type state struct {
+		Height int64  `json:"current_height"`
+		Hash   string `json:"block_hash"`
+		Work   string `json:"total_work"`
+		Vault  int64  `json:"vault_units"`
+	}
+	var settled state
+	c.eventually(limit, "with the miners stopped, the nodes did not come to rest on one block", func() bool {
+		var first state
+		if !nodes[0].get("/block", &first) {
+			return false
+		}
+		for _, n := range nodes[1:] {
+			var other state
+			if !n.get("/block", &other) || other != first {
+				return false
+			}
+		}
+		settled = first
+		return true
+	})
+	want := nodes[0].balances()
+	var total float64
+	for _, amount := range want {
+		total += amount
+	}
+	for _, n := range nodes[1:] {
+		got := n.balances()
+		if len(got) != len(want) {
+			t.Errorf("%s lists %d addresses with coins and %s lists %d", n.name, len(got), nodes[0].name, len(want))
+		}
+		for address, amount := range want {
+			if got[address] != amount {
+				t.Errorf("%s counts %v CVN at %s and %s counts %v", n.name, got[address], address, nodes[0].name, amount)
+			}
+		}
+	}
+	issued := float64(settled.Height) * 50
+	held := total + float64(settled.Vault)/float64(UnitsPerCVN)
+	if diff := held - issued; diff > 0.000001 || diff < -0.000001 {
+		t.Errorf("at block #%d the nodes hold %v CVN with the vault, and %v was issued", settled.Height, held, issued)
+	}
+	return settled.Height
+}
+
+// Blocks filled to the size limit: mined, passed between real nodes, checked
+// by each, and counted the same by all. The same code that fills them here
+// is the tool for doing it on a real test network (fill_blocks_devtool.go).
+func TestMultiNodeFullBlocks(t *testing.T) {
+	c := newLocalCluster(t)
+	const wait = 4 * time.Minute
+	key, pub, address := newTestWallet(t)
+
+	seedA := c.seed("seed-a", 1, []int{1, 2}).startNode()
+	seedB := c.seed("seed-b", 2, []int{1, 2}).startNode()
+	c.waitForHeight(30*time.Second, 0, seedA, seedB)
+	miner := c.miner("miner", 11, []int{1, 2}, address).startNode()
+	c.waitForHeight(wait, 6, miner, seedA, seedB)
+
+	// First cut six rewards into fifty coins each, so there are enough
+	// coins to make a block's worth of transfers at once.
+	var rewards []SpendableCoin
+	c.eventually(wait, "the miner has fewer than six coins", func() bool {
+		rewards = miner.coins(address)
+		return len(rewards) >= 6
+	})
+	cuts, _, _ := fillTransfers(key, pub, address, rewards[:6], 1<<30, 100000)
+	if len(cuts) != 6 {
+		t.Fatalf("built %d transfers from six coins", len(cuts))
+	}
+	for _, tx := range cuts {
+		if err := SubmitTransferOverHTTP(miner.url(""), tx); err != nil {
+			t.Fatalf("the miner refused a transfer: %v", err)
+		}
+	}
+	var pieces []SpendableCoin
+	c.eventually(wait, "the three hundred small coins never appeared", func() bool {
+		pieces = pieces[:0]
+		for _, coin := range miner.coins(address) {
+			if coin.Amount.Units() < cvn("2") {
+				pieces = append(pieces, coin)
+			}
+		}
+		return len(pieces) >= 300
+	})
+
+	// Now nearly four blocks' worth of transfers, all at once. The first
+	// block after them may be mined while they are still being handed over
+	// and hold only some; the blocks after it are full.
+	budget := blockTransferBudgetBytes()
+	transfers, bytes, _ := fillTransfers(key, pub, address, pieces, budget*15/4, 100000)
+	if bytes < budget*3 {
+		t.Fatalf("built only %d bytes of transfers; a block holds %d", bytes, budget)
+	}
+	from := miner.height()
+	for _, tx := range transfers {
+		if err := SubmitTransferOverHTTP(miner.url(""), tx); err != nil {
+			t.Fatalf("the miner refused a transfer: %v", err)
+		}
+	}
+	seeds := []string{seedA.url(""), seedB.url("")}
+	blocks := watchBlocks(miner.url(""), seeds, from, 6, 20*time.Second, wait, nil)
+	if len(blocks) < 6 {
+		// The miner stopped making blocks with transfers still waiting.
+		c.saveStacks()
+	}
+
+	full, carried := 0, 0
+	for _, b := range blocks {
+		carried += b.Transfers
+		t.Logf("after the transfers were sent: block #%d, %d bytes, %d transfers", b.Height, b.Bytes, b.Transfers)
+		if b.Bytes > Params.MaxBlockBytes {
+			t.Errorf("block #%d is %d bytes, over the limit of %d", b.Height, b.Bytes, Params.MaxBlockBytes)
+		}
+		if b.Bytes < Params.MaxBlockBytes*9/10 {
+			continue
+		}
+		full++
+		for _, seed := range seeds {
+			delay, reached := b.Delay[seed]
+			if !reached {
+				t.Errorf("full block #%d (%d bytes) did not reach %s within 20 seconds", b.Height, b.Bytes, seed)
+				continue
+			}
+			t.Logf("full block #%d: %d bytes, %d transfers, on %s after %.2f s", b.Height, b.Bytes, b.Transfers, seed, delay.Seconds())
+		}
+	}
+	if full < 2 {
+		t.Errorf("saw %d full block(s) in the %d blocks after the transfers were sent; want at least two", full, len(blocks))
+	}
+	if carried != len(transfers) {
+		t.Errorf("%d transfers were sent and the next %d blocks carried %d", len(transfers), len(blocks), carried)
+	}
+
+	// The pieces put back together: the other kind of large transfer, each
+	// spending the most coins a transfer may.
+	var made []SpendableCoin
+	c.eventually(wait, "the pieces of the filled blocks never appeared", func() bool {
+		made = miner.coins(address)
+		return len(made) >= len(transfers)*TxMaxOutputs
+	})
+	combines, combineBytes := combineBack(key, pub, transfers, made, 100000)
+	if len(combines) < len(transfers)*TxMaxOutputs/TxMaxInputs {
+		t.Fatalf("built %d combining transfers for %d pieces", len(combines), len(transfers)*TxMaxOutputs)
+	}
+	from = miner.height()
+	for _, tx := range combines {
+		if err := SubmitTransferOverHTTP(miner.url(""), tx); err != nil {
+			t.Fatalf("the miner refused a combining transfer: %v", err)
+		}
+	}
+	carried = 0
+	for _, b := range watchBlocks(miner.url(""), seeds, from, combineBytes/budget+2, 20*time.Second, wait, nil) {
+		carried += b.Transfers
+		if b.Bytes > Params.MaxBlockBytes {
+			t.Errorf("block #%d is %d bytes, over the limit of %d", b.Height, b.Bytes, Params.MaxBlockBytes)
+		}
+		if b.Transfers == 0 {
+			continue
+		}
+		for _, seed := range seeds {
+			if delay, reached := b.Delay[seed]; !reached {
+				t.Errorf("block #%d (%d bytes of combining transfers) did not reach %s within 20 seconds", b.Height, b.Bytes, seed)
+			} else {
+				t.Logf("combining block #%d: %d bytes, %d transfers of up to %d coins, on %s after %.2f s", b.Height, b.Bytes, b.Transfers, TxMaxInputs, seed, delay.Seconds())
+			}
+		}
+	}
+	if carried != len(combines) {
+		t.Errorf("%d combining transfers (%d bytes) were sent and the next blocks carried %d", len(combines), combineBytes, carried)
+	}
+
+	miner.stopNode()
+	height := c.restAndCheckAccounts(wait, seedA, seedB)
+	// The pieces are all still the sender's: the coins moved nowhere.
+	if got, want := seedA.balances()[address], float64(height)*50; got >= want || got < want-1 {
+		t.Errorf("the wallet holds %v CVN at block #%d; it should hold just under %v (the fees' fifth is in the vault)", got, height, want)
+	}
+	for _, n := range c.nodes {
+		if log := n.log(); strings.Contains(log, "panic:") || strings.Contains(log, "is not valid") {
+			t.Errorf("%s's log shows a panic or a refused block", n.name)
+		}
 	}
 }

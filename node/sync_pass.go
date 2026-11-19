@@ -597,6 +597,36 @@ func requestSyncPassForBlock() {
 	go TriggerActiveReSyncPass()
 }
 
+// A BLOCK THAT ARRIVED DURING A PASS
+//
+// While a pass is changing the chain, a block arriving from another node
+// cannot be placed and is dropped. If nothing more were done the node would
+// be one block short when the pass ended, could not attach the block after
+// that either, and would wait out syncPassFromBlockInterval before asking:
+// on a 45-second network, a whole block interval spent behind, mining (if it
+// mines) on a block that has already been built on.
+//
+// So the drop is remembered, and when the pass ends another starts at once to
+// fetch what was missed. It is spaced by a few seconds, so that a node sent
+// blocks continuously cannot be kept asking its peers without pause.
+
+var blockMissedDuringPass int32 // 1 if a block was dropped since the last pass began
+var lastPassAfterMiss int64     // unix nanoseconds, read and written atomically
+
+const missedBlockPassInterval = 3 * time.Second
+
+func catchUpAfterMissedBlock() {
+	if !atomic.CompareAndSwapInt32(&blockMissedDuringPass, 1, 0) {
+		return
+	}
+	now := time.Now().UnixNano()
+	last := atomic.LoadInt64(&lastPassAfterMiss)
+	if now-last < int64(missedBlockPassInterval) || !atomic.CompareAndSwapInt64(&lastPassAfterMiss, last, now) {
+		return
+	}
+	go TriggerActiveReSyncPass()
+}
+
 // chooseSyncSource picks the node to catch up from: in the first tier where
 // any node claims a chain better than ours, the one claiming the best.
 // Sources set aside after failing to deliver are skipped.
@@ -658,7 +688,10 @@ func TriggerActiveReSyncPass() {
 	if !atomic.CompareAndSwapInt32(&syncPassRunning, 0, 1) {
 		return
 	}
-	defer atomic.StoreInt32(&syncPassRunning, 0)
+	defer func() {
+		atomic.StoreInt32(&syncPassRunning, 0)
+		catchUpAfterMissedBlock()
+	}()
 	// Whatever this pass pauses, this pass resumes.
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
 	deadline := time.Now().Add(syncPassLimit)

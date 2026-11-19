@@ -166,6 +166,10 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		return // the genesis block is never taken from the network
 	}
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		// The chain is being changed and this block cannot be placed now.
+		// It is not kept, but it is not forgotten either: the pass asks
+		// again as soon as it ends (see catchUpAfterMissedBlock).
+		atomic.StoreInt32(&blockMissedDuringPass, 1)
 		return
 	}
 	StateMutex.Lock()
@@ -192,7 +196,11 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		// If the incoming block wins, replace our tip with it now instead of
 		// staying on our own block until the next height forces a re-sync.
 		// The loser is simply dropped: there is no uncle share.
+		// The gossip handler has already checked this block's proof of work
+		// against the parent the two share (see blockCarriesBadWork), so it
+		// is a real rival and the height is counted as a race.
 		if siblingWins(currentTip, incomingBlock) {
+			noteBlockRace(incomingBlock.Index, currentTip.Index, currentTip.Hash, incomingBlock.Hash)
 			return
 		}
 		StateMutex.Lock()
@@ -202,6 +210,7 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 			SaveBlockToStorageInternal(incomingBlock)
 		StateMutex.Unlock()
 		if adopted {
+			noteBlockRace(incomingBlock.Index, currentTip.Index, incomingBlock.Hash, currentTip.Hash)
 			fmt.Printf("🔄 [TIP SWITCH] Height %d: adopted competing block %.16s (more work or lower hash) over local %.16s\n", incomingBlock.Index, incomingBlock.Hash, currentTip.Hash)
 		}
 		return

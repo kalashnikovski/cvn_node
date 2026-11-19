@@ -137,6 +137,10 @@ func Run(frontendAssets embed.FS) {
 	if !anchorRefused && runBackupCommand(os.Args, anchorErr == nil) {
 		return
 	}
+	// Tools that exist only in a program built for testing (none in a release).
+	if !anchorRefused && anchorErr == nil && devToolCommand != nil && devToolCommand(os.Args) {
+		return
+	}
 
 	// `--randomx-bench` measures this machine's RandomX speed and exits.
 	for _, arg := range os.Args {
@@ -323,11 +327,17 @@ func Run(frontendAssets embed.FS) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			latest := GetLatestBlockInternal()
+			races, racedOver, racesSince := blockRaceCount(latest.Index)
 			payload := map[string]interface{}{
 				"current_height": latest.Index,
 				"block_hash":     latest.Hash,
 				"timestamp":      latest.Timestamp,
-				"transactions":   latest.Transactions,
+				// Heights at which this node saw two blocks compete, out of
+				// how many blocks, since it started (see block_races.go).
+				"races":        races,
+				"races_blocks": racedOver,
+				"races_since":  racesSince.Unix(),
+				"transactions": latest.Transactions,
 				// Total mining work in this node's chain; peers compare chains by it.
 				"total_work": chainWorkThrough(latest.Index).String(),
 				// Units held by the vault (always 0 on a network without one).
@@ -411,10 +421,16 @@ func Run(frontendAssets embed.FS) {
 		StateMutex.RLock()
 		tip := GetLatestBlockInternal()
 		StateMutex.RUnlock()
+		races, racedOver, racesSince := blockRaceCount(tip.Index)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":   "ONLINE",
 			"height":   tip.Index,
 			"tip_hash": tip.Hash,
+			// Heights at which this node saw two blocks compete, out of how
+			// many blocks, since it started (see block_races.go).
+			"races":        races,
+			"races_blocks": racedOver,
+			"races_since":  racesSince.Unix(),
 			// The address this node mines to, so a wallet on the same machine can
 			// show the right balance by default.
 			"miner_address": strings.TrimSpace(CustomMinerAddress),
@@ -426,6 +442,7 @@ func Run(frontendAssets embed.FS) {
 	joinBeforeMining(os.Args, !seedOnly)
 	// Catch up with the network before mining starts (see sync_pass.go).
 	runInitialDownload(os.Args)
+	beginCountingRaces(GetLatestBlockInternal().Index)
 	go runChainLagWatchdog()
 	// Decide once before the miner starts whether this node is caught up, then
 	// keep checking. See mining_readiness.go.
@@ -701,11 +718,19 @@ func executionMiningWorkerThread(ctx context.Context, workerID int64) {
 			// few hashes: often enough to react at once, without a database read
 			// per hash.
 			if !randomXTemplate || i%4 == 0 {
+				// Asked by identifier alone, without reading the block (see
+				// latestTipID). Only if that says the tip has moved is the
+				// block itself read, to be sure before the work is dropped.
 				StateMutex.RLock()
-				actualTipCheck := GetLatestBlockInternal()
+				tipHeight, tipHash := latestTipID()
 				StateMutex.RUnlock()
-				if actualTipCheck.Index != (nextIndex-1) || actualTipCheck.Hash != parentBlockTipHash {
-					break
+				if tipHeight != (nextIndex-1) || tipHash != parentBlockTipHash {
+					StateMutex.RLock()
+					actualTipCheck := GetLatestBlockInternal()
+					StateMutex.RUnlock()
+					if actualTipCheck.Index != (nextIndex-1) || actualTipCheck.Hash != parentBlockTipHash {
+						break
+					}
 				}
 			}
 			// Under RandomX the nonce is four bytes.

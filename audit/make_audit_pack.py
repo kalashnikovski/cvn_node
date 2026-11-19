@@ -98,6 +98,8 @@ PROGRAM = [
     "node/own_address.go",
     "node/join_check.go",
     "node/listen_host.go",
+    "node/block_races.go",
+    "node/fill_blocks_devtool.go",
     "node/localnet_multinode.go",
     "node/backup.go",
     "node/recovery_words.go",

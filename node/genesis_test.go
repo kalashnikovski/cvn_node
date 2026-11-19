@@ -220,7 +220,7 @@ func TestCVNTestnet(t *testing.T) {
 		!IsHeartbeatHeight(1) || !IsTxForkHeight(1) || Params.KeyEpochBlocks != 1920 || Params.KeyLagBlocks != 100 {
 		t.Error("the CVN Testnet must run every launch rule")
 	}
-	if Params.HeartbeatInitialDifficulty != 1000000 || minDifficultyAt(1) != 5000 {
+	if Params.HeartbeatInitialDifficulty != 2500000 || minDifficultyAt(1) != 5000 {
 		t.Errorf("starting difficulty %d, minimum %d", Params.HeartbeatInitialDifficulty, minDifficultyAt(1))
 	}
 	// It shares no port, database or message key with another network, so
@@ -252,12 +252,12 @@ func TestCVNTestnet(t *testing.T) {
 		t.Fatal(err)
 	}
 	genesis := buildGenesisBlock()
-	if got := CalculateNextDifficulty(genesis, testHeaderTime+60); got != 1000000 {
-		t.Errorf("a first block one minute after the anchor needs difficulty %d, want 1,000,000", got)
+	if got := CalculateNextDifficulty(genesis, testHeaderTime+60); got != 2500000 {
+		t.Errorf("a first block one minute after the anchor needs difficulty %d, want 2,500,000", got)
 	}
 	// A Bitcoin block dated well before anyone could start does not make the
 	// start any easier (see audit_launch_test.go).
-	if got := CalculateNextDifficulty(genesis, testHeaderTime+3600); got != 1000000 {
-		t.Errorf("a first block an hour after the anchor needs difficulty %d, want 1,000,000", got)
+	if got := CalculateNextDifficulty(genesis, testHeaderTime+3600); got != 2500000 {
+		t.Errorf("a first block an hour after the anchor needs difficulty %d, want 2,500,000", got)
 	}
 }

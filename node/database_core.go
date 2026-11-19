@@ -192,6 +192,40 @@ func GetLatestBlockInternal() Block {
 	return currentTip
 }
 
+// latestTipID returns the height and identifier of the newest block without
+// reading the block itself.
+//
+// A miner asks "is the block I am building on still the newest?" thousands
+// of times a second. GetLatestBlockInternal answers by reading the whole
+// block and every transfer in it, which costs almost nothing for an ordinary
+// block and milliseconds for a full one: with a full block at the tip, the
+// asking took more time than the mining. The identifier is also kept in the
+// small total-work record written with every block, and that is read here.
+// If the record is not there, the block is read as before.
+func latestTipID() (int64, string) {
+	height := atomic.LoadInt64(&localHeightState)
+	if GlobalBoltEngine == nil {
+		return height, ""
+	}
+	hash := ""
+	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(chainWorkBucket)
+		if bucket == nil {
+			return nil
+		}
+		var entry chainWorkEntry
+		if raw := bucket.Get(chainWorkKey(height)); raw != nil && json.Unmarshal(raw, &entry) == nil {
+			hash = entry.Hash
+		}
+		return nil
+	})
+	if hash == "" {
+		tip := GetLatestBlockInternal()
+		return tip.Index, tip.Hash
+	}
+	return height, hash
+}
+
 // GetLatestBlock wraps our internal state memory helper to fulfill global interface requirements
 func GetLatestBlock() Block {
 	return GetLatestBlockInternal()

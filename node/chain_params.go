@@ -195,15 +195,17 @@ var cvnTestnetParams = ChainParams{
 	MaxBlockBytes: 300000,
 
 	// The minimum is what one slow processor thread can still meet in about
-	// a block interval. The start is set for the handful of machines expected
-	// on the first day: about 22,000 hashes per second meets it once every
-	// 45 seconds. Too high corrects itself (difficulty halves after six
-	// minutes without a block); too low hands the first miner a burst of
-	// fast blocks, so the guess errs high.
+	// a block interval. The start is set for a publicly announced first day:
+	// about 55,000 hashes per second meets it once every 45 seconds, which
+	// is one fast desktop and a dozen ordinary ones. Too high corrects
+	// itself within a few blocks (difficulty falls by up to 39% a block, and
+	// halves after six minutes without one); too low hands the first miners
+	// a run of fast blocks, because difficulty rises by 5% a block at most.
+	// So the guess errs high.
 	PowSchedule:                []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 5000}},
 	KeyEpochBlocks:             1920,
 	KeyLagBlocks:               100,
-	HeartbeatInitialDifficulty: 1000000,
+	HeartbeatInitialDifficulty: 2500000,
 	ReliefNotInherited:         true,
 	ExponentialSteps:           true,
 	Economics:                  &NewGenesisEconomics,

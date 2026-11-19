@@ -35,3 +35,8 @@ func dialPeer(address string, timeout time.Duration) (net.Conn, error) {
 // extraNetworks are networks that exist only in programs built for testing
 // (see localnet_multinode.go). In a released program the list is empty.
 var extraNetworks = map[string]func() (ChainParams, error){}
+
+// devToolCommand runs a command that exists only in a program built for
+// testing (see fill_blocks_devtool.go), and reports whether it ran one. In a
+// released program it is nil.
+var devToolCommand func(args []string) bool

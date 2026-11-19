@@ -5,6 +5,8 @@ package node
 import (
 	"fmt"
 	"net"
+	"net/http"
+	_ "net/http/pprof" // what every part of the program is doing, for a test that finds a node stuck
 	"os"
 	"strconv"
 )
@@ -33,8 +35,17 @@ import (
 
 const localnetName = "localnet"
 
+// localnetDebugPort is where a node of the local test network says what each
+// part of it is doing (the Go runtime's own report), on its loopback address.
+const localnetDebugPort = 38089
+
 func init() {
 	extraNetworks[localnetName] = localnetParams
+	if ip := net.ParseIP(os.Getenv("CVN_LOCALNET_HOST")); ip != nil && ip.IsLoopback() && os.Getenv("CVN_LOCALNET_DEBUG") != "" {
+		go func() {
+			_ = http.ListenAndServe(net.JoinHostPort(ip.String(), strconv.Itoa(localnetDebugPort)), nil)
+		}()
+	}
 }
 
 func localnetParams() (ChainParams, error) {
