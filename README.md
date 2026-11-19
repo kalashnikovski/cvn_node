@@ -111,6 +111,14 @@ go test ./...
 go build -o cvn_node .
 ```
 
+`go test ./...` runs every rule inside one process and takes about six minutes. A second set of tests starts several real nodes on this one machine and watches them work together: seeds, miners, a late joiner, a transfer, a node that loses power, and a miner that returns from being cut off. It takes under a minute and is run separately:
+
+```bash
+go test -tags multinode -run MultiNode -timeout 30m ./node/
+```
+
+Those nodes run a test-only network that exists only in a program built with `-tags multinode`. It is reachable from this machine alone, and no released program contains it.
+
 Where things are:
 
 | Folder | What is in it |

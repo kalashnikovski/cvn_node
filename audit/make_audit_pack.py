@@ -97,6 +97,8 @@ PROGRAM = [
     "node/peer_cache.go",
     "node/own_address.go",
     "node/join_check.go",
+    "node/listen_host.go",
+    "node/localnet_multinode.go",
     "node/backup.go",
     "node/recovery_words.go",
     "node/recovery_wordlist.go",

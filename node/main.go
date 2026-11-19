@@ -395,9 +395,9 @@ func Run(frontendAssets embed.FS) {
 			json.NewEncoder(w).Encode(payload)
 		})
 		fmt.Printf("📡 [PORT %d] Initializing HTTP Bulk Sync api channels...\n", Params.SyncPort)
-		if err := serveHTTP(fmt.Sprintf(":%d", Params.SyncPort), winMux); err != nil {
+		if err := serveHTTP(listenAddress(Params.SyncPort), winMux); err != nil {
 			if runtime.GOOS == "windows" {
-				_ = serveHTTP(fmt.Sprintf(":%d", Params.SyncFallbackPort), winMux)
+				_ = serveHTTP(listenAddress(Params.SyncFallbackPort), winMux)
 			}
 		}
 	}()
@@ -420,7 +420,7 @@ func Run(frontendAssets embed.FS) {
 			"miner_address": strings.TrimSpace(CustomMinerAddress),
 		})
 	})
-	go func() { _ = serveHTTP(fmt.Sprintf(":%d", Params.StatusPort), mirrorMux) }()
+	go func() { _ = serveHTTP(listenAddress(Params.StatusPort), mirrorMux) }()
 	// Before anything else, make sure the machines this node was told of are
 	// on its chain (see join_check.go).
 	joinBeforeMining(os.Args, !seedOnly)

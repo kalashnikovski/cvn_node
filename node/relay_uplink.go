@@ -184,7 +184,7 @@ func runRelayUplink(address string, announcedID string) {
 		}
 	}()
 
-	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
+	conn, err := dialPeer(address, 3*time.Second)
 	if err != nil {
 		return
 	}

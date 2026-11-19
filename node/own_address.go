@@ -66,6 +66,10 @@ func isOwnHost(host string) bool {
 	if ip == nil {
 		return false
 	}
+	// A node given one address to live at knows that address as its own.
+	if Params.ListenHost != "" && ip.Equal(net.ParseIP(Params.ListenHost)) {
+		return true
+	}
 	loadInterfaceAddresses()
 	ownHosts.RLock()
 	defer ownHosts.RUnlock()

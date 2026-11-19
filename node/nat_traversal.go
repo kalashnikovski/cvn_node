@@ -64,6 +64,10 @@ func SetupAutomatedPortMapping() {
 		// Let the startup banner print first.
 		time.Sleep(500 * time.Millisecond)
 
+		if Params.ListenHost != "" {
+			// Listening on one named address only: there is no router to ask.
+			return
+		}
 		if os.Getenv("CVN_DISABLE_UPNP") != "" {
 			announceNetworkStatus("📡 [NAT] Automatic port mapping disabled (CVN_DISABLE_UPNP). Blocks still arrive through the outbound relay.")
 			return

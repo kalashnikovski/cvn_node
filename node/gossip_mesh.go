@@ -84,7 +84,7 @@ func StartMeshNetwork() {
 	fmt.Printf("📡 Listening for other nodes on port %d...\n", Params.GossipPort)
 	fmt.Println("====================================================================")
 
-	listener8080, err := net.Listen("tcp", ":"+Params.gossipPortText())
+	listener8080, err := net.Listen("tcp", listenAddress(Params.GossipPort))
 	if err != nil {
 		log.Printf("🚨 Could not listen for other nodes on port %d: %v\n", Params.GossipPort, err)
 		return
@@ -410,7 +410,7 @@ func transmitPayloadToNetworkBoundary(payload string) {
 			continue
 		}
 		go func(addr string) {
-			conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+			conn, err := dialPeer(addr, 3*time.Second)
 			if err == nil {
 				writeFramedPayloadNatively(conn, payload)
 				conn.Close()
@@ -450,7 +450,7 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 
 		for _, seedAddr := range staticMeshSeeds {
 			go func(addr string) {
-				conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+				conn, err := dialPeer(addr, 2*time.Second)
 				if err == nil {
 					writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
 
@@ -495,7 +495,7 @@ func runNetworkTopologyDiscoveryDiscoveryLoop() {
 												PeerMapMutex.RUnlock()
 												if !exists {
 													go func(targetIP string) {
-														dConn, dErr := net.DialTimeout("tcp", targetIP, 2*time.Second)
+														dConn, dErr := dialPeer(targetIP, 2*time.Second)
 														if dErr == nil {
 															writeFramedPayloadNatively(dConn, "PEER_PING:DISCOVERY_REQUEST")
 															dConn.Close()

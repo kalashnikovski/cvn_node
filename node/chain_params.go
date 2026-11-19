@@ -38,6 +38,11 @@ type ChainParams struct {
 	// reject each other's messages because their keys differ.
 	AuthKey string
 
+	// ListenHost, if set, is the one address of this machine the node
+	// listens on and connects from (see listen_host.go). Empty on every
+	// published network: the node listens on all of the machine's addresses.
+	ListenHost string
+
 	GossipPort       int // blocks and transfers between nodes
 	SyncPort         int // block download, wallet and explorer requests
 	SyncFallbackPort int // used on Windows when SyncPort is taken
@@ -231,7 +236,15 @@ func SelectNetwork(name string) error {
 		Params = devnetParams
 		applyDevnetOverrides()
 	default:
-		return fmt.Errorf("unknown network %q (known: %s)", name, strings.Join(KnownNetworks(), ", "))
+		build, known := extraNetworks[strings.ToLower(strings.TrimSpace(name))]
+		if !known {
+			return fmt.Errorf("unknown network %q (known: %s)", name, strings.Join(KnownNetworks(), ", "))
+		}
+		params, err := build()
+		if err != nil {
+			return err
+		}
+		Params = params
 	}
 	applyParams()
 	return nil
