@@ -152,14 +152,31 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		requestSyncPassForBlock()
 		return
 	}
-	if !ValidateBlockSignatures(incomingBlock) {
-		return
+	if incomingBlock.Index == currentTip.Index+1 && placeOnTip(incomingBlock) {
+		go BroadcastNewBlock(incomingBlock)
 	}
-	if incomingBlock.Index == currentTip.Index+1 {
-		if SaveBlockToStorageInternal(incomingBlock) {
-			go BroadcastNewBlock(incomingBlock)
-		}
+}
+
+// placeOnTip checks a block that is to follow the newest block and stores
+// it. It holds the chain still while it does: a block from a neighbour and a
+// pass that is comparing chains (sync_pass.go) both add blocks, and each
+// used to look at the newest block, then check, then store, with nothing to
+// stop the other doing the same in between. Two of them adding the same
+// block at once could leave the pass believing its source had sent a bad
+// block, and the source was then set aside for ten minutes. Under the lock
+// each sees the chain as the other left it.
+func placeOnTip(block Block) bool {
+	StateMutex.Lock()
+	defer StateMutex.Unlock()
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		atomic.StoreInt32(&blockMissedDuringPass, 1)
+		return false
 	}
+	tip := GetLatestBlockInternal()
+	if block.Index != tip.Index+1 || block.PrevHash != tip.Hash {
+		return false
+	}
+	return ValidateBlockSignatures(block) && SaveBlockToStorageInternal(block)
 }
 func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	if incomingBlock.Index <= 0 {
@@ -172,6 +189,23 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 		atomic.StoreInt32(&blockMissedDuringPass, 1)
 		return
 	}
+	// A block whose parent this node has asked a neighbour for, and which
+	// has not come yet, is kept for a moment and placed once the parent is
+	// here (see placeAfterItsParent).
+	if placeAfterItsParent(incomingBlock) {
+		return
+	}
+	placeWireBlock(incomingBlock)
+}
+
+// placeWireBlock puts a block that arrived from a neighbour where it belongs:
+// on top of the chain, beside the newest block as its rival, or nowhere, in
+// which case the node compares chains with others.
+func placeWireBlock(incomingBlock Block) {
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		atomic.StoreInt32(&blockMissedDuringPass, 1)
+		return
+	}
 	StateMutex.Lock()
 	currentTip := GetLatestBlockInternal()
 	StateMutex.Unlock()
@@ -180,10 +214,7 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 			requestSyncPassForBlock()
 			return
 		}
-		if !ValidateBlockSignatures(incomingBlock) {
-			return
-		}
-		if SaveBlockToStorageInternal(incomingBlock) {
+		if placeOnTip(incomingBlock) {
 			SignalMinerReset()
 			go BroadcastNewBlock(incomingBlock)
 		}

@@ -52,6 +52,7 @@ type localNode struct {
 	folder  string
 	args    []string
 	env     []string
+	program string // another version of the program to run, or empty for this one
 	process *exec.Cmd
 	done    chan struct{}
 	exit    error
@@ -88,6 +89,66 @@ func multiNodeProgram(t *testing.T) string {
 		t.Fatal(buildProgramErr)
 	}
 	return builtProgram
+}
+
+// earlierVersion is the release that nodes of this version must be able to
+// share a network with.
+const earlierVersion = "v5.0.0-rc11"
+
+var (
+	buildEarlierOnce sync.Once
+	builtEarlier     string
+	buildEarlierErr  error
+)
+
+// earlierProgram builds the program as it was at the earlier release, from
+// this repository's own history, with the local test network in it. The test
+// is skipped where that history is not at hand.
+func earlierProgram(t *testing.T) string {
+	t.Helper()
+	buildEarlierOnce.Do(func() {
+		folder, err := os.MkdirTemp("", "cvn-multinode-earlier-")
+		if err != nil {
+			buildEarlierErr = err
+			return
+		}
+		source := filepath.Join(folder, "source")
+		add := exec.Command("git", "worktree", "add", "--detach", source, earlierVersion)
+		add.Dir = ".."
+		if out, err := add.CombinedOutput(); err != nil {
+			buildEarlierErr = fmt.Errorf("skip: %s is not in this copy of the repository: %v\n%s", earlierVersion, err, out)
+			return
+		}
+		defer func() {
+			remove := exec.Command("git", "worktree", "remove", "--force", source)
+			remove.Dir = ".."
+			_ = remove.Run()
+		}()
+		name := "cvn_earlier"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		builtEarlier = filepath.Join(folder, name)
+		build := exec.Command("go", "build", "-tags", "multinode", "-o", builtEarlier, ".")
+		build.Dir = source
+		if out, err := build.CombinedOutput(); err != nil {
+			buildEarlierErr = fmt.Errorf("building %s: %v\n%s", earlierVersion, err, out)
+		}
+	})
+	if buildEarlierErr != nil {
+		if strings.HasPrefix(buildEarlierErr.Error(), "skip:") {
+			t.Skip(buildEarlierErr)
+		}
+		t.Fatal(buildEarlierErr)
+	}
+	return builtEarlier
+}
+
+// earlier makes a node run the earlier release in place of this version.
+func (n *localNode) earlier() *localNode {
+	n.program = earlierProgram(n.cluster.t)
+	n.name += " (" + earlierVersion + ")"
+	return n
 }
 
 // measuredStartingDifficulty picks a starting difficulty at which one mining
@@ -197,7 +258,11 @@ func (n *localNode) startNode() *localNode {
 		t.Fatal(err)
 	}
 	fmt.Fprintf(logFile, "\n===== started %s: %s =====\n", time.Now().Format("15:04:05"), strings.Join(n.args, " "))
-	process := exec.Command(n.cluster.program, n.args...)
+	program := n.cluster.program
+	if n.program != "" {
+		program = n.program
+	}
+	process := exec.Command(program, n.args...)
 	process.Dir = n.folder
 	process.Env = n.env
 	process.Stdout, process.Stderr = logFile, logFile
@@ -261,8 +326,15 @@ func (c *localCluster) saveStacks() {
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	for _, n := range c.nodes {
+		// The whole log, and the node's own account of its newest block.
+		_ = os.WriteFile(filepath.Join(folder, n.name+".log"), []byte(n.log()), 0600)
 		if !n.running() {
 			continue
+		}
+		if resp, err := client.Get(n.url("/block")); err == nil {
+			data, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			_ = os.WriteFile(filepath.Join(folder, n.name+".block.json"), data, 0600)
 		}
 		resp, err := client.Get(fmt.Sprintf("http://%s:%d/debug/pprof/goroutine?debug=2", n.host, localnetDebugPort))
 		if err != nil {
@@ -720,18 +792,33 @@ func (c *localCluster) restAndCheckAccounts(limit time.Duration, nodes ...*local
 		Vault  int64  `json:"vault_units"`
 	}
 	var settled state
-	c.eventually(limit, "with the miners stopped, the nodes did not come to rest on one block", func() bool {
+	agreed := func() (state, bool) {
 		var first state
 		if !nodes[0].get("/block", &first) {
-			return false
+			return first, false
 		}
 		for _, n := range nodes[1:] {
 			var other state
 			if !n.get("/block", &other) || other != first {
-				return false
+				return first, false
 			}
 		}
-		settled = first
+		return first, true
+	}
+	c.eventually(limit, "with the miners stopped, the nodes did not come to rest on one block", func() bool {
+		// At rest means still agreeing a moment later. A miner that was
+		// stopped a moment after finding a block has that block still on its
+		// way to the others, and one look can fall just before it lands.
+		first, ok := agreed()
+		if !ok {
+			return false
+		}
+		time.Sleep(2 * time.Second)
+		again, ok := agreed()
+		if !ok || again != first {
+			return false
+		}
+		settled = again
 		return true
 	})
 	want := nodes[0].balances()
@@ -761,16 +848,70 @@ func (c *localCluster) restAndCheckAccounts(limit time.Duration, nodes ...*local
 // Blocks filled to the size limit: mined, passed between real nodes, checked
 // by each, and counted the same by all. The same code that fills them here
 // is the tool for doing it on a real test network (fill_blocks_devtool.go).
-func TestMultiNodeFullBlocks(t *testing.T) {
+func TestMultiNodeFullBlocks(t *testing.T) { fullBlocksBetweenRealNodes(t, false) }
+
+// The same, on a network where some nodes run the earlier release: a seed
+// and an ordinary node on the old version, a seed, an ordinary node and the
+// miner on this one. Blocks at the size limit have to reach all of them, by
+// announcement where both ends understand that and whole where one does not,
+// and every node has to end with the same chain and the same coins.
+func TestMultiNodeOldAndNewVersionsTogether(t *testing.T) { fullBlocksBetweenRealNodes(t, true) }
+
+// handOverTogether gives a node many transfers, eight at a time. One at a
+// time takes long enough on a busy machine for the miner to find several
+// blocks meanwhile, each holding only the transfers that had arrived by then
+// and none of them full.
+func handOverTogether(t *testing.T, to *localNode, transfers []Transaction) {
+	t.Helper()
+	var handing sync.WaitGroup
+	refusals := make(chan error, len(transfers))
+	next := make(chan Transaction)
+	for worker := 0; worker < 8; worker++ {
+		handing.Add(1)
+		go func() {
+			defer handing.Done()
+			for tx := range next {
+				if err := SubmitTransferOverHTTP(to.url(""), tx); err != nil {
+					refusals <- err
+				}
+			}
+		}()
+	}
+	for _, tx := range transfers {
+		next <- tx
+	}
+	close(next)
+	handing.Wait()
+	select {
+	case err := <-refusals:
+		t.Fatalf("%s refused a transfer: %v", to.name, err)
+	default:
+	}
+}
+
+func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 	c := newLocalCluster(t)
 	const wait = 4 * time.Minute
 	key, pub, address := newTestWallet(t)
 
-	seedA := c.seed("seed-a", 1, []int{1, 2}).startNode()
+	seedA := c.seed("seed-a", 1, []int{1, 2})
+	if withEarlierVersion {
+		seedA.earlier()
+	}
+	seedA.startNode()
 	seedB := c.seed("seed-b", 2, []int{1, 2}).startNode()
 	c.waitForHeight(30*time.Second, 0, seedA, seedB)
+	watched := []*localNode{seedA, seedB}
+	if withEarlierVersion {
+		// Two nodes that are nobody's seed: they hear of blocks only through
+		// the connections they keep open to the seeds.
+		watched = append(watched,
+			c.seed("old-node", 21, []int{1, 2}).earlier().startNode(),
+			c.seed("new-node", 22, []int{1, 2}).startNode())
+		c.waitForHeight(30*time.Second, 0, watched...)
+	}
 	miner := c.miner("miner", 11, []int{1, 2}, address).startNode()
-	c.waitForHeight(wait, 6, miner, seedA, seedB)
+	c.waitForHeight(wait, 6, append([]*localNode{miner}, watched...)...)
 
 	// First cut six rewards into fifty coins each, so there are enough
 	// coins to make a block's worth of transfers at once.
@@ -808,14 +949,15 @@ func TestMultiNodeFullBlocks(t *testing.T) {
 		t.Fatalf("built only %d bytes of transfers; a block holds %d", bytes, budget)
 	}
 	from := miner.height()
-	for _, tx := range transfers {
-		if err := SubmitTransferOverHTTP(miner.url(""), tx); err != nil {
-			t.Fatalf("the miner refused a transfer: %v", err)
-		}
+	handOverTogether(t, miner, transfers)
+	var seeds []string
+	names := make(map[string]string)
+	for _, n := range watched {
+		seeds = append(seeds, n.url(""))
+		names[n.url("")] = n.name
 	}
-	seeds := []string{seedA.url(""), seedB.url("")}
-	blocks := watchBlocks(miner.url(""), seeds, from, 6, 20*time.Second, wait, nil)
-	if len(blocks) < 6 {
+	blocks := watchBlocks(miner.url(""), seeds, from, 8, 20*time.Second, wait, nil)
+	if len(blocks) < 8 {
 		// The miner stopped making blocks with transfers still waiting.
 		c.saveStacks()
 	}
@@ -834,10 +976,10 @@ func TestMultiNodeFullBlocks(t *testing.T) {
 		for _, seed := range seeds {
 			delay, reached := b.Delay[seed]
 			if !reached {
-				t.Errorf("full block #%d (%d bytes) did not reach %s within 20 seconds", b.Height, b.Bytes, seed)
+				t.Errorf("full block #%d (%d bytes) did not reach %s within 20 seconds", b.Height, b.Bytes, names[seed])
 				continue
 			}
-			t.Logf("full block #%d: %d bytes, %d transfers, on %s after %.2f s", b.Height, b.Bytes, b.Transfers, seed, delay.Seconds())
+			t.Logf("full block #%d: %d bytes, %d transfers, on %s after %.2f s", b.Height, b.Bytes, b.Transfers, names[seed], delay.Seconds())
 		}
 	}
 	if full < 2 {
@@ -859,13 +1001,9 @@ func TestMultiNodeFullBlocks(t *testing.T) {
 		t.Fatalf("built %d combining transfers for %d pieces", len(combines), len(transfers)*TxMaxOutputs)
 	}
 	from = miner.height()
-	for _, tx := range combines {
-		if err := SubmitTransferOverHTTP(miner.url(""), tx); err != nil {
-			t.Fatalf("the miner refused a combining transfer: %v", err)
-		}
-	}
+	handOverTogether(t, miner, combines)
 	carried = 0
-	for _, b := range watchBlocks(miner.url(""), seeds, from, combineBytes/budget+2, 20*time.Second, wait, nil) {
+	for _, b := range watchBlocks(miner.url(""), seeds, from, combineBytes/budget+4, 20*time.Second, wait, nil) {
 		carried += b.Transfers
 		if b.Bytes > Params.MaxBlockBytes {
 			t.Errorf("block #%d is %d bytes, over the limit of %d", b.Height, b.Bytes, Params.MaxBlockBytes)
@@ -885,8 +1023,25 @@ func TestMultiNodeFullBlocks(t *testing.T) {
 		t.Errorf("%d combining transfers (%d bytes) were sent and the next blocks carried %d", len(combines), combineBytes, carried)
 	}
 
+	// How the large blocks travelled. A node of this version asks for a
+	// block that was announced to it; a node of the earlier version knows
+	// nothing of announcements and must never have been sent one it acted on.
+	asked := make(map[string]int)
+	for _, n := range c.nodes {
+		asked[n.name] = strings.Count(n.log(), "asking for it")
+		t.Logf("%s asked for %d announced block(s)", n.name, asked[n.name])
+		if n.program != "" && asked[n.name] > 0 {
+			t.Errorf("%s runs the earlier version and yet asked for an announced block", n.name)
+		}
+	}
+	if !withEarlierVersion && (asked[seedA.name] < full || asked[seedB.name] < full) {
+		// Among nodes of this version a large block is never sent unasked,
+		// so each seed must have asked for every full block it holds.
+		t.Errorf("%d full blocks were mined, and the seeds asked for %d and %d: a large block was sent without being asked for", full, asked[seedA.name], asked[seedB.name])
+	}
+
 	miner.stopNode()
-	height := c.restAndCheckAccounts(wait, seedA, seedB)
+	height := c.restAndCheckAccounts(wait, watched...)
 	// The pieces are all still the sender's: the coins moved nowhere.
 	if got, want := seedA.balances()[address], float64(height)*50; got >= want || got < want-1 {
 		t.Errorf("the wallet holds %v CVN at block #%d; it should hold just under %v (the fees' fifth is in the vault)", got, height, want)
@@ -894,6 +1049,12 @@ func TestMultiNodeFullBlocks(t *testing.T) {
 	for _, n := range c.nodes {
 		if log := n.log(); strings.Contains(log, "panic:") || strings.Contains(log, "is not valid") {
 			t.Errorf("%s's log shows a panic or a refused block", n.name)
+		}
+		// Blocks here come a second or two apart, large ones followed
+		// closely by small ones. No node of this version may take that for
+		// having fallen behind and set an honest neighbour aside.
+		if n.program == "" && strings.Contains(n.log(), "did not deliver one") {
+			t.Errorf("%s set a neighbour aside for not delivering a chain", n.name)
 		}
 	}
 }

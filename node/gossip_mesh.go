@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	mathrand "math/rand"
 	"net"
 	"os"
 	"runtime"
@@ -22,9 +23,13 @@ const (
 )
 
 var (
-	ActivePeerMap         = make(map[string]time.Time)
-	PeerMapMutex          sync.RWMutex
-	MaxMeshConnectionPool = make(chan struct{}, 200)
+	ActivePeerMap = make(map[string]time.Time)
+	PeerMapMutex  sync.RWMutex
+	// MaxMeshConnectionPool is how many connections from nodes that are not
+	// seeds are served at once. Most are connections that stay open to
+	// receive blocks, and an open connection that only hears announcements
+	// costs little.
+	MaxMeshConnectionPool = make(chan struct{}, 600)
 
 	// Security Blacklists & IP Connection Trackers
 	IPConnectionRegistry = make(map[string]int)
@@ -184,8 +189,14 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
 	rateLimiter := GetIPRateLimiter(remoteIP)
 
+	// Transfers have an allowance of their own. When they shared one with
+	// everything else, a node that passed on a burst of transfers could have
+	// its next block ignored by the receiver.
+	transferLimiter := GetIPRateLimiter("transfers|" + remoteIP)
+
 	defer func() {
 		unregisterRelaySubscriber(conn)
+		forgetRelayConnection(conn)
 		conn.Close()
 		decrementIPConnection(remoteIP)
 		if pooled {
@@ -244,13 +255,33 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 			return
 		}
 
-		if !rateLimiter.Allow() {
-			continue
-		}
-
 		msg := string(payloadBuffer)
 		msg = strings.TrimSpace(msg)
 		if msg == "" {
+			continue
+		}
+		if strings.HasPrefix(msg, "TX_BROADCAST:") {
+			if !transferLimiter.Allow() {
+				continue
+			}
+		} else if !rateLimiter.Allow() {
+			continue
+		}
+
+		if strings.HasPrefix(msg, "RELAY_FEATURES:") {
+			// The other end says what it understands. It is told the same
+			// about this node, once.
+			if strings.Contains(msg, relayFeatureAnnounce) && noteConnectionAnnounces(conn) {
+				writeFramedPayloadNatively(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
+			}
+			continue
+		}
+		if strings.HasPrefix(msg, "BLOCK_ANNOUNCE:") {
+			handleBlockAnnouncement(conn, remoteIP, strings.TrimPrefix(msg, "BLOCK_ANNOUNCE:"))
+			continue
+		}
+		if strings.HasPrefix(msg, "BLOCK_REQUEST:") {
+			handleBlockRequest(conn, strings.TrimPrefix(msg, "BLOCK_REQUEST:"))
 			continue
 		}
 
@@ -308,9 +339,7 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 			}
 			// Only transfers that pass the full checks are stored and passed
 			// on; a transfer we already hold is not relayed again.
-			if AdmitTransactionToMempool(incomingTx) == nil {
-				go BroadcastNewTransaction(incomingTx)
-			}
+			queueIncomingTransfer(incomingTx)
 			continue
 		}
 
@@ -372,7 +401,19 @@ func BroadcastNewBlock(b Block) {
 		return
 	}
 	payload := fmt.Sprintf("BLOCK_BROADCAST:%s", string(jsonBytes))
-	transmitPayloadToNetworkBoundary(payload)
+	// A block is passed on once, however many parts of the program ask.
+	if !rememberBlockPassedOn(b.Hash, payload) {
+		return
+	}
+	// A large block is announced to the nodes that understand that, and
+	// sent whole only to those that ask (see block_relay.go).
+	announcement := ""
+	if len(payload) > announceBlocksOverBytes {
+		if short, err := json.Marshal(blockAnnouncement{Height: b.Index, Hash: b.Hash}); err == nil {
+			announcement = "BLOCK_ANNOUNCE:" + string(short)
+		}
+	}
+	transmitPayloadToNetworkBoundary(payload, announcement)
 }
 
 func BroadcastNewTransaction(tx Transaction) {
@@ -381,10 +422,14 @@ func BroadcastNewTransaction(tx Transaction) {
 		return
 	}
 	payload := fmt.Sprintf("TX_BROADCAST:%s", string(jsonBytes))
-	transmitPayloadToNetworkBoundary(payload)
+	transmitPayloadToNetworkBoundary(payload, "")
 }
 
-func transmitPayloadToNetworkBoundary(payload string) {
+// transmitPayloadToNetworkBoundary passes a block or a transfer on: down
+// every connection already open, and to a few nodes with no open connection
+// by calling them up. announcement, when not empty, is sent in place of the
+// payload to the open connections whose other end understands it.
+func transmitPayloadToNetworkBoundary(payload, announcement string) {
 	PeerMapMutex.RLock()
 	var targets []string
 	for peer := range ActivePeerMap {
@@ -397,17 +442,25 @@ func transmitPayloadToNetworkBoundary(payload string) {
 		localBypassIP = Params.WindowsSelfSkipHost
 	}
 
-	// Peers holding a relay connection to us get the payload down that
-	// connection, so dialing them as well would only deliver it twice (or time
-	// out against their firewall).
-	subscribedIPs := pushPayloadToRelaySubscribers(payload)
+	// Nodes with a connection open to us, or that we have one open to, get
+	// it down that connection. Calling them up as well would only deliver it
+	// twice (or time out against their firewall).
+	reached := sendOverOpenConnections(payload, announcement)
 
+	// Of the others, a fixed number are called up, chosen afresh each time.
+	// Every node that takes the block does the same, so it still reaches
+	// them all, and the work per node no longer grows with the network.
+	mathrand.Shuffle(len(targets), func(a, b int) { targets[a], targets[b] = targets[b], targets[a] })
+	called := 0
 	for _, address := range targets {
 		if localBypassIP != "" && strings.Contains(address, localBypassIP) && runtime.GOOS == "windows" {
 			continue
 		}
-		if host, _, splitErr := net.SplitHostPort(address); splitErr == nil && subscribedIPs[host] {
+		if host, _, splitErr := net.SplitHostPort(address); splitErr == nil && reached[host] {
 			continue
+		}
+		if called++; called > freshCallsPerMessage {
+			break
 		}
 		go func(addr string) {
 			conn, err := dialPeer(addr, 3*time.Second)

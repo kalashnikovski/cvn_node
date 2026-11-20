@@ -96,6 +96,7 @@ PROGRAM = [
     "node/sync_pass.go",
     "node/gossip_mesh.go",
     "node/relay_uplink.go",
+    "node/block_relay.go",
     "node/peer_cache.go",
     "node/own_address.go",
     "node/join_check.go",

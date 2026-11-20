@@ -31,13 +31,18 @@ import (
 //
 // Peers running older code ignore RELAY_SUBSCRIBE; the uplink then simply acts
 // as the usual keep-alive ping.
+//
+// The same connection is used the other way too: a node sends its own blocks
+// and transfers up its uplinks, in place of opening a new connection to the
+// far end for each one. What is sent, and when a block is announced in place
+// of being sent, is in block_relay.go.
 
 const (
 	relayMaxUplinks        = 8
 	relayPingInterval      = 15 * time.Second
 	relayReadTimeout       = 45 * time.Second
 	relayRetryAfterFailure = 2 * time.Minute
-	relayMaxSubscribers    = 64
+	relayMaxSubscribers    = 256
 )
 
 // localNodeInstanceID is random per process. It lets a node notice that an
@@ -81,23 +86,6 @@ func unregisterRelaySubscriber(conn net.Conn) {
 	relaySubscribersMutex.Lock()
 	delete(relaySubscribers, conn)
 	relaySubscribersMutex.Unlock()
-}
-
-// pushPayloadToRelaySubscribers sends one payload down every subscribed
-// connection and returns the IPs it was pushed to.
-func pushPayloadToRelaySubscribers(payload string) map[string]bool {
-	pushedIPs := make(map[string]bool)
-	relaySubscribersMutex.RLock()
-	connections := make([]net.Conn, 0, len(relaySubscribers))
-	for conn, ip := range relaySubscribers {
-		connections = append(connections, conn)
-		pushedIPs[ip] = true
-	}
-	relaySubscribersMutex.RUnlock()
-	for _, conn := range connections {
-		go writeFramedPayloadNatively(conn, payload)
-	}
-	return pushedIPs
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +179,16 @@ func runRelayUplink(address string, announcedID string) {
 	defer conn.Close()
 	everConnected = true
 
+	// This connection also carries this node's own blocks and transfers to
+	// the far end (see block_relay.go).
+	farHost, _, _ := net.SplitHostPort(address)
+	registerUplinkConnection(conn, farHost)
+	defer forgetRelayConnection(conn)
+
 	writeFramedPayloadNatively(conn, "RELAY_SUBSCRIBE:"+announcedID)
+	// A far end running an older version does not know this line and lets
+	// it pass; it is then sent whole blocks, as before.
+	writeFramedPayloadNatively(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
 	writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
 
 	stopPinging := make(chan struct{})
@@ -233,6 +230,17 @@ func runRelayUplink(address string, announcedID string) {
 		msg := strings.TrimSpace(string(payload))
 
 		switch {
+		case strings.HasPrefix(msg, "RELAY_FEATURES:"):
+			if strings.Contains(msg, relayFeatureAnnounce) {
+				noteConnectionAnnounces(conn)
+			}
+
+		case strings.HasPrefix(msg, "BLOCK_ANNOUNCE:"):
+			handleBlockAnnouncement(conn, farHost, strings.TrimPrefix(msg, "BLOCK_ANNOUNCE:"))
+
+		case strings.HasPrefix(msg, "BLOCK_REQUEST:"):
+			handleBlockRequest(conn, strings.TrimPrefix(msg, "BLOCK_REQUEST:"))
+
 		case strings.HasPrefix(msg, "RELAY_ACK:"):
 			if strings.TrimSpace(strings.TrimPrefix(msg, "RELAY_ACK:")) == announcedID {
 				// We dialed our own public address.
@@ -310,9 +318,7 @@ func runRelayUplink(address string, announcedID string) {
 			if json.Unmarshal([]byte(strings.TrimPrefix(msg, "TX_BROADCAST:")), &incomingTx) != nil {
 				continue
 			}
-			if AdmitTransactionToMempool(incomingTx) == nil {
-				go BroadcastNewTransaction(incomingTx)
-			}
+			queueIncomingTransfer(incomingTx)
 		}
 	}
 }

@@ -802,6 +802,12 @@ func TriggerActiveReSyncPass() {
 				continue
 			}
 			if !ValidateBlockSignatures(block) {
+				// A block that fails here because this node took the very
+				// same block another way a moment ago (it was on its way from
+				// a neighbour when the pass began) is no fault of the source.
+				if GetBlockByHeightFromDB(block.Index).Hash == block.Hash {
+					continue
+				}
 				log.Printf("⚠️ [SYNC] Block #%d from %s is not valid. Ending this pass.\n", block.Index, source)
 				refused = true
 				break
