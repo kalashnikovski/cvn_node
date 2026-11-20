@@ -206,24 +206,24 @@ func TestABurstOfTransfersDoesNotCrowdOutABlock(t *testing.T) {
 	t.Cleanup(func() { GlobalBoltEngine = savedEngine })
 
 	near, far := connectedPair(t)
-	go handleIncomingPeerStream(far, false)
+	go serveInboundConnection(far, false)
 
 	// Far more transfers than one address is allowed in a burst. They are
 	// not valid transfers, which costs the sender nothing here.
 	for i := 0; i < 300; i++ {
-		writeFramedPayloadNatively(near, `TX_BROADCAST:{"tx_id":"none"}`)
+		writeFrame(near, `TX_BROADCAST:{"tx_id":"none"}`)
 	}
-	writeFramedPayloadNatively(near, "RELAY_FEATURES:"+relayFeatureAnnounce)
+	writeFrame(near, "RELAY_FEATURES:"+relayFeatureAnnounce)
 	if got, ok := readRelayFrame(t, near, 3*time.Second); !ok || got != "RELAY_FEATURES:"+relayFeatureAnnounce {
 		t.Fatalf("after a burst of transfers the node no longer answered: %q", got)
 	}
 	announcement, _ := json.Marshal(blockAnnouncement{Height: 9, Hash: testHash("f")})
-	writeFramedPayloadNatively(near, "BLOCK_ANNOUNCE:"+string(announcement))
+	writeFrame(near, "BLOCK_ANNOUNCE:"+string(announcement))
 	if got, ok := readRelayFrame(t, near, 3*time.Second); !ok || got != "BLOCK_REQUEST:"+string(announcement) {
 		t.Fatalf("after a burst of transfers a block announcement went unheard: %q", got)
 	}
 	// Saying it again brings no second answer.
-	writeFramedPayloadNatively(near, "RELAY_FEATURES:"+relayFeatureAnnounce)
+	writeFrame(near, "RELAY_FEATURES:"+relayFeatureAnnounce)
 	if got, ok := readRelayFrame(t, near, 300*time.Millisecond); ok {
 		t.Errorf("the features line was answered a second time: %q", got)
 	}

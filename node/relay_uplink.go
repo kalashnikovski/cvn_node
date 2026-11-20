@@ -2,11 +2,9 @@ package node
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"strings"
@@ -185,11 +183,11 @@ func runRelayUplink(address string, announcedID string) {
 	registerUplinkConnection(conn, farHost)
 	defer forgetRelayConnection(conn)
 
-	writeFramedPayloadNatively(conn, "RELAY_SUBSCRIBE:"+announcedID)
+	writeFrame(conn, "RELAY_SUBSCRIBE:"+announcedID)
 	// A far end running an older version does not know this line and lets
 	// it pass; it is then sent whole blocks, as before.
-	writeFramedPayloadNatively(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
-	writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
+	writeFrame(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
+	writeFrame(conn, "PEER_PING:DISCOVERY_REQUEST")
 
 	stopPinging := make(chan struct{})
 	defer close(stopPinging)
@@ -201,30 +199,15 @@ func runRelayUplink(address string, announcedID string) {
 			case <-stopPinging:
 				return
 			case <-ticker.C:
-				writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
+				writeFrame(conn, "PEER_PING:DISCOVERY_REQUEST")
 			}
 		}
 	}()
 
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(relayReadTimeout))
-		header := make([]byte, 4)
-		if _, err := io.ReadFull(conn, header); err != nil {
-			return
-		}
-		frameLength := binary.BigEndian.Uint32(header)
-		if frameLength > MaxPayloadFrameSize {
-			return
-		}
-		mac := make([]byte, 32)
-		if _, err := io.ReadFull(conn, mac); err != nil {
-			return
-		}
-		payload := make([]byte, frameLength)
-		if _, err := io.ReadFull(conn, payload); err != nil {
-			return
-		}
-		if !VerifyPayloadHMAC(payload, mac) {
+		payload, signature, err := readFrame(conn)
+		if err != nil || !VerifyPayloadHMAC(payload, signature) {
 			return
 		}
 		msg := strings.TrimSpace(string(payload))

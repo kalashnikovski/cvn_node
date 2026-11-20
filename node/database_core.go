@@ -50,7 +50,8 @@ func InitBoltEngine() {
 		bUTXO, _ := tx.CreateBucketIfNotExists(utxoBucket)
 		_, _ = tx.CreateBucketIfNotExists(undoBucket)
 
-		// 👑 THE DETERMINISTIC GENESIS BOOTSTRAPPER ENGINE: Wiped Clean of Pre-mines
+		// An empty database is given this network's first block, which pays
+		// nothing to anyone (see genesis.go).
 		if bBlocks.Stats().KeyN == 0 {
 			paddedZeroKey := fmt.Sprintf("%016d", int64(0))
 
@@ -463,14 +464,12 @@ func SaveBlockToStorageInternal(block Block) bool {
 		ApplyIncrementalDeltaCacheUpdate(block)
 	}
 
-	// 👑 PRODUCTION REMEDY: ISOLATED BROADCAST LAYER INTERCEPT
-	// Extract text payload transmissions out of the exclusive BoltDB transaction handles!
-	// This isolates network streaming operations and opens up full block win parities.
+	// The block is passed on only now, after the database has let go of it:
+	// sending must never hold up storing.
 	// A block stored while catching up is one the network already has;
 	// announcing each of them would be noise, hundreds of times over.
 	if atomic.LoadInt32(&IsSyncingActive) == 0 && len(block.Transactions) > 0 {
 		go func(b Block) {
-			// Cleanly forward headers straight through the structured packet marshalling pipeline
 			BroadcastNewBlock(b)
 		}(block)
 	}

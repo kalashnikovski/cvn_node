@@ -88,6 +88,9 @@ RULES = [
 PROGRAM = [
     "main.go",
     "node/main.go",
+    "node/http_api.go",
+    "node/dashboard.go",
+    "node/builtin_miner.go",
     "node/anchor_wait.go",
     "node/genesis_watch.go",
     "node/bitcoin_headers.go",

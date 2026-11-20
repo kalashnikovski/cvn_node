@@ -10,8 +10,11 @@ import (
 	"time"
 )
 
-// 👑 SYSTEM SCALING INFRASTRUCTURE: AUTHENTICATION SECRETS
-// Used to cleanly discard raw packet flooding before unmarshaling JSON payloads.
+// getNetworkAuthSecret is the key every message between nodes of one network
+// is signed with. It is not a secret: it is in the source. It lets a node
+// drop, cheaply and before reading it, anything that was not written for
+// this network, such as a message from a node of another CVN network or the
+// stray traffic every open port receives.
 func getNetworkAuthSecret() []byte {
 	secret := os.Getenv("CVN_NETWORK_AUTH_TOKEN")
 	if secret == "" {

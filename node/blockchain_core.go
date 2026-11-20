@@ -215,7 +215,6 @@ func placeWireBlock(incomingBlock Block) {
 			return
 		}
 		if placeOnTip(incomingBlock) {
-			SignalMinerReset()
 			go BroadcastNewBlock(incomingBlock)
 		}
 		return

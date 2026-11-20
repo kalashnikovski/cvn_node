@@ -3,6 +3,7 @@ package node
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,11 +16,15 @@ import (
 	"time"
 )
 
-// Global Peer Registry Configuration Constants
 const (
-	MaxPeerMapCapacity  = 200
-	MaxPayloadFrameSize = 2048 * 1024 // 👑 UPGRADED TO 2 MB PRODUCTION CEILING WINDOW FOR NETWORK PARITY
-	DefaultReadTimeout  = 30 * time.Second
+	// MaxPeerMapCapacity is how many other nodes a node keeps track of.
+	MaxPeerMapCapacity = 200
+	// MaxPayloadFrameSize is the largest message a node will read: 2 MB,
+	// several times the largest block.
+	MaxPayloadFrameSize = 2048 * 1024
+	// DefaultReadTimeout is how long an inbound connection may say nothing
+	// before it is closed.
+	DefaultReadTimeout = 30 * time.Second
 )
 
 var (
@@ -31,7 +36,8 @@ var (
 	// costs little.
 	MaxMeshConnectionPool = make(chan struct{}, 600)
 
-	// Security Blacklists & IP Connection Trackers
+	// Connections open from each address, addresses refused for a while,
+	// and how many malformed messages each address has sent.
 	IPConnectionRegistry = make(map[string]int)
 	IPRegistryMutex      sync.Mutex
 	MaliciousIPBlacklist = make(map[string]time.Time)
@@ -39,7 +45,8 @@ var (
 	IPMalformedTrack     = make(map[string]int)
 )
 
-// TokenBucket handles per-remote-IP network token rate limiting
+// TokenBucket is an allowance of messages for one address: so many at once,
+// refilled at a steady rate. A message beyond the allowance is dropped.
 type TokenBucket struct {
 	tokens     float64
 	maxTokens  float64
@@ -97,7 +104,7 @@ func StartMeshNetwork() {
 	defer listener8080.Close()
 
 	StartPeerCache()
-	go runNetworkTopologyDiscoveryDiscoveryLoop()
+	go runPeerDiscovery()
 	go runRelayUplinkManager()
 	SetupAutomatedPortMapping()
 
@@ -132,12 +139,12 @@ func StartMeshNetwork() {
 		// kept, and anyone can hold them for as long as they keep talking,
 		// so the seeds must not depend on finding one free.
 		if isSeedHost(remoteIP) {
-			go handleIncomingPeerStream(conn, false)
+			go serveInboundConnection(conn, false)
 			continue
 		}
 		select {
 		case MaxMeshConnectionPool <- struct{}{}:
-			go handleIncomingPeerStream(conn, true)
+			go serveInboundConnection(conn, true)
 		default:
 			decrementIPConnection(remoteIP)
 			conn.Close()
@@ -161,10 +168,11 @@ func flagMalformedIP(ip string) {
 	count := IPMalformedTrack[ip]
 	IPRegistryMutex.Unlock()
 
-	if count >= 10 { // 👑 Relax structural block bounds to ensure clean cross-continental handshakes
+	// One malformed message can be an accident of the network. Ten are not.
+	if count >= 10 {
 		BlacklistMutex.Lock()
 		MaliciousIPBlacklist[ip] = time.Now().Add(5 * time.Minute)
-		log.Printf("🚫 [SECURITY FIREWALL] IP %s blacklisted for 5 minutes due to tracking variations.\n", ip)
+		log.Printf("🚫 [NETWORK] %s has sent ten malformed messages. Nothing is taken from it for 5 minutes.\n", ip)
 		BlacklistMutex.Unlock()
 	}
 }
@@ -182,9 +190,9 @@ func isSeedHost(host string) bool {
 	return false
 }
 
-// handleIncomingPeerStream serves one inbound connection. pooled says
+// serveInboundConnection serves one inbound connection. pooled says
 // whether it holds one of the shared places, which it gives back at the end.
-func handleIncomingPeerStream(conn net.Conn, pooled bool) {
+func serveInboundConnection(conn net.Conn, pooled bool) {
 	remoteAddr := conn.RemoteAddr().String()
 	remoteIP, _, _ := net.SplitHostPort(remoteAddr)
 	rateLimiter := GetIPRateLimiter(remoteIP)
@@ -205,52 +213,23 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 	}()
 
 	for {
-		// Enforce adaptive refreshing read deadline (30-second idle timeout)
 		_ = conn.SetReadDeadline(time.Now().Add(DefaultReadTimeout))
-
-		// 👑 CHUNK BOUNDARY ALIGNMENT: Allocate an explicit 4-byte buffer for the frame size header
-		lengthHeaderBuffer := make([]byte, 4)
-		_, err := io.ReadFull(conn, lengthHeaderBuffer)
+		payloadBuffer, signature, err := readFrame(conn)
 		if err != nil {
-			return
-		}
-
-		frameLength := binary.BigEndian.Uint32(lengthHeaderBuffer)
-		if frameLength > MaxPayloadFrameSize {
-			// Name the sender and say what the first four bytes look like. Port 8080
-			// is scanned constantly, and a web request or TLS hello read as a length
-			// header gives an absurd size; a real peer doing this is a different matter.
-			looksLike := "unknown protocol"
-			switch {
-			case string(lengthHeaderBuffer) == "GET " || string(lengthHeaderBuffer) == "POST" || string(lengthHeaderBuffer) == "HEAD" || string(lengthHeaderBuffer) == "PUT " || string(lengthHeaderBuffer) == "OPTI" || string(lengthHeaderBuffer) == "CONN":
-				looksLike = "an HTTP request, not a CVN peer"
-			case lengthHeaderBuffer[0] == 0x16 && lengthHeaderBuffer[1] == 0x03:
-				looksLike = "a TLS handshake, not a CVN peer"
-			case lengthHeaderBuffer[0] == 'S' && lengthHeaderBuffer[1] == 'S' && lengthHeaderBuffer[2] == 'H':
-				looksLike = "an SSH client, not a CVN peer"
+			var tooLarge frameTooLarge
+			if errors.As(err, &tooLarge) {
+				// Name the sender and say what the first four bytes look
+				// like. This port is scanned constantly, and a web request
+				// or TLS hello read as a length gives an absurd size; a real
+				// node doing this is a different matter.
+				log.Printf("🚨 [NETWORK] %s sent something that is not a CVN message: its first four bytes, %q, read as a length give %d bytes (%s). Closing the connection.\n", remoteIP, tooLarge.header[:], tooLarge.length, tooLarge.looksLike())
+				flagMalformedIP(remoteIP)
 			}
-			log.Printf("🚨 [FRAME VIOLATION DETECTED] %s sent a %d-byte frame header (%q: %s). Severing connection.\n", remoteIP, frameLength, lengthHeaderBuffer, looksLike)
-			flagMalformedIP(remoteIP)
 			return
 		}
-
-		// 👑 CHUNK BOUNDARY ALIGNMENT: Explicitly isolate the 32-byte HMAC signature buffer next
-		macSignatureBuffer := make([]byte, 32)
-		_, err = io.ReadFull(conn, macSignatureBuffer)
-		if err != nil {
-			return
-		}
-
-		// 👑 CHUNK BOUNDARY ALIGNMENT: Stream out exactly the designated payload bytes
-		payloadBuffer := make([]byte, frameLength)
-		_, err = io.ReadFull(conn, payloadBuffer)
-		if err != nil {
-			return
-		}
-
-		// Discard packet instantly if cross-continental cryptographic envelope checks break
-		if !VerifyPayloadHMAC(payloadBuffer, macSignatureBuffer) {
-			log.Printf("🚫 [AUTHENTICATION REFUSAL] Aborted unauthenticated or misaligned packet flood from IP: %s\n", remoteIP)
+		// A message that is not signed for this network is dropped unread.
+		if !VerifyPayloadHMAC(payloadBuffer, signature) {
+			log.Printf("🚫 [NETWORK] %s sent a message that is not signed for this network. Closing the connection.\n", remoteIP)
 			flagMalformedIP(remoteIP)
 			return
 		}
@@ -272,7 +251,7 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 			// The other end says what it understands. It is told the same
 			// about this node, once.
 			if strings.Contains(msg, relayFeatureAnnounce) && noteConnectionAnnounces(conn) {
-				writeFramedPayloadNatively(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
+				writeFrame(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
 			}
 			continue
 		}
@@ -293,7 +272,7 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 			if subscriberID != localNodeInstanceID {
 				registerRelaySubscriber(conn, remoteIP)
 			}
-			writeFramedPayloadNatively(conn, "RELAY_ACK:"+localNodeInstanceID)
+			writeFrame(conn, "RELAY_ACK:"+localNodeInstanceID)
 			continue
 		}
 
@@ -326,7 +305,7 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 			PeerMapMutex.Unlock()
 
 			listBytes, _ := json.Marshal(peers)
-			writeFramedPayloadNatively(conn, fmt.Sprintf("PEER_LIST:%s", string(listBytes)))
+			writeFrame(conn, fmt.Sprintf("PEER_LIST:%s", string(listBytes)))
 			continue
 		}
 
@@ -373,23 +352,76 @@ func handleIncomingPeerStream(conn net.Conn, pooled bool) {
 	}
 }
 
-func writeFramedPayloadNatively(w io.Writer, payload string) {
+// A MESSAGE ON THE WIRE
+//
+// Every message between nodes is one frame: four bytes giving the length of
+// the payload, 32 bytes of signature over the payload (see
+// getNetworkAuthSecret), and the payload, which is a word, a colon, and what
+// the word is about ("BLOCK_BROADCAST:" and a block, for example).
+
+// frameTooLarge is the error for a frame whose stated length is over the
+// limit. Whatever sent it is almost never a CVN node.
+type frameTooLarge struct {
+	header [4]byte
+	length uint32
+}
+
+func (e frameTooLarge) Error() string {
+	return fmt.Sprintf("a frame of %d bytes is over the limit", e.length)
+}
+
+// looksLike guesses what sent the four bytes that were read as a length.
+func (e frameTooLarge) looksLike() string {
+	switch first := string(e.header[:]); {
+	case first == "GET " || first == "POST" || first == "HEAD" || first == "PUT " || first == "OPTI" || first == "CONN":
+		return "an HTTP request"
+	case e.header[0] == 0x16 && e.header[1] == 0x03:
+		return "a TLS handshake"
+	case first[:3] == "SSH":
+		return "an SSH client"
+	}
+	return "unknown"
+}
+
+// readFrame takes one frame off a connection. It checks the length against
+// the limit and nothing else: whether the signature is good is for the
+// caller to decide, with VerifyPayloadHMAC.
+func readFrame(conn net.Conn) (payload, signature []byte, err error) {
+	var header [4]byte
+	if _, err = io.ReadFull(conn, header[:]); err != nil {
+		return nil, nil, err
+	}
+	length := binary.BigEndian.Uint32(header[:])
+	if length > MaxPayloadFrameSize {
+		return nil, nil, frameTooLarge{header: header, length: length}
+	}
+	signature = make([]byte, 32)
+	if _, err = io.ReadFull(conn, signature); err != nil {
+		return nil, nil, err
+	}
+	payload = make([]byte, length)
+	if _, err = io.ReadFull(conn, payload); err != nil {
+		return nil, nil, err
+	}
+	return payload, signature, nil
+}
+
+// writeFrame sends one frame.
+func writeFrame(w io.Writer, payload string) {
 	payloadBytes := []byte(payload)
-	macSignature := ComputePayloadHMAC(payloadBytes)
+	signature := ComputePayloadHMAC(payloadBytes)
+	var length [4]byte
+	binary.BigEndian.PutUint32(length[:], uint32(len(payloadBytes)))
 
-	// Structured serialization layout protocol: [Length Header] -> [HMAC Signature] -> [Payload JSON]
-	lengthHeaderBuffer := make([]byte, 4)
-	binary.BigEndian.PutUint32(lengthHeaderBuffer, uint32(len(payloadBytes)))
-
-	// One Write call per frame. Relay connections are written to by several
-	// goroutines (ping replies, block pushes), and three separate writes could
-	// interleave two frames into garbage.
-	frame := make([]byte, 0, 4+len(macSignature)+len(payloadBytes))
-	frame = append(frame, lengthHeaderBuffer...)
-	frame = append(frame, macSignature...)
+	// One Write call per frame. A connection is written to from several
+	// places at once (answers to pings, blocks, transfers), and three
+	// separate writes could interleave two frames into nonsense.
+	frame := make([]byte, 0, 4+len(signature)+len(payloadBytes))
+	frame = append(frame, length[:]...)
+	frame = append(frame, signature...)
 	frame = append(frame, payloadBytes...)
 	if conn, isConn := w.(net.Conn); isConn {
-		// A peer that stops reading must not be able to hang the sender.
+		// A node that stops reading must not be able to hang the sender.
 		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	}
 	_, _ = w.Write(frame)
@@ -413,7 +445,7 @@ func BroadcastNewBlock(b Block) {
 			announcement = "BLOCK_ANNOUNCE:" + string(short)
 		}
 	}
-	transmitPayloadToNetworkBoundary(payload, announcement)
+	sendToNetwork(payload, announcement)
 }
 
 func BroadcastNewTransaction(tx Transaction) {
@@ -422,14 +454,14 @@ func BroadcastNewTransaction(tx Transaction) {
 		return
 	}
 	payload := fmt.Sprintf("TX_BROADCAST:%s", string(jsonBytes))
-	transmitPayloadToNetworkBoundary(payload, "")
+	sendToNetwork(payload, "")
 }
 
-// transmitPayloadToNetworkBoundary passes a block or a transfer on: down
+// sendToNetwork passes a block or a transfer on: down
 // every connection already open, and to a few nodes with no open connection
 // by calling them up. announcement, when not empty, is sent in place of the
 // payload to the open connections whose other end understands it.
-func transmitPayloadToNetworkBoundary(payload, announcement string) {
+func sendToNetwork(payload, announcement string) {
 	PeerMapMutex.RLock()
 	var targets []string
 	for peer := range ActivePeerMap {
@@ -465,7 +497,7 @@ func transmitPayloadToNetworkBoundary(payload, announcement string) {
 		go func(addr string) {
 			conn, err := dialPeer(addr, 3*time.Second)
 			if err == nil {
-				writeFramedPayloadNatively(conn, payload)
+				writeFrame(conn, payload)
 				conn.Close()
 			}
 		}(address)
@@ -497,85 +529,77 @@ func loadStaticMeshSeeds() []string {
 	return staticMeshSeeds
 }
 
-func runNetworkTopologyDiscoveryDiscoveryLoop() {
+// runPeerDiscovery keeps the list of other nodes fresh. Every fifteen
+// seconds it asks the seeds, and the nodes remembered from earlier runs, which
+// nodes they know of, and it forgets any node not heard from for a minute and
+// a half.
+func runPeerDiscovery() {
 	for {
-		staticMeshSeeds := seedsAndCachedPeers()
-
-		for _, seedAddr := range staticMeshSeeds {
-			go func(addr string) {
-				conn, err := dialPeer(addr, 2*time.Second)
-				if err == nil {
-					writeFramedPayloadNatively(conn, "PEER_PING:DISCOVERY_REQUEST")
-
-					var frameLength uint32
-					_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
-
-					lengthHeaderBuffer := make([]byte, 4)
-					_, err = io.ReadFull(conn, lengthHeaderBuffer)
-					if err == nil {
-						frameLength = binary.BigEndian.Uint32(lengthHeaderBuffer)
-						if frameLength <= MaxPayloadFrameSize {
-							// Discard isolated hmac padding space during network discovery handshakes
-							macDiscardBuffer := make([]byte, 32)
-							_, err = io.ReadFull(conn, macDiscardBuffer)
-							if err == nil {
-								payloadBuffer := make([]byte, frameLength)
-								_, err = io.ReadFull(conn, payloadBuffer)
-								if err == nil {
-									responseString := string(payloadBuffer)
-									if strings.HasPrefix(responseString, "PEER_LIST:") {
-										// A seed that answered with a correctly signed peer list is
-										// alive, so register it now. Until this was added a node only
-										// learned a peer when that peer pinged it, so for up to 15
-										// seconds after start its blocks were broadcast to nobody.
-										if VerifyPayloadHMAC(payloadBuffer, macDiscardBuffer) {
-											PeerMapMutex.Lock()
-											if _, known := ActivePeerMap[addr]; known || len(ActivePeerMap) < MaxPeerMapCapacity {
-												ActivePeerMap[addr] = time.Now()
-											}
-											PeerMapMutex.Unlock()
-										}
-										rawPayload := strings.TrimPrefix(responseString, "PEER_LIST:")
-										var receivedAddresses []string
-										if json.Unmarshal([]byte(rawPayload), &receivedAddresses) == nil {
-											for _, ip := range receivedAddresses {
-												cleanedIP := strings.TrimSpace(strings.ReplaceAll(ip, "\r", ""))
-												if cleanedIP == "" || strings.HasPrefix(cleanedIP, "127.0.0.1") || isOwnGossipAddress(cleanedIP) {
-													continue
-												}
-												PeerMapMutex.RLock()
-												_, exists := ActivePeerMap[cleanedIP]
-												PeerMapMutex.RUnlock()
-												if !exists {
-													go func(targetIP string) {
-														dConn, dErr := dialPeer(targetIP, 2*time.Second)
-														if dErr == nil {
-															writeFramedPayloadNatively(dConn, "PEER_PING:DISCOVERY_REQUEST")
-															dConn.Close()
-														}
-													}(cleanedIP)
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-					conn.Close()
-				}
-			}(seedAddr)
+		for _, address := range seedsAndCachedPeers() {
+			go askForPeers(address)
 		}
 		time.Sleep(15 * time.Second)
 		PeerMapMutex.Lock()
 		for peer, lastSeen := range ActivePeerMap {
 			if time.Since(lastSeen) > (90 * time.Second) {
 				delete(ActivePeerMap, peer)
-				// Nodes do not hold connections open to each other; this is
-				// the list of nodes that new blocks and transfers are sent to.
 				log.Printf("🔌 [NETWORK] Nothing heard from %s for 90 seconds; no longer sending to it until it is heard from again.\n", peer)
 			}
 		}
 		PeerMapMutex.Unlock()
+	}
+}
+
+// askForPeers asks one node which nodes it knows of, and says hello to each
+// of those this node has not met.
+func askForPeers(address string) {
+	conn, err := dialPeer(address, 2*time.Second)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	writeFrame(conn, "PEER_PING:DISCOVERY_REQUEST")
+	_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+	payload, signature, err := readFrame(conn)
+	if err != nil {
+		return
+	}
+	response := string(payload)
+	if !strings.HasPrefix(response, "PEER_LIST:") {
+		return
+	}
+	// A node that answered with a correctly signed list is alive, so it is
+	// listed now. Until this was added a node only learned of another when
+	// that one pinged it, and for up to fifteen seconds after starting its
+	// blocks were sent to nobody.
+	if VerifyPayloadHMAC(payload, signature) {
+		PeerMapMutex.Lock()
+		if _, known := ActivePeerMap[address]; known || len(ActivePeerMap) < MaxPeerMapCapacity {
+			ActivePeerMap[address] = time.Now()
+		}
+		PeerMapMutex.Unlock()
+	}
+	var listed []string
+	if json.Unmarshal([]byte(strings.TrimPrefix(response, "PEER_LIST:")), &listed) != nil {
+		return
+	}
+	for _, other := range listed {
+		other = strings.TrimSpace(strings.ReplaceAll(other, "\r", ""))
+		if other == "" || strings.HasPrefix(other, "127.0.0.1") || isOwnGossipAddress(other) {
+			continue
+		}
+		PeerMapMutex.RLock()
+		_, met := ActivePeerMap[other]
+		PeerMapMutex.RUnlock()
+		if met {
+			continue
+		}
+		// A ping is how the other node comes to list this one.
+		go func(other string) {
+			if hello, err := dialPeer(other, 2*time.Second); err == nil {
+				writeFrame(hello, "PEER_PING:DISCOVERY_REQUEST")
+				hello.Close()
+			}
+		}(other)
 	}
 }

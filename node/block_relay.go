@@ -158,7 +158,7 @@ func sendOverOpenConnections(payload, announcement string) map[string]bool {
 
 	for i, connection := range connections {
 		if messages[i] != "" {
-			go writeFramedPayloadNatively(connection.conn, messages[i])
+			go writeFrame(connection.conn, messages[i])
 		}
 	}
 	return reached
@@ -209,7 +209,7 @@ func handleBlockAnnouncement(conn net.Conn, from, body string) {
 	ask := func() {
 		request, _ := json.Marshal(announced)
 		log.Printf("📦 [RELAY] Block #%d was announced by %s; asking for it.\n", announced.Height, from)
-		writeFramedPayloadNatively(conn, "BLOCK_REQUEST:"+string(request))
+		writeFrame(conn, "BLOCK_REQUEST:"+string(request))
 	}
 	wait := claimBlockFetch(announced.Hash)
 	if wait == 0 {
@@ -301,6 +301,6 @@ func handleBlockRequest(conn net.Conn, body string) {
 		return
 	}
 	if payload, kept := recentBlockPayload(wanted.Hash); kept {
-		writeFramedPayloadNatively(conn, payload)
+		writeFrame(conn, payload)
 	}
 }
