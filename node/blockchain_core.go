@@ -158,10 +158,14 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 }
 
 // placeOnTip checks a block that is to follow the newest block and stores
-// it. It holds the chain still while it does: a block from a neighbour and a
-// pass that is comparing chains (sync_pass.go) both add blocks, and each
-// used to look at the newest block, then check, then store, with nothing to
-// stop the other doing the same in between. Two of them adding the same
+// it. Every block that is added one at a time comes through here: a block
+// from a neighbour, a block this node's own miner found, and a block the
+// fast miner handed in.
+//
+// It holds the chain still while it does: those three and a pass that is
+// comparing chains (sync_pass.go) all add blocks, and each used to look at
+// the newest block, then check, then store, with nothing to stop another
+// doing the same in between. Two of them adding the same
 // block at once could leave the pass believing its source had sent a bad
 // block, and the source was then set aside for ten minutes. Under the lock
 // each sees the chain as the other left it.

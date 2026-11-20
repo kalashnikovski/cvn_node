@@ -193,8 +193,11 @@ func miningWorker(ctx context.Context, workerID int64) {
 				// Our own block is checked exactly as a peer's would be before
 				// it is stored: storing alone does not check its date or its
 				// difficulty, and a block peers would refuse must not become
-				// our tip.
-				if ValidateBlockSignatures(candidate) && SaveBlockToStorage(candidate) {
+				// our tip. It is also placed the way a peer's is, with the
+				// chain held still (placeOnTip), so that a block arriving
+				// from elsewhere or a comparison of chains cannot change the
+				// newest block between the check and the storing.
+				if placeOnTip(candidate) {
 					logMutex.Lock()
 					logLine := fmt.Sprintf("[%s] 🎉 [SUCCESS] Solved valid block #%-3d | Hash: %s | Performance: %s", time.Now().Format("15:04:05"), candidate.Index, candidate.Hash[:16], formatHashrate(currentLiveHashrateTrack))
 					liveTerminalEventLogs = append(liveTerminalEventLogs, logLine)

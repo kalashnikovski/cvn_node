@@ -405,7 +405,9 @@ func (c *stratumClient) submit(jobID, nonceHex string) string {
 	if tip.Hash != job.tipHash {
 		return "stale job: the chain has moved on"
 	}
-	if !ValidateBlockSignatures(block) || !SaveBlockToStorage(block) {
+	// Checked and stored with the chain held still, as a block from another
+	// node is (placeOnTip): the newest block cannot change in between.
+	if !placeOnTip(block) {
 		return "block rejected"
 	}
 	logMutex.Lock()
