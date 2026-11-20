@@ -115,7 +115,7 @@ cd cvn_node && GOTOOLCHAIN=auto go build -o cvn_node .
 ./cvn_node --generate-wallet
 ```
 
-This prints your address and your private key and saves the address as this machine's mining address. **Write the private key down.**
+This prints your address, your private key, and the same key as 24 recovery words, and saves the address as this machine's mining address. **Write the 24 words down on paper.** They are shown this once and saved nowhere.
 
 ### Mine
 

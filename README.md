@@ -2,15 +2,18 @@
 
 Covenant Standard is a proof-of-work blockchain written from scratch in Go. It is built for fair, open mining on ordinary home computers: no pre-mine, no founder allocation, no investor sale.
 
-> **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`). The first test network (`testnet-1`) has been retired. Coins on all of these have no value. Mine to help test, not to accumulate.
+> **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`), which is joined by invitation ([Installation_Guide.md](Installation_Guide.md), section 7). The first test network (`testnet-1`) has been retired. Coins on all of these have no value. Mine to help test, not to accumulate.
 
 ## What works today
 
 - Mining with 45-second blocks; difficulty adjusts on every block.
 - Sending CVN between wallets. Every transfer is signed by its owner and checked by every node.
-- A desktop wallet on Windows and a text wallet on Linux and Windows.
+- A desktop wallet on Windows and a text wallet on Linux and Windows. A private key is also given as 24 recovery words, and either form opens the wallet.
 - Nodes find each other, sync from scratch, and recover from forks without help.
+- A new node joins the network that is there. If the seeds it was given do not answer it waits, and if they are on another chain it stops and says so; it does not start a chain of its own.
 - No port forwarding needed: a node behind a home router still receives blocks and can mine.
+- A node saves a checked copy of its chain once a day and keeps the newest seven.
+- Downloads anyone can check: every release lists its SHA-256 sums, is signed by GitHub as built from its tag, and can be rebuilt to the same bytes.
 
 See [ROADMAP.md](ROADMAP.md) for what is finished and what is still being built. The rules planned for launch are set out in [WHITEPAPER.md](WHITEPAPER.md).
 
@@ -33,12 +36,14 @@ git clone https://github.com/kalashnikovski/cvn_node
 cd cvn_node
 GOTOOLCHAIN=auto go build -o cvn_node .
 ./cvn_node --generate-wallet
-./cvn_node --miner-address YOUR_CVN_ADDRESS
+./cvn_node
 ```
 
-`--generate-wallet` prints your address, your private key, and the same key as 24 recovery words, once. **Write the 24 words down on paper.** Nothing is saved anywhere, and coins mined to an address cannot be spent without it.
+Each release also has the program ready built, as `cvn_node_linux_amd64.tar.gz` and `cvn_node_linux_arm64.tar.gz`.
 
-To limit how many processor threads the miner uses:
+`--generate-wallet` prints your address, your private key, and the same key as 24 recovery words, once. **Write the 24 words down on paper.** The key and the words are saved nowhere, and coins mined to an address cannot be spent without them. The address alone is saved, as this machine's mining address.
+
+To mine to a different address, or to limit how many processor threads the miner uses:
 
 ```bash
 ./cvn_node --miner-address YOUR_CVN_ADDRESS --threads 4
@@ -67,14 +72,15 @@ A miner receives a separate coin for every block won, and one transfer can spend
 | Node to node | 18080 | Blocks and transfers |
 | Sync and wallet | 18081 | Block download, balances, sending transfers |
 | Status | 18082 | Height and tip of this node |
+| Mining work | 18083 | Work for the fast miner on this same computer |
 
-These are the CVN Testnet's ports. On `devnet` they are 28080, 28081 and 28082.
+These are the CVN Testnet's ports. On `devnet` they are 28080, 28081, 28082 and 28083.
 
 Seed nodes (all run by the project's maintainer; they are where a new node looks first, they have no say over the rules, and none of them mines): Singapore `207.148.67.11`, Atlanta `64.177.44.185`, Los Angeles `149.28.69.173`, Toronto `149.248.54.9`, Amsterdam `95.179.179.191`, Mumbai `65.20.67.25`.
 
 Any node answers these in a browser:
 
-- `http://NODE:18081/block` — current height, block hash and total work
+- `http://NODE:18081/block` — current height, block hash and total work, and how many heights this node has seen two blocks compete at
 - `http://NODE:18081/addresses` — balances
 - `http://NODE:18081/` — a simple block explorer
 
@@ -132,7 +138,7 @@ The project depends on three libraries: [bbolt](https://github.com/etcd-io/bbolt
 
 ## Reporting problems
 
-Open an issue on GitHub with a screenshot of the miner window and the output of `http://localhost:18081/block`. For anything that could let someone take or create coins, please contact the maintainer privately first.
+Open an issue on GitHub with a screenshot of the miner window and the output of `http://localhost:18081/block` (on `devnet`, port 28081). Make sure no private key or recovery words are in the picture. For anything that could let someone take or create coins, please contact the maintainer privately first.
 
 ## Licence
 
