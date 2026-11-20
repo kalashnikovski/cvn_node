@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Covenant Standard (CVN)</title>
+<meta name="description" content="Covenant Standard is a proof-of-work blockchain written from scratch, mined on ordinary home computers, with no pre-mine. It is in testing and has not launched.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="name" href="./">Covenant Standard</a>
+    <nav>
+      <a href="explorer/">Explorer</a>
+      <a href="https://github.com/kalashnikovski/cvn_node">Source</a>
+      <a href="https://github.com/kalashnikovski/cvn_node/releases">Downloads</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>Covenant Standard (CVN)</h1>
+  <p class="lead">A proof-of-work blockchain written from scratch, built for fair, open mining on ordinary home computers. No pre-mine, no founder's share, no investor sale.</p>
+
+  <div class="notice">
+    <p><b>Status: in testing. Nothing has launched.</b></p>
+    <p>The rules are being rehearsed on a small development network. The public test network, the CVN Testnet, has not started; its start will be announced in advance as a Bitcoin block height, and everyone begins from zero at that block.</p>
+    <p>Coins on every test network have no value and carry over to nothing. Nothing is for sale here, and nobody is asked for money.</p>
+  </div>
+
+  <h2>The design in brief</h2>
+  <div class="scroll">
+  <table>
+    <tr><td class="key">Block time</td><td>45 seconds; difficulty adjusts on every block</td></tr>
+    <tr><td class="key">Mining</td><td>RandomX, tuned for home processors</td></tr>
+    <tr><td class="key">Block reward</td><td>50 CVN, halving every 7 years for 49 years</td></tr>
+    <tr><td class="key">Total supply</td><td>486,727,500 CVN, and no more</td></tr>
+    <tr><td class="key">Fees</td><td>Voluntary; a transfer with no fee is allowed</td></tr>
+    <tr><td class="key">The seventh year</td><td>A fifth of any coin left unmoved for 7 years goes into a common vault, which pays it out little by little to those who mine. A coin that is moved, or renewed in the wallet, starts a new count.</td></tr>
+    <tr><td class="key">Pre-mine</td><td>None. The first block pays nothing to nobody.</td></tr>
+    <tr><td class="key">Ledger</td><td>Open: every address and amount can be seen by anyone</td></tr>
+  </table>
+  </div>
+  <p class="quiet" style="margin-top:10px">The full rules, and what the design does not do, are in the <a href="https://github.com/kalashnikovski/cvn_node/blob/main/WHITEPAPER.md">design paper</a>.</p>
+
+  <h2>A fair start</h2>
+  <ul>
+    <li><b>No coins have been sold, promised or set aside</b> for anyone, and none will be. Every coin there will ever be is paid by the rules to whoever mines a block.</li>
+    <li><b>The start is tied to a Bitcoin block that does not exist yet</b> when it is announced. Nobody can know a future Bitcoin block, so nobody can mine early, including the people who wrote the software.</li>
+    <li><b>The seed nodes do not mine.</b> They keep the chain and pass blocks on, and have no say over the rules.</li>
+    <li><b>Every download can be checked.</b> Each release lists its SHA-256 sums, is signed as built from its source, and can be rebuilt by anyone to the same bytes.</li>
+  </ul>
+  <p>The whole statement, and what outside reviewers found when they tested it against the code, is in the <a href="https://github.com/kalashnikovski/cvn_node#fair-launch-statement">README</a>.</p>
+
+  <h2>Where to go</h2>
+  <ul class="links">
+    <li><a href="explorer/"><b>Explorer</b><span>The seed nodes, what each one holds, and their block explorers</span></a></li>
+    <li><a href="https://github.com/kalashnikovski/cvn_node/releases"><b>Downloads</b><span>Programs for Windows and Linux, with their sums</span></a></li>
+    <li><a href="https://github.com/kalashnikovski/cvn_node/blob/main/Installation_Guide.md"><b>Installation guide</b><span>Step by step, for someone new to this</span></a></li>
+    <li><a href="https://github.com/kalashnikovski/cvn_node/blob/main/MINING_GUIDE.md"><b>Mining guide</b><span>The two miners, and how to get full speed</span></a></li>
+    <li><a href="https://github.com/kalashnikovski/cvn_node/blob/main/WHITEPAPER.md"><b>Design paper</b><span>Every rule, stated plainly</span></a></li>
+    <li><a href="https://github.com/kalashnikovski/cvn_node/blob/main/ROADMAP.md"><b>Roadmap</b><span>What is built, what is tested, what is missing</span></a></li>
+    <li><a href="https://github.com/kalashnikovski/cvn_node"><b>Source code</b><span>Go, MIT licence</span></a></li>
+  </ul>
+
+  <h2>Staying safe</h2>
+  <ul>
+    <li>This site's addresses all end in <code>covenantstandard.online</code>. The programs come only from the project's releases on GitHub.</li>
+    <li>Nobody from the project will ever ask for your private key or your 24 recovery words. Anyone who has them has your coins.</li>
+  </ul>
+</main>
+
+<footer>
+  <div class="wrap">Covenant Standard is open-source software under the MIT licence. It is a test project: nothing here is an offer of anything of value.</div>
+</footer>
+</body>
+</html>
