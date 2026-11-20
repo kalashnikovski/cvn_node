@@ -16,8 +16,8 @@ How to get an independent review of the Covenant Standard (CVN) code from severa
 
    | Reviewer | Give it |
    |---|---|
-   | Takes a file of about 950,000 characters whole | `cvn_audit_full.txt`, attached, with the prompt |
-   | Cuts a long file or paste short | The three parts (each about 300,000 to 350,000 characters), one message each, as described under "Sending the pack in parts" below |
+   | Takes a file of about 1,350,000 characters whole | `cvn_audit_full.txt`, attached, with the prompt |
+   | Cuts a long file or paste short | The three parts (each about 415,000 to 470,000 characters), one message each, as described under "Sending the pack in parts" below |
    | Takes about 275,000 characters at most | `cvn_audit_focus.txt`: the rules only. A narrower review; see Prompt 5B |
    | Takes about 80,000 characters at most | `cvn_audit_rule_b.txt`: one rule only; see Prompt 5C |
    | Less than that | It cannot review this code usefully. A model that only sees part of a file will invent the rest. |
@@ -748,6 +748,218 @@ HOW TO ANSWER
 Answer each question in order, in a few lines: what you checked and what you concluded. "Did not check" is acceptable; silence is not.
 
 Then any findings, most serious first, each with: Title; Severity (Critical: nodes can disagree, or coins can be taken / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps with numbers; the lines that allow it, quoted; the smallest fix.
+
+Be specific or say nothing. Do not add a summary.
+```
+
+---
+
+## Round 6: which reviewers, and how
+
+Rounds 1 to 5 gave each reviewer a file to read. A reviewer that can only read is good at arithmetic and bad at timing, and this round is mostly about timing: nodes passing blocks to each other, two parts of a node touching the chain at once. Every fault the authors found in that code showed about one run in thirty to fifty, and none could be seen by reading.
+
+So for this round, prefer a reviewer that can **run the code**:
+
+| Kind of reviewer | What it can do | Give it |
+|---|---|---|
+| A coding agent with a shell: it clones the repository, runs the tests, writes its own | Find faults of timing; prove a finding with a failing test | **Prompt 7A**, and the commit to check out |
+| A chat model that takes the whole pack (about 1,350,000 characters, or 335,000 tokens) | Read everything; reason about messages, locks and arithmetic | **Prompt 7B** with `cvn_audit_full.txt` |
+| A chat model with a smaller limit (about 250,000 characters, or 62,000 tokens) | The networking only | **Prompt 7C** with `cvn_audit_network.txt` |
+
+Which products these are changes from month to month, so none is named here. Three things matter more than the name:
+
+1. **Use at least one reviewer from a different maker than the one that helped write the code.** A model reviewing code written with the help of its own kind tends to find the same things reasonable.
+2. **Use the strongest model each maker offers, with its longest thinking setting.** This review is a few runs, not thousands; the price difference is small and the difference in what is found is not.
+3. **Let an agent run for hours.** The useful part of Prompt 7A is running the tests with real nodes thirty times. A tool that stops after twenty minutes will not get there; ask it to continue, or give it item 5 of the prompt as a task of its own.
+
+Run each reviewer on the **same commit**, each in a new conversation or session with nothing else in it. Give an agent a fresh copy of the repository, on a machine that is not running a node: its tests use ports 38080 to 38089 on loopback addresses and build programs in the temporary folder.
+
+Then run Prompt 2 as before, giving each reviewer the others' findings. For an agent, add: "For each finding you call real, run its test and report the result."
+
+---
+
+## Prompt 7A: round 6, for a reviewer that can run the code
+
+Replace nothing in the prompt; tell the reviewer the commit separately, in the first line of your message ("Review commit <hash>.").
+
+```text
+You are reviewing a proof-of-work blockchain, written in Go, before a public test network opens. You have the repository and a shell. Your job is to find what is wrong and to PROVE it, with a test that fails or a run that shows it. Do not summarise the code, explain it or praise it.
+
+SET UP
+
+1. Clone https://github.com/kalashnikovski/cvn_node and check out the commit you were given. State the commit you are on.
+2. Confirm it builds and its tests pass before you change anything: `go build ./...` then `go test ./...` (about seven minutes). If either fails, stop and report that.
+3. A second set of tests starts several real copies of the program on this machine: `go test -tags multinode -run MultiNode -timeout 30m ./node/` (about two minutes). Run it once. These tests are your best tool: read node/multinode_test.go and node/multinode_split_test.go and use their helpers for your own experiments.
+
+Do not contact any machine but GitHub and the Go module proxy. Do not run anything in the folder `deploy/`. Do not run the program with `--network devnet` or `--network cvn_testnet`: those are real networks. Use the tests, or `-tags multinode` with `--network localnet`, which listens on loopback addresses only.
+
+READ FIRST
+
+- audit/CHANGES_FOR_ROUND_6.md: what changed since the last review, as claims for you to test. It is the map of this review. It was written by the authors and may be wrong, incomplete or flattering; treat every claim as something to break.
+- WHITEPAPER.md: what the rules are meant to be. Where the code and the paper disagree, that is a finding.
+- audit/FINDINGS_ROUND_1.md to audit/FINDINGS_ROUND_5.md and audit/FINDINGS_FAIR_LAUNCH.md: what earlier reviews found. Do not report these again unless a fix is wrong or has been undone.
+
+WHAT MATTERS, MOST SERIOUS FIRST
+
+A. Two honest nodes that end up disagreeing about the chain, for good. This is the worst thing that can be wrong.
+B. Coins created, destroyed or moved other than by the rules.
+C. A node that can be stopped, stalled, crashed, or made to do unbounded work or hold unbounded memory, by anyone who can send it a message or answer one of its requests.
+D. A node that sets honest neighbours aside, or is left behind and does not recover.
+E. A key or password exposed, or weakly protected.
+F. A claim in the documents that the code does not keep.
+
+WHERE TO SPEND YOUR TIME
+
+About half on section 2 of the changes file (how a block travels) and the locking around it. This code is new, it is concurrent, and its authors found five faults in it by repetition alone, each showing about one run in thirty to fifty. Assume there are more.
+
+Specifically:
+
+1. Locking. Map every place that takes StateMutex, MempoolMatrix's lock, BalanceCacheMutex, PeerMapMutex, relaySubscribersMutex and blockRelay's lock, and the order they are taken in. Find a pair of paths that take two of them in opposite orders, a path that takes one twice, and a path that holds one across a network call, a disk sync or a sleep. Run `go test -race ./node/` on the tests that exercise these paths and report what the race detector says (the authors have not done this; if it cannot run here, say why).
+2. placeOnTip and the pass in TriggerActiveReSyncPass. Are there still two paths that can store a block on the same parent, or store one checked against a newest block that has since changed? What about a block restored after a failed switch of branch (restoreChainLocked), the sibling rule in placeWireBlock, and chain_work.go?
+3. Announce and fetch. Find a sequence of BLOCK_ANNOUNCE, BLOCK_REQUEST, BLOCK_BROADCAST and RELAY_FEATURES messages, from one stranger or several, that leaves a node behind, makes it ask for ever, makes it hold a block in placeAfterItsParent that should have been placed, or costs it far more than it costs the sender.
+4. Old and new together. TestMultiNodeOldAndNewVersionsTogether builds release candidate 11 and runs it beside this version. Extend it: an old miner with new seeds, a new miner with only old neighbours, a restart of each kind in the middle. Do they always agree?
+5. Repetition. Run the multinode tests at least thirty times (`-count=30`, about an hour) and report every failure with the log lines that explain it. A failure that happens once in thirty runs is a finding.
+6. The Bitcoin headers (section 3). Compare nextBitcoinBits, compactFromTarget and checkNext with Bitcoin Core's pow.cpp and validation.cpp, line by line. Then try to give the follower a chain it accepts and should not.
+7. The three rule changes (section 1). For each, try to make two nodes compute different results, and try to gain coins.
+
+Then the rest of the changes file, in its own order, as far as your time allows. Say plainly what you did not reach.
+
+HOW TO PROVE A FINDING
+
+Write a Go test in the node/ folder that fails on this commit because of the fault, and include it in your answer in full. For a fault in how nodes behave together, write it with the helpers in node/multinode_test.go. If the fault is one of timing and cannot be made to happen every time, give the test, the number of runs, how many failed, and the log lines from a failing run. If you cannot show it at all, say "not demonstrated" and give your reasoning; do not present a suspicion as a finding.
+
+Do not fix anything in the code under review. Do not commit or push.
+
+DO NOT REPORT
+
+What the earlier findings files and the changes file already list as known. Style, naming and wording. Missing features. That the message key is in the source. That the seeds are run by one person.
+
+HOW TO ANSWER
+
+1. The commit you reviewed, and the result of the build, the tests and the multinode tests before you changed anything.
+2. For each numbered item under "WHERE TO SPEND YOUR TIME": what you did, in a few lines, and what you concluded. "Did not reach" is acceptable; silence is not.
+3. Findings, most serious first. For each: Title. Which of A to F above. Severity (Critical / High / Medium / Low). Whether it is demonstrated, and how often it fails. The function and file. The exact steps. The test, in full. The smallest fix you would make.
+4. Claims in audit/CHANGES_FOR_ROUND_6.md that you tested and found true, one line each, with what you ran. This matters as much as the findings: it is the only evidence anyone but the authors has looked.
+5. What you did not look at.
+
+Be specific or say nothing. Do not add a summary.
+```
+
+---
+
+## Prompt 7B: round 6, for a reviewer that reads the whole pack
+
+Give `cvn_audit_full.txt`, or the three parts as described under "Sending the pack in parts".
+
+```text
+You are reviewing a proof-of-work blockchain, written in Go, before a public test network opens. Your job is to find what is wrong. Do not summarise the code, explain it or praise it.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below (or three parts sent one after another), holding the whole program except third-party code: the design paper and guides, the record of earlier reviews, the code, and the tests. It numbers its files and ends with the line "END OF PACK". Begin your answer by stating the commit named at the top, the number of the last file you can see, and whether you can see that line. If you cannot, your copy was cut short: say so and stop.
+
+You cannot run anything. Reason from the code, and quote the lines you rely on.
+
+READ FIRST
+
+- audit/CHANGES_FOR_ROUND_6.md: what changed since the last review, as claims for you to test. It was written by the authors and may be wrong, incomplete or flattering.
+- WHITEPAPER.md: what the rules are meant to be. Where the code and the paper disagree, that is a finding.
+- audit/FINDINGS_ROUND_1.md to audit/FINDINGS_ROUND_5.md and audit/FINDINGS_FAIR_LAUNCH.md: what earlier reviews found. Do not report these again unless a fix is wrong or has been undone.
+
+WHAT MATTERS, MOST SERIOUS FIRST
+
+A. Two honest nodes that end up disagreeing about the chain, for good.
+B. Coins created, destroyed or moved other than by the rules.
+C. A node that can be stopped, stalled, crashed, or made to do unbounded work or hold unbounded memory, by anyone who can send it a message or answer one of its requests.
+D. A node that sets honest neighbours aside, or is left behind and does not recover.
+E. A key or password exposed, or weakly protected.
+F. A claim in the documents that the code does not keep.
+
+QUESTIONS
+
+Answer each in order. Sections refer to audit/CHANGES_FOR_ROUND_6.md.
+
+1. Locking (section 2). List every place that takes StateMutex and say what else each holds or waits for while it has it. Is there a pair of paths that take two locks in opposite orders, a path that takes one twice, or a path that holds one across a network call or a sleep? Name the functions.
+
+2. One block, one place (section 2). placeOnTip and the pass in TriggerActiveReSyncPass are meant to be the only ways a block is added. Is there another? Consider restoreChainLocked, the sibling rule in placeWireBlock, chain_work.go, the initial download, and a restored backup. Can any of them store a block checked against a newest block that has since changed?
+
+3. Announce and fetch (section 2). Trace BLOCK_ANNOUNCE, BLOCK_REQUEST and RELAY_FEATURES through both readers (serveInboundConnection and runRelayUplink). Find a sequence from one stranger, or several, that leaves a node behind, makes it ask without end, holds a block in placeAfterItsParent that should have been placed, grows a table without limit, or costs the node far more than it costs the sender. Give the messages in order.
+
+4. Old and new together (section 2). A node of release candidate 11 knows none of the three new message words and lets them pass. Is there any state in which a new node sends an old node only an announcement? Any in which a new node waits for something an old node will never send?
+
+5. The transfer queue (section 2). Transfers are dropped when the queue of 1,024 is full, and two workers check them. Can a stranger keep honest transfers out for as long as it likes, and at what cost to itself? Can a transfer be passed on twice, or passed on before it is checked?
+
+6. Bitcoin's headers (section 3). Compare nextBitcoinBits, compactFromTarget and checkNext with what you know of Bitcoin's rules. Is any header chain accepted that Bitcoin would refuse and that an attacker could make for less than the cost of real Bitcoin blocks? Can offer be made to keep a branch with less work, or to end with its index and its list of headers disagreeing? What can someone who controls the node's DNS do?
+
+7. The messages from Bitcoin peers and explorers (section 3). Is every length checked before it is used? Find a reply that makes the node panic, loop, or allocate without limit.
+
+8. The three rule changes (section 1). For each: can two correct nodes get different results? Can a miner or a holder gain coins? For the sweep, follow one coin just under and one just over the threshold through a sweep, a reorganisation that undoes it, and the sweep again.
+
+9. Joining (section 4). Can a node be made to begin a chain of its own? Can a node that holds a chain be stopped from running by someone who is not one of its seeds?
+
+10. Keys (section 6). Is the saved key's protection adequate for a key that controls real value: the number of PBKDF2 rounds, the salt, the nonce, what is and is not authenticated? Is any key, password or set of recovery words written to a log, a file, or the screen where it should not be?
+
+11. Backups (section 7) and the test-only programs (section 8). Can anything reachable from the network start a backup or a restore, or choose a file name? Can any CVN_LOCALNET_* setting, or the tool that fills blocks, reach a program built the way release.yml builds it?
+
+12. The tidy (section 9). The authors claim nothing a node does changed. Compare node/main.go, node/http_api.go, node/dashboard.go, node/builtin_miner.go and readFrame with what they must have replaced. One removal is admitted (the miner window no longer asks its own node for its balance). Is there another change in behaviour?
+
+DO NOT REPORT
+
+What the earlier findings files and the changes file already list as known. Style, naming and wording. Missing features. That the message key is in the source. That the seeds are run by one person.
+
+HOW TO ANSWER
+
+For each question: what you checked and what you concluded, in a few lines. "Did not check" is acceptable; silence is not.
+
+Then findings, most serious first, each with: Title. Which of A to F. Severity (Critical / High / Medium / Low). Confidence (Certain / Likely / Possible). The function and file. The exact steps, with the messages or values. The lines that allow it, quoted. The smallest fix.
+
+Then the claims in audit/CHANGES_FOR_ROUND_6.md that you examined and found true, one line each.
+
+Be specific or say nothing. Do not add a summary.
+```
+
+---
+
+## Prompt 7C: round 6, the networking only
+
+Give `cvn_audit_network.txt`. A narrower review: it does not cover the rules of validity, the wallets or the backups.
+
+```text
+You are reviewing ONE part of a proof-of-work blockchain, written in Go, before a public test network opens: how its nodes pass blocks to each other, place them on the chain, and find the Bitcoin block the chain starts from. A mistake here cannot make a bad block valid, but it can stop good blocks arriving, and that is how a network splits. Your job is to find what is wrong. Do not summarise, explain or praise.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below, holding twenty files from a larger code base. The rules that decide whether a block or a transfer is valid (ValidateBlockSignatures, SaveBlockToStorageInternal and what they call) are NOT here; assume they are correct and take a block as valid or not. Do not guess at code you cannot see; where a finding depends on it, say so.
+
+The material numbers its files ("FILE n OF 20") and ends with the line "END OF PACK". Begin by stating the number of the last file you can see and whether you can see that line. If you cannot, your copy was cut short: say so and stop.
+
+Read audit/CHANGES_FOR_ROUND_6.md first, sections 2, 3 and 4. It states what changed as claims, and lists what is known and not fixed. It was written by the authors and may be wrong.
+
+QUESTIONS
+
+1. Locking. List every place in these files that takes StateMutex and say what else each holds or waits for meanwhile. Is there a pair of paths that take two locks in opposite orders, a path that takes one twice, or one that holds a lock across a network call or a sleep?
+
+2. One block, one place. placeOnTip and the pass in TriggerActiveReSyncPass are meant to be the only ways a block is added. Find another in these files, or a way either stores a block checked against a newest block that has since changed.
+
+3. Announce and fetch. Trace BLOCK_ANNOUNCE, BLOCK_REQUEST and RELAY_FEATURES through serveInboundConnection and runRelayUplink. Find a sequence of messages that leaves a node behind, makes it ask without end, holds a block in placeAfterItsParent that should have been placed, grows a table without limit, or costs the node far more than the sender.
+
+4. Old and new. A node of the release before this one ignores the three new message words. Is there a state in which a new node sends it only an announcement, or waits for something it will never send?
+
+5. Starvation. Blocks, transfers, pings and announcements share connections. Can a stranger delay a block's arrival by sending something else? By how long?
+
+6. Bitcoin's headers. Compare nextBitcoinBits, compactFromTarget and checkNext with Bitcoin's rules. Is a header chain accepted that Bitcoin would refuse and that costs less than real Bitcoin blocks to make? Can offer keep a branch with less work, or leave its index and list disagreeing? Is every length in a peer's or an explorer's reply checked before use?
+
+7. Joining. Can a node be made to begin a chain of its own, or be stopped by someone who is not one of its seeds?
+
+DO NOT REPORT
+
+What the changes file lists as known and not fixed. Style and wording. That the message key is in the source.
+
+HOW TO ANSWER
+
+Answer each question in order, in a few lines: what you checked and what you concluded. "Did not check" is acceptable; silence is not.
+
+Then findings, most serious first, each with: Title; Severity (Critical: nodes can disagree for good / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps with the messages in order; the lines that allow it, quoted; the smallest fix.
 
 Be specific or say nothing. Do not add a summary.
 ```

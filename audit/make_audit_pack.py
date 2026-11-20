@@ -22,6 +22,7 @@ repository):
     cvn_audit_rule_b.txt      smaller still: only what the change to late-
                               block relief needs
     cvn_audit_rule_h.txt      likewise for the exponential difficulty step
+    cvn_audit_network.txt     how blocks travel and the starting block (round 6)
 
 and each prompt of audit/AUDIT_PROMPT.md as its own file (PROMPT_1.txt and so
 on), ready to paste.
@@ -63,6 +64,7 @@ RULES = [
     "audit/CHANGES_FOR_ROUND_4.md",
     "audit/FINDINGS_ROUND_4.md",
     "audit/FINDINGS_ROUND_5.md",
+    "audit/CHANGES_FOR_ROUND_6.md",
     "node/chain_params.go",
     "node/amount.go",
     "node/block_format.go",
@@ -196,6 +198,31 @@ RULE_H = [
     "node/relief_not_inherited_test.go",
 ]
 
+# How blocks travel and how a node finds its starting block: the subject of
+# round 6, for a reviewer that cannot take the full pack.
+NETWORK = [
+    "audit/CHANGES_FOR_ROUND_6.md",
+    "node/block_relay.go",
+    "node/gossip_mesh.go",
+    "node/relay_uplink.go",
+    "node/blockchain_core.go",
+    "node/sync_pass.go",
+    "node/join_check.go",
+    "node/own_address.go",
+    "node/peer_cache.go",
+    "node/bitcoin_headers.go",
+    "node/bitcoin_peers.go",
+    "node/anchor_wait.go",
+    "node/genesis_watch.go",
+    "node/genesis.go",
+    "node/builtin_miner.go",
+    "node/stratum.go",
+    "node/security_harness.go",
+    "node/block_relay_test.go",
+    "node/place_on_tip_test.go",
+    "node/bitcoin_headers_test.go",
+]
+
 
 def git(*args):
     try:
@@ -292,6 +319,11 @@ def main():
          ["For a short review of one change: each difficulty step applied as e^x, in whole numbers.",
           "See audit/FINDINGS_ROUND_4.md, finding 1. Nothing else is here."],
          RULE_H),
+        ("cvn_audit_network.txt", "A SELECTION - HOW BLOCKS TRAVEL, AND THE STARTING BLOCK",
+         ["For round 6, for a reviewer that cannot take the full pack. How a node passes blocks on,",
+          "places them, compares chains, and finds the Bitcoin block it starts from. See",
+          "audit/CHANGES_FOR_ROUND_6.md, sections 2 to 4. The rules of validity are NOT here."],
+         NETWORK),
     ]
     os.makedirs(OUT, exist_ok=True)
     for name, title, purpose, files in packs:
