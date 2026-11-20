@@ -90,6 +90,8 @@ PROGRAM = [
     "node/main.go",
     "node/anchor_wait.go",
     "node/genesis_watch.go",
+    "node/bitcoin_headers.go",
+    "node/bitcoin_peers.go",
     "node/mining_readiness.go",
     "node/sync_pass.go",
     "node/gossip_mesh.go",

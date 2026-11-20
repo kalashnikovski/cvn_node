@@ -275,21 +275,21 @@ A launch network starts when one particular Bitcoin block is mined. Its height i
 
    It shows how many Bitcoin blocks are left and waits.
 
-**At the moment itself** there is nothing to do. The program asks several public Bitcoin block explorers for the block at that height, and starts as soon as two of them give the same one. Everyone who is waiting starts within seconds of each other.
+**At the moment itself** there is nothing to do. The program follows Bitcoin's own block headers up to that height, checking every one as it goes, and starts as soon as the block at that height appears. It takes nobody's word for which block that is: it has counted. Everyone who is waiting starts within seconds of each other.
 
-**If you would rather not depend on those websites,** supply the block's header yourself. It is 160 characters, public the instant the block is mined. With your own Bitcoin node:
+**If you would rather the program contacted nobody about it,** supply the block's header yourself. It is 160 characters, public the instant the block is mined. With your own Bitcoin node:
 
 ```bash
 bitcoin-cli getblockheader $(bitcoin-cli getblockhash HEIGHT) false
 ```
 
-or from any block explorer: find the block, copy its hash, and open `https://mempool.space/api/block/HASH/header`. Then either put the header in a file named `genesis_anchor_NETWORK.txt` beside the program (a waiting node picks it up within a minute), or start with `--genesis-anchor HEADER`. Add `--no-anchor-lookup` if the program should ask no website at all.
+or from any block explorer: find the block, copy its hash, and open `https://mempool.space/api/block/HASH/header`. Then either put the header in a file named `genesis_anchor_NETWORK.txt` beside the program (a waiting node picks it up within a minute), or start with `--genesis-anchor HEADER`. Add `--no-anchor-lookup` if the program should ask nobody at all.
 
-The program checks the header whoever supplies it: it must carry the work of a real, current Bitcoin block. A wrong header cannot cost you coins. It would start your node on a network of its own, and the program warns you if that has happened.
+The program checks a header you supply: it must carry the work of a real, current Bitcoin block, dated after the start was announced. It does not count up to a header supplied by hand, so getting the right block is then yours to see to. A wrong header cannot cost you coins. It would start your node on a network of its own, and the program warns you if that has happened.
 
-**What being first is worth.** A node that asks the explorers starts within about ten to twenty seconds of the Bitcoin block appearing. Someone who supplies the header from their own Bitcoin node starts those seconds earlier. A block takes about 45 seconds for the whole network at the starting difficulty, and for the first 20 blocks that difficulty cannot fall, so a lead of that size is worth a fraction of one block's chance. Nobody has to wait for the clock at the start either: the first block is dated two hours before its Bitcoin block's own time, because Bitcoin allows a block's time to run up to two hours ahead. Those two hours of earlier dates buy nothing, because the difficulty rule counts any date before the Bitcoin block's own time as that time.
+**What being first is worth.** A waiting node starts within about ten to twenty seconds of the Bitcoin block appearing. Someone who supplies the header from their own Bitcoin node starts those seconds earlier. A block takes about 45 seconds for the whole network at the starting difficulty, and for the first 20 blocks that difficulty cannot fall, so a lead of that size is worth a fraction of one block's chance. Nobody has to wait for the clock at the start either: the first block is dated two hours before its Bitcoin block's own time, because Bitcoin allows a block's time to run up to two hours ahead. Those two hours of earlier dates buy nothing, because the difficulty rule counts any date before the Bitcoin block's own time as that time.
 
-**If Bitcoin replaces that block.** About one Bitcoin block in several hundred is replaced by another moments after it appears. Nodes could then have started from two different blocks and be on two networks. The rule is fixed in advance and is nobody's to decide: **the network is the one that begins from the Bitcoin block still in Bitcoin's chain six blocks later. Blocks mined on the other are void.** For the first hour or so the program keeps asking the explorers whether its Bitcoin block is still the one at that height, and it also compares its first block with the seed nodes'. If either check fails it says so, repeatedly. To move over to the right network: stop the program, delete `genesis_anchor_NETWORK.txt` and that network's chain database, and start again. Your wallet is not in those files.
+**If Bitcoin replaces that block.** About one Bitcoin block in several hundred is replaced by another moments after it appears. Nodes could then have started from two different blocks and be on two networks. The rule is fixed in advance and is nobody's to decide: **the network is the one that begins from the Bitcoin block still in Bitcoin's chain six blocks later. Blocks mined on the other are void.** For the first hour or so the program keeps following Bitcoin's headers to see whether its Bitcoin block is still the one at that height, and it also compares its first block with the seed nodes'. If either check fails it says so, repeatedly. To move over to the right network: stop the program, delete `genesis_anchor_NETWORK.txt` and that network's chain database, and start again. Your wallet is not in those files.
 
 ### If the seed nodes cannot be reached, or you do not trust them
 
@@ -304,7 +304,7 @@ Seed nodes are only where a new node looks first. They have no say over the rule
 
 - The seed nodes of the network you chose (listed in [README.md](README.md)), and other nodes it learns of from them.
 - Your own router, to ask it to open the network's ports (switch off with the environment variable `CVN_DISABLE_UPNP`).
-- On a launch network that has not started yet, and only then: the Bitcoin block explorers mempool.space, blockstream.info, mempool.emzy.de, btcscan.org and mempool.ninja, to ask for one Bitcoin block. `--no-anchor-lookup` switches this off.
+- On a launch network that has not started yet, and for about an hour after it starts: a few computers on the Bitcoin network, found through the Bitcoin project's published look-up names, to fetch Bitcoin block headers and nothing else. If none can be reached it asks the Bitcoin block explorers mempool.space, blockstream.info, mempool.emzy.de, btcscan.org and mempool.ninja for the same headers. `--no-anchor-lookup` switches all of this off.
 - Nothing else. It sends no usage reports and checks for no updates.
 
 Two things to know about privacy. A wallet asks a node for your balance and coins: the node on your own machine if one is running, otherwise a seed node, which then sees your address and the address your computer connects from. And any node shows its own mining address at `http://NODE:18082/status` (28082 on `devnet`). Balances and transfers are public on this chain in any case.

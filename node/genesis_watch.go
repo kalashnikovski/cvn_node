@@ -22,16 +22,18 @@ import (
 //
 // A node therefore does two things from time to time:
 //
-//   - Until the anchor is six Bitcoin blocks deep, it asks the Bitcoin block
-//     explorers again whether the block it started from is still the one at
-//     that height. If Bitcoin has replaced it, the node says so and says how
-//     to move over. This does not depend on the seeds.
+//   - Until the anchor is six Bitcoin blocks deep, it goes on following
+//     Bitcoin's headers (bitcoin_headers.go) and looks whether the block it
+//     started from is still the one at that height. If Bitcoin has replaced
+//     it, the node says so and says how to move over. This does not depend
+//     on the seeds. (A rehearsal from an old Bitcoin block, whose height
+//     cannot be counted up to, asks the block explorers.)
 //   - It compares its first block with the seeds' and says so, plainly and
 //     repeatedly, if they differ.
 //
 // It does not stop mining or change anything by itself. A warning can be
-// wrong (a seed, or two explorers, can be), and deleting a chain is for the
-// operator to do.
+// wrong (a seed can be, and for a moment Bitcoin itself can hold two blocks
+// at one height), and deleting a chain is for the operator to do.
 
 const genesisWatchInterval = 5 * time.Minute
 
@@ -75,18 +77,28 @@ func genesisWarning() string {
 // before it counts as settled.
 const anchorSettledDepth = 6
 
-// anchorWarning asks the Bitcoin block explorers whether the block this
-// network started from is still the one at its height. settled is true once
-// they agree it is and it is anchorSettledDepth blocks deep: there is then
-// nothing more to watch. warning is the line to show if Bitcoin now has
-// another block there.
+// anchorWarning looks whether the block this network started from is still
+// the one at its height in Bitcoin's chain. settled is true once it is and
+// it is anchorSettledDepth blocks deep: there is then nothing more to watch.
+// warning is the line to show if Bitcoin now has another block there.
 func anchorWarning() (settled bool, warning string) {
 	anchor := Params.Anchor
 	if anchor.BitcoinHeight <= 0 || anchor.BitcoinHeader == "" {
 		return true, ""
 	}
-	header, tip, agreed := lookUpAnchor(anchor.BitcoinHeight)
-	if !agreed {
+	var (
+		header string
+		tip    int64
+		known  bool
+	)
+	if follower := followerForAnchor(); follower != nil {
+		tip = follower.advance()
+		follower.done()
+		header, known = follower.chain.headerAt(anchor.BitcoinHeight)
+	} else {
+		header, tip, known = lookUpAnchor(anchor.BitcoinHeight)
+	}
+	if !known {
 		return false, ""
 	}
 	if header == anchor.BitcoinHeader {

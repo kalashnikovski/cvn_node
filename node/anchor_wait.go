@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,22 +25,23 @@ import (
 //
 //   - The anchor file, genesis_anchor_NAME.txt, in case the operator puts
 //     the header there.
-//   - Public Bitcoin block explorers, asked for the block at the announced
-//     height. Their answer is only used when two of them give the same
-//     header, and the header must carry Bitcoin's proof of work like any
-//     other. Several are asked, so that one being out of reach delays
-//     nobody. `--no-anchor-lookup` switches this off, for an operator who
-//     prefers to supply the header by hand.
+//   - Bitcoin itself. The node follows Bitcoin's headers from a block fixed
+//     in this software up to the announced height, checking every one (see
+//     bitcoin_headers.go), and takes the header it arrives at. Nobody's word
+//     is taken for which block stands at that height: the node has counted.
+//     `--no-anchor-lookup` switches this off, for an operator who prefers
+//     to supply the header by hand.
 //
 // A header found this way is written to the anchor file, so the node starts
 // from the same anchor every time afterwards without asking anyone.
 //
-// What an explorer could do wrong: nothing that costs anyone coins. A made-up
-// header is refused, because it has to carry the work of a real Bitcoin
-// block. A real header of the wrong block would start the node on a network
-// of its own, which is why two sources have to agree, and why a node that
-// has itself seen Bitcoin short of the height only takes a header dated
-// about now: an older block cannot be the one it was waiting for.
+// One case is still settled the older way. A height at or below the block
+// fixed in this software cannot be counted up to, which only happens when a
+// development network rehearses a launch from an old Bitcoin block. Public
+// block explorers are then asked for the block at that height, and their
+// answer is used only when two of them give the same header and it carries
+// Bitcoin's proof of work. A launch network is never in this case: a test
+// holds every scheduled network to a height after the fixed block.
 
 // errAnchorNotYetKnown means the network is scheduled but its Bitcoin block
 // has not been supplied yet: the node can wait for it.
@@ -68,7 +70,10 @@ var anchorFreshness = 3 * time.Hour
 var anchorHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 // anchorGet fetches a small text answer from an explorer.
-func anchorGet(url string) (string, bool) {
+func anchorGet(url string) (string, bool) { return anchorGetUpTo(url, 4096) }
+
+// anchorGetUpTo fetches an answer of at most `limit` bytes from an explorer.
+func anchorGetUpTo(url string, limit int64) (string, bool) {
 	response, err := anchorHTTPClient.Get(url)
 	if err != nil {
 		return "", false
@@ -77,11 +82,30 @@ func anchorGet(url string) (string, bool) {
 	if response.StatusCode != http.StatusOK {
 		return "", false
 	}
-	body, err := io.ReadAll(io.LimitReader(response.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(response.Body, limit))
 	if err != nil {
 		return "", false
 	}
 	return strings.TrimSpace(string(body)), true
+}
+
+// The follower of Bitcoin's headers for this network's anchor. One is kept
+// for as long as the program runs, so that the watch for a replaced anchor
+// (genesis_watch.go) carries on from the headers already checked.
+var (
+	anchorFollowerLock sync.Mutex
+	anchorFollower     *bitcoinFollower
+)
+
+// followerForAnchor returns the follower, making it at first use. It is nil
+// when this network's height cannot be counted up to.
+func followerForAnchor() *bitcoinFollower {
+	anchorFollowerLock.Lock()
+	defer anchorFollowerLock.Unlock()
+	if anchorFollower == nil {
+		anchorFollower = newBitcoinFollower(Params.Anchor.BitcoinHeight)
+	}
+	return anchorFollower
 }
 
 // anchorFromSource asks one explorer for the header of the Bitcoin block at
@@ -193,10 +217,15 @@ func waitForGenesisAnchor(args []string, nearInterval, farInterval time.Duration
 	fmt.Printf(" This network starts when Bitcoin block %d is mined.\n", height)
 	fmt.Println(" Leave this window open: the node will start by itself at that moment,")
 	fmt.Println(" at the same time as everyone else who is waiting.")
-	if lookup {
+	follower := followerForAnchor()
+	switch {
+	case lookup && follower != nil:
+		fmt.Printf(" It follows Bitcoin's own headers to that block from block %d,\n", bitcoinStart.Height)
+		fmt.Println(" and checks every one of them itself.")
+	case lookup:
 		fmt.Println(" It is watching public Bitcoin block explorers for that block.")
-	} else {
-		fmt.Printf(" Explorer look-ups are off. Put the block's header in %s\n", genesisAnchorFileName())
+	default:
+		fmt.Printf(" Look-ups are off. Put the block's header in %s\n", genesisAnchorFileName())
 		fmt.Println(" when it exists, and the node will start.")
 	}
 	fmt.Println("====================================================================")
@@ -216,7 +245,32 @@ func waitForGenesisAnchor(args []string, nearInterval, farInterval time.Duration
 			}
 		}
 		interval := farInterval
-		if lookup {
+		if lookup && follower != nil {
+			tip := follower.advance()
+			if header, reached := follower.chain.headerAt(height); reached {
+				if err := useAnchorHeader(header); err == nil {
+					follower.done()
+					_ = os.WriteFile(genesisAnchorFileName(), []byte(header+"\n"), 0644)
+					fmt.Printf("✅ Bitcoin block %d has been mined: %s\n", height, Params.Anchor.BitcoinHash)
+					fmt.Printf("   This node followed Bitcoin's headers to it from block %d and checked each one.\n   Starting.\n", bitcoinStart.Height)
+					return
+				} else if time.Since(lastReport) > time.Minute {
+					fmt.Printf("⚠️  Bitcoin block %d cannot be used: %v\n", height, err)
+				}
+			}
+			if height-tip <= 3 {
+				interval = nearInterval
+			}
+			if time.Since(lastReport) > time.Minute {
+				lastReport = time.Now()
+				switch source := follower.source(); {
+				case source == "":
+					fmt.Printf("[%s] ⏳ Waiting for Bitcoin block %d. Neither the Bitcoin network nor the block explorers answered just now; still trying. Followed so far: block %d.\n", time.Now().Format("15:04:05"), height, tip)
+				case tip < height:
+					fmt.Printf("[%s] ⏳ Waiting for Bitcoin block %d. Bitcoin's headers followed to block %d (from %s): %d to go, roughly %d minutes.\n", time.Now().Format("15:04:05"), height, tip, source, height-tip, (height-tip)*10)
+				}
+			}
+		} else if lookup {
 			header, tip, agreed := lookUpAnchor(height)
 			if agreed && sawItMissing {
 				if _, dated, err := parseBitcoinHeader(header); err == nil {
