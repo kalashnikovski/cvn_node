@@ -394,12 +394,17 @@ func textWalletKeys(ask func(string) string, reader *bufio.Reader) {
 	const prompt = "Private key, 24 recovery words, or the saved key's password (not shown while typing): "
 	switch strings.ToLower(ask("Choose a-d: ")) {
 	case "a":
-		privateKeyHex, _, err := signingKeyFrom(readSecretLine(reader, prompt))
+		privateKeyHex, publicKeyHex, err := signingKeyFrom(readSecretLine(reader, prompt))
 		if err != nil {
 			fmt.Printf("❌ %v\n", err)
 			return
 		}
+		// The address is shown with the words, so that words written down
+		// for the wrong key are noticed before they are relied on.
+		address, _ := DeriveAddressFromPublicKey(publicKeyHex)
 		fmt.Println()
+		fmt.Printf(" These are the words for the address %s\n", strings.TrimSpace(address))
+		fmt.Println(" Check that it is your address before you write them down.")
 		printRecoveryWords(privateKeyHex)
 		fmt.Println(" Write them on paper, in order. Anyone who has them has the coins.")
 	case "b":

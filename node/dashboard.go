@@ -39,7 +39,9 @@ func runDashboard(seedOnly bool) {
 	onScreen := stdoutIsTerminal()
 	ticker := time.NewTicker(dashboardInterval)
 	defer ticker.Stop()
-	_ = exec.Command("cmd", "/c", "cls").Run()
+	if runtime.GOOS == "windows" {
+		_ = exec.Command("cmd", "/c", "cls").Run()
+	}
 	for tick := uint64(1); ; tick++ {
 		<-ticker.C
 		StateMutex.RLock()

@@ -594,6 +594,14 @@ func requestSyncPassForBlock() {
 	if now-last < int64(syncPassFromBlockInterval/time.Second) || !atomic.CompareAndSwapInt64(&lastPassFromBlock, last, now) {
 		return
 	}
+	if atomic.LoadInt32(&syncPassRunning) == 1 {
+		// A pass is running already and may have chosen its source before
+		// this block existed. Starting another now would do nothing, and the
+		// request would be used up for the next 30 seconds. So the block is
+		// noted as missed, and the pass that follows this one fetches it.
+		atomic.StoreInt32(&blockMissedDuringPass, 1)
+		return
+	}
 	go TriggerActiveReSyncPass()
 }
 
@@ -610,18 +618,35 @@ func requestSyncPassForBlock() {
 // fetch what was missed. It is spaced by a few seconds, so that a node sent
 // blocks continuously cannot be kept asking its peers without pause.
 
-var blockMissedDuringPass int32 // 1 if a block was dropped since the last pass began
-var lastPassAfterMiss int64     // unix nanoseconds, read and written atomically
+var blockMissedDuringPass int32  // 1 if a block was dropped since the last pass began
+var lastPassAfterMiss int64      // unix nanoseconds, read and written atomically
+var missedBlockPassWaiting int32 // 1 while a pass for a missed block is waiting out the spacing
 
 const missedBlockPassInterval = 3 * time.Second
 
+// catchUpAfterMissedBlock starts a pass for a block that was dropped, now or,
+// when one was started for the same reason a moment ago, once the spacing
+// has run out. The note that a block was dropped is cleared only when the
+// pass for it starts. It used to be cleared first, and when the spacing then
+// said "not yet" the block was forgotten.
 func catchUpAfterMissedBlock() {
-	if !atomic.CompareAndSwapInt32(&blockMissedDuringPass, 1, 0) {
+	if atomic.LoadInt32(&blockMissedDuringPass) == 0 || atomic.LoadInt32(&syncPassRunning) == 1 {
+		// Nothing was missed, or a pass is running and will come here
+		// again when it ends.
 		return
 	}
-	now := time.Now().UnixNano()
 	last := atomic.LoadInt64(&lastPassAfterMiss)
-	if now-last < int64(missedBlockPassInterval) || !atomic.CompareAndSwapInt64(&lastPassAfterMiss, last, now) {
+	if wait := time.Duration(last) + missedBlockPassInterval - time.Duration(time.Now().UnixNano()); wait > 0 {
+		if atomic.CompareAndSwapInt32(&missedBlockPassWaiting, 0, 1) {
+			time.AfterFunc(wait, func() {
+				atomic.StoreInt32(&missedBlockPassWaiting, 0)
+				catchUpAfterMissedBlock()
+			})
+		}
+		return
+	}
+	if !atomic.CompareAndSwapInt64(&lastPassAfterMiss, last, time.Now().UnixNano()) ||
+		!atomic.CompareAndSwapInt32(&blockMissedDuringPass, 1, 0) {
 		return
 	}
 	go TriggerActiveReSyncPass()
@@ -781,6 +806,7 @@ func TriggerActiveReSyncPass() {
 		if next > claimedHeight {
 			break
 		}
+		tipWhenAsked := GetLatestBlockInternal().Hash
 		batch := fetchBlockBatch(source, next)
 		if len(batch) == 0 {
 			break
@@ -796,6 +822,30 @@ func TriggerActiveReSyncPass() {
 		// asked to stand still.
 		pauseForChainChange()
 		StateMutex.Lock()
+		if tipNow := GetLatestBlockInternal(); tipNow.Hash != tipWhenAsked {
+			// The newest block changed while these blocks were on their way:
+			// this node's miner found one, or a neighbour sent one, or a rival
+			// of the newest block took its place. If the new one is among the
+			// blocks just fetched, they still fit and the pass goes on. If it
+			// is not, they belong on a block this node no longer has on top,
+			// and checking them would find the first "not valid" and blame a
+			// source that sent nothing wrong. The pass ends without a verdict
+			// and another follows, which compares the chains as they now are.
+			expected := false
+			for _, block := range batch {
+				if block.Index == tipNow.Index && block.Hash == tipNow.Hash {
+					expected = true
+					break
+				}
+			}
+			if !expected {
+				StateMutex.Unlock()
+				log.Printf("🔁 [SYNC] Our newest block changed while blocks from %s were on their way. Comparing again.\n", source)
+				blameless = true
+				atomic.StoreInt32(&blockMissedDuringPass, 1)
+				break
+			}
+		}
 		refused := false
 		for _, block := range batch {
 			if block.Index != GetLatestBlockInternal().Index+1 {

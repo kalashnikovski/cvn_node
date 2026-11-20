@@ -276,11 +276,12 @@ func signingKeyFrom(typed string) (privateKeyHex, publicKeyHex string, err error
 	case looksLikeHex(typed) && len(typed) >= 63 && len(typed) <= 64:
 		privateKeyHex = typed
 	case haveSavedKey:
+		// With a key saved, anything that is not the words or a whole key
+		// is taken as the password, and a wrong password is refused. It used
+		// to be tried as a short private key when it was made only of the
+		// characters 0-9 and a-f, so a mistyped password such as 19841207
+		// was accepted as the key of some other, empty address.
 		privateKeyHex, err = openSavedKey(typed)
-		if err != nil && looksLikeHex(typed) && len(typed) <= 64 {
-			// A short key written without its leading zeros.
-			privateKeyHex, err = typed, nil
-		}
 	case looksLikeHex(typed) && len(typed) <= 64:
 		privateKeyHex = typed
 	case len(strings.Fields(typed)) > 1:

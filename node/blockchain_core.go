@@ -238,6 +238,13 @@ func placeWireBlock(incomingBlock Block) {
 			return
 		}
 		StateMutex.Lock()
+		if atomic.LoadInt32(&IsSyncingActive) == 1 {
+			// A pass began changing the chain since the check above. The
+			// newest block is the pass's to change now.
+			StateMutex.Unlock()
+			atomic.StoreInt32(&blockMissedDuringPass, 1)
+			return
+		}
 		liveTip := GetLatestBlockInternal()
 		adopted := liveTip.Hash == currentTip.Hash &&
 			ValidateBlockSignatures(incomingBlock) &&

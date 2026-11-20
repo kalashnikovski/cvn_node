@@ -271,6 +271,7 @@ func serveInboundConnection(conn net.Conn, pooled bool) {
 			subscriberID := strings.TrimSpace(strings.TrimPrefix(msg, "RELAY_SUBSCRIBE:"))
 			if subscriberID != localNodeInstanceID {
 				registerRelaySubscriber(conn, remoteIP)
+				noteRelayIdentity(conn, subscriberID)
 			}
 			writeFrame(conn, "RELAY_ACK:"+localNodeInstanceID)
 			continue
@@ -420,11 +421,18 @@ func writeFrame(w io.Writer, payload string) {
 	frame = append(frame, length[:]...)
 	frame = append(frame, signature...)
 	frame = append(frame, payloadBytes...)
-	if conn, isConn := w.(net.Conn); isConn {
+	conn, isConn := w.(net.Conn)
+	if isConn {
 		// A node that stops reading must not be able to hang the sender.
 		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	}
-	_, _ = w.Write(frame)
+	if _, err := w.Write(frame); err != nil && isConn {
+		// Part of the frame may have gone. Connections stay open now, and
+		// whatever was written next would be read as the rest of this frame:
+		// nonsense, counted against this node as a malformed message. The
+		// connection is closed, and whoever holds it opens another.
+		conn.Close()
+	}
 }
 
 func BroadcastNewBlock(b Block) {
@@ -494,13 +502,54 @@ func sendToNetwork(payload, announcement string) {
 		if called++; called > freshCallsPerMessage {
 			break
 		}
-		go func(addr string) {
-			conn, err := dialPeer(addr, 3*time.Second)
-			if err == nil {
-				writeFrame(conn, payload)
-				conn.Close()
-			}
-		}(address)
+		go callAndSend(address, payload, announcement)
+	}
+}
+
+// freshCallFeatureWait is how long a node called up afresh is given to say
+// that it understands announcements, before it is sent a large block whole.
+const freshCallFeatureWait = time.Second
+
+// callAndSend calls a node up and gives it a block or a transfer.
+//
+// A large block is not sent whole to a node that can ask for it. The caller
+// says it understands announcements; a node of this version says the same
+// back, is sent the announcement, and is handed the block if it asks, which
+// it does only if it has not got the block another way. A node of an older
+// version says nothing back, and after a moment is sent the whole block, as
+// it always was. Large blocks used to be sent whole on every one of these
+// calls, up to eight times by every node.
+func callAndSend(address, payload, announcement string) {
+	conn, err := dialPeer(address, 3*time.Second)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	if announcement == "" {
+		writeFrame(conn, payload)
+		return
+	}
+	writeFrame(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
+	_ = conn.SetReadDeadline(time.Now().Add(freshCallFeatureWait))
+	answer, signature, err := readFrame(conn)
+	if err != nil || !VerifyPayloadHMAC(answer, signature) ||
+		!strings.HasPrefix(string(answer), "RELAY_FEATURES:") || !strings.Contains(string(answer), relayFeatureAnnounce) {
+		writeFrame(conn, payload)
+		return
+	}
+	writeFrame(conn, announcement)
+	// The other node may ask at once, or only after waiting on someone it
+	// asked first. The call is kept for as long as that can take.
+	_ = conn.SetReadDeadline(time.Now().Add(3 * blockFetchPatience))
+	for {
+		request, signature, err := readFrame(conn)
+		if err != nil || !VerifyPayloadHMAC(request, signature) {
+			return
+		}
+		if msg := string(request); strings.HasPrefix(msg, "BLOCK_REQUEST:") {
+			handleBlockRequest(conn, strings.TrimPrefix(msg, "BLOCK_REQUEST:"))
+			return
+		}
 	}
 }
 
@@ -571,14 +620,16 @@ func askForPeers(address string) {
 	// A node that answered with a correctly signed list is alive, so it is
 	// listed now. Until this was added a node only learned of another when
 	// that one pinged it, and for up to fifteen seconds after starting its
-	// blocks were sent to nobody.
-	if VerifyPayloadHMAC(payload, signature) {
-		PeerMapMutex.Lock()
-		if _, known := ActivePeerMap[address]; known || len(ActivePeerMap) < MaxPeerMapCapacity {
-			ActivePeerMap[address] = time.Now()
-		}
-		PeerMapMutex.Unlock()
+	// blocks were sent to nobody. A list that is not signed for this network
+	// is not read at all.
+	if !VerifyPayloadHMAC(payload, signature) {
+		return
 	}
+	PeerMapMutex.Lock()
+	if _, known := ActivePeerMap[address]; known || len(ActivePeerMap) < MaxPeerMapCapacity {
+		ActivePeerMap[address] = time.Now()
+	}
+	PeerMapMutex.Unlock()
 	var listed []string
 	if json.Unmarshal([]byte(strings.TrimPrefix(response, "PEER_LIST:")), &listed) != nil {
 		return

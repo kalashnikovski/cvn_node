@@ -60,7 +60,8 @@ func freshBlockRelay(t *testing.T) {
 		blockRelay.Lock()
 		blockRelay.recent, blockRelay.recentOrder = make(map[string]string), nil
 		blockRelay.uplinks, blockRelay.announces = make(map[net.Conn]string), make(map[net.Conn]bool)
-		blockRelay.fetching = make(map[string]time.Time)
+		blockRelay.fetching = make(map[string]*blockFetch)
+		blockRelay.identities = make(map[net.Conn]string)
 		blockRelay.Unlock()
 		relaySubscribersMutex.Lock()
 		relaySubscribers = make(map[net.Conn]string)
@@ -108,6 +109,10 @@ func TestLargeBlocksAreAnnouncedOnlyToNodesThatUnderstand(t *testing.T) {
 	registerRelaySubscriber(oldNear, "10.0.0.2")
 	// A second connection with the node at 10.0.0.2, this one opened by us.
 	registerUplinkConnection(twiceNear, "10.0.0.2")
+	// The node there gave the same name on both, so they are known to be
+	// two connections with one node.
+	noteRelayIdentity(oldNear, "the-node-at-2")
+	noteRelayIdentity(twiceNear, "the-node-at-2")
 
 	reached := sendOverOpenConnections("BLOCK_BROADCAST:the whole block", "BLOCK_ANNOUNCE:the short form")
 	if len(reached) != 2 || !reached["10.0.0.1"] || !reached["10.0.0.2"] {

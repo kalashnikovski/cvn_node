@@ -204,6 +204,14 @@ func runRelayUplink(address string, announcedID string) {
 		}
 	}()
 
+	// What arrives on a connection this node opened is held to the same
+	// allowance as what arrives on one opened to it. It was held to none:
+	// a stranger had only to say hello, wait to be called, and could then
+	// send announcements as fast as the line carried them, each one a read
+	// of the database, an entry in a table and a line in the log.
+	rateLimiter := GetIPRateLimiter(farHost)
+	transferLimiter := GetIPRateLimiter("transfers|" + farHost)
+
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(relayReadTimeout))
 		payload, signature, err := readFrame(conn)
@@ -211,6 +219,13 @@ func runRelayUplink(address string, announcedID string) {
 			return
 		}
 		msg := strings.TrimSpace(string(payload))
+		if strings.HasPrefix(msg, "TX_BROADCAST:") {
+			if !transferLimiter.Allow() {
+				continue
+			}
+		} else if !rateLimiter.Allow() {
+			continue
+		}
 
 		switch {
 		case strings.HasPrefix(msg, "RELAY_FEATURES:"):
@@ -233,6 +248,7 @@ func runRelayUplink(address string, announcedID string) {
 				forgetCachedPeer(address)
 				return
 			}
+			noteRelayIdentity(conn, strings.TrimSpace(strings.TrimPrefix(msg, "RELAY_ACK:")))
 			if !wasLive {
 				wasLive = true
 				relayUplinkMutex.Lock()

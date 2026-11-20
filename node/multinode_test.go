@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -174,13 +175,35 @@ func measuredStartingDifficulty() int64 {
 	return difficulty
 }
 
+// claimTestSubnet picks the third number of the addresses one test's nodes
+// use, and holds it until the test ends. Two runs of these tests at once on
+// one machine used to be able to draw the same number; their nodes then
+// found each other, each saw a different first block, and a test failed for
+// a reason that had nothing to do with the program. Holding a port on the
+// subnet open marks it as taken, to this process and to any other.
+func claimTestSubnet(t *testing.T) int {
+	t.Helper()
+	random := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for attempt := 0; attempt < 200; attempt++ {
+		subnet := 1 + random.Intn(250)
+		held, err := net.Listen("tcp", fmt.Sprintf("127.77.%d.250:39999", subnet))
+		if err != nil {
+			continue
+		}
+		t.Cleanup(func() { held.Close() })
+		return subnet
+	}
+	t.Fatal("no free range of addresses was found for this test's nodes")
+	return 0
+}
+
 func newLocalCluster(t *testing.T) *localCluster {
 	t.Helper()
 	cluster := &localCluster{
 		t:       t,
 		program: multiNodeProgram(t),
 		folder:  t.TempDir(),
-		subnet:  1 + rand.New(rand.NewSource(time.Now().UnixNano())).Intn(250),
+		subnet:  claimTestSubnet(t),
 		genesis: time.Now().Unix() - 60,
 		start:   measuredStartingDifficulty(),
 	}

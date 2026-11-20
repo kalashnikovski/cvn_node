@@ -66,13 +66,45 @@ var blockRelay = struct {
 	recentOrder []string
 	uplinks     map[net.Conn]string // connections this node opened -> the other end's address
 	announces   map[net.Conn]bool   // connections whose other end understands announcements
-	fetching    map[string]time.Time
+	identities  map[net.Conn]string // connections -> the name the node at the other end gave itself
+	fetching    map[string]*blockFetch
 }{
-	recent:    make(map[string]string),
-	uplinks:   make(map[net.Conn]string),
-	announces: make(map[net.Conn]bool),
-	fetching:  make(map[string]time.Time),
+	recent:     make(map[string]string),
+	uplinks:    make(map[net.Conn]string),
+	announces:  make(map[net.Conn]bool),
+	identities: make(map[net.Conn]string),
+	fetching:   make(map[string]*blockFetch),
 }
+
+// blockFetch is what is known about one block that was announced and asked
+// for: when it was last asked for, and which other nodes have announced it
+// since and can be asked next.
+type blockFetch struct {
+	lastAsked time.Time
+	first     string          // the address whose announcement began it
+	heard     map[string]bool // addresses that have announced it
+	waiting   []blockAnnouncer
+	following bool // a goroutine is waiting to ask the next one
+}
+
+type blockAnnouncer struct {
+	conn net.Conn
+	from string
+}
+
+const (
+	// blockFetchesKept is how many announced blocks are followed at once.
+	blockFetchesKept = 256
+	// blockFetchesPerAddress is how many of those one address may have
+	// begun. Announcing a block that does not exist costs nothing, so one
+	// address must not be able to fill the table.
+	blockFetchesPerAddress = 8
+	// blockAnnouncersKept is how many nodes are remembered, for one block,
+	// as able to supply it.
+	blockAnnouncersKept = 16
+	// blockFetchKept is how long an announced block is followed.
+	blockFetchKept = 30 * time.Second
+)
 
 // rememberBlockPassedOn keeps a block ready for nodes that ask for it. It
 // reports whether this is the first time the block is being passed on.
@@ -109,6 +141,7 @@ func forgetRelayConnection(conn net.Conn) {
 	blockRelay.Lock()
 	delete(blockRelay.uplinks, conn)
 	delete(blockRelay.announces, conn)
+	delete(blockRelay.identities, conn)
 	blockRelay.Unlock()
 }
 
@@ -122,10 +155,28 @@ func noteConnectionAnnounces(conn net.Conn) (news bool) {
 	return news
 }
 
+// noteRelayIdentity records the name the node at the other end of a
+// connection gave itself (a random name each node makes up when it starts).
+func noteRelayIdentity(conn net.Conn, identity string) {
+	if identity == "" || len(identity) > 64 {
+		return
+	}
+	blockRelay.Lock()
+	blockRelay.identities[conn] = identity
+	blockRelay.Unlock()
+}
+
 // sendOverOpenConnections sends a block or transfer down every open
-// connection, once to each address. Where announcement is not empty, the
+// connection, once to each node. Where announcement is not empty, the
 // ends that understand announcements are sent that and the others the
 // payload. It returns the addresses reached.
+//
+// Two connections are taken to be with one node only when they are with the
+// same address and the far end gave the same name on both: that is this node
+// and another having each opened a connection to the other. The address alone
+// is not enough. Two nodes in one house, one office, or behind one address
+// shared by a mobile carrier look alike from outside, and when the address
+// alone was used each block went to only one of them.
 func sendOverOpenConnections(payload, announcement string) map[string]bool {
 	type open struct {
 		conn net.Conn
@@ -144,9 +195,14 @@ func sendOverOpenConnections(payload, announcement string) map[string]bool {
 		connections = append(connections, open{conn, host})
 	}
 	messages := make([]string, len(connections))
+	sent := make(map[string]bool)
 	for i, connection := range connections {
-		if reached[connection.host] {
-			continue
+		if identity := blockRelay.identities[connection.conn]; identity != "" {
+			node := connection.host + "|" + identity
+			if sent[node] {
+				continue
+			}
+			sent[node] = true
 		}
 		reached[connection.host] = true
 		messages[i] = payload
@@ -172,32 +228,15 @@ func haveBlock(announced blockAnnouncement) bool {
 	return GetBlockByHeightFromDB(announced.Height).Hash == announced.Hash
 }
 
-// claimBlockFetch decides who asks for a block. It returns zero when the
-// caller should ask now, and otherwise how long to wait before trying again,
-// because the block was asked for a moment ago.
-func claimBlockFetch(hash string) time.Duration {
-	blockRelay.Lock()
-	defer blockRelay.Unlock()
-	if asked, pending := blockRelay.fetching[hash]; pending {
-		if waited := time.Since(asked); waited < blockFetchPatience {
-			return blockFetchPatience - waited
-		}
-	}
-	if len(blockRelay.fetching) > 256 {
-		for other, asked := range blockRelay.fetching {
-			if time.Since(asked) > time.Minute {
-				delete(blockRelay.fetching, other)
-			}
-		}
-	}
-	blockRelay.fetching[hash] = time.Now()
-	return 0
-}
-
 // handleBlockAnnouncement answers "I have block H" from the other end of a
-// connection: if the block is not held here, it is asked for, from this
-// connection now or, when another was asked a moment ago, from this one
-// later if the block still has not come.
+// connection. If the block is not held here it is asked for: from this
+// connection now, when nobody has been asked yet, and otherwise from this one
+// in its turn if the block still has not come.
+//
+// Each address is asked once for a block, and those that announced it are
+// asked in the order they did. When the turns were drawn for instead, a node
+// that announced a block over and over and never sent it held nearly every
+// turn, and the node that would have sent it was never asked.
 func handleBlockAnnouncement(conn net.Conn, from, body string) {
 	var announced blockAnnouncement
 	if json.Unmarshal([]byte(body), &announced) != nil || announced.Height <= 0 || !isLowerHex(announced.Hash, 64) {
@@ -206,22 +245,86 @@ func handleBlockAnnouncement(conn net.Conn, from, body string) {
 	if haveBlock(announced) {
 		return
 	}
-	ask := func() {
-		request, _ := json.Marshal(announced)
-		log.Printf("📦 [RELAY] Block #%d was announced by %s; asking for it.\n", announced.Height, from)
-		writeFrame(conn, "BLOCK_REQUEST:"+string(request))
-	}
-	wait := claimBlockFetch(announced.Hash)
-	if wait == 0 {
-		ask()
+	blockRelay.Lock()
+	fetch := blockRelay.fetching[announced.Hash]
+	if fetch != nil {
+		if !fetch.heard[from] && len(fetch.waiting) < blockAnnouncersKept {
+			fetch.heard[from] = true
+			fetch.waiting = append(fetch.waiting, blockAnnouncer{conn, from})
+			if !fetch.following {
+				fetch.following = true
+				go askNextAnnouncer(announced)
+			}
+		}
+		blockRelay.Unlock()
 		return
 	}
-	go func() {
-		time.Sleep(wait)
-		if !haveBlock(announced) && claimBlockFetch(announced.Hash) == 0 {
-			ask()
+	// A block nobody has announced before. Old entries are cleared, and the
+	// announcement is let pass if the table is full or this address has
+	// begun its share already.
+	begunByThisAddress := 0
+	for hash, other := range blockRelay.fetching {
+		if time.Since(other.lastAsked) > blockFetchKept {
+			delete(blockRelay.fetching, hash)
+		} else if other.first == from {
+			begunByThisAddress++
 		}
-	}()
+	}
+	if len(blockRelay.fetching) >= blockFetchesKept || begunByThisAddress >= blockFetchesPerAddress {
+		blockRelay.Unlock()
+		return
+	}
+	blockRelay.fetching[announced.Hash] = &blockFetch{lastAsked: time.Now(), first: from, heard: map[string]bool{from: true}}
+	blockRelay.Unlock()
+	askForAnnouncedBlock(blockAnnouncer{conn, from}, announced)
+}
+
+func askForAnnouncedBlock(announcer blockAnnouncer, announced blockAnnouncement) {
+	request, _ := json.Marshal(announced)
+	log.Printf("📦 [RELAY] Block #%d was announced by %s; asking for it.\n", announced.Height, announcer.from)
+	writeFrame(announcer.conn, "BLOCK_REQUEST:"+string(request))
+}
+
+// askNextAnnouncer waits out the patience allowed to whoever was asked last
+// and, if the block has still not come, asks the next node that announced it.
+// It ends when the block is here or nobody is left to ask.
+func askNextAnnouncer(announced blockAnnouncement) {
+	for {
+		blockRelay.Lock()
+		fetch := blockRelay.fetching[announced.Hash]
+		if fetch == nil {
+			blockRelay.Unlock()
+			return
+		}
+		wait := blockFetchPatience - time.Since(fetch.lastAsked)
+		blockRelay.Unlock()
+		if wait > 0 {
+			time.Sleep(wait)
+		}
+		held := haveBlock(announced)
+
+		blockRelay.Lock()
+		fetch = blockRelay.fetching[announced.Hash]
+		if fetch == nil {
+			blockRelay.Unlock()
+			return
+		}
+		if held || len(fetch.waiting) == 0 {
+			fetch.following = false
+			fetch.waiting = nil
+			blockRelay.Unlock()
+			return
+		}
+		if time.Since(fetch.lastAsked) < blockFetchPatience {
+			blockRelay.Unlock()
+			continue
+		}
+		next := fetch.waiting[0]
+		fetch.waiting = fetch.waiting[1:]
+		fetch.lastAsked = time.Now()
+		blockRelay.Unlock()
+		askForAnnouncedBlock(next, announced)
+	}
 }
 
 // Transfers that arrive from other nodes are checked away from the
@@ -273,18 +376,26 @@ func queueIncomingTransfer(tx Transaction) {
 // took the block.
 func placeAfterItsParent(block Block) bool {
 	blockRelay.Lock()
-	asked, pending := blockRelay.fetching[block.PrevHash]
+	fetch, pending := blockRelay.fetching[block.PrevHash]
+	var asked time.Time
+	if pending {
+		asked = fetch.lastAsked
+	}
 	blockRelay.Unlock()
 	until := asked.Add(2 * blockFetchPatience)
-	parentIsTip := func() bool {
-		_, tip := latestTipID()
-		return tip == block.PrevHash
+	// The wait is for the parent to be held, not for it to be the newest
+	// block. A rival of the newest block has a parent that is held and is not
+	// the newest, and it used to be kept waiting here for nothing, for up to
+	// four seconds, when that parent had been fetched a moment before.
+	parentIsHeld := func() bool {
+		height, tip := latestTipID()
+		return tip == block.PrevHash || height >= block.Index
 	}
-	if !pending || time.Now().After(until) || parentIsTip() {
+	if !pending || time.Now().After(until) || parentIsHeld() {
 		return false
 	}
 	go func() {
-		for time.Now().Before(until) && !parentIsTip() {
+		for time.Now().Before(until) && !parentIsHeld() {
 			time.Sleep(25 * time.Millisecond)
 		}
 		placeWireBlock(block)
