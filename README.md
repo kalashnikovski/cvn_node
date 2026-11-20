@@ -2,6 +2,8 @@
 
 Covenant Standard is a proof-of-work blockchain written from scratch in Go. It is built for fair, open mining on ordinary home computers: no pre-mine, no founder allocation, no investor sale.
 
+Website: https://covenantstandard.online. The seed nodes, what each holds, and their block explorers: https://covenantstandard.online/explorer/.
+
 > **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`), which is joined by invitation ([Installation_Guide.md](Installation_Guide.md), section 7). The first test network (`testnet-1`) has been retired. Coins on all of these have no value. Mine to help test, not to accumulate.
 
 ## What works today
