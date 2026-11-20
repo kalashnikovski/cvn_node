@@ -40,7 +40,8 @@ type localCluster struct {
 	folder  string
 	subnet  int // third number of every node's address, different on each run
 	genesis int64
-	start   int64 // starting difficulty
+	start   int64    // starting difficulty
+	env     []string // further settings given to every node started after they are added
 	nodes   []*localNode
 }
 
@@ -233,6 +234,7 @@ func (c *localCluster) node(name string, number int, seeds []int, extra ...strin
 			"CVN_SEEDS=", "CVN_NETWORK=", "CVN_MINER=", "CVN_LOCALNET_DEBUG=1",
 		),
 	}
+	n.env = append(n.env, c.env...)
 	c.nodes = append(c.nodes, n)
 	return n
 }

@@ -32,6 +32,8 @@ import (
 //	CVN_LOCALNET_GENESIS     the date of the first block, in Unix seconds.
 //	                         Two different values make two different chains.
 //	CVN_LOCALNET_DIFFICULTY  the difficulty the first block starts from
+//	CVN_LOCALNET_REORG_LIMIT how many of its own blocks a node will replace
+//	                         (100 if not given, as on the launch networks)
 
 const localnetName = "localnet"
 
@@ -62,6 +64,11 @@ func localnetParams() (ChainParams, error) {
 		difficulty = given
 	}
 	economics := NewGenesisEconomics
+	// The limit on replacing one's own blocks is 100. A test of it would
+	// have to mine more than that; here, and only here, it can be set lower.
+	if given, err := strconv.ParseInt(os.Getenv("CVN_LOCALNET_REORG_LIMIT"), 10, 64); err == nil && given > 0 {
+		economics.ReorgLimitBlocks = given
+	}
 	return ChainParams{
 		Name:        localnetName,
 		Description: "Local test network: several nodes on one machine, for the multi-node tests",
