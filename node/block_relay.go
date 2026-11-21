@@ -41,8 +41,14 @@ const (
 	// and fetched. Below it the block itself is sent.
 	announceBlocksOverBytes = 16 * 1024
 	// blockFetchPatience is how long a node waits for a block it asked for
-	// before asking someone else who announced it.
-	blockFetchPatience = 2 * time.Second
+	// before asking someone else who announced it. A full block of 300,000
+	// bytes over a connection that has been idle takes about six trips there
+	// and back; between Australia and Europe that is a little over two
+	// seconds. At two seconds a far-away node asked a second and a third
+	// node for a block that was already on its way, and each sent a whole
+	// copy. The wait only comes into play when the first node asked does not
+	// deliver, so a longer one does not slow a block down otherwise.
+	blockFetchPatience = 4 * time.Second
 	// recentBlocksKept is how many blocks last passed on are kept ready to
 	// hand to a node that asks.
 	recentBlocksKept = 32
@@ -80,7 +86,9 @@ var blockRelay = struct {
 // for: when it was last asked for, and which other nodes have announced it
 // since and can be asked next.
 type blockFetch struct {
+	began     time.Time // when it was first asked for
 	lastAsked time.Time
+	arrived   time.Time       // when a copy of the block came in; zero until then
 	first     string          // the address whose announcement began it
 	heard     map[string]bool // addresses that have announced it
 	waiting   []blockAnnouncer
@@ -248,7 +256,7 @@ func handleBlockAnnouncement(conn net.Conn, from, body string) {
 	blockRelay.Lock()
 	fetch := blockRelay.fetching[announced.Hash]
 	if fetch != nil {
-		if !fetch.heard[from] && len(fetch.waiting) < blockAnnouncersKept {
+		if fetch.arrived.IsZero() && !fetch.heard[from] && len(fetch.waiting) < blockAnnouncersKept {
 			fetch.heard[from] = true
 			fetch.waiting = append(fetch.waiting, blockAnnouncer{conn, from})
 			if !fetch.following {
@@ -274,9 +282,25 @@ func handleBlockAnnouncement(conn net.Conn, from, body string) {
 		blockRelay.Unlock()
 		return
 	}
-	blockRelay.fetching[announced.Hash] = &blockFetch{lastAsked: time.Now(), first: from, heard: map[string]bool{from: true}}
+	now := time.Now()
+	blockRelay.fetching[announced.Hash] = &blockFetch{began: now, lastAsked: now, first: from, heard: map[string]bool{from: true}}
 	blockRelay.Unlock()
 	askForAnnouncedBlock(blockAnnouncer{conn, from}, announced)
+}
+
+// noteAnnouncedBlockArrived records that a copy of a block has come in. If
+// the block is one this node asked for after an announcement, it returns how
+// long ago it was first asked for. From then on nobody else is asked for it.
+func noteAnnouncedBlockArrived(hash string) (sinceAsked time.Duration, asked bool) {
+	blockRelay.Lock()
+	defer blockRelay.Unlock()
+	fetch := blockRelay.fetching[hash]
+	if fetch == nil || !fetch.arrived.IsZero() {
+		return 0, false
+	}
+	fetch.arrived = time.Now()
+	fetch.waiting = nil
+	return fetch.arrived.Sub(fetch.began), true
 }
 
 func askForAnnouncedBlock(announcer blockAnnouncer, announced blockAnnouncement) {
@@ -309,7 +333,9 @@ func askNextAnnouncer(announced blockAnnouncement) {
 			blockRelay.Unlock()
 			return
 		}
-		if held || len(fetch.waiting) == 0 {
+		// A copy that has come in and is being checked is enough: asking
+		// another node now would only bring a second copy of the same block.
+		if held || !fetch.arrived.IsZero() || len(fetch.waiting) == 0 {
 			fetch.following = false
 			fetch.waiting = nil
 			blockRelay.Unlock()
@@ -386,7 +412,7 @@ func placeAfterItsParent(block Block) bool {
 	// The wait is for the parent to be held, not for it to be the newest
 	// block. A rival of the newest block has a parent that is held and is not
 	// the newest, and it used to be kept waiting here for nothing, for up to
-	// four seconds, when that parent had been fetched a moment before.
+	// twice the wait, when that parent had been fetched a moment before.
 	parentIsHeld := func() bool {
 		height, tip := latestTipID()
 		return tip == block.PrevHash || height >= block.Index

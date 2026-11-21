@@ -3,6 +3,7 @@
 package node
 
 import (
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
@@ -191,8 +192,17 @@ func TestMultiNodeLimitOnReplacingBlocks(t *testing.T) {
 	// A newcomer whose only seed is the stray node takes the stray chain: it
 	// knows no better.
 	newcomer := c.seed("newcomer", 14, []int{13}).startNode()
+	// (The stray node tells the newcomer of the network's nodes, and now and
+	// then the newcomer has compared chains with one of them and moved on
+	// before this test looks. Its log then shows that it held the stray
+	// chain first and left it.)
 	c.eventually(wait, "the newcomer did not download the stray node's chain", func() bool {
-		return newcomer.height() == strayHeight && newcomer.hashAt(1) == strayFirst
+		if newcomer.height() == strayHeight && newcomer.hashAt(1) == strayFirst {
+			return true
+		}
+		log := newcomer.log()
+		return strings.Contains(log, fmt.Sprintf("Starting at block #%d.", strayHeight)) &&
+			strings.Contains(log, fmt.Sprintf("it proves more work than our %d block(s) there", strayHeight))
 	})
 	// Restarted knowing of the network's seed as well, it leaves that chain
 	// for the one with more work, although the two part further back than

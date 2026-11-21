@@ -186,20 +186,38 @@ func ProcessIncomingWireBlockWithDelay(incomingBlock Block) {
 	if incomingBlock.Index <= 0 {
 		return // the genesis block is never taken from the network
 	}
+	// For a block this node asked for after an announcement, the log says
+	// how long it took to come and how long to check and store. Without
+	// those two figures a slow block cannot be told from a slow node.
+	sinceAsked, askedFor := noteAnnouncedBlockArrived(incomingBlock.Hash)
 	if atomic.LoadInt32(&IsSyncingActive) == 1 {
 		// The chain is being changed and this block cannot be placed now.
 		// It is not kept, but it is not forgotten either: the pass asks
 		// again as soon as it ends (see catchUpAfterMissedBlock).
 		atomic.StoreInt32(&blockMissedDuringPass, 1)
+		if askedFor {
+			log.Printf("📦 [RELAY] Block #%d arrived %.1f seconds after it was asked for. The chain is being changed, so the pass will fetch it.\n", incomingBlock.Index, sinceAsked.Seconds())
+		}
 		return
 	}
 	// A block whose parent this node has asked a neighbour for, and which
 	// has not come yet, is kept for a moment and placed once the parent is
 	// here (see placeAfterItsParent).
 	if placeAfterItsParent(incomingBlock) {
+		if askedFor {
+			log.Printf("📦 [RELAY] Block #%d arrived %.1f seconds after it was asked for. It is kept until its parent is in place.\n", incomingBlock.Index, sinceAsked.Seconds())
+		}
 		return
 	}
+	began := time.Now()
 	placeWireBlock(incomingBlock)
+	if askedFor {
+		outcome := "It was not placed on top of the chain."
+		if _, tip := latestTipID(); tip == incomingBlock.Hash {
+			outcome = fmt.Sprintf("Checking and storing it took %.1f seconds.", time.Since(began).Seconds())
+		}
+		log.Printf("📦 [RELAY] Block #%d (%d bytes) arrived %.1f seconds after it was asked for. %s\n", incomingBlock.Index, blockSizeBytes(incomingBlock), sinceAsked.Seconds(), outcome)
+	}
 }
 
 // placeWireBlock puts a block that arrived from a neighbour where it belongs:

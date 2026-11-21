@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -477,6 +478,20 @@ func SaveBlockToStorageInternal(block Block) bool {
 	return true
 }
 
+// balancesCountedThrough is the height of the newest block the running
+// balances include. It is read and written under BalanceCacheMutex.
+//
+// The balances are kept two ways: a block that holds only its reward is
+// added to them, and now and then they are counted afresh from every coin.
+// A fresh count can be asked for by anyone looking at the address page. When
+// one ran between a block being written and that block being added, the
+// fresh count already included the block, and its reward was then added a
+// second time; the node showed 50 coins too many at the miner's address
+// until the next fresh count. A fresh count now notes which block it reaches,
+// from the same view of the database it counted, and a block it has already
+// counted is not added again.
+var balancesCountedThrough int64 = -1
+
 // ApplyIncrementalDeltaCacheUpdate updates the memory cache using only the block's deltas
 func ApplyIncrementalDeltaCacheUpdate(block Block) {
 	BalanceCacheMutex.Lock()
@@ -485,6 +500,10 @@ func ApplyIncrementalDeltaCacheUpdate(block Block) {
 	if StateBalanceCache == nil {
 		StateBalanceCache = make(map[string]int64)
 	}
+	if balancesCountedThrough >= block.Index {
+		return
+	}
+	balancesCountedThrough = block.Index
 
 	// This is only called for a block that holds nothing but its reward
 	// transaction, so there are no spent coins to subtract: only the reward
@@ -511,11 +530,21 @@ func RebuildStateBalanceCacheInternal() {
 	defer BalanceCacheMutex.Unlock()
 
 	StateBalanceCache = make(map[string]int64)
+	balancesCountedThrough = -1
 	if GlobalBoltEngine == nil {
 		return
 	}
 
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
+		// The newest block in this same view of the database: the coins
+		// counted below are exactly the coins as of that block.
+		if blocks := tx.Bucket(blocksBucket); blocks != nil {
+			if newest, _ := blocks.Cursor().Last(); newest != nil {
+				if height, err := strconv.ParseInt(string(newest), 10, 64); err == nil {
+					balancesCountedThrough = height
+				}
+			}
+		}
 		bUTXO := tx.Bucket(utxoBucket)
 
 		if bUTXO != nil {

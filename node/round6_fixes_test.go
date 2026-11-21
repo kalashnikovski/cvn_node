@@ -210,3 +210,44 @@ func TestABlockFoundDuringADownloadDoesNotBlameTheSource(t *testing.T) {
 		t.Error("the source was set aside by the pass that followed")
 	}
 }
+
+// A fresh count of every balance that runs just after a block is written,
+// and before that block's reward is added to the running balances, already
+// includes the block. The reward is not then added a second time.
+func TestARewardIsNotCountedTwiceAfterAFreshCount(t *testing.T) {
+	t.Chdir(t.TempDir())
+	startTestChain(t, "devnet")
+	buildTestChain(t, 3)
+	tip := GetLatestBlockInternal()
+	miner := strings.TrimSpace(tip.Transactions[0].Outputs[0].Recipient)
+
+	RebuildStateBalanceCacheInternal() // anyone opening the address page
+	BalanceCacheMutex.RLock()
+	want := StateBalanceCache[miner]
+	BalanceCacheMutex.RUnlock()
+	if want == 0 {
+		t.Fatal("the miner of the newest block holds nothing")
+	}
+
+	ApplyIncrementalDeltaCacheUpdate(tip) // the block being added, late
+
+	BalanceCacheMutex.RLock()
+	got := StateBalanceCache[miner]
+	BalanceCacheMutex.RUnlock()
+	if got != want {
+		t.Errorf("the miner's balance is shown as %d units; the coins come to %d", got, want)
+	}
+
+	// The next block is still added in the ordinary way.
+	extendTestChain(t, tip.Timestamp+45, miner, nil)
+	BalanceCacheMutex.RLock()
+	after := StateBalanceCache[miner]
+	BalanceCacheMutex.RUnlock()
+	RebuildStateBalanceCacheInternal()
+	BalanceCacheMutex.RLock()
+	counted := StateBalanceCache[miner]
+	BalanceCacheMutex.RUnlock()
+	if after != counted || after <= want {
+		t.Errorf("after one more block the running balance is %d and a fresh count gives %d", after, counted)
+	}
+}

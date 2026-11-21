@@ -233,3 +233,47 @@ func TestABurstOfTransfersDoesNotCrowdOutABlock(t *testing.T) {
 		t.Errorf("the features line was answered a second time: %q", got)
 	}
 }
+
+// Once a copy of an announced block has come in, nobody else is asked for
+// it, however long checking and storing it takes. A far-away node used to
+// ask every node that had announced the block, one after another, while the
+// first copy was still being dealt with, and was sent the block six times.
+func TestNobodyElseIsAskedOnceACopyHasArrived(t *testing.T) {
+	onNetwork(t, "devnet")
+	freshBlockRelay(t)
+	savedEngine := GlobalBoltEngine
+	GlobalBoltEngine = nil // this node holds no blocks
+	t.Cleanup(func() { GlobalBoltEngine = savedEngine })
+
+	firstNear, firstFar := connectedPair(t)
+	secondNear, secondFar := connectedPair(t)
+	announcement, _ := json.Marshal(blockAnnouncement{Height: 7, Hash: testHash("c")})
+
+	if _, asked := noteAnnouncedBlockArrived(testHash("c")); asked {
+		t.Fatal("a block nobody announced was taken as one that was asked for")
+	}
+	handleBlockAnnouncement(firstNear, "10.0.0.1", string(announcement))
+	if got, ok := readRelayFrame(t, firstFar, 2*time.Second); !ok || got != "BLOCK_REQUEST:"+string(announcement) {
+		t.Fatalf("the first node to announce was sent %q", got)
+	}
+	handleBlockAnnouncement(secondNear, "10.0.0.2", string(announcement))
+
+	// The copy from the first node comes in. It is not stored yet.
+	time.Sleep(200 * time.Millisecond)
+	sinceAsked, asked := noteAnnouncedBlockArrived(testHash("c"))
+	if !asked || sinceAsked < 150*time.Millisecond || sinceAsked > 2*time.Second {
+		t.Fatalf("the arrival of a block that was asked for was noted as asked=%v, %v after", asked, sinceAsked)
+	}
+	if _, again := noteAnnouncedBlockArrived(testHash("c")); again {
+		t.Error("a second copy was counted as the arrival of a block asked for")
+	}
+	if got, ok := readRelayFrame(t, secondFar, blockFetchPatience+time.Second); ok {
+		t.Errorf("with a copy already here, a second node was still asked: %q", got)
+	}
+	// A node that announces it later still is not asked either.
+	thirdNear, thirdFar := connectedPair(t)
+	handleBlockAnnouncement(thirdNear, "10.0.0.3", string(announcement))
+	if got, ok := readRelayFrame(t, thirdFar, 500*time.Millisecond); ok {
+		t.Errorf("with a copy already here, a later announcer was asked: %q", got)
+	}
+}

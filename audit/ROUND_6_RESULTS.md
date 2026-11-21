@@ -98,10 +98,22 @@ Harmless; now done on Windows only.
 
 ## Findings that were not faults in the program
 
-- **A newcomer left at block 0 in `TestMultiNodeLimitOnReplacingBlocks` (Antigravity 2).** Antigravity and Claude Code each ran thirty repetitions of the multi-node tests on the same machine at the same time. Two test networks drew the same range of addresses and found each other; each then saw a different first block and, correctly, would not follow the other. Claude's report shows the same clash from its side. The tests now hold a port on their range of addresses for as long as they run, so two runs cannot share one.
+- **A newcomer left at block 0 in `TestMultiNodeLimitOnReplacingBlocks` (Antigravity 2).** Two causes, both in the test and both now removed. Antigravity and Claude Code each ran thirty repetitions of the multi-node tests on the same machine at the same time; two test networks could draw the same range of addresses and find each other (Claude's report shows this from its side). The tests now hold a port on their range for as long as they run. Separately, the test itself had a race, seen again here in 1 run of 45: the stray node tells the newcomer of the network's nodes, and now and then the newcomer had taken the stray chain and already left it for the network's before the test looked. The test now accepts a log that shows both steps.
 - **A data race on the network settings (Antigravity 4, Claude).** Between a test putting the settings back and a goroutine left over from a block stored earlier in the same test. Nothing in the program writes the settings after start. Real nodes built with the race detector reported nothing. The unit tests cannot yet pass under `-race`; that is noted as work to do.
 - **A node with a chain stops if the node named with `--connect` is on another chain while every seed is silent (Google AI 4).** Kept. The operator named that node; being told plainly that it is on a different chain is the purpose of the check.
 - **Transfers crowded out by a flood of invalid ones (Google AI 2).** Already listed as known. The estimate assumed 5 to 10 thousandths of a second to check a transfer; a signature check takes a small fraction of that. A dropped transfer is not lost. Left as it is, and still listed.
+
+## Changed afterwards, from a run on devnet
+
+Five full blocks were sent across devnet on the fixed code (Melbourne and six seeds). All arrived well inside a block interval, but Amsterdam asked all six other nodes in turn for two of them, and was sent each block several times.
+
+- **The wait before asking a second node is 4 seconds, not 2.** A full block from Australia to Europe over an idle connection takes a little over two seconds, so the first copy was still on its way when the second node was asked. The wait matters only when the first node does not deliver.
+- **Nobody else is asked once a copy has arrived**, however long checking and storing it takes. Test: `TestNobodyElseIsAskedOnceACopyHasArrived`.
+- **The log says how long a requested block took to arrive and how long to check and store**, so a slow line can be told from a slow node.
+
+## Found while repeating the tests
+
+- **A block reward could be counted twice in the balances a node shows.** A fresh count of all balances (anyone opening the address page can cause one) that ran between a block being written and its reward being added to the running balances already included the block; the reward was then added again. The node showed 50 coins too many at the miner's address until the next fresh count. It affected only what is shown: blocks are checked against the coins themselves, never against these totals. Seen in 1 run of 45. A fresh count now notes the block it reaches and that block is not added again. Test: `TestARewardIsNotCountedTwiceAfterAFreshCount`.
 
 ## Noted, not changed
 
