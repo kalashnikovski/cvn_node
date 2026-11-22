@@ -76,3 +76,4 @@ footer { border-top: 1px solid var(--line); margin-top: 56px; padding: 22px 0 40
   h1 { font-size: 28px; }
   th, td { padding: 8px 10px; }
 }
+.after { margin-top: 10px; }

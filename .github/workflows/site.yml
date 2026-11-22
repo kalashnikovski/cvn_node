@@ -41,6 +41,22 @@ jobs:
             echo "$missing"
             exit 1
           fi
+      # The pages also say what they may load: their own style sheet and
+      # script, and answers from the seeds; nothing written into the page
+      # itself (Lockpick findings LP-4SJ838 and LP-WFHY62). A script or a
+      # style written into a page would be refused by the browser, so a page
+      # that has one, or lacks the policy, is not published.
+      - name: Every page says what it may load
+        run: |
+          bad=0
+          for page in $(find site -name '*.html'); do
+            grep -q '<meta http-equiv="Content-Security-Policy" content="default-src '"'"'none'"'"';' "$page" || { echo "$page: no content policy"; bad=1; }
+            grep -q "object-src 'none'; base-uri 'none'; form-action 'none'" "$page" || { echo "$page: the policy lacks object-src, base-uri or form-action"; bad=1; }
+            if grep -nE '<script>|<script [^>]*[^c]>|<style|[[:space:]]style=|[[:space:]]on[a-z]+=' "$page" | grep -v '<script src="[^"]*"></script>'; then
+              echo "$page: a script, style or handler is written into the page"; bad=1
+            fi
+          done
+          exit $bad
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
