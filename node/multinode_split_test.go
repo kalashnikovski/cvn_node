@@ -5,6 +5,7 @@ package node
 import (
 	"fmt"
 	"math/big"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -90,10 +91,15 @@ func TestMultiNodeTwoHalvesRejoin(t *testing.T) {
 	// Two miners in one half race each other now and then, and the loser
 	// gives up a block for the other's: that is ordinary. What must never
 	// happen is a node of the strong half leaving its chain for the weak
-	// half's.
+	// half's. The two halves part at the very first block, so that is a
+	// switch "above block #0". Once the weak half's miner has taken up the
+	// strong chain it is a miner like the others, and a node of the strong
+	// half giving up later blocks for a longer run of its blocks is the
+	// ordinary case again: this check used to count that as a fault.
 	for _, n := range strong {
 		for _, weakNode := range weak {
-			if strings.Contains(n.log(), "Switching to the branch from http://"+weakNode.host+":") {
+			leftForWeakChain := regexp.MustCompile(`Switching to the branch from http://` + regexp.QuoteMeta(weakNode.host) + `:\d+ above block #0:`)
+			if leftForWeakChain.MatchString(n.log()) {
 				t.Errorf("%s, in the half with more work, gave up blocks for the chain of %s", n.name, weakNode.name)
 			}
 		}

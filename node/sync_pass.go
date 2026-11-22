@@ -719,6 +719,7 @@ func TriggerActiveReSyncPass() {
 	}()
 	// Whatever this pass pauses, this pass resumes.
 	defer atomic.StoreInt32(&IsSyncingActive, 0)
+	defer releaseProofHelp()
 	deadline := time.Now().Add(syncPassLimit)
 
 	startTip := GetLatestBlockInternal()
@@ -821,6 +822,10 @@ func TriggerActiveReSyncPass() {
 		// Only now, with blocks in hand to add, is the rest of the node
 		// asked to stand still.
 		pauseForChainChange()
+		// The proofs of these blocks are worked out on several cores before
+		// the blocks are checked one after another (see proof_ahead.go). The
+		// rest of the node is not held up while that is done.
+		prepareProofs(batch)
 		StateMutex.Lock()
 		if tipNow := GetLatestBlockInternal(); tipNow.Hash != tipWhenAsked {
 			// The newest block changed while these blocks were on their way:

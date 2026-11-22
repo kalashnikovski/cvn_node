@@ -218,6 +218,10 @@ type rxLight struct {
 	key   string
 	cache *randomx.Cache
 	vm    *randomx.VM
+	// More machines on the same cache, each about 2 MB, so that several
+	// proofs can be worked out at once. Made when a batch of downloaded
+	// blocks needs them and given back when the download is over.
+	spare []*randomx.VM
 }
 
 func newRxLight(key []byte) (*rxLight, error) {
@@ -236,6 +240,7 @@ func newRxLight(key []byte) (*rxLight, error) {
 }
 
 func (e *rxLight) close() {
+	e.closeSpare()
 	if e.vm != nil {
 		e.vm.Close()
 	}
@@ -254,6 +259,9 @@ var rxVerifier struct {
 	sync.Mutex
 	engines []*rxLight        // most recently used first; at most two keys
 	results map[string]string // key + blob -> work value, for repeat checks
+	// The same, for the batch of downloaded blocks being added: worked out
+	// ahead on several cores, and replaced with each batch.
+	prepared map[string]string
 }
 
 // randomXVerify returns the work value of a mining blob under a key (see
@@ -269,26 +277,15 @@ func randomXVerify(key []byte, input []byte) (string, bool) {
 	if work, known := rxVerifier.results[cacheKey]; known {
 		return work, true
 	}
-	var engine *rxLight
-	for i, candidate := range rxVerifier.engines {
-		if candidate.key == string(key) {
-			engine = candidate
-			rxVerifier.engines[0], rxVerifier.engines[i] = rxVerifier.engines[i], rxVerifier.engines[0]
-			break
-		}
+	// Worked out ahead, on several cores, for a batch of downloaded blocks
+	// (see proof_ahead.go).
+	if work, known := rxVerifier.prepared[cacheKey]; known {
+		atomic.AddInt64(&proofsFoundReady, 1)
+		return work, true
 	}
+	engine := verifyEngineLocked(key)
 	if engine == nil {
-		created, err := newRxLight(key)
-		if err != nil {
-			return "", false
-		}
-		engine = created
-		rxVerifier.engines = append([]*rxLight{engine}, rxVerifier.engines...)
-		for len(rxVerifier.engines) > 2 {
-			last := len(rxVerifier.engines) - 1
-			rxVerifier.engines[last].close()
-			rxVerifier.engines = rxVerifier.engines[:last]
-		}
+		return "", false
 	}
 	work := engine.hash(input)
 	if rxVerifier.results == nil || len(rxVerifier.results) > 4096 {
@@ -296,6 +293,28 @@ func randomXVerify(key []byte, input []byte) (string, bool) {
 	}
 	rxVerifier.results[cacheKey] = work
 	return work, true
+}
+
+// verifyEngineLocked returns the checking engine for a key, preparing one if
+// there is none, and nil if that fails. rxVerifier must be locked.
+func verifyEngineLocked(key []byte) *rxLight {
+	for i, candidate := range rxVerifier.engines {
+		if candidate.key == string(key) {
+			rxVerifier.engines[0], rxVerifier.engines[i] = rxVerifier.engines[i], rxVerifier.engines[0]
+			return candidate
+		}
+	}
+	created, err := newRxLight(key)
+	if err != nil {
+		return nil
+	}
+	rxVerifier.engines = append([]*rxLight{created}, rxVerifier.engines...)
+	for len(rxVerifier.engines) > 2 {
+		last := len(rxVerifier.engines) - 1
+		rxVerifier.engines[last].close()
+		rxVerifier.engines = rxVerifier.engines[:last]
+	}
+	return created
 }
 
 // warmNextVerifyKey prepares the checking engine for the RandomX key that
