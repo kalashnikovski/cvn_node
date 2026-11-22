@@ -14,7 +14,7 @@ func onNetwork(t *testing.T, name string) {
 	if err := SelectNetwork(name); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { Params = saved; applyParams() })
+	t.Cleanup(func() { backgroundWork.Wait(); Params = saved; applyParams() })
 }
 
 func TestParseCVN(t *testing.T) {

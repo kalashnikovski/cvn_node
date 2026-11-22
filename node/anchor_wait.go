@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -65,7 +66,11 @@ const anchorSourcesNeeded = 2
 // as the block it was waiting for. Bitcoin allows a block's date to be up to
 // two hours ahead of true time and about an hour behind. A variable so tests
 // can use older blocks.
-var anchorFreshness = 3 * time.Hour
+var anchorFreshnessNanos = int64(3 * time.Hour) // read and written atomically; tests change it
+
+func anchorFreshness() time.Duration {
+	return time.Duration(atomic.LoadInt64(&anchorFreshnessNanos))
+}
 
 var anchorHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
@@ -274,7 +279,7 @@ func waitForGenesisAnchor(args []string, nearInterval, farInterval time.Duration
 			header, tip, agreed := lookUpAnchor(height)
 			if agreed && sawItMissing {
 				if _, dated, err := parseBitcoinHeader(header); err == nil {
-					if age := time.Since(time.Unix(dated, 0)); age > anchorFreshness || age < -anchorFreshness {
+					if age := time.Since(time.Unix(dated, 0)); age > anchorFreshness() || age < -anchorFreshness() {
 						agreed = false
 						if time.Since(lastReport) > time.Minute {
 							fmt.Printf("⚠️  The explorers gave a block for height %d dated %s, which cannot be the block this node has been waiting for. Not using it.\n", height, time.Unix(dated, 0).UTC().Format("2 January 2006 15:04 UTC"))

@@ -98,7 +98,14 @@ func StartMeshNetwork() {
 
 	listener8080, err := net.Listen("tcp", listenAddress(Params.GossipPort))
 	if err != nil {
-		log.Printf("🚨 Could not listen for other nodes on port %d: %v\n", Params.GossipPort, err)
+		// Without this port the node has no connections at all: it neither
+		// hears of blocks nor passes its own on. It used to carry on like
+		// that, showing "Running" and mining blocks nobody would ever see.
+		fmt.Printf("\n🚨 This node cannot use port %d: %v\n", Params.GossipPort, err)
+		fmt.Println("   Another copy of the node is probably running on this computer, or another program holds the port.")
+		fmt.Println("   Close it and start again. The node has stopped; nothing was changed.")
+		log.Printf("🚨 Could not listen for other nodes on port %d: %v. Stopping.\n", Params.GossipPort, err)
+		stopBecausePortIsTaken()
 		return
 	}
 	defer listener8080.Close()
@@ -150,6 +157,23 @@ func StartMeshNetwork() {
 			conn.Close()
 		}
 	}
+}
+
+// stopBecausePortIsTaken ends the program. Tests put something else here.
+var stopBecausePortIsTaken = func() { os.Exit(1) }
+
+// backgroundWork counts the sends that were started and left to finish by
+// themselves, so that tests can wait for them before they put the network
+// settings back.
+var backgroundWork sync.WaitGroup
+
+// inBackground runs something without waiting for it.
+func inBackground(work func()) {
+	backgroundWork.Add(1)
+	go func() {
+		defer backgroundWork.Done()
+		work()
+	}()
 }
 
 func decrementIPConnection(ip string) {

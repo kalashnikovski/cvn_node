@@ -3,11 +3,13 @@ package node
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // WHAT A NODE ANSWERS OVER HTTP
@@ -193,7 +195,7 @@ func syncAPI() *http.ServeMux {
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
-		go BroadcastNewTransaction(tx)
+		inBackground(func() { BroadcastNewTransaction(tx) })
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(map[string]string{"status": "accepted", "tx_id": tx.ID})
 	})
@@ -202,6 +204,21 @@ func syncAPI() *http.ServeMux {
 	winMux.HandleFunc("/utxos", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
+		// Finding one address's coins reads every coin there is. Anyone can
+		// ask, so each caller has an allowance, and only a few lists are
+		// made at once. A wallet asks once or twice for a transfer.
+		host, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if !coinListAllowance(host).Allow() {
+			http.Error(w, `{"error":"too many requests for coins from this address; try again in a few seconds"}`, http.StatusTooManyRequests)
+			return
+		}
+		select {
+		case coinListsInProgress <- struct{}{}:
+			defer func() { <-coinListsInProgress }()
+		default:
+			http.Error(w, `{"error":"the node is busy listing coins for others; try again in a moment"}`, http.StatusServiceUnavailable)
+			return
+		}
 		json.NewEncoder(w).Encode(ListSpendableCoins(r.URL.Query().Get("address")))
 	})
 	// The balance of one address.
@@ -227,6 +244,23 @@ func syncAPI() *http.ServeMux {
 		json.NewEncoder(w).Encode(payload)
 	})
 	return winMux
+}
+
+// coinListsInProgress holds a place for each list of coins being made.
+var coinListsInProgress = make(chan struct{}, 4)
+
+// coinListAllowance is one caller's allowance of coin lists: ten at once,
+// then one every two seconds.
+func coinListAllowance(host string) *TokenBucket {
+	IPTokensMutex.Lock()
+	defer IPTokensMutex.Unlock()
+	key := "coins|" + host
+	limiter, exists := IPTokensMap[key]
+	if !exists {
+		limiter = &TokenBucket{tokens: 10, maxTokens: 10, refillRate: 0.5, lastRefill: time.Now()}
+		IPTokensMap[key] = limiter
+	}
+	return limiter
 }
 
 // serveSyncAPI answers the first set for as long as the program runs.

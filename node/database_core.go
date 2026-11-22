@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,9 +34,29 @@ var blocksBucket = []byte("blocks")
 var metaBucket = []byte("meta")
 var utxoBucket = []byte("utxo")
 
+// databaseMapSize is how much room the database is given to grow into
+// before the program has to arrange more.
+//
+// Arranging more has to wait until nothing is reading the database. A backup
+// reads all of it, for as long as the copy takes, so a block that needed more
+// room while a backup was being written waited for the whole copy, and every
+// other reader waited behind the block. Room arranged at the start means
+// that moment does not come until the chain has outgrown it.
+//
+// On Linux and macOS the room costs nothing until it is used. On Windows the
+// file itself is made that large at once, so there the database is left to
+// grow in its ordinary steps. A 32-bit program cannot be given this much.
+func databaseMapSize() int {
+	if runtime.GOOS == "windows" || strconv.IntSize < 64 {
+		return 0
+	}
+	const room int64 = 8 << 30
+	return int(room)
+}
+
 // InitBoltEngine mounts the local physical bbolt storage files safely on startup
 func InitBoltEngine() {
-	db, err := bbolt.Open(BlockchainFile, 0600, nil)
+	db, err := bbolt.Open(BlockchainFile, 0600, &bbolt.Options{InitialMmapSize: databaseMapSize()})
 	if err != nil {
 		panic(fmt.Sprintf("🚨 CRITICAL STORAGE FAULT: Unable to allocate BoltDB file handles: %v", err))
 	}
@@ -470,9 +491,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 	// A block stored while catching up is one the network already has;
 	// announcing each of them would be noise, hundreds of times over.
 	if atomic.LoadInt32(&IsSyncingActive) == 0 && len(block.Transactions) > 0 {
-		go func(b Block) {
-			BroadcastNewBlock(b)
-		}(block)
+		inBackground(func() { BroadcastNewBlock(block) })
 	}
 
 	return true

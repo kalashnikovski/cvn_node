@@ -230,9 +230,8 @@ func TestDevnetCanRehearseALaunch(t *testing.T) {
 // one that has just been mined.
 func treatOldBlocksAsNew(t *testing.T) {
 	t.Helper()
-	saved := anchorFreshness
-	anchorFreshness = 100 * 365 * 24 * time.Hour
-	t.Cleanup(func() { anchorFreshness = saved })
+	saved := atomic.SwapInt64(&anchorFreshnessNanos, int64(100*365*24*time.Hour))
+	t.Cleanup(func() { atomic.StoreInt64(&anchorFreshnessNanos, saved) })
 }
 
 // One explorer out of reach, or several, delays nobody as long as two answer.

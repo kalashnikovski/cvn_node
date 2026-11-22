@@ -43,6 +43,9 @@ func startTestChain(t *testing.T, network string, prepare ...func()) {
 	InitBoltEngine()
 	setInitialDownload(0, 0, false)
 	t.Cleanup(func() {
+		// Blocks stored by the test were handed to goroutines to pass on.
+		// They read the settings put back below, so they finish first.
+		backgroundWork.Wait()
 		if GlobalBoltEngine != nil {
 			GlobalBoltEngine.Close()
 			GlobalBoltEngine = nil

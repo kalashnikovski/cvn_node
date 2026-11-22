@@ -115,9 +115,9 @@ Five full blocks were sent across devnet on the fixed code (Melbourne and six se
 
 - **A block reward could be counted twice in the balances a node shows.** A fresh count of all balances (anyone opening the address page can cause one) that ran between a block being written and its reward being added to the running balances already included the block; the reward was then added again. The node showed 50 coins too many at the miner's address until the next fresh count. It affected only what is shown: blocks are checked against the coins themselves, never against these totals. Seen in 1 run of 45. A fresh count now notes the block it reaches and that block is not added again. Test: `TestARewardIsNotCountedTwiceAfterAFreshCount`.
 
-## Noted, not changed
+## The four notes, dealt with afterwards
 
-- `/utxos` reads every coin on each request, with no limit. Older than this round.
-- A backup holds one read of the database for as long as the copy takes, and a block that makes the file grow waits for it.
-- A node that cannot open its port carries on with no connections instead of stopping.
-- The unit tests under the race detector (above).
+- **`/utxos` had no limit.** Finding one address's coins reads every coin there is, and anyone could ask as often as they liked. Each caller now has an allowance (ten at once, then one every two seconds) and four lists at most are made at a time. A wallet that is asked to wait tries the next node. Test: `TestTheCoinListHasAnAllowance`.
+- **A node that could not open its port carried on.** It showed "Running" with no connections, and a miner would have mined blocks nobody saw. It now says the port is taken, most likely by another copy of the node, and stops. Test: `TestANodeThatCannotOpenItsPortStops`.
+- **A backup could hold up storing a block.** The database has to arrange more room now and then as it grows, and can only do that when nothing is reading it; a backup reads all of it for as long as the copy takes. On Linux and macOS the node now arranges 8 GB of room when it opens the database, which costs nothing until used, so that moment does not come until the chain has outgrown it. On Windows room cannot be arranged without making the file that large, so Windows is unchanged; the chance there stays small (the moment comes at each doubling of the file up to 1 GB, then once per GB, and has to fall inside the daily copy). **Not yet seen running on Linux by the authors.**
+- **The unit tests under the race detector.** The reports were all of one kind: a test changing the network settings while a goroutine left from a stored block was still reading them. Sends started in the background are now counted, and the tests wait for them before changing the settings. One test changed a setting while its own waiting node was reading it; that setting is now read atomically.

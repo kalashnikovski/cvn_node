@@ -66,6 +66,9 @@ func (peer *standInPeer) asOnlySeed(t *testing.T) string {
 	t.Helper()
 	host, portText, _ := net.SplitHostPort(peer.server.Listener.Addr().String())
 	port, _ := strconv.Atoi(portText)
+	// Blocks the test has stored were handed to goroutines to pass on, and
+	// those read the settings changed here.
+	backgroundWork.Wait()
 	Params.SeedHosts = []string{host}
 	Params.SyncPort = port
 	Params.ExtraSyncURLs = nil

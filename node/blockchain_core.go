@@ -153,7 +153,7 @@ func ProcessIncomingNetworkBlock(incomingBlock Block) {
 		return
 	}
 	if incomingBlock.Index == currentTip.Index+1 && placeOnTip(incomingBlock) {
-		go BroadcastNewBlock(incomingBlock)
+		inBackground(func() { BroadcastNewBlock(incomingBlock) })
 	}
 }
 
@@ -237,7 +237,7 @@ func placeWireBlock(incomingBlock Block) {
 			return
 		}
 		if placeOnTip(incomingBlock) {
-			go BroadcastNewBlock(incomingBlock)
+			inBackground(func() { BroadcastNewBlock(incomingBlock) })
 		}
 		return
 	}
