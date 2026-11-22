@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"math/big"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -251,5 +252,54 @@ func TestProofsOnSeveralCoresAreFaster(t *testing.T) {
 		tookAlone.Seconds()/tookTogether.Seconds())
 	if threads >= 4 && tookTogether*3/2 > tookAlone {
 		t.Errorf("on %d cores the proofs took %v, and one at a time %v", threads, tookTogether, tookAlone)
+	}
+}
+
+// From the Linux check on a server in London: every seed held the same
+// chain, and the node downloaded all of it from Singapore, the first in the
+// list, both times. Among seeds that claim the same work the one that
+// answers soonest is chosen. A seed with more work is still chosen over a
+// nearer one with less.
+func TestTheSeedThatAnswersSoonestIsChosen(t *testing.T) {
+	onNetwork(t, "devnet")
+	t.Chdir(t.TempDir())
+	Params.SeedHosts = []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"}
+	far, near, middling := Params.syncURL("10.0.0.1"), Params.syncURL("10.0.0.2"), Params.syncURL("10.0.0.3")
+	PeerMapMutex.Lock()
+	savedPeers := ActivePeerMap
+	ActivePeerMap = map[string]time.Time{}
+	PeerMapMutex.Unlock()
+	savedProbe := probeChain
+	t.Cleanup(func() {
+		probeChain = savedProbe
+		PeerMapMutex.Lock()
+		ActivePeerMap = savedPeers
+		PeerMapMutex.Unlock()
+	})
+
+	takes := map[string]time.Duration{far: 120 * time.Millisecond, near: 5 * time.Millisecond, middling: 50 * time.Millisecond}
+	claims := map[string]int64{far: 110, near: 110, middling: 110}
+	probeChain = func(gateway string) (int64, *big.Int) {
+		height, known := claims[gateway]
+		if !known {
+			return 0, nil
+		}
+		time.Sleep(takes[gateway])
+		return height, big.NewInt(height * 1000)
+	}
+	ourWork := big.NewInt(100 * 1000)
+
+	if chosen, height := chooseSyncSource(100, ourWork); chosen != near || height != 110 {
+		t.Errorf("with three seeds on the same chain the node chose %q; want the one that answered soonest, %q", chosen, near)
+	}
+	// The far one is a block ahead: more work wins, however slow.
+	claims[far] = 111
+	if chosen, height := chooseSyncSource(100, ourWork); chosen != far || height != 111 {
+		t.Errorf("with the far seed ahead the node chose %q (claiming #%d); want the far seed", chosen, height)
+	}
+	// The near one has nothing better than ours: it is not chosen for being near.
+	claims[far], claims[near] = 110, 100
+	if chosen, _ := chooseSyncSource(100, ourWork); chosen != middling {
+		t.Errorf("with the nearest seed no further on than us the node chose %q; want %q", chosen, middling)
 	}
 }

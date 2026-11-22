@@ -659,24 +659,36 @@ func chooseSyncSource(ourHeight int64, ourWork *big.Int) (source string, claimed
 	asked := make(map[string]bool)
 	for _, tier := range syncSourceTiers() {
 		var bestWork *big.Int
+		var bestAnswered time.Duration
 		claimedHeight = ourHeight
 		for _, gateway := range tier {
 			if asked[gateway] || syncSourceIsSetAside(gateway) {
 				continue
 			}
 			asked[gateway] = true
+			askedAt := time.Now()
 			peerHeight, peerWork := probeChain(gateway)
+			answered := time.Since(askedAt)
 			if !peerChainIsBetter(peerHeight, peerWork, ourHeight, ourWork) {
 				continue
 			}
 			better := source == ""
 			if peerWork != nil {
 				better = better || bestWork == nil || peerWork.Cmp(bestWork) > 0
+				// The seeds nearly always hold the same chain. Among those
+				// that claim exactly the same work, the one that answered
+				// soonest is taken: it is the nearest, and the blocks will
+				// come from it fastest. It used to be whichever stood first
+				// in the list, so every node in the world downloaded from
+				// the same seed.
+				if !better && bestWork != nil && peerWork.Cmp(bestWork) == 0 && answered < bestAnswered {
+					better = true
+				}
 			} else {
 				better = better || (bestWork == nil && peerHeight > claimedHeight)
 			}
 			if better {
-				source, claimedHeight, bestWork = gateway, peerHeight, peerWork
+				source, claimedHeight, bestWork, bestAnswered = gateway, peerHeight, peerWork, answered
 			}
 		}
 		if source != "" {
