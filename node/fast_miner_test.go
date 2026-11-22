@@ -130,7 +130,7 @@ func TestOnlyTheCVNEditionIsAccepted(t *testing.T) {
 
 func TestFastMinerCommandLine(t *testing.T) {
 	arguments := strings.Join(fastMinerArguments("127.0.0.1:18083", "CVN_abc", runtime.NumCPU()), " ")
-	for _, expected := range []string{"-o 127.0.0.1:18083", "-u CVN_abc", "-a rx/0", "--donate-level 0", "--no-color"} {
+	for _, expected := range []string{"-o 127.0.0.1:18083", "-u CVN_abc", "-a rx/0", "--donate-level 0", "--no-color", "--keepalive"} {
 		if !strings.Contains(arguments, expected) {
 			t.Errorf("the fast miner's command line lacks %q: %s", expected, arguments)
 		}
@@ -226,7 +226,12 @@ func TestFastMinerIsRunAndItsSpeedIsShown(t *testing.T) {
 		t.Error("the node does not count the fast miner as connected")
 	}
 	select {
-	case <-finished:
+	case err := <-finished:
+		// It had connected, so its ending is not "it never connected", which
+		// is what the node used to say of every fast miner that stopped.
+		if err != nil {
+			t.Errorf("a miner that connected and then ended was reported as: %v", err)
+		}
 	case <-time.After(20 * time.Second):
 		t.Fatal("the node did not notice the fast miner stopping")
 	}
@@ -371,6 +376,42 @@ func TestTheFastMinerIsUsedWhenItsFolderIsThere(t *testing.T) {
 	}
 	if choice, _ := chosenMiner([]string{"cvn_node"}); choice != MinerBuiltIn {
 		t.Errorf("\"miner\": \"builtin\" in miner_config.json did not win: %q", choice)
+	}
+}
+
+// From the Linux check on a rented server: the download unpacks into a folder
+// of its own named xmrig-cvn. Unpacked into a folder already made with that
+// name, the miner sat one level further down and the built-in miner ran
+// without a word.
+func TestTheFastMinerIsFoundOneFolderFurtherDown(t *testing.T) {
+	folder := t.TempDir()
+	t.Chdir(folder)
+	t.Setenv("CVN_MINER", "")
+	saved := programFolder
+	programFolder = func() string { return folder }
+	defer func() { programFolder = saved }()
+
+	inner := filepath.Join(folder, "xmrig-cvn", "xmrig-cvn")
+	if err := os.MkdirAll(inner, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if fastMinerUnpacked() {
+		t.Fatal("two empty folders were taken for a fast miner")
+	}
+	if err := os.WriteFile(filepath.Join(inner, fastMinerFileName()), []byte("x"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if choice, _ := chosenMiner([]string{"cvn_node"}); choice != MinerXMRig {
+		t.Errorf("the fast miner one folder further down was not chosen: %q", choice)
+	}
+	found := false
+	for _, place := range fastMinerPlaces(folder) {
+		if place == filepath.Join(inner, fastMinerFileName()) {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the place the miner is in is not one of the places looked in")
 	}
 }
 

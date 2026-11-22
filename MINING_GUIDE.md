@@ -41,16 +41,15 @@ There is nothing to type and no file to edit. You download one folder, put it in
 
 1. Stop the miner if it is running.
 2. Download `xmrig-cvn-linux-static-x64.tar.gz` from the newest release at https://github.com/kalashnikovski/cvn-xmrig/releases.
-3. Make a folder named `xmrig-cvn` inside your CVN folder (the one that contains `cvn_node`) and unpack into it, so that the miner is at `cvn_node/xmrig-cvn/xmrig`:
+3. Unpack it inside your CVN folder (the one that contains `cvn_node`). The download makes the `xmrig-cvn` folder itself, so do not make one first:
 
    ```bash
    cd cvn_node
-   mkdir -p xmrig-cvn
-   tar -xzf ~/Downloads/xmrig-cvn-linux-static-x64.tar.gz -C xmrig-cvn
+   tar -xzf ~/Downloads/xmrig-cvn-linux-static-x64.tar.gz
    ls xmrig-cvn
    ```
 
-   If `ls` shows another folder and not a file named `xmrig`, move that folder's contents up one level into `xmrig-cvn`.
+   `ls` must show a file named `xmrig`, so that the miner is at `cvn_node/xmrig-cvn/xmrig`.
 4. Start the miner as usual.
 
 **How to tell it is running.** Among the first lines the miner window prints, look for:

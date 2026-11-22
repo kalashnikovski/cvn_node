@@ -256,8 +256,25 @@ func fastMinerUnpacked() bool {
 	if folder == "" {
 		return false
 	}
-	info, err := os.Stat(filepath.Join(folder, "xmrig-cvn", fastMinerFileName()))
-	return err == nil && !info.IsDir()
+	for _, candidate := range fastMinerPlaces(folder) {
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// fastMinerPlaces lists where the fast miner is looked for inside the
+// program's folder. The download unpacks into a folder of its own named
+// xmrig-cvn, so someone who made that folder first and unpacked into it has
+// the miner one level further down; it is found there too.
+func fastMinerPlaces(folder string) []string {
+	name := fastMinerFileName()
+	return []string{
+		filepath.Join(folder, "xmrig-cvn", name),
+		filepath.Join(folder, "xmrig-cvn", "xmrig-cvn", name),
+		filepath.Join(folder, name),
+	}
 }
 
 // chosenMiner returns which miner to use: what was asked for on the command
@@ -314,7 +331,7 @@ func locateFastMiner(args []string) (string, error) {
 	// started from as well would run whatever file of that name happened to
 	// be there.
 	for _, folder := range folders {
-		for _, candidate := range []string{filepath.Join(folder, "xmrig-cvn", name), filepath.Join(folder, name)} {
+		for _, candidate := range fastMinerPlaces(folder) {
 			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 				return usableFastMiner(candidate, name)
 			}
@@ -366,6 +383,11 @@ func fastMinerArguments(workServerAddress, minerAddress string, threads int) []s
 		"--no-title",
 		"--print-time", "10",
 		"--retry-pause", "3",
+		// The work server closes a connection it has heard nothing on for
+		// ten minutes, and a miner only speaks when it has found a block. A
+		// slow machine can go far longer than that between blocks, so the
+		// miner is told to say it is still there.
+		"--keepalive",
 	}
 	if threads > 0 && threads < runtime.NumCPU() {
 		arguments = append(arguments, "-t", strconv.Itoa(threads))
@@ -551,19 +573,21 @@ func runFastMinerOnce(path string, arguments []string) error {
 	// it is stopped and counted as a failure. Time the node spends catching
 	// up with the network does not count against it.
 	exited := make(chan struct{})
+	var connected int32
 	go func() {
 		waited := time.Duration(0)
 		for waited < fastMinerConnectDeadline {
 			select {
 			case <-exited:
 				return
-			case <-time.After(time.Second):
+			case <-time.After(250 * time.Millisecond):
 			}
 			if atomic.LoadInt32(&externalMinersConnected) > 0 {
+				atomic.StoreInt32(&connected, 1)
 				return
 			}
 			if atomic.LoadInt32(&IsSyncingActive) == 0 && atomic.LoadInt32(&MiningHoldActive) == 0 {
-				waited += time.Second
+				waited += 250 * time.Millisecond
 			}
 		}
 		_ = command.Process.Kill()
@@ -572,7 +596,9 @@ func runFastMinerOnce(path string, arguments []string) error {
 	err := command.Wait()
 	close(exited)
 	_ = writer.Close()
-	if err == nil && atomic.LoadInt32(&externalMinersConnected) == 0 {
+	// Whether it is connected now says nothing: a miner that has just ended
+	// has always just disconnected. What counts is whether it ever was.
+	if err == nil && atomic.LoadInt32(&connected) == 0 && atomic.LoadInt32(&externalMinersConnected) == 0 {
 		err = fmt.Errorf("it never connected to this node")
 	}
 	return err
