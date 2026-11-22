@@ -20,7 +20,9 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 echo "== Stopping the seed services"
-UNITS=$(systemctl list-unit-files 'cvn-seed-*.service' --no-legend | awk '{print $1}')
+# Only the services that are switched on. One that was switched off, such
+# as the service of a network that has been retired, is left alone.
+UNITS=$(systemctl list-unit-files 'cvn-seed-*.service' --state=enabled --no-legend | awk '{print $1}')
 for unit in $UNITS; do systemctl stop "$unit"; done
 
 echo "== Fetching and building"
