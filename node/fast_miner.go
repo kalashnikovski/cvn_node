@@ -51,16 +51,26 @@ const (
 	MinerBuiltIn = "builtin"
 	MinerXMRig   = "xmrig"
 
-	fastMinerQuickFailure    = 60 * time.Second
 	fastMinerFailuresAllowed = 3
 	fastMinerSpeedFreshness  = 45 * time.Second
+
+	// A fast miner that stops fastMinerStopsAllowed times within
+	// fastMinerStopsWindow is given up on, however long each run lasted.
+	// Counting only runs shorter than a minute left one that failed after 61
+	// seconds every time to be restarted for ever, with the built-in miner
+	// idle and nothing mined in the gaps (review round 7, report 4).
+	fastMinerStopsAllowed = 5
 )
 
-// How long to wait before starting a stopped fast miner again, and how long
-// a started one has to connect to this node.
+// How long to wait before starting a stopped fast miner again, how long a
+// started one has to connect to this node, how short a run counts as a
+// failure to start, and the time over which stops are counted. Variables so
+// tests can shorten them.
 var (
 	fastMinerRestartPause    = 5 * time.Second
 	fastMinerConnectDeadline = 40 * time.Second
+	fastMinerQuickFailure    = 60 * time.Second
+	fastMinerStopsWindow     = 10 * time.Minute
 )
 
 // fastMinerActive is 1 while the fast miner is expected to do the mining.
@@ -513,6 +523,7 @@ func StartChosenMiner(workServerAddress string) {
 // to the built-in miner if it fails again and again.
 func superviseFastMiner(path string, arguments []string) {
 	quickFailures := 0
+	var stops []time.Time
 	for {
 		started := time.Now()
 		err := runFastMinerOnce(path, arguments)
@@ -521,6 +532,13 @@ func superviseFastMiner(path string, arguments []string) {
 		} else {
 			quickFailures = 0
 		}
+		recent := stops[:0]
+		for _, at := range stops {
+			if time.Since(at) < fastMinerStopsWindow {
+				recent = append(recent, at)
+			}
+		}
+		stops = append(recent, time.Now())
 		reason := "it stopped"
 		if err != nil {
 			reason = err.Error()
@@ -528,6 +546,11 @@ func superviseFastMiner(path string, arguments []string) {
 		if quickFailures >= fastMinerFailuresAllowed {
 			atomic.StoreInt32(&fastMinerActive, 0)
 			announceNetworkStatus(fmt.Sprintf("⚠️ [MINER] The fast miner failed %d times in a row (%s). The built-in miner is taking over.", quickFailures, reason))
+			return
+		}
+		if len(stops) >= fastMinerStopsAllowed {
+			atomic.StoreInt32(&fastMinerActive, 0)
+			announceNetworkStatus(fmt.Sprintf("⚠️ [MINER] The fast miner stopped %d times in %d minutes (%s). The built-in miner is taking over.", len(stops), int(fastMinerStopsWindow/time.Minute), reason))
 			return
 		}
 		announceNetworkStatus(fmt.Sprintf("⚠️ [MINER] The fast miner is not running (%s). Starting it again.", reason))
@@ -570,8 +593,10 @@ func runFastMinerOnce(path string, arguments []string) error {
 	}()
 
 	// A miner that runs but never connects would mine nothing for ever, so
-	// it is stopped and counted as a failure. Time the node spends catching
-	// up with the network does not count against it.
+	// it is stopped and counted as a failure. Time in which the node would
+	// not let any miner in does not count against it: while it catches up
+	// with the network, and while its newest block is dated ahead of the
+	// clock and the work server hands out no work (review round 7, report 5).
 	exited := make(chan struct{})
 	var connected int32
 	go func() {
@@ -586,7 +611,7 @@ func runFastMinerOnce(path string, arguments []string) error {
 				atomic.StoreInt32(&connected, 1)
 				return
 			}
-			if atomic.LoadInt32(&IsSyncingActive) == 0 && atomic.LoadInt32(&MiningHoldActive) == 0 {
+			if atomic.LoadInt32(&IsSyncingActive) == 0 && atomic.LoadInt32(&MiningHoldActive) == 0 && !workWaitsForClock() {
 				waited += 250 * time.Millisecond
 			}
 		}

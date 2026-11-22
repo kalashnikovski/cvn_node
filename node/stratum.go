@@ -119,6 +119,17 @@ func serveMiningWork(listener net.Listener) {
 	}
 }
 
+// workWaitsForClock reports whether the work server is handing out no work
+// because this node's newest block is dated ahead of the clock. That ends by
+// itself, within two minutes of the block's arrival.
+func workWaitsForClock() bool {
+	StateMutex.RLock()
+	tip := GetLatestBlockInternal()
+	StateMutex.RUnlock()
+	now := time.Now().Unix()
+	return tip.Hash != "" && mustWaitForClock(minerBlockDate(tip, now), now)
+}
+
 // buildStratumJob prepares work on top of the current tip paying `address`.
 func buildStratumJob(address string) (*stratumJob, bool) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 {

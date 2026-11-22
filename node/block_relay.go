@@ -268,19 +268,45 @@ func handleBlockAnnouncement(conn net.Conn, from, body string) {
 		return
 	}
 	// A block nobody has announced before. Old entries are cleared, and the
-	// announcement is let pass if the table is full or this address has
-	// begun its share already.
-	begunByThisAddress := 0
+	// announcement is let pass if this address has begun its share already.
+	begun := make(map[string]int)
 	for hash, other := range blockRelay.fetching {
 		if time.Since(other.lastAsked) > blockFetchKept {
 			delete(blockRelay.fetching, hash)
-		} else if other.first == from {
-			begunByThisAddress++
+		} else {
+			begun[other.first]++
 		}
 	}
-	if len(blockRelay.fetching) >= blockFetchesKept || begunByThisAddress >= blockFetchesPerAddress {
+	if begun[from] >= blockFetchesPerAddress {
 		blockRelay.Unlock()
 		return
+	}
+	if len(blockRelay.fetching) >= blockFetchesKept {
+		// The table is full. Thirty-two addresses, each announcing its eight
+		// blocks that do not exist, used to fill it, and a real block
+		// announced by an honest neighbour was then not asked for (review
+		// round 7, new finding 3). So room is made at the cost of whoever
+		// holds the most places: the oldest block begun by the address with
+		// the most gives way, as long as that address holds more places than
+		// the one announcing now. Addresses that fill the table lose places
+		// to those that hardly use it, never the other way about.
+		most := ""
+		for address, places := range begun {
+			if places > begun[most] || (places == begun[most] && address < most) {
+				most = address
+			}
+		}
+		if begun[most] <= begun[from] {
+			blockRelay.Unlock()
+			return
+		}
+		oldest := ""
+		for hash, other := range blockRelay.fetching {
+			if other.first == most && (oldest == "" || other.began.Before(blockRelay.fetching[oldest].began)) {
+				oldest = hash
+			}
+		}
+		delete(blockRelay.fetching, oldest)
 	}
 	now := time.Now()
 	blockRelay.fetching[announced.Hash] = &blockFetch{began: now, lastAsked: now, first: from, heard: map[string]bool{from: true}}

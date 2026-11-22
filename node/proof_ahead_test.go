@@ -180,6 +180,14 @@ func TestWorkingAheadStopsAtABlockWithoutTheWork(t *testing.T) {
 		batch = append(batch, next)
 	}
 	forgetProofs()
+	// Proofs are worked out only for blocks that follow the newest block, so
+	// the node is put back to where it was before these blocks existed.
+	backToTheStart := func() {
+		StateMutex.Lock()
+		rollbackChainToHeightLocked(0)
+		StateMutex.Unlock()
+	}
+	backToTheStart()
 
 	prepared := prepareProofs(batch)
 	if most := 2 * proofsAtOncePerThread; prepared > most {
@@ -187,6 +195,11 @@ func TestWorkingAheadStopsAtABlockWithoutTheWork(t *testing.T) {
 	}
 	if prepared < 3 {
 		t.Errorf("only %d proofs were worked out; the blocks before the bad one should have been", prepared)
+	}
+	for _, block := range batch[:2] {
+		if !ValidateBlockSignatures(block) || !SaveBlockToStorageInternal(block) {
+			t.Fatalf("block #%d was refused when put back", block.Index)
+		}
 	}
 	if ValidateBlockSignatures(lazy) {
 		t.Error("a block without the work passed, after its proof was worked out ahead")
@@ -197,6 +210,7 @@ func TestWorkingAheadStopsAtABlockWithoutTheWork(t *testing.T) {
 
 	// A batch that does not join up is not worked on past the break.
 	forgetProofs()
+	backToTheStart()
 	broken := append([]Block{}, batch[:2]...)
 	stray := batch[1]
 	stray.Index, stray.PrevHash = 3, "not the block before"

@@ -110,3 +110,7 @@ Known and accepted: it is one measurement for each source; and it applies within
 - `go test -race ./node/` in full at `7d04f06` (clean); on the proof and download tests at `6f73812` (clean).
 - The multi-node tests 45 times at `7d04f06`, 45 at `6f73812` after the change in section 7, and 45 at `5626c8b`, without a failure.
 - Devnet: six seeds and one miner ran `7d04f06` overnight, about 2,260 blocks, all agreeing. Nothing later than `7d04f06` had run on devnet when this was written.
+
+## After the review
+
+Review round 7 tested these claims. Two sentences in section 5 were wrong (the wait behind a group of hashes, and what a batch of made-up blocks costs), and eight faults were found and fixed. See `ROUND_7_RESULTS.md`.

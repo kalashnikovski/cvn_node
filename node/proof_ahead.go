@@ -5,6 +5,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"cvn_node/internal/randomx"
 )
@@ -30,11 +31,25 @@ import (
 // batch is not what it seemed), the answer is simply not found and the proof
 // is worked out the old way.
 //
-// A batch comes from another node and may be rubbish. Work is done on it a
-// few blocks at a time, and stops at the first block that does not join on
-// to the one before, does not carry its own identifier, or whose proof falls
-// short of the difficulty the block itself claims. Someone sending rubbish
-// costs this node a handful of hashes, as it did before, not a batch full.
+// A batch comes from another node and may be rubbish. So:
+//
+//   - A download hands its blocks over a few at a time (proofsAtOnce), and
+//     each few are checked and stored before the next are worked on. The
+//     rules, which refuse rubbish at its first block, are never more than
+//     one small group behind.
+//   - Nothing is worked out unless the blocks follow this node's newest
+//     block and the first of them carries the difficulty the rules require
+//     there. Blocks made up in advance, or made once and sent to every node,
+//     do not get that far: each attempt needs a block on the newest block of
+//     the node it is sent to, at the difficulty of the day.
+//   - Work stops at the first block that does not join on to the one before,
+//     does not carry its own identifier, or whose proof falls short of the
+//     difficulty the block itself claims.
+//
+// The first two were added after review round 7 (report 2, new finding 2).
+// Before them a reply of any length had every proof in it worked out, with
+// the miner stopped, before the rules saw its first block; and a batch that
+// began with a made-up block 0 chose the RandomX key itself.
 
 // proofCheckThreads is how many cores may work on proofs at once: as many as
 // mining may use, so that `--threads` limits this too.
@@ -52,11 +67,41 @@ type proofWanted struct {
 	target string
 }
 
-// prepareProofs works out, on several cores, the proofs of a batch of blocks
-// that is about to be checked and added, and reports how many it prepared.
+// proofsAtOnce is how many downloaded blocks have their proofs worked out
+// together before they are checked and stored: one go for every core. It is
+// zero where proofs are not worked out ahead at all.
+func proofsAtOnce() int {
+	threads := proofCheckThreads()
+	if threads < 2 || !networkUsesRandomX() {
+		return 0
+	}
+	return threads * proofsAtOncePerThread
+}
+
+// followsOurNewestBlock reports whether a block is one the rules could take
+// next: it stands on this node's newest block, is dated as a block there may
+// be, and claims exactly the difficulty required of it. None of this needs
+// the proof, and all of it is checked again, with everything else, when the
+// block itself is checked.
+func followsOurNewestBlock(block Block) bool {
+	tip := GetLatestBlockInternal()
+	if tip.Hash == "" || block.Index != tip.Index+1 || block.PrevHash != tip.Hash {
+		return false
+	}
+	if block.Timestamp <= tip.Timestamp || block.Timestamp > time.Now().Unix()+HeartbeatMaxFutureDriftSeconds {
+		return false
+	}
+	return block.Difficulty == CalculateNextDifficulty(tip, block.Timestamp)
+}
+
+// prepareProofs works out, on several cores, the proofs of a few blocks that
+// are about to be checked and added, and reports how many it prepared.
 func prepareProofs(batch []Block) int {
 	threads := proofCheckThreads()
 	if threads < 2 || len(batch) < 2 || !networkUsesRandomX() {
+		return 0
+	}
+	if !followsOurNewestBlock(batch[0]) {
 		return 0
 	}
 	// What was prepared for the batch before this one is no longer needed.
@@ -96,10 +141,15 @@ func prepareProofs(batch []Block) int {
 		if block.Index != first+int64(i) || (i > 0 && block.PrevHash != batch[i-1].Hash) {
 			break
 		}
+		// Every block must carry its own identifier, those before RandomX
+		// too: the identifier of a block here may be the key for a later one.
+		if block.Hash != CalculateHash(block) {
+			break
+		}
 		if powAlgorithmAt(block.Index) != PowRandomX {
 			continue
 		}
-		if int64(block.Difficulty) < minDifficultyAt(block.Index) || block.Nonce < 0 || block.Nonce >= powNonceLimit || block.Hash != CalculateHash(block) {
+		if int64(block.Difficulty) < minDifficultyAt(block.Index) || block.Nonce < 0 || block.Nonce >= powNonceLimit {
 			break
 		}
 		// The key is the identifier of an earlier block of the same chain:

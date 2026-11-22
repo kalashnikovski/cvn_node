@@ -72,6 +72,46 @@ func setSyncSourceAside(source, reason string) {
 	log.Printf("⏸️ [SYNC] %s %s. Not asking it again for %d minutes.\n", source, reason, int(syncSourceCooldown/time.Minute))
 }
 
+// A SOURCE THAT SENT NO BLOCKS
+//
+// A source that reports a block and then sends none from that height on has
+// not delivered what it claimed. But an honest node does exactly that for a
+// moment while it changes its own chain: it has taken blocks off and not yet
+// put the others on, so the height it reported a second ago is one it does
+// not hold now. The same goes for a node that was restarted, or a request
+// lost on the way. Setting such a node aside for ten minutes punished it for
+// nothing (review round 7, report 1).
+//
+// So a pass that ends this way is excused, once. If the same source does it
+// again within syncSourceCooldown without having delivered anything in
+// between, it is set aside as before: a source that never delivers cannot
+// be asked for ever.
+var syncExcused = struct {
+	sync.Mutex
+	at map[string]time.Time
+}{at: make(map[string]time.Time)}
+
+// excuseSyncSourceOnce reports whether a source that sent no blocks may be
+// let off this time, and notes that it was.
+func excuseSyncSourceOnce(source string) bool {
+	syncExcused.Lock()
+	defer syncExcused.Unlock()
+	for other, at := range syncExcused.at {
+		if time.Since(at) > syncSourceCooldown {
+			delete(syncExcused.at, other)
+		}
+	}
+	if _, already := syncExcused.at[source]; already {
+		return false
+	}
+	syncExcused.at[source] = time.Now()
+	return true
+}
+
+// chainComparisonsPerPass is how often one pass compares chains with its
+// source before it gives up for now (see TriggerActiveReSyncPass).
+const chainComparisonsPerPass = 3
+
 // syncSourceIsSetAside reports whether a source is currently set aside.
 func syncSourceIsSetAside(source string) bool {
 	syncSetAside.Lock()
@@ -128,6 +168,12 @@ func fetchBlockBatchChecked(source string, start int64) (batch []Block, answered
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, syncReplyLimitBytes)).Decode(&batch) != nil {
 		return nil, false
+	}
+	// A node sends at most syncBatchMaxBlocks in one reply. One that sends
+	// more is not taken at its word: the rest is asked for in its turn, like
+	// any other blocks, so that no reply decides how much work is done on it.
+	if len(batch) > syncBatchMaxBlocks {
+		batch = batch[:syncBatchMaxBlocks]
 	}
 	return batch, true
 }
@@ -746,13 +792,23 @@ func TriggerActiveReSyncPass() {
 	// A source that claimed a better chain owes us one. If the pass ends
 	// with our chain no better and the fault was not ours, it is set aside.
 	blameless := false
+	// noBlocksCame is set when the pass ended because the source sent no
+	// blocks from a height it had reported; noBlocksFrom is that height.
+	noBlocksCame, noBlocksFrom := false, int64(0)
 	defer func() {
 		switch {
 		case TotalChainWork().Cmp(startWork) > 0:
 			syncDelivered.Lock()
 			syncDelivered.at[source] = time.Now()
 			syncDelivered.Unlock()
-		case !blameless:
+			syncExcused.Lock()
+			delete(syncExcused.at, source)
+			syncExcused.Unlock()
+		case blameless:
+		case noBlocksCame && excuseSyncSourceOnce(source):
+			log.Printf("🔌 [SYNC] %s reported block #%d and sent no blocks from #%d on. It may be changing its own chain. Asking again shortly; if it does this again it is set aside.\n", source, claimedHeight, noBlocksFrom)
+			atomic.StoreInt32(&blockMissedDuringPass, 1)
+		default:
 			syncDelivered.Lock()
 			delete(syncDelivered.at, source)
 			syncDelivered.Unlock()
@@ -763,26 +819,60 @@ func TriggerActiveReSyncPass() {
 	// How far back to look for the point where the chains part. A node never
 	// replaces more of its own blocks than the reorganisation limit, so
 	// there is no reason to look further back than that.
-	lowest := lowestReplaceableAncestor(startTip.Index)
-	ancestor, answered := findCommonAncestor(source, lowest, startTip.Index)
-	if !answered {
-		// A lost request proves nothing about the source's chain. The pass
-		// ends without a verdict, and the source is not blamed for it.
-		log.Printf("🔌 [SYNC] %s stopped answering while our chains were being compared. Trying again later.\n", source)
-		blameless = true
-		return
-	}
-	if ancestor < 0 {
-		if lowest > 0 {
-			log.Printf("🛑 [REORG LIMIT] %s offers a chain that parts from ours more than %d blocks back. This node does not replace more than that many of its own blocks, so it keeps its chain. If this node was left behind on a dead branch, stop it, delete %s and start again.\n", source, Params.Economics.ReorgLimitBlocks, Params.DatabaseFile)
-		} else {
-			log.Printf("🚨 [SYNC] %s shares no block with our chain, not even the first. It is on another network or another chain.\n", source)
+	//
+	// The comparison is made over the network, and takes a moment. The point
+	// it finds is the point where the source's chain parts from our chain AS
+	// IT WAS when the comparison began. If a block arrived from a neighbour
+	// meanwhile, that point is now one below our newest block although the
+	// two chains never parted, and the pass used to take it for a rival
+	// branch: it took our own good block off, stopped the miner and
+	// downloaded the same block again. While the block was off, this node
+	// told anyone who asked that it had no block at the height it had just
+	// reported, and was set aside for it (review round 7, new finding 1).
+	//
+	// So the point is only acted on if our newest block is still the one the
+	// comparison was made against. If it is not, the chains are compared
+	// again as they now are.
+	var ancestor int64
+	var tip Block
+	comparedWith := startTip
+	for try := 1; ; try++ {
+		lowest := lowestReplaceableAncestor(comparedWith.Index)
+		var answered bool
+		ancestor, answered = findCommonAncestor(source, lowest, comparedWith.Index)
+		if !answered {
+			// A lost request proves nothing about the source's chain. The pass
+			// ends without a verdict, and the source is not blamed for it.
+			log.Printf("🔌 [SYNC] %s stopped answering while our chains were being compared. Trying again later.\n", source)
+			blameless = true
+			return
 		}
-		return
+		if ancestor < 0 {
+			if lowest > 0 {
+				log.Printf("🛑 [REORG LIMIT] %s offers a chain that parts from ours more than %d blocks back. This node does not replace more than that many of its own blocks, so it keeps its chain. If this node was left behind on a dead branch, stop it, delete %s and start again.\n", source, Params.Economics.ReorgLimitBlocks, Params.DatabaseFile)
+			} else {
+				log.Printf("🚨 [SYNC] %s shares no block with our chain, not even the first. It is on another network or another chain.\n", source)
+			}
+			return
+		}
+		StateMutex.Lock()
+		tip = GetLatestBlockInternal()
+		if tip.Hash == comparedWith.Hash {
+			break // the chain lock stays held
+		}
+		StateMutex.Unlock()
+		if try >= chainComparisonsPerPass {
+			// Blocks keep arriving faster than the chains can be compared.
+			// That is no fault of the source; the next pass starts afresh.
+			log.Printf("🔁 [SYNC] Our newest block kept changing while our chain was compared with %s. Comparing again shortly.\n", source)
+			blameless = true
+			atomic.StoreInt32(&blockMissedDuringPass, 1)
+			return
+		}
+		comparedWith = tip
 	}
 
-	StateMutex.Lock()
-	tip := GetLatestBlockInternal()
+	// The chain lock is held from here.
 	var removed []Block
 	if ancestor < tip.Index {
 		if depth := countedReorgDepth(tip.Index, ancestor); !reorgDepthAllowed(depth) {
@@ -803,9 +893,13 @@ func TriggerActiveReSyncPass() {
 		StateMutex.Lock()
 		if GetLatestBlockInternal().Hash != tip.Hash {
 			// Our tip moved while the other branch was being measured. Start
-			// over on the next pass; this is no fault of the source.
+			// over on the next pass; this is no fault of the source. The
+			// next pass follows in seconds, like any other for a block that
+			// came at a bad moment, and does not wait for the next trigger.
 			StateMutex.Unlock()
+			log.Printf("🔁 [SYNC] Our newest block changed while the branch from %s was being measured. Comparing again shortly.\n", source)
 			blameless = true
+			atomic.StoreInt32(&blockMissedDuringPass, 1)
 			return
 		}
 		log.Printf("⚖️ [CHAIN WORK] Switching to the branch from %s above block #%d: it proves more work than our %d block(s) there.\n", source, ancestor, tip.Index-ancestor)
@@ -820,8 +914,23 @@ func TriggerActiveReSyncPass() {
 			break
 		}
 		tipWhenAsked := GetLatestBlockInternal().Hash
-		batch := fetchBlockBatch(source, next)
+		batch, answered := fetchBlockBatchChecked(source, next)
+		if len(batch) == 0 && answered {
+			// It answered, with no blocks from a height it had reported. If
+			// it still reports that height, the answer is asked for once
+			// more: a node that was changing its chain a moment ago may be
+			// done by now.
+			if heightNow, _ := probeChain(source); heightNow >= next {
+				batch, answered = fetchBlockBatchChecked(source, next)
+			} else {
+				answered = false // it no longer claims the block at all
+			}
+		}
 		if len(batch) == 0 {
+			// No answer, or a source that no longer holds what it reported,
+			// may be excused once (see excuseSyncSourceOnce). One that goes
+			// on reporting the block and goes on sending nothing is not.
+			noBlocksCame, noBlocksFrom = !answered, next
 			break
 		}
 		if claimedHeight-next > 100 {
@@ -834,56 +943,72 @@ func TriggerActiveReSyncPass() {
 		// Only now, with blocks in hand to add, is the rest of the node
 		// asked to stand still.
 		pauseForChainChange()
-		// The proofs of these blocks are worked out on several cores before
-		// the blocks are checked one after another (see proof_ahead.go). The
-		// rest of the node is not held up while that is done.
-		prepareProofs(batch)
-		StateMutex.Lock()
-		if tipNow := GetLatestBlockInternal(); tipNow.Hash != tipWhenAsked {
-			// The newest block changed while these blocks were on their way:
-			// this node's miner found one, or a neighbour sent one, or a rival
-			// of the newest block took its place. If the new one is among the
-			// blocks just fetched, they still fit and the pass goes on. If it
-			// is not, they belong on a block this node no longer has on top,
-			// and checking them would find the first "not valid" and blame a
-			// source that sent nothing wrong. The pass ends without a verdict
-			// and another follows, which compares the chains as they now are.
-			expected := false
-			for _, block := range batch {
-				if block.Index == tipNow.Index && block.Hash == tipNow.Hash {
-					expected = true
+		// The blocks are taken a few at a time. The proofs of each few are
+		// worked out on several cores (see proof_ahead.go), with the chain
+		// lock free, and then those blocks are checked and stored one after
+		// another exactly as before. The proofs of a whole batch used to be
+		// worked out before the first block was looked at by the rules, so a
+		// batch of rubbish cost a batch full of hashes with the node standing
+		// still (review round 7, report 2). Now it costs one small group.
+		atOnce := proofsAtOnce()
+		if atOnce <= 0 {
+			atOnce = len(batch)
+		}
+		standsOn := tipWhenAsked
+		refused, moved := false, false
+		for from := 0; from < len(batch) && !refused && !moved; from += atOnce {
+			part := batch[from:min(from+atOnce, len(batch))]
+			prepareProofs(part)
+			StateMutex.Lock()
+			if tipNow := GetLatestBlockInternal(); tipNow.Hash != standsOn {
+				// The newest block changed while these blocks were on their
+				// way: this node's miner found one, or a neighbour sent one, or
+				// a rival of the newest block took its place. If the new one is
+				// among the blocks just fetched, they still fit and the pass
+				// goes on. If it is not, they belong on a block this node no
+				// longer has on top, and checking them would find the first
+				// "not valid" and blame a source that sent nothing wrong. The
+				// pass ends without a verdict and another follows, which
+				// compares the chains as they now are.
+				expected := false
+				for _, block := range batch {
+					if block.Index == tipNow.Index && block.Hash == tipNow.Hash {
+						expected = true
+						break
+					}
+				}
+				if !expected {
+					StateMutex.Unlock()
+					log.Printf("🔁 [SYNC] Our newest block changed while blocks from %s were on their way. Comparing again.\n", source)
+					blameless = true
+					atomic.StoreInt32(&blockMissedDuringPass, 1)
+					moved = true
 					break
 				}
 			}
-			if !expected {
-				StateMutex.Unlock()
-				log.Printf("🔁 [SYNC] Our newest block changed while blocks from %s were on their way. Comparing again.\n", source)
-				blameless = true
-				atomic.StoreInt32(&blockMissedDuringPass, 1)
-				break
-			}
-		}
-		refused := false
-		for _, block := range batch {
-			if block.Index != GetLatestBlockInternal().Index+1 {
-				continue
-			}
-			if !ValidateBlockSignatures(block) {
-				// A block that fails here because this node took the very
-				// same block another way a moment ago (it was on its way from
-				// a neighbour when the pass began) is no fault of the source.
-				if GetBlockByHeightFromDB(block.Index).Hash == block.Hash {
+			for _, block := range part {
+				if block.Index != GetLatestBlockInternal().Index+1 {
 					continue
 				}
-				log.Printf("⚠️ [SYNC] Block #%d from %s is not valid. Ending this pass.\n", block.Index, source)
-				refused = true
-				break
+				if !ValidateBlockSignatures(block) {
+					// A block that fails here because this node took the very
+					// same block another way a moment ago (it was on its way
+					// from a neighbour when the pass began) is no fault of the
+					// source.
+					if GetBlockByHeightFromDB(block.Index).Hash == block.Hash {
+						continue
+					}
+					log.Printf("⚠️ [SYNC] Block #%d from %s is not valid. Ending this pass.\n", block.Index, source)
+					refused = true
+					break
+				}
+				SaveBlockToStorageInternal(block)
 			}
-			SaveBlockToStorageInternal(block)
+			standsOn = GetLatestBlockInternal().Hash
+			StateMutex.Unlock()
 		}
-		StateMutex.Unlock()
 		// Stop if the batch moved us nowhere, rather than asking for it again.
-		if refused || GetLatestBlockInternal().Index < next {
+		if moved || refused || GetLatestBlockInternal().Index < next {
 			break
 		}
 	}
