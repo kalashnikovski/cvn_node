@@ -30,6 +30,17 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Pages cannot send response headers, so each page says in its own
+      # head how much a visitor's browser tells the sites they go on to
+      # (Lockpick finding LP-SMGKMY). A page without the line is not published.
+      - name: Every page limits what it tells other sites
+        run: |
+          missing=$(grep -rL --include='*.html' '<meta name="referrer" content="strict-origin-when-cross-origin">' site || true)
+          if [ -n "$missing" ]; then
+            echo "These pages lack the referrer line:"
+            echo "$missing"
+            exit 1
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
