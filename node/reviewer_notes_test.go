@@ -1,10 +1,12 @@
 package node
 
 import (
+	"bytes"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -79,5 +81,22 @@ func TestTheCoinListHasAnAllowance(t *testing.T) {
 	}
 	if code := ask("203.0.113.11:5000"); code != http.StatusOK {
 		t.Errorf("with places free again, a request was answered with %d", code)
+	}
+}
+
+// From GitHub's code scanner: the frame writer added up the size of what it
+// was about to send without a limit. Nothing this program builds is near
+// the limit, but a frame over it would be refused by whoever received it
+// and counted against this node, so it is not sent at all.
+func TestAFrameOverTheLimitIsNotSent(t *testing.T) {
+	onNetwork(t, "devnet")
+	var sent bytes.Buffer
+	writeFrame(&sent, strings.Repeat("x", MaxPayloadFrameSize+1))
+	if sent.Len() != 0 {
+		t.Errorf("%d bytes were sent for a message over the limit", sent.Len())
+	}
+	writeFrame(&sent, strings.Repeat("x", MaxPayloadFrameSize))
+	if want := 4 + 32 + MaxPayloadFrameSize; sent.Len() != want {
+		t.Errorf("a message exactly at the limit sent %d bytes, want %d", sent.Len(), want)
 	}
 }

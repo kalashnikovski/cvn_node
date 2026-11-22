@@ -434,6 +434,13 @@ func readFrame(conn net.Conn) (payload, signature []byte, err error) {
 // writeFrame sends one frame.
 func writeFrame(w io.Writer, payload string) {
 	payloadBytes := []byte(payload)
+	if len(payloadBytes) > MaxPayloadFrameSize {
+		// No node would read it: readFrame refuses anything larger, and
+		// counts it against the sender. Nothing this program builds is
+		// near the limit, so this is a fault here, not something to send.
+		log.Printf("🚨 A message of %d bytes was not sent: the largest a node reads is %d.\n", len(payloadBytes), MaxPayloadFrameSize)
+		return
+	}
 	signature := ComputePayloadHMAC(payloadBytes)
 	var length [4]byte
 	binary.BigEndian.PutUint32(length[:], uint32(len(payloadBytes)))
