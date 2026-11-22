@@ -58,6 +58,10 @@ var proofCheckThreads = func() int { return miningThreads(os.Args) }
 // proofsFoundReady counts the proofs the checking found already worked out.
 var proofsFoundReady int64
 
+// proofsWorkedOutAhead counts the proofs worked out ahead, used or not.
+// Tests read it.
+var proofsWorkedOutAhead int64
+
 // proofsAtOncePerThread is how many proofs each core is given in one go.
 // The checking engine is held for that long, so it is kept short.
 const proofsAtOncePerThread = 4
@@ -217,6 +221,7 @@ func randomXVerifyTogether(key []byte, blobs [][]byte, threads int) ([]string, b
 		}(machine)
 	}
 	working.Wait()
+	atomic.AddInt64(&proofsWorkedOutAhead, int64(len(blobs)))
 
 	if rxVerifier.prepared == nil {
 		rxVerifier.prepared = make(map[string]string, len(blobs))

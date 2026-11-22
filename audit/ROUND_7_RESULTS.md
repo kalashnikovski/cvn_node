@@ -76,7 +76,7 @@ Test: `TestRound7AFastMinerThatKeepsStoppingIsGivenUpOn`.
 
 Each address may begin eight blocks and the table holds 256, so 32 addresses announcing blocks that do not exist filled it. A real block announced by an honest neighbour was then not asked for, and a large block is sent only to nodes that ask; it came by a later pass.
 
-Fixed in `handleBlockAnnouncement`: when the table is full, the oldest block begun by the address holding the most places gives way, as long as that address holds more places than the one announcing now.
+Fixed in `handleBlockAnnouncement`: when the table is full, the oldest block begun by the address holding the most places gives way, as long as that address holds more places than the one announcing now. (Tightened after the fixes were reviewed: see finding 2 under "The fixes, reviewed".)
 
 Test: `TestRound7AFullTableOfAnnouncedBlocksMakesRoom`.
 
@@ -84,7 +84,7 @@ Test: `TestRound7AFullTableOfAnnouncedBlocksMakesRoom`.
 
 That way out of a pass did not ask for a pass to follow, and wrote no line in the log. The follow-up came with the next trigger, 30 to 60 seconds later, where every other "the newest block changed" ending is followed in three seconds.
 
-Fixed: it asks for the pass and says so in the log. No test of its own.
+Fixed: it asks for the pass and says so in the log. Test, written by the reviewer of the fixes: `TestRecheckATipChangedWhileABranchIsMeasuredIsFollowedUp`.
 
 ## Reported, and left as it is
 
@@ -113,4 +113,47 @@ Still without a test: the 8 GB of room for the database on Linux and macOS, whic
 
 ## What nobody looked at
 
-The race detector on this round's fixes by an outside reviewer. Linux and macOS. A run with large pages on. A real XMRig in place of the stand-in. `deploy/update_seed.sh`.
+Linux and macOS. A run with large pages on. A real XMRig in place of the stand-in. `deploy/update_seed.sh`.
+
+## The fixes, reviewed
+
+Codex (OpenAI) reviewed commit `3f3db0a` on 23 November, on Windows, in a clone of its own: for each fix it took the fix out and ran the test named for it, and then went at eight places where the fixes might have broken something. Its tests are in `node/round7_recheck_test.go`, turned round to pass on the code as it is now.
+
+### Does each test fail without its fix?
+
+| Finding | Fails without the fix |
+| --- | --- |
+| 1, 4, 5, 6, 7 | Yes |
+| 2 | Two of the three tests yes. `TestRound7ASourceThatStillClaimsABlockItDoesNotSendIsSetAside` passes either way: it shows the other side, that such a source is still set aside. |
+| 3 | The cut to 512 blocks and the difficulty check: yes. The groups: **no**, see below. |
+| 8 | Had no test. The reviewer wrote one, and it fails without the fix. |
+
+### What it found
+
+**1. Sources that had delivered were remembered for good, and all of them were asked at the start of every pass (Medium).** A source that delivers a better chain is put on a list that is asked before the nodes merely connected. Nothing left the list but a source that was chosen and then failed, and one that has gone away is never chosen. Each takes two seconds to give up on, one after another, before a pass looks at anyone else: eight took 16 seconds in the reviewer's test, and the list only grew. Each entry needs a node that really delivered a block, so it grows slowly, with the nodes that come and go.
+
+Fixed in `chooseSyncSource` and `provenSyncSources`: a source is forgotten the first time it does not answer, a day after it last delivered, or when eight more recent ones fill the list. A node that is still about is still asked among those connected. Test: `TestRecheckSourcesThatWentAwayAreForgotten`.
+
+**2. A full table of announced blocks could push out a block being fetched from an honest neighbour (Low).** Round 7's fix made room at the cost of an address holding more places than the one announcing. With the table full of addresses holding one place each, a new address holding none pushed one out. It takes 256 addresses.
+
+Fixed in `handleBlockAnnouncement`: an address gives way only if it would still hold at least as many places afterwards as the one announcing. A table filled by 256 addresses with one place each therefore takes no new block until a place is thirty seconds old, as before round 7; the block then comes by the next pass. Test: `TestRecheckAFullTableKeepsABlockBeingFetched`.
+
+**3. The test for "a group at a time" passed with the groups taken out (Low; a fault in the test).** `TestRound7ABlockWithoutItsProofCostsOneSmallGroup` calls `prepareProofs` itself, which already stopped at the first group whose proofs fall short. What the groups add is the case where every proof is good and the rules refuse the block for another reason.
+
+New test, through a pass: `TestRecheckADownloadWorksProofsOutAGroupAtATime`. One mined block followed by 511 made-up ones that claim difficulty 1. With the groups, 8 proofs are worked out; without, 512.
+
+Each of the three new tests fails with its fix taken out.
+
+### What it confirmed
+
+- Every path that adds or removes a block looks at the sync flag while holding the chain lock, so nothing changes the chain between two groups. `prepareProofs` running while blocks are stored: no race under the race detector.
+- A first download of 500 RandomX blocks is not slower than on `c7c7d64`: 11.7 s against 13.8 s on 2 threads, 5.2 s against 6.7 s on 32 (one run each).
+- A source that reports a height and sends no blocks is not asked for ever: one excuse, then set aside.
+- A rival at the same height arriving during the comparison: the pass ends on the right chain.
+- Nothing that fetches blocks relied on a reply longer than 512.
+- The leftover-goroutine race in the tests is a fault in the tests, as the authors judged.
+- The fast miner's time to connect can be held back about 11 seconds by one block dated as far ahead as allowed. To keep it held back takes a stream of valid blocks a second apart, each harder than the last.
+
+### What it did not reach
+
+A second comparison that ends above the reorganisation limit. A source that goes silent only in the second comparison. A block waiting for a parent whose entry was pushed out of the table. Linux and macOS, large pages, a real XMRig, `deploy/`.

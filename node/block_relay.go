@@ -287,8 +287,7 @@ func handleBlockAnnouncement(conn net.Conn, from, body string) {
 		// announced by an honest neighbour was then not asked for (review
 		// round 7, new finding 3). So room is made at the cost of whoever
 		// holds the most places: the oldest block begun by the address with
-		// the most gives way, as long as that address holds more places than
-		// the one announcing now. Addresses that fill the table lose places
+		// the most gives way. Addresses that fill the table lose places
 		// to those that hardly use it, never the other way about.
 		most := ""
 		for address, places := range begun {
@@ -296,7 +295,15 @@ func handleBlockAnnouncement(conn net.Conn, from, body string) {
 				most = address
 			}
 		}
-		if begun[most] <= begun[from] {
+		// "More places than the announcer" was not enough: with the table
+		// full of addresses holding one place each, a new address holding
+		// none pushed one of them out, and that one might be the honest
+		// neighbour whose block was on its way (the review of the round 7
+		// fixes, finding 2). So the address that gives way must still hold
+		// at least as many places afterwards as the one announcing now.
+		// Between two that would end up level, the one already being
+		// fetched from stays.
+		if begun[most] < begun[from]+2 {
 			blockRelay.Unlock()
 			return
 		}

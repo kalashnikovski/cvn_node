@@ -279,10 +279,63 @@ var probeChain = peerChainStatus
 
 // syncDelivered remembers the sources that have delivered a better chain
 // when they said they had one.
+//
+// It is kept short. Every source in it is asked for its newest block at the
+// start of every pass, one after another, and one that has gone away takes
+// two seconds to give up on. Nothing used to leave the list but a source
+// that was chosen and then failed, and one that no longer answers is never
+// chosen: after eight such sources a pass spent sixteen seconds on them
+// before it looked at a node that was there, and the number only grew (the
+// review of the round 7 fixes, finding 1). So a source is forgotten the
+// first time it does not answer, a day after it last delivered, or when
+// more recent ones have filled the list. A node that is still about is
+// still asked, among those connected to this one.
 var syncDelivered = struct {
 	sync.Mutex
 	at map[string]time.Time
 }{at: make(map[string]time.Time)}
+
+const (
+	syncDeliveredKept = 8
+	syncDeliveredFor  = 24 * time.Hour
+)
+
+// provenSyncSources lists the sources remembered for having delivered, after
+// dropping those remembered too long and those there is no room for. The
+// seeds are left out: they are asked first in any case.
+func provenSyncSources(seeds []string) []string {
+	syncDelivered.Lock()
+	defer syncDelivered.Unlock()
+	for _, seed := range seeds {
+		delete(syncDelivered.at, seed)
+	}
+	for source, at := range syncDelivered.at {
+		if time.Since(at) > syncDeliveredFor {
+			delete(syncDelivered.at, source)
+		}
+	}
+	for len(syncDelivered.at) > syncDeliveredKept {
+		oldest := ""
+		for source, at := range syncDelivered.at {
+			if oldest == "" || at.Before(syncDelivered.at[oldest]) {
+				oldest = source
+			}
+		}
+		delete(syncDelivered.at, oldest)
+	}
+	proven := make([]string, 0, len(syncDelivered.at))
+	for source := range syncDelivered.at {
+		proven = append(proven, source)
+	}
+	return proven
+}
+
+// forgetSyncDelivery drops a source from those remembered for delivering.
+func forgetSyncDelivery(source string) {
+	syncDelivered.Lock()
+	delete(syncDelivered.at, source)
+	syncDelivered.Unlock()
+}
 
 // syncSourceTiers lists the nodes a pass may catch up from, most trusted
 // first:
@@ -305,13 +358,7 @@ func syncSourceTiers() [][]string {
 		}
 		seeds = append(seeds, endpoint)
 	}
-	var proven []string
-	syncDelivered.Lock()
-	for source := range syncDelivered.at {
-		proven = append(proven, source)
-	}
-	syncDelivered.Unlock()
-	proven = append(proven, cachedPeerHTTPGateways(seeds)...)
+	proven := append(provenSyncSources(seeds), cachedPeerHTTPGateways(seeds)...)
 
 	var strangers []string
 	PeerMapMutex.RLock()
@@ -715,6 +762,9 @@ func chooseSyncSource(ourHeight int64, ourWork *big.Int) (source string, claimed
 			askedAt := time.Now()
 			peerHeight, peerWork := probeChain(gateway)
 			answered := time.Since(askedAt)
+			if peerHeight <= 0 && peerWork == nil {
+				forgetSyncDelivery(gateway) // it did not answer
+			}
 			if !peerChainIsBetter(peerHeight, peerWork, ourHeight, ourWork) {
 				continue
 			}
@@ -809,9 +859,7 @@ func TriggerActiveReSyncPass() {
 			log.Printf("🔌 [SYNC] %s reported block #%d and sent no blocks from #%d on. It may be changing its own chain. Asking again shortly; if it does this again it is set aside.\n", source, claimedHeight, noBlocksFrom)
 			atomic.StoreInt32(&blockMissedDuringPass, 1)
 		default:
-			syncDelivered.Lock()
-			delete(syncDelivered.at, source)
-			syncDelivered.Unlock()
+			forgetSyncDelivery(source)
 			setSyncSourceAside(source, "claimed a better chain and did not deliver one")
 		}
 	}()
