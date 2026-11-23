@@ -121,7 +121,7 @@ These are built and are the only rules in the program. They run on the developme
   - *Also have:* GitHub's scanners switched on for the repository: code scanning, dependency alerts, secret scanning, and private reporting of vulnerabilities. The one alert so far is closed.
   - *Missing:* a review by an independent person or firm.
 - [x] **Whitepaper rewritten** to match what is built, and kept in step with each rule change since.
-- [x] **Downloads anyone can check.** Each release lists the SHA-256 of every package and of every program inside it, the programs are built so that anyone who builds the same tag gets the same bytes, and GitHub signs each file as built by this project's recipe from this repository at that tag. For release candidate 11 all four programs were rebuilt from the tag on a separate machine and matched.
+- [x] **Downloads anyone can check.** Each release lists the SHA-256 of every package and of every program inside it, the programs are built so that anyone who builds the same tag gets the same bytes, and GitHub signs each file as built by this project's recipe from this repository at that tag. For release candidate 11 all four programs were rebuilt from the tag on a separate machine and matched; for release candidate 12 they were rebuilt from the tag in a clean copy and matched again.
 - [ ] **Launch at a pre-announced time**, from a new genesis block, with every setting published in advance.
 
 ## Phase 5: After launch
