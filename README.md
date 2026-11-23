@@ -11,7 +11,8 @@ Website: https://covenantstandard.online. The seed nodes, what each holds, and t
 - Mining with 45-second blocks; difficulty adjusts on every block.
 - Sending CVN between wallets. Every transfer is signed by its owner and checked by every node.
 - A desktop wallet on Windows and a text wallet on Linux and Windows. A private key is also given as 24 recovery words, and either form opens the wallet.
-- Nodes find each other, sync from scratch, and recover from forks without help.
+- Nodes find each other, sync from scratch, and recover from forks without help. A first download uses several processor cores and comes from the seed that answers soonest.
+- Blocks travel over the connections nodes already have open, and a large block is announced first and sent only to nodes that ask for it.
 - A new node joins the network that is there. If the seeds it was given do not answer it waits, and if they are on another chain it stops and says so; it does not start a chain of its own.
 - No port forwarding needed: a node behind a home router still receives blocks and can mine.
 - A node saves a checked copy of its chain once a day and keeps the newest seven.
@@ -119,7 +120,7 @@ go test ./...
 go build -o cvn_node .
 ```
 
-`go test ./...` runs every rule inside one process and takes about six minutes. A second set of tests starts several real nodes on this one machine and watches them work together: seeds, miners, a late joiner, a transfer, a node that loses power, and a miner that returns from being cut off. It takes under a minute and is run separately:
+`go test ./...` runs every rule inside one process and takes about ten minutes. A second set of tests starts several real nodes on this one machine and watches them work together: seeds, miners, a late joiner, a transfer, a node that loses power, a miner that returns from being cut off, two halves of a network that meet, and this version sharing a network with the release before it. It takes a few minutes and is run separately:
 
 ```bash
 go test -tags multinode -run MultiNode -timeout 30m ./node/
@@ -140,7 +141,7 @@ The project depends on three libraries: [bbolt](https://github.com/etcd-io/bbolt
 
 ## Reporting problems
 
-Open an issue on GitHub with a screenshot of the miner window and the output of `http://localhost:18081/block` (on `devnet`, port 28081). Make sure no private key or recovery words are in the picture. For anything that could let someone take or create coins, please contact the maintainer privately first.
+Open an issue on GitHub with a screenshot of the miner window and the output of `http://localhost:18081/block` (on `devnet`, port 28081). Make sure no private key or recovery words are in the picture. For anything that could let someone take or create coins, please report it privately first: on the repository's Security tab, choose "Report a vulnerability".
 
 ## Licence
 
