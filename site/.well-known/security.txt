@@ -1,0 +1,7 @@
+# Where to report a security problem in Covenant Standard (CVN):
+# the software, its seed nodes or this website.
+# Reports go privately to the maintainer through GitHub. No email is used.
+Contact: https://github.com/kalashnikovski/cvn_node/security/advisories/new
+Expires: 2027-11-01T00:00:00Z
+Preferred-Languages: en
+Canonical: https://covenantstandard.online/.well-known/security.txt

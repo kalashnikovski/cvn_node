@@ -5,6 +5,8 @@
 # Local Data Ledgers & Vault Storage
 backups/
 *.txt
+# The site's security contact file is published.
+!/site/.well-known/security.txt
 *.bak
 *.db
 
