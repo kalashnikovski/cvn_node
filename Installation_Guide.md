@@ -6,7 +6,7 @@ How to run a Covenant Standard (CVN) node, mine, and use the wallet, on Windows 
 
 One program does everything: it is the node, the miner and the text wallet. On Windows there is also a desktop wallet with a window.
 
-**Which download to use.** Trial packages of the current program are on the GitHub Releases page, with names ending in `-rc` (for example `v5.0.0-rc11`). Use the newest of those. The packages there from October 2026 (names beginning `v4`) are too old to follow the current chain. The packages meant for general use will be published with the public test network. Section 11 shows how to check any package you download.
+**Which download to use.** Trial packages of the current program are on the GitHub Releases page, with names ending in `-rc` (for example `v5.0.0-rc12`). Use the newest of those. The packages there from October 2026 (names beginning `v4`) are too old to follow the current chain. The packages meant for general use will be published with the public test network. Section 11 shows how to check any package you download.
 
 **New to this?** On Windows you need three parts of this guide and nothing else: section 1, then "Install" and "Mine" in section 2. If you were invited to the development network, section 7 has the one command to use in place of a double-click.
 
@@ -29,7 +29,7 @@ There are two ways to get the program, A and B. **You do only one of them.** Alm
 
 #### Way A (recommended): download the ready-made package
 
-1. Go to https://github.com/kalashnikovski/cvn_node/releases. The page lists the releases one under another, newest at the top. The newest is the first one you see; its name looks like `v5.0.0-rc11`. You do not need to click its name or any link in its text. Those links lead to other things, such as the fast miner, which is optional and comes later.
+1. Go to https://github.com/kalashnikovski/cvn_node/releases. The page lists the releases one under another, newest at the top. The newest is the first one you see; its name looks like `v5.0.0-rc12`. You do not need to click its name or any link in its text. Those links lead to other things, such as the fast miner, which is optional and comes later.
 2. Scroll down to the end of that first release, to the word **Assets**. If no list of files shows under it, click **Assets** to open the list. In the list, click **`cvn_node_windows.zip`**. Your browser downloads it. That one file is all you need; leave the others.
 3. Open your Downloads folder. Right-click `cvn_node_windows.zip`, choose **Extract All**, and pick a place of your own, for example `C:\`. You get a folder named `cvn_node`. This is your **CVN folder**; the rest of this guide refers to it by that name.
 
