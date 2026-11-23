@@ -109,13 +109,22 @@ func networkUsesRandomX() bool {
 	return false
 }
 
+// miningWork counts what is being done for connected miners. Nothing in the
+// program waits for it; tests do, before they change the network settings
+// that this work reads.
+var miningWork sync.WaitGroup
+
 func serveMiningWork(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			return
 		}
-		go handleStratumClient(conn)
+		miningWork.Add(1)
+		go func() {
+			defer miningWork.Done()
+			handleStratumClient(conn)
+		}()
 	}
 }
 
@@ -308,7 +317,11 @@ func handleStratumClient(conn net.Conn) {
 				} else {
 					noteNetworkEvent(fmt.Sprintf("⛏️ [WORK SERVER] External miner connected from %s, paying %s.", conn.RemoteAddr(), client.address))
 				}
-				go client.pushJobs(done, job.tipHash)
+				miningWork.Add(1)
+				go func() {
+					defer miningWork.Done()
+					client.pushJobs(done, job.tipHash)
+				}()
 			}
 		case "submit":
 			if !loggedIn {

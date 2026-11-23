@@ -480,7 +480,6 @@ func TestRound7AnnouncersAndTimeAreLimited(t *testing.T) {
 	waiting := -1
 	if fetch != nil {
 		waiting = len(fetch.waiting)
-		fetch.lastAsked = time.Now().Add(-blockFetchKept - time.Second)
 	}
 	blockRelay.Unlock()
 	if waiting < 0 || waiting > blockAnnouncersKept {
@@ -488,11 +487,22 @@ func TestRound7AnnouncersAndTimeAreLimited(t *testing.T) {
 	}
 
 	// Thirty seconds on, the next new announcement clears the old block away.
-	other, _ := json.Marshal(blockAnnouncement{Height: 6, Hash: testHash("f")})
-	handleBlockAnnouncement(near, "10.0.3.1", string(other))
-	blockRelay.Lock()
-	stillThere := blockRelay.fetching[testHash("e")] != nil
-	blockRelay.Unlock()
+	// The clock is put back by hand. The routine that follows the block may
+	// be asking its next node at that moment, which counts as following it
+	// afresh, so this is tried a few times.
+	stillThere := true
+	for try := 0; try < 5 && stillThere; try++ {
+		blockRelay.Lock()
+		if fetch := blockRelay.fetching[testHash("e")]; fetch != nil {
+			fetch.lastAsked = time.Now().Add(-blockFetchKept - time.Second)
+		}
+		blockRelay.Unlock()
+		other, _ := json.Marshal(blockAnnouncement{Height: 6, Hash: testHash([]string{"f", "1", "2", "3", "4"}[try])})
+		handleBlockAnnouncement(near, "10.0.3.1", string(other))
+		blockRelay.Lock()
+		stillThere = blockRelay.fetching[testHash("e")] != nil
+		blockRelay.Unlock()
+	}
 	if stillThere {
 		t.Errorf("a block announced more than %v ago is still being followed", blockFetchKept)
 	}

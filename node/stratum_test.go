@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -134,9 +135,43 @@ func startWorkServerForTest(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { listener.Close() })
-	go serveMiningWork(listener)
+	served := &listenerThatRemembers{Listener: listener}
+	// This is put back before the chain's settings are (the last thing set up
+	// is the first taken down), so nothing done for a miner reads settings
+	// that are being changed.
+	t.Cleanup(func() {
+		listener.Close()
+		served.closeAll()
+		miningWork.Wait()
+	})
+	go serveMiningWork(served)
 	return listener.Addr().String()
+}
+
+// listenerThatRemembers keeps the connections it accepted, so that a test can
+// close them all when it ends.
+type listenerThatRemembers struct {
+	net.Listener
+	sync.Mutex
+	accepted []net.Conn
+}
+
+func (l *listenerThatRemembers) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err == nil {
+		l.Lock()
+		l.accepted = append(l.accepted, conn)
+		l.Unlock()
+	}
+	return conn, err
+}
+
+func (l *listenerThatRemembers) closeAll() {
+	l.Lock()
+	defer l.Unlock()
+	for _, conn := range l.accepted {
+		conn.Close()
+	}
 }
 
 func TestMiningBlobLayout(t *testing.T) {
