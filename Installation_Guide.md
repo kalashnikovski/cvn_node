@@ -439,4 +439,4 @@ If a fingerprint does not match, first check the Go version and that you built f
 
 ---
 
-To report a problem, open an issue on GitHub with a picture of the miner window and what `http://localhost:18081/block` shows. If the problem could let someone take or create coins, contact the maintainer privately first.
+To report a problem, open an issue on GitHub with a picture of the miner window and what `http://localhost:18081/block` shows. If the problem could let someone take or create coins, report it privately first: on the repository's Security tab on GitHub, choose "Report a vulnerability".

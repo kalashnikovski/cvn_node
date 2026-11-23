@@ -3,10 +3,6 @@
 # ============================================================================
 
 # Local Data Ledgers & Vault Storage
-ledger_vault.json
-evolved_vault.txt
-network_health_summary.log
-cvn_mainnet.db
 backups/
 *.txt
 *.bak
@@ -58,7 +54,6 @@ genesis_anchor_*.txt
 /bundle_pure_engine.bat
 /bundle_source.bat
 /release_package/
-/cvn_node_vault_backups/
 
 # Source packs and reviewers' answers (made by audit/make_audit_pack.py)
 /audit/out/

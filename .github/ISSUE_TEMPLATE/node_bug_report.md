@@ -8,7 +8,8 @@ assignees: ''
 
 <!--
 If the problem could let someone take or create coins, or stop the network,
-do NOT post it here. Contact the maintainer privately first.
+do NOT post it here. Report it privately: on the repository's Security tab,
+choose "Report a vulnerability".
 
 Never post a private key.
 -->
@@ -28,7 +29,7 @@ Never post a private key.
 
 - System: <!-- Windows 11, Ubuntu 24.04, ... -->
 - Network: <!-- cvn_testnet (the default) or devnet -->
-- Version: <!-- the date you downloaded or last ran "git pull" -->
+- Version: <!-- the release name, such as v5.0.0-rc12; or, if you built it yourself, the date you last ran "git pull" -->
 - How it was started: <!-- LaunchMiner.bat, or the command line you used -->
 
 **What your node reports**
