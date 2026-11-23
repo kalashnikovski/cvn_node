@@ -49,10 +49,6 @@ genesis_anchor_*.txt
 
 # Maintainer's own operations scripts and working folders (not part of the project)
 /scripts/
-/testing_suite/
-/backup_ledger.ps1
-/bundle_pure_engine.bat
-/bundle_source.bat
 /release_package/
 
 # Source packs and reviewers' answers (made by audit/make_audit_pack.py)
@@ -62,7 +58,4 @@ genesis_anchor_*.txt
 xmrig-cvn/
 
 # Private test kit for testers (GPU vs CPU RandomX); never pushed.
-# The .txt kit files are already covered by *.txt above.
 /CVN_GPU_vs_CPU_Test.zip
-/benchmark_cpu_windows.bat
-/benchmark_cpu_linux.sh
