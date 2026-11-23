@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -584,6 +585,30 @@ func TestPoolPayCommandSignsAndSends(t *testing.T) {
 	}
 	if again := poolLedger.unsettledPayments(); len(again) != 1 {
 		t.Errorf("a second run left %d payments under way", len(again))
+	}
+}
+
+// The password file opens the pool's key. One that anybody but its owner can
+// read or change is not used.
+func TestAPasswordFileOthersCanReadIsNotUsed(t *testing.T) {
+	for mode, tooOpen := range map[os.FileMode]bool{
+		0o600: false, 0o400: false, 0o700: false,
+		0o640: true, 0o644: true, 0o604: true, 0o620: true, 0o602: true, 0o666: true, 0o777: true,
+	} {
+		if passwordFileTooOpen(mode) != tooOpen {
+			t.Errorf("a file with permissions %04o: too open is %v, want %v", mode, !tooOpen, tooOpen)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return // permissions are not written this way there, and nothing is checked
+	}
+	withWorkPort(t, 28083)
+	file := filepath.Join(t.TempDir(), "password")
+	if err := os.WriteFile(file, []byte("correct horse battery\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if code := RunPoolPay([]string{"cvn_node", "--pool-pay", "--password-file", file}); code == 0 {
+		t.Error("the paying command used a password file that every user of the machine can read")
 	}
 }
 

@@ -54,6 +54,8 @@ To mine to a different address, or to limit how many processor threads the miner
 
 A one-time system setting (large pages) makes mining about a quarter faster, and an optional separate fast miner adds about a tenth more: you unpack one folder into your CVN folder and the program uses it by itself. With the fast miner, an optional processor tuning adds a few percent more for those willing to run it as administrator. All three are in [MINING_GUIDE.md](MINING_GUIDE.md).
 
+To mine at a pool and not by yourself, see section 5 of the same guide. A pool is this program with one more option, and anyone may run one: [POOL_GUIDE.md](POOL_GUIDE.md).
+
 ### The wallet
 
 While the miner runs in one terminal, open another:
@@ -95,6 +97,7 @@ From the maintainer, who wrote this software and runs its seed nodes:
 - **Coins on the test networks carry over to nothing.** The CVN Testnet and `devnet` are for testing, as was the first test network (`testnet-1`, now retired). Their coins have no value and no claim on any later network, which will start from zero for everyone.
 - **I will mine from the first block, like anyone else,** with one home computer (a 16-core desktop processor) running the programs published here. Its mining address will be published before the start, so that anyone can see what it earned.
 - **The seed nodes do not mine.** They are rented servers that keep the chain and pass blocks on. The computer I mine with is not a seed and has no better place on the network than yours.
+- **I will run a mining pool that anyone may use, and it takes no fee.** It is the published program with one option added, on a rented server that does nothing else. Every block it finds is divided among the machines that worked for it, by the work each did; what it found and what it paid can be checked on its page and on the chain. Its address will be published before the start, like my own. Nobody has to use it: mining by yourself works as it always has, and anyone can run a pool of their own with the same program.
 - **The start is announced in advance** as a Bitcoin block height fixed in a tagged release of this software, together with the packages, their SHA-256 sums and the source of the faster miner, so that everybody has the same programs and nobody can begin early. How that works, and how to check it afterwards, is in section 11 of the [design paper](WHITEPAPER.md).
 
 What reviewers found when they tested these claims against the code, and what was done about it, is recorded in [audit/FINDINGS_FAIR_LAUNCH.md](audit/FINDINGS_FAIR_LAUNCH.md).

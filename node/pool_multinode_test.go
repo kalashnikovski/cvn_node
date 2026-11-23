@@ -4,6 +4,7 @@ package node
 
 import (
 	"bufio"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -547,5 +548,142 @@ func TestMultiNodeAPoolLosesABlock(t *testing.T) {
 	// The pool that stayed on the network lost nothing.
 	if page, _ := poolPageOf(mainPool); page.BlocksLost != 0 || page.BlocksConfirmed == 0 {
 		t.Errorf("the network's own pool records %d lost and %d confirmed", page.BlocksLost, page.BlocksConfirmed)
+	}
+}
+
+// TestMultiNodeTheRealFastMinerAtAPool runs the real fast miner, through
+// `--pool-mine`, against a real pool beside a seed. Everything else here
+// uses stand-in miners; this is the one place the program a miner really
+// runs meets the pool.
+//
+// The fast miner is not part of this repository, so the test runs only when
+// CVN_REAL_FAST_MINER names its file:
+//
+//	CVN_REAL_FAST_MINER=/path/to/xmrig go test -tags multinode -run TheRealFastMiner -v ./node/
+//
+// On Windows, expect the antivirus to step in. A program built a moment ago,
+// in the temporary folder, that starts mining software pointed at a pool is
+// what coin-mining malware looks like. Microsoft Defender ended this test
+// after half a minute, and then refused to start the multi-node test program
+// at all until its source had changed. Run it on Linux, or on a machine
+// where you have decided for yourself what the antivirus should allow.
+func TestMultiNodeTheRealFastMinerAtAPool(t *testing.T) {
+	fastMiner := os.Getenv("CVN_REAL_FAST_MINER")
+	if fastMiner == "" {
+		t.Skip("CVN_REAL_FAST_MINER does not name the CVN edition of XMRig, so the real miner is not tried")
+	}
+	c := poolCluster(t)
+	const wait = 10 * time.Minute
+	_, _, poolsAddress := newTestWallet(t)
+	_, _, minersAddress := newTestWallet(t)
+
+	seed := c.seed("seed-a", 1, nil).startNode()
+	c.waitForHeight(wait, 0, seed)
+	pool := c.pool("pool", 5, []int{1}, poolsAddress).startNode()
+	c.eventually(wait, "the pool did not publish its record", func() bool {
+		page, ok := poolPageOf(pool)
+		return ok && page.PoolAddress == poolsAddress
+	})
+
+	// A miner's machine: the program, the fast miner and an address. No
+	// seeds are named, because it joins no network.
+	miner := c.node("miner", 9, nil, "--pool-mine", pool.host, "--miner-address", minersAddress,
+		"--xmrig-path", fastMiner, "--threads", "1").startNode()
+	stillMining := func() {
+		t.Helper()
+		if !miner.running() {
+			t.Fatalf("the program mining at the pool ended by itself:\n%s", miner.log())
+		}
+	}
+
+	c.eventually(wait, "the pool counted no work from the real miner", func() bool {
+		stillMining()
+		page, _ := poolPageOf(pool)
+		for _, address := range page.Addresses {
+			if address.Address == minersAddress && address.Work > 0 {
+				return true
+			}
+		}
+		return false
+	})
+	c.eventually(wait, "no block found with the real miner came to count", func() bool {
+		stillMining()
+		page, _ := poolPageOf(pool)
+		return page.BlocksConfirmed >= 2
+	})
+	// Once a minute the program says how it is doing, with what the pool
+	// has recorded for its address.
+	c.eventually(wait, "the program never reported its shares and what it is owed", func() bool {
+		stillMining()
+		said := miner.log()
+		return strings.Contains(said, "shares taken") && strings.Contains(said, "the pool owes this address")
+	})
+
+	said := miner.log()
+	for _, want := range []string{"MINING AT A POOL", "The pool says", "takes no fee", "Connected to the pool", "first share", "H/s"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the program mining at the pool never said %q", want)
+		}
+	}
+	if strings.Contains(said, "shares taken 0") {
+		t.Error("the program counted no shares while the pool counted its work: it does not understand what the fast miner prints")
+	}
+
+	// The pool's record and the seed agree on the blocks, and the one miner
+	// earned all of what counts.
+	page, _ := poolPageOf(pool)
+	for _, block := range page.Blocks {
+		if block.State == poolBlockConfirmed && seed.hashAt(block.Height) != block.Hash {
+			t.Errorf("the pool counts block %d, which is not the block the seed holds at that height", block.Height)
+		}
+	}
+	var account poolPageAddress
+	if !pool.get("/pool.json?address="+minersAddress, &account) || account.EarnedUnits <= 0 {
+		t.Errorf("the pool has recorded nothing earned for the real miner: %+v", account)
+	}
+
+	// Closing the program takes the fast miner with it.
+	miner.stopNode()
+	c.eventually(wait, "the pool still counts a miner after the program was closed: the fast miner outlived it", func() bool {
+		after, _ := poolPageOf(pool)
+		return after.Miners == 0
+	})
+	t.Logf("what the program printed while it mined at the pool:\n%s", said)
+}
+
+// TestMultiNodePoolOptionsThatContradict starts the real program with
+// options that cannot both be meant. It says which, and ends, and no node
+// is started.
+func TestMultiNodePoolOptionsThatContradict(t *testing.T) {
+	c := poolCluster(t)
+	_, _, address := newTestWallet(t)
+	for _, attempt := range []struct {
+		options []string
+		says    string
+	}{
+		// A pool, and a miner at somebody else's pool.
+		{[]string{"--pool", address, "--pool-mine", "127.0.0.1"}, "Give one of the two"},
+		// A node that does not mine, asked to mine at a pool.
+		{[]string{"--no-mining", "--pool-mine", "127.0.0.1"}, "Give one of the two"},
+		// The option with nothing after it, and with something that is not a machine.
+		{[]string{"--miner-address", address, "--pool-mine"}, "--pool-mine needs the pool's address"},
+		{[]string{"--miner-address", address, "--pool-mine", "http://127.0.0.1/pool"}, "is not a pool's address"},
+		// A pool to mine at, and no fast miner to do it with.
+		{[]string{"--miner-address", address, "--pool-mine", "127.0.0.1"}, "needs the fast miner"},
+	} {
+		n := c.node("refused", 3, nil, attempt.options...)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		command := exec.CommandContext(ctx, c.program, n.args...)
+		command.Dir = n.folder
+		command.Env = n.env
+		out, err := command.CombinedOutput()
+		ranOutOfTime := ctx.Err() != nil
+		cancel()
+		if err == nil || ranOutOfTime || !strings.Contains(string(out), attempt.says) {
+			t.Errorf("started with %v the program should end saying %q. It ended with %v and said:\n%s", attempt.options, attempt.says, err, out)
+		}
+		if strings.Contains(string(out), "Listening for other nodes") {
+			t.Errorf("started with %v the program began to run a node", attempt.options)
+		}
 	}
 }

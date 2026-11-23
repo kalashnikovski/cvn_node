@@ -1,6 +1,8 @@
 @echo off
 rem Starts the CVN miner. Anything you add after the file name is passed on to
 rem the miner, for example:   LaunchMiner.bat --threads 8
+rem To mine at a pool and not by yourself (MINING_GUIDE.md, section 5):
+rem                           LaunchMiner.bat --pool-mine pool.example.org
 title Covenant Standard (CVN) Miner
 cd /d "%~dp0"
 

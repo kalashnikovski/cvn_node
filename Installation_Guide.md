@@ -77,6 +77,7 @@ Double-clicking is enough for ordinary use. A few things in this guide need an o
 | Use only some processor threads | `LaunchMiner.bat --threads 8` |
 | Mine on another network | `LaunchMiner.bat --network devnet` |
 | Several at once | `LaunchMiner.bat --network devnet --threads 8` |
+| Mine at a pool, not by yourself | `LaunchMiner.bat --pool-mine pool.example.org` (section 5 of [MINING_GUIDE.md](MINING_GUIDE.md)) |
 
 Commands in this guide that begin with `cvn_miner.exe` are typed the same way. Where one is shown beginning with `cvn_miner.exe` and you normally start the miner with `LaunchMiner.bat`, you can use `LaunchMiner.bat` in its place: it passes everything after its name on to the program.
 

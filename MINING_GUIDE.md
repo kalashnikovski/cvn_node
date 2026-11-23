@@ -1,6 +1,8 @@
-# Mining guide: choosing a miner, large pages and processor tuning
+# Mining guide: choosing a miner, large pages, processor tuning and pools
 
 This guide applies to every CVN network: the development network today, and the public test network and mainnet when they launch. All of them mine with RandomX.
+
+Sections 1 to 4 are about mining by yourself, with your own node. Section 5 is about mining at a pool.
 
 ## 1. Two miners to choose from
 
@@ -234,3 +236,106 @@ The name in quotes depends on your processor. If the tuning was refused you see 
 ## 4. A warning about unstable machines
 
 RandomX uses the processor and memory harder than almost any other program. A machine whose memory is run faster than its tested settings (overclocked, or with timings set by hand) may run everything else without trouble and still crash or restart when mining starts. If that happens, return the memory to its standard profile before mining; an unstable machine also produces wrong results that the network refuses.
+
+## 5. Mining at a pool
+
+A machine that mines by itself is paid the whole of every block it finds, and finds one rarely. On a busy network a single desktop can wait days or weeks for a block. A pool is many machines working on the same blocks: every block the pool finds is divided among them by the work each did, so each is paid a little, often.
+
+Over a long time the two come to the same. A pool does not add to what a machine earns; it evens out the waiting.
+
+| | Mining by yourself | Mining at a pool |
+|---|---|---|
+| What runs on your machine | The whole program: a node with its copy of the chain, and a miner | The fast miner only. No node and no chain |
+| Who builds the blocks | Your own node | The pool |
+| When you are paid | When your machine finds a block: all of it, straight to your address | Your part of every block the pool finds, sent by the pool once it owes you enough |
+| Whom you rely on | Nobody | The pool's operator, for the coins the pool holds until it pays them |
+
+Nobody has to use a pool. Mining by yourself works exactly as before, and you can change from one to the other whenever you like: the coins arrive at the same address either way.
+
+### What you need
+
+- **The fast miner** in your CVN folder, as section 1 describes. The built-in miner cannot mine at a pool: it takes its work from the node in the same program.
+- **A mining address.** The one already saved on your machine is used. It is the name the pool knows your machine by, and where the pool sends what it owes.
+- **The pool's name**, for example `pool.example.org`. A pool that listens on a port of its own choosing gives it with the name: `pool.example.org:3333`.
+
+### Starting
+
+**Windows:** open a Command Prompt in your CVN folder ([Installation_Guide.md](Installation_Guide.md), "Typing a command") and type:
+
+```
+LaunchMiner.bat --pool-mine pool.example.org
+```
+
+**Linux:**
+
+```bash
+./cvn_node --pool-mine pool.example.org
+```
+
+Add `--network devnet` (or whichever network the pool is on) and `--threads N` as you would for mining by yourself.
+
+**To mine at the pool every time** without typing anything, add one line to `miner_config.json` in your CVN folder, and start the miner the way you always do:
+
+```
+{
+  "miner_address": "CVN_your_address",
+  "mine_at_pool": "pool.example.org"
+}
+```
+
+Mind the comma at the end of every line but the last. On Windows, the first time you start after changing the file, `LaunchMiner.bat` asks you to confirm your mining address once more. To mine by yourself again, take the line out.
+
+### What you see
+
+```
+====================================================================
+ MINING AT A POOL ON DEVNET
+====================================================================
+ Pool:          pool.example.org:28083   (asked for with --pool-mine)
+ Your address:  CVN_your_address
+                The pool counts this machine's work for that address and pays it there.
+ Fast miner:    C:\cvn_node\xmrig-cvn\xmrig.exe
+ No node runs on this machine and no chain is kept. The pool builds the blocks.
+ The pool says: 12 miner(s) connected, 96.40 kH/s, 310 block(s) found so far. It takes no fee
+                and pays every address it owes 1 CVN or more.
+ Its page:      http://pool.example.org:28081/pool
+====================================================================
+2026/11/24 09:26:28 [POOL] Connected to the pool.
+2026/11/24 09:26:37 [POOL] The pool took this machine's first share. From here on it has a part in the blocks the pool finds.
+2026/11/24 09:27:28 [POOL] 17.85 kH/s · shares taken 2 · the pool owes this address 0 CVN, has 0 CVN on its way and has paid 0 CVN
+```
+
+The last line comes once a minute. In it:
+
+- **Shares taken** are pieces of work the pool has counted for you. The pool asks each machine for work it can do about once every 30 seconds, so a fast machine and a slow one both hand in about two shares a minute; the fast machine's shares are simply worth more.
+- **Too late** counts shares that arrived just after somebody found a block. Every miner has a few. They are not a fault.
+- **Refused**, if it appears, counts shares the pool would not take for another reason, and the reason is printed when it happens. More than a handful means something is wrong: usually a miner that is not the CVN edition, or an unstable machine (section 4).
+- **Owes, on its way, has paid** are the pool's own figures for your address, read from its page.
+
+The program checks that the pool is on the network it was started for, and stops with a message if it is not. If the pool cannot be reached, the fast miner keeps trying, and the line says "Not connected to the pool at the moment".
+
+### How you are paid
+
+This is how a pool run with this program works. A pool run with other software has its own rules: read them before you mine there.
+
+1. **A block the pool finds is divided by recent work.** The pool looks back over the most recent shares, as far as it takes to add up to twice the work of one block, and divides the block's reward among their addresses by the work each did. A machine that has been at the pool for a while has a part in every block, whoever's machine found it.
+2. **The block has to last.** It counts once 100 more blocks stand on it, about 75 minutes. Until then it is "waiting". If the network replaces it in that time, which happens now and then to every miner, it counts for nothing and nobody is owed for it.
+3. **You are owed your part** from that moment. The pool page shows it.
+4. **The pool pays** every address it owes 1 CVN or more, by an ordinary transfer, whenever its operator's payments run (once an hour, unless the operator has chosen otherwise). Each transfer carries a fee of 0.001 CVN, shared equally among the addresses it pays, so each receives at most 0.001 CVN less than it was owed.
+5. **An amount under 1 CVN stays owed** until it has grown. It does not expire.
+
+The pool page, at `http://POOL-NAME:18081/pool` on the CVN Testnet and `http://POOL-NAME:28081/pool` on devnet, shows every block the pool found, what became of it, and how its reward was divided address by address. Anyone can add the division up. The coins themselves are on the chain: the pool's address, and every payment from it, can be looked up on any node's explorer.
+
+### What a pool can and cannot do
+
+- **It holds your coins until it pays them.** A block's reward is paid by the network to the pool's address, and the pool sends each miner's part on later. An operator who is dishonest, careless or broken into could fail to pay. The pool page lets you check that the division is right and that payments are made; it cannot make an operator pay. Mine at a pool whose operator you have reason to trust, and notice if the amount it owes you keeps growing without being paid.
+- **It cannot touch your wallet.** The pool is given your address and nothing else. Never give a pool, or anyone, your private key or recovery words.
+- **It may keep a fee.** A pool run with this program keeps none: there is no fee in it to switch on. A pool run with other software sets its own.
+- **The connection is not encrypted** in this version. Somebody between you and the pool could see your address and your work. That is all it carries.
+- **Antivirus programs are quicker to object to pool mining** than to mining by yourself: mining software that connects to a pool is what coin-mining malware looks like. See the note on antivirus programs in section 1.
+
+A network is healthier with many miners and several pools than with one large pool. If one pool comes to hold a large part of the network's speed, mine at another, or by yourself.
+
+### Running a pool
+
+Anyone can run one: it is the same program with one more option. See [POOL_GUIDE.md](POOL_GUIDE.md).

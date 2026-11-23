@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -552,6 +553,14 @@ func poolPaymentLooksRight(payment poolPayment, ownAddress string, feeUnits int6
 	return nil
 }
 
+// passwordFileTooOpen reports whether a file's permissions let anyone but
+// its owner read it or write to it. The password file opens the pool's key,
+// so the paying command will not use one that does. (Windows does not write
+// a file's permissions this way, and nothing is checked there.)
+func passwordFileTooOpen(mode os.FileMode) bool {
+	return mode.Perm()&0o077 != 0
+}
+
 // RunPoolPay is `--pool-pay`: it signs the payments the pool's node on this
 // machine has prepared and hands them back. It returns the code the program
 // ends with.
@@ -571,6 +580,11 @@ func RunPoolPay(args []string) int {
 	if byHand {
 		typed = readSecretLine(bufio.NewReader(os.Stdin), " The pool's private key, its 24 recovery words, or the saved key's password (not shown while typing): ")
 	} else {
+		if info, err := os.Stat(passwordFile); err == nil && runtime.GOOS != "windows" && passwordFileTooOpen(info.Mode()) {
+			fmt.Printf("❌ %s can be read by other users of this machine (its permissions are %04o).\n", passwordFile, info.Mode().Perm())
+			fmt.Printf("   It opens the pool's key. Make it readable by its owner alone and try again:  chmod 600 %s\n", passwordFile)
+			return 1
+		}
 		raw, err := os.ReadFile(passwordFile)
 		if err != nil {
 			fmt.Printf("❌ %s could not be read: %v\n", passwordFile, err)

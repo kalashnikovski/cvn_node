@@ -160,9 +160,26 @@ func Run(frontendAssets embed.FS) {
 	if err == nil && isPool && !networkUsesRandomX() {
 		err = fmt.Errorf("a pool needs a network mined with RandomX, and %s is not one", Params.Name)
 	}
+	// `--pool-mine HOST`, or "mine_at_pool" in miner_config.json, mines at
+	// somebody's pool with the fast miner and never starts a node
+	// (pool_mine.go).
+	mineAt, mineAtAskedBy, mineAtErr := poolMineRequested(os.Args)
+	if err == nil && mineAtAskedBy != "" {
+		switch {
+		case isPool:
+			err = fmt.Errorf("--pool makes this node a pool, and %s asks it to mine at another. Give one of the two", mineAtAskedBy)
+		case seedOnly:
+			err = fmt.Errorf("mining is switched off on this node, and %s asks it to mine at a pool. Give one of the two", mineAtAskedBy)
+		default:
+			err = mineAtErr
+		}
+	}
 	if err != nil {
 		fmt.Println("🚨 " + err.Error())
 		os.Exit(1)
+	}
+	if mineAtAskedBy != "" {
+		os.Exit(RunPoolMiner(mineAt, mineAtAskedBy, os.Args))
 	}
 	if isPool {
 		poolAddress = pool

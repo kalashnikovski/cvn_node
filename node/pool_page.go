@@ -92,6 +92,7 @@ type poolPage struct {
 	Network           string            `json:"network"`
 	PoolAddress       string            `json:"pool_address"`
 	FeePercent        int               `json:"fee_percent"`
+	WorkPort          int               `json:"work_port"`
 	WindowBlocks      int64             `json:"window_blocks"`
 	ShareSeconds      float64           `json:"share_seconds"`
 	Height            int64             `json:"height"`
@@ -153,7 +154,7 @@ func readPoolPage(now time.Time) poolPage {
 	view := poolLedger.view(difficulty, now.Unix(), poolPageBlocks)
 	_, miners := poolSpeedNow()
 	page := poolPage{
-		Network: Params.Name, PoolAddress: poolAddress, FeePercent: 0,
+		Network: Params.Name, PoolAddress: poolAddress, FeePercent: 0, WorkPort: Params.StratumPort,
 		WindowBlocks: poolWindowBlocks, ShareSeconds: poolShareSeconds,
 		Height: tip.Index, NetworkDifficulty: difficulty, Miners: miners,
 		Speed: view.Speed, SpeedText: formatHashrate(view.Speed / 1000000.0),
@@ -317,8 +318,9 @@ summary { cursor: pointer; }
 </div>
 
 <h2>To mine here</h2>
-<p>Run the CVN edition of XMRig with this pool's address and port, and your own CVN address as the user name:</p>
-<p><code>xmrig -o THIS-POOL:PORT -u CVN_YOUR_ADDRESS --keepalive</code></p>
+<p>Put the fast miner (the CVN edition of XMRig) in your CVN folder, as the mining guide describes, and start the miner with this pool's name:</p>
+<p><code>LaunchMiner.bat --pool-mine THIS-POOL</code> on Windows, <code>./cvn_node --network {{.Network}} --pool-mine THIS-POOL</code> on Linux.</p>
+<p class="quiet">The mining address saved on your machine is the one this pool counts your work for and pays. No node runs on your machine and no chain is downloaded. The fast miner can also be started by hand: <code>xmrig -o THIS-POOL:{{.WorkPort}} -u CVN_YOUR_ADDRESS -a rx/0 --keepalive</code></p>
 
 <h2>Miners</h2>
 <p class="quiet">Work is what each address has in the window a block found now would be divided over. Owed is its part of the blocks that count, not yet paid. On its way is in a payment that has been sent and is not yet too deep to be replaced.</p>
