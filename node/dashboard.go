@@ -82,6 +82,11 @@ func recordMiningSpeed() miningSpeeds {
 	if reported, ok := fastMinerHashrate(); ok {
 		now = reported / 1000000.0
 	}
+	// A pool shows the speed of its miners together, read from their shares.
+	if poolRunning() {
+		poolSpeed, _ := poolSpeedNow()
+		now = poolSpeed / 1000000.0
+	}
 	currentLiveHashrateTrack = now
 
 	hashrateMutex.Lock()
@@ -117,6 +122,9 @@ func noteMiningActivity(seedOnly bool, speed float64, height int64) {
 	var line string
 	if seedOnly {
 		line = fmt.Sprintf("[%s] 🌱 [SEED] Not mining. Following the network // Ledger Height: #%d", at, height)
+	} else if poolRunning() {
+		poolSpeed, miners := poolSpeedNow()
+		line = fmt.Sprintf("[%s] ⛏️  [POOL] %d miner(s) at %s // height #%d", at, miners, formatHashrate(poolSpeed/1000000.0), height)
 	} else if status, working := minerStatus(height); !working {
 		// Not mining for now. Say why, and not "Mining at 0 H/s".
 		line = fmt.Sprintf("[%s] ⏳ [SYNC] Not mining yet. %s // height #%d", at, status, height)
@@ -149,6 +157,9 @@ func drawDashboard(seedOnly bool, height int64, balance float64, speeds miningSp
 	fmt.Println(inGreen(fmt.Sprintf("💰 WALLET BALANCE: %-16.2f CVN | 📊 15m AVG HASHRATE: %s", balance, formatHashrate(speeds.last15Minutes))))
 	if seedOnly {
 		fmt.Println(inGreen(fmt.Sprintf("🌱 SEED NODE: NOT MINING            | 📊 60m AVG HASHRATE: %s", formatHashrate(speeds.lastHour))))
+	} else if poolRunning() {
+		_, miners := poolSpeedNow()
+		fmt.Println(inGreen(fmt.Sprintf("⛏️  POOL: %-4d MINER(S) CONNECTED     | 📊 60m AVG HASHRATE: %s", miners, formatHashrate(speeds.lastHour))))
 	} else {
 		fmt.Println(inGreen(fmt.Sprintf("🪪 MINING ADDRESS: %-16.16s...  | 📊 60m AVG HASHRATE: %s", CustomMinerAddress, formatHashrate(speeds.lastHour))))
 	}

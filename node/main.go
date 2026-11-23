@@ -145,7 +145,23 @@ func Run(frontendAssets embed.FS) {
 	// holds could never be spent.
 	// A node that does not mine earns nothing and needs no address.
 	seedOnly := miningSwitchedOff(os.Args)
-	if !seedOnly {
+	// A pool mines with other people's machines and not its own: its blocks
+	// pay the pool's address, which is given on the command line (pool.go).
+	pool, isPool, err := poolAddressRequested(os.Args)
+	if err == nil && isPool && seedOnly {
+		err = fmt.Errorf("--pool and --no-mining were both given. A pool builds blocks; a node that does not mine cannot be one")
+	}
+	if err == nil && isPool && !networkUsesRandomX() {
+		err = fmt.Errorf("a pool needs a network mined with RandomX, and %s is not one", Params.Name)
+	}
+	if err != nil {
+		fmt.Println("🚨 " + err.Error())
+		os.Exit(1)
+	}
+	if isPool {
+		poolAddress = pool
+		CustomMinerAddress = pool
+	} else if !seedOnly {
 		minerAddress, err := resolveMinerAddress(os.Args)
 		if err != nil {
 			fmt.Println("🚨 " + err.Error())
@@ -173,6 +189,8 @@ func Run(frontendAssets embed.FS) {
 
 	if seedOnly {
 		log.Println("🌱 This node does not mine. It keeps the chain, checks every block and passes blocks on.")
+	} else if isPool {
+		log.Printf("⛏️ This node is a pool. Its blocks pay %s\n", poolAddress)
 	} else {
 		log.Printf("🪪 Mining rewards go to %s\n", CustomMinerAddress)
 	}
@@ -203,6 +221,15 @@ func Run(frontendAssets embed.FS) {
 	// stays idle unless the fast miner cannot run (see fast_miner.go).
 	if seedOnly {
 		announceNetworkStatus("🌱 [SEED] Mining is switched off on this node (--no-mining). It keeps the chain, checks every block and passes blocks on.")
+	} else if isPool {
+		// A pool hands out work and checks it. It does not mine itself: a
+		// small server's processor is better spent checking shares.
+		if err := startPool(); err != nil {
+			fmt.Println("🚨 " + err.Error())
+			os.Exit(1)
+		}
+		go runVerifyKeyWarmer()
+		go runTableJanitor()
 	} else {
 		StartChosenMiner(StartMiningWorkServer())
 		go runVerifyKeyWarmer()

@@ -1,0 +1,385 @@
+package node
+
+import (
+	"encoding/hex"
+	"fmt"
+	"math"
+	"net"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// A POOL: MANY MINERS, ONE NODE
+//
+// Started with `--pool CVN_ADDRESS`, a node becomes a pool. Miners anywhere
+// point the fast miner at it and log in with their own CVN address. Every
+// block the node builds pays the pool's address; the node keeps a record of
+// how much work each miner did, and a block's reward is divided among them
+// by that record (pool_ledger.go). Paying it out is a later stage and is
+// never done by this part of the program, which holds no key.
+//
+// Nothing here is a rule of the chain. A block found by a pool is an
+// ordinary block, checked by every node like any other, and anyone can run a
+// pool of their own with this same option.
+//
+// HOW WORK IS HANDED OUT
+//
+// The work server (stratum.go) already gives every miner a block of its own
+// to work on and checks each answer with CVN's RandomX. A pool changes three
+// things:
+//
+//   - The block pays the pool's address, whoever is working on it.
+//   - The miner is asked for much less than the network asks: a difficulty
+//     of its own, chosen so that it sends an answer about every
+//     poolShareSeconds. Each answer that meets it is a share, recorded with
+//     that difficulty as its weight. A fast machine is given a higher
+//     difficulty and a slow one a lower, and because a share counts for its
+//     difficulty both are credited in proportion to the work they did.
+//   - An answer that also meets the network's difficulty is a block, and is
+//     placed on the chain exactly as before.
+//
+// One answer costs the pool one RandomX hash to check. The lowest difficulty
+// a pool hands out (poolMinShareDifficulty) keeps the cost of making a share
+// thousands of times the cost of checking it.
+
+// poolAddress is where the blocks of the pool this node runs are paid. It is
+// empty on a node that is not a pool.
+var poolAddress string
+
+// The pool's settings. They are variables so that tests can run a pool on a
+// chain whose blocks take a handful of hashes.
+var (
+	// poolShareSeconds is how often each miner should send a share.
+	poolShareSeconds = 30.0
+	// poolStartDifficulty is what a miner is asked for before the pool has
+	// seen how fast it is: one share in 30 seconds at about 1,700 hashes a
+	// second.
+	poolStartDifficulty = 50000
+	// poolMinShareDifficulty is the least a miner is ever asked for.
+	poolMinShareDifficulty = 2500
+	// poolWindowBlocks is how many blocks' worth of work a reward is shared
+	// over (decided 23 November 2026: twice a block's work).
+	poolWindowBlocks = int64(2)
+	// A miner's difficulty is looked at again after this many shares, or
+	// after this long, whichever comes first.
+	poolRetargetShares = 6
+	poolRetargetAfter  = 2 * time.Minute
+)
+
+const (
+	// poolSpeedOver is the stretch of time the pool's speed is read from.
+	poolSpeedOver = 10 * time.Minute
+	// One address on the internet may hold this many connections, and the
+	// pool this many in all.
+	poolConnectionsPerHost = 32
+	poolMinersAtMost       = 2000
+	// poolDuplicateShare is the answer to a share handed in twice.
+	poolDuplicateShare = "duplicate share"
+)
+
+// poolRunning reports whether this node is a pool.
+func poolRunning() bool {
+	return poolAddress != ""
+}
+
+// poolAddressRequested reads `--pool CVN_ADDRESS` from the command line.
+func poolAddressRequested(args []string) (address string, on bool, err error) {
+	for i, arg := range args {
+		if arg != "--pool" {
+			continue
+		}
+		if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+			return "", false, fmt.Errorf("--pool needs the address the pool's blocks are paid to: --pool CVN_...")
+		}
+		address = strings.TrimSpace(args[i+1])
+		if !looksLikeWalletAddress(address) {
+			return "", false, fmt.Errorf("--pool was given %q, which is not a CVN wallet address: %s", address, addressFormDescription())
+		}
+		return address, true, nil
+	}
+	return "", false, nil
+}
+
+// startPool opens the pool's record and the port miners connect to.
+func startPool() error {
+	if !networkUsesRandomX() {
+		return fmt.Errorf("a pool needs a network mined with RandomX, and %s is not one", Params.Name)
+	}
+	record, err := openPoolLedger(poolLedgerPath())
+	if err != nil {
+		return err
+	}
+	poolLedger = record
+	listening := StartMiningWorkServer()
+	if listening == "" {
+		return fmt.Errorf("the pool could not open port %d for miners", Params.StratumPort)
+	}
+	announceNetworkStatus(fmt.Sprintf("⛏️ [POOL] This node is a pool. Its blocks pay %s. Miners connect to port %d and log in with their own CVN address.", poolAddress, Params.StratumPort))
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Who may connect
+// ---------------------------------------------------------------------------
+
+var poolConnections = struct {
+	sync.Mutex
+	byHost map[string]int
+	all    int
+}{byHost: make(map[string]int)}
+
+// poolAdmit takes a place for a connection from a host, or refuses it.
+func poolAdmit(host string) bool {
+	poolConnections.Lock()
+	defer poolConnections.Unlock()
+	if poolConnections.all >= poolMinersAtMost || poolConnections.byHost[host] >= poolConnectionsPerHost {
+		return false
+	}
+	poolConnections.byHost[host]++
+	poolConnections.all++
+	return true
+}
+
+func poolRelease(host string) {
+	poolConnections.Lock()
+	defer poolConnections.Unlock()
+	if poolConnections.byHost[host] <= 1 {
+		delete(poolConnections.byHost, host)
+	} else {
+		poolConnections.byHost[host]--
+	}
+	if poolConnections.all > 0 {
+		poolConnections.all--
+	}
+}
+
+// hostOf is the address a connection came from, without its port.
+func hostOf(conn net.Conn) string {
+	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		return conn.RemoteAddr().String()
+	}
+	return host
+}
+
+// ---------------------------------------------------------------------------
+// A miner's own difficulty
+// ---------------------------------------------------------------------------
+
+// poolMiner is what the pool keeps for one connected miner.
+type poolMiner struct {
+	sync.Mutex
+	difficulty   int
+	periodStart  time.Time
+	periodWork   int64
+	periodShares int
+	changed      bool // new work at the new difficulty has not been sent yet
+}
+
+// poolNextShareDifficulty is the difficulty to ask of a miner next, given
+// what it did at the current one: `work` is the weight of the `shares` it
+// sent in `seconds`. The aim is one share every poolShareSeconds. A step is
+// never more than four times up or down, never below the pool's least or
+// above `ceiling` (the network's own difficulty), and a change of less than a
+// fifth is not made at all, so that a steady miner is left alone.
+func poolNextShareDifficulty(current int, work int64, shares int, seconds float64, ceiling int) int {
+	if current < 1 {
+		current = 1
+	}
+	if seconds < 1 {
+		seconds = 1
+	}
+	speed := float64(work) / seconds
+	if shares == 0 {
+		// Nothing in all that time: it is slower than one share's worth.
+		speed = float64(current) / 2 / seconds
+	}
+	next := speed * poolShareSeconds
+	next = math.Min(next, float64(current)*4)
+	next = math.Max(next, float64(current)/4)
+	if ceiling > 0 {
+		next = math.Min(next, float64(ceiling))
+	}
+	next = math.Max(next, float64(poolMinShareDifficulty))
+	if math.Abs(next-float64(current)) < float64(current)/5 {
+		return current
+	}
+	return int(next)
+}
+
+func (m *poolMiner) begin(now time.Time) {
+	m.Lock()
+	defer m.Unlock()
+	m.difficulty = poolStartDifficulty
+	if m.difficulty < poolMinShareDifficulty {
+		m.difficulty = poolMinShareDifficulty
+	}
+	m.periodStart = now
+}
+
+func (m *poolMiner) asked() int {
+	m.Lock()
+	defer m.Unlock()
+	return m.difficulty
+}
+
+// retargetLocked looks at the period just ended and starts the next.
+func (m *poolMiner) retargetLocked(now time.Time, ceiling int) {
+	next := poolNextShareDifficulty(m.difficulty, m.periodWork, m.periodShares, now.Sub(m.periodStart).Seconds(), ceiling)
+	if next != m.difficulty {
+		m.difficulty = next
+		m.changed = true
+	}
+	m.periodStart, m.periodWork, m.periodShares = now, 0, 0
+}
+
+// noteShare counts a share towards the miner's speed.
+func (m *poolMiner) noteShare(weight int64, now time.Time, ceiling int) {
+	m.Lock()
+	defer m.Unlock()
+	m.periodWork += weight
+	m.periodShares++
+	if m.periodShares >= poolRetargetShares || now.Sub(m.periodStart) >= poolRetargetAfter {
+		m.retargetLocked(now, ceiling)
+	}
+}
+
+// easeIfQuiet lowers the difficulty of a miner that has sent too little for
+// too long, so that a slow machine is not left without shares.
+func (m *poolMiner) easeIfQuiet(now time.Time, ceiling int) {
+	m.Lock()
+	defer m.Unlock()
+	if !m.periodStart.IsZero() && now.Sub(m.periodStart) >= poolRetargetAfter {
+		m.retargetLocked(now, ceiling)
+	}
+}
+
+// takeChanged reports, once, that the miner's difficulty has changed.
+func (m *poolMiner) takeChanged() bool {
+	m.Lock()
+	defer m.Unlock()
+	changed := m.changed
+	m.changed = false
+	return changed
+}
+
+// ---------------------------------------------------------------------------
+// Shares
+// ---------------------------------------------------------------------------
+
+// shareDifficultyFor is what a job asks of this miner: its own difficulty,
+// or the network's if that is lower.
+func (c *stratumClient) shareDifficultyFor(networkDifficulty int) int {
+	asked := c.pool.asked()
+	if asked < poolMinShareDifficulty {
+		asked = poolMinShareDifficulty
+	}
+	if asked > networkDifficulty {
+		asked = networkDifficulty
+	}
+	return asked
+}
+
+// submitShare checks an answer from one of the pool's miners. An answer that
+// meets the miner's own difficulty is recorded as a share; one that also
+// meets the network's becomes a block. It returns "" for a share that was
+// counted.
+func (c *stratumClient) submitShare(jobID, nonceHex string) string {
+	if atomic.LoadInt32(&IsSyncingActive) == 1 {
+		return "stale job: the node is catching up with the network"
+	}
+	// A pool that has fallen behind the network hands out no new work (see
+	// buildStratumJob), and takes none in: a block found on the old work
+	// would be lost, and shares for it would be paid for out of blocks that
+	// other work earned.
+	if atomic.LoadInt32(&MiningHoldActive) == 1 {
+		return "stale job: the pool is waiting for the network"
+	}
+	job := c.findJob(jobID)
+	if job == nil {
+		return "unknown or expired job"
+	}
+	raw, err := hex.DecodeString(nonceHex)
+	if err != nil || len(raw) != 4 {
+		return "malformed nonce"
+	}
+	nonce := uint32(raw[0]) | uint32(raw[1])<<8 | uint32(raw[2])<<16 | uint32(raw[3])<<24
+
+	// Work on a block that is no longer the newest is worth nothing to the
+	// pool, and saying so costs no proof check.
+	StateMutex.RLock()
+	tip := GetLatestBlockInternal()
+	StateMutex.RUnlock()
+	if tip.Hash != job.tipHash {
+		return "stale job: the chain has moved on"
+	}
+	if job.seen[nonce] {
+		return poolDuplicateShare
+	}
+	blob, ok := powBlob(job.commitment, nonce)
+	if !ok {
+		return "malformed job"
+	}
+	work, ok := randomXVerify(job.key, blob)
+	if !ok {
+		return "the pool could not check this share"
+	}
+	asked := job.askedDifficulty()
+	if work > HeartbeatTargetHex(asked) {
+		return stratumBadWork
+	}
+	if job.seen == nil {
+		job.seen = make(map[uint32]bool)
+	}
+	job.seen[nonce] = true
+
+	now := time.Now()
+	place, err := poolLedger.addShare(c.address, int64(asked), now.Unix(), job.template.Difficulty)
+	if err != nil {
+		noteNetworkEvent("⚠️ [POOL] A share could not be recorded: " + err.Error())
+		return "the pool could not record this share"
+	}
+	c.pool.noteShare(int64(asked), now, job.template.Difficulty)
+
+	if work <= HeartbeatTargetHex(job.template.Difficulty) {
+		c.poolBlockFound(job, nonce, place, now)
+	}
+	return ""
+}
+
+// poolBlockFound places a block one of the pool's miners found and records
+// it with the division of its reward. The share that found it is already
+// recorded, and stays recorded whatever becomes of the block.
+func (c *stratumClient) poolBlockFound(job *stratumJob, nonce uint32, winningShare uint64, now time.Time) {
+	block := job.template
+	block.Nonce = int64(nonce)
+	block.Hash = CalculateHashWithTxDigest(block, job.txDigest)
+	if !BlockProofValid(block, block.Difficulty) {
+		return
+	}
+	// Checked and stored with the chain held still, as every other block is.
+	if !placeOnTip(block) {
+		noteNetworkEvent(fmt.Sprintf("⛏️ [POOL] A miner found block #%d, but the chain had moved on before it could be placed.", block.Index))
+		return
+	}
+	found, err := poolLedger.addBlock(block, c.address, winningShare, now.Unix())
+	if err != nil {
+		announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d was found and placed, but could not be written into the pool's record: %v", block.Index, err))
+		return
+	}
+	logMutex.Lock()
+	liveTerminalEventLogs = append(liveTerminalEventLogs, fmt.Sprintf("[%s] 🎉 [SUCCESS] The pool found block #%-3d | %s CVN shared among %d address(es) | Hash: %s",
+		now.Format("15:04:05"), block.Index, FormatUnits(found.RewardUnits), len(found.Parts), block.Hash[:16]))
+	logMutex.Unlock()
+}
+
+// poolSpeedNow is the pool's speed in hashes a second, and the number of
+// miners connected.
+func poolSpeedNow() (float64, int) {
+	if poolLedger == nil {
+		return 0, 0
+	}
+	return poolLedger.speed(time.Now()), int(atomic.LoadInt32(&externalMinersConnected))
+}

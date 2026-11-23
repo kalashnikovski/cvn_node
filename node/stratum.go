@@ -51,6 +51,19 @@ type stratumJob struct {
 	commitment string
 	key        []byte
 	tipHash    string
+	// On a pool: the difficulty this miner is asked for on this job, and the
+	// nonces it has already handed in for it (see pool.go).
+	shareDifficulty int
+	seen            map[uint32]bool
+}
+
+// askedDifficulty is what an answer to this job must meet: the network's
+// difficulty, or on a pool the miner's own if that is lower.
+func (j *stratumJob) askedDifficulty() int {
+	if j.shareDifficulty > 0 && j.shareDifficulty < j.template.Difficulty {
+		return j.shareDifficulty
+	}
+	return j.template.Difficulty
 }
 
 // stratumBadWork is the answer to a submission whose proof does not meet the
@@ -68,6 +81,7 @@ type stratumClient struct {
 	address string
 	jobs    []*stratumJob
 	jobsMu  sync.Mutex
+	pool    poolMiner // on a pool: this miner's own difficulty
 }
 
 type stratumRequest struct {
@@ -85,6 +99,10 @@ func StartMiningWorkServer() string {
 		return ""
 	}
 	host := "127.0.0.1"
+	if poolRunning() {
+		// A pool is for miners elsewhere: it listens wherever the node does.
+		host = Params.ListenHost
+	}
 	for i, arg := range os.Args {
 		if arg == "--mining-listen" && i+1 < len(os.Args) {
 			host = os.Args[i+1]
@@ -96,7 +114,9 @@ func StartMiningWorkServer() string {
 		return ""
 	}
 	go serveMiningWork(listener)
-	announceNetworkStatus(fmt.Sprintf("⛏️ [WORK SERVER] External miners can connect to %s.", listener.Addr()))
+	if !poolRunning() {
+		announceNetworkStatus(fmt.Sprintf("⛏️ [WORK SERVER] External miners can connect to %s.", listener.Addr()))
+	}
 	return listener.Addr().String()
 }
 
@@ -195,7 +215,7 @@ func (j *stratumJob) describe() map[string]interface{} {
 	return map[string]interface{}{
 		"blob":      hex.EncodeToString(blob),
 		"job_id":    j.id,
-		"target":    stratumTargetHex(j.template.Difficulty),
+		"target":    stratumTargetHex(j.askedDifficulty()),
 		"algo":      "rx/0",
 		"height":    j.template.Index,
 		"seed_hash": hex.EncodeToString(j.key),
@@ -225,9 +245,16 @@ func (c *stratumClient) reply(id json.RawMessage, result interface{}, errorText 
 
 // newJob builds fresh work for this client and remembers it.
 func (c *stratumClient) newJob() (*stratumJob, bool) {
-	job, ok := buildStratumJob(c.address)
+	payTo := c.address
+	if poolRunning() {
+		payTo = poolAddress // the miner is credited in the pool's record
+	}
+	job, ok := buildStratumJob(payTo)
 	if !ok {
 		return nil, false
+	}
+	if poolRunning() {
+		job.shareDifficulty = c.shareDifficultyFor(job.template.Difficulty)
 	}
 	c.jobsMu.Lock()
 	c.jobs = append(c.jobs, job)
@@ -252,15 +279,28 @@ func (c *stratumClient) findJob(id string) *stratumJob {
 func handleStratumClient(conn net.Conn) {
 	client := &stratumClient{conn: conn, address: strings.TrimSpace(CustomMinerAddress)}
 	defer conn.Close()
+	onPool := poolRunning()
+	if onPool {
+		host := hostOf(conn)
+		if !poolAdmit(host) {
+			return
+		}
+		defer poolRelease(host)
+	}
 
 	loggedIn := false
 	done := make(chan struct{})
 	defer func() {
 		close(done)
 		if loggedIn {
+			remaining := atomic.AddInt32(&externalMinersConnected, -1)
+			if onPool {
+				noteNetworkEvent(fmt.Sprintf("⛏️ [POOL] A miner left: %s (%s).", client.address, conn.RemoteAddr()))
+				return
+			}
 			noteNetworkEvent("⛏️ [WORK SERVER] External miner disconnected: " + conn.RemoteAddr().String())
 			// The dashboard is told when the last one leaves, not about each.
-			if atomic.AddInt32(&externalMinersConnected, -1) == 0 {
+			if remaining == 0 {
 				announceNetworkStatus("⛏️ [WORK SERVER] No external miner is connected any more. The built-in miner takes over.")
 			}
 		}
@@ -298,6 +338,9 @@ func handleStratumClient(conn net.Conn) {
 				return
 			}
 			client.address = login
+			if onPool && !loggedIn {
+				client.pool.begin(time.Now())
+			}
 			job, ok := client.newJob()
 			if !ok {
 				client.reply(request.ID, nil, "the node is not ready to hand out work yet")
@@ -312,7 +355,9 @@ func handleStratumClient(conn net.Conn) {
 			if !loggedIn {
 				loggedIn = true
 				// The dashboard is told when the first one arrives, not about each.
-				if atomic.AddInt32(&externalMinersConnected, 1) == 1 {
+				if connected := atomic.AddInt32(&externalMinersConnected, 1); onPool {
+					noteNetworkEvent(fmt.Sprintf("⛏️ [POOL] A miner joined: %s (%s).", client.address, conn.RemoteAddr()))
+				} else if connected == 1 {
 					announceNetworkStatus(fmt.Sprintf("⛏️ [WORK SERVER] External miner connected from %s, paying %s. The built-in miner is paused.", conn.RemoteAddr(), client.address))
 				} else {
 					noteNetworkEvent(fmt.Sprintf("⛏️ [WORK SERVER] External miner connected from %s, paying %s.", conn.RemoteAddr(), client.address))
@@ -341,7 +386,7 @@ func handleStratumClient(conn net.Conn) {
 				// a proof check. A miner that keeps sending them is faulty
 				// or hostile, and is disconnected. Answers that were good
 				// but arrived after the chain moved on are not counted.
-				if errorText == stratumBadWork {
+				if errorText == stratumBadWork || errorText == poolDuplicateShare {
 					if client.badWork++; client.badWork >= stratumBadWorkLimit {
 						noteNetworkEvent("⛏️ [WORK SERVER] Disconnecting " + conn.RemoteAddr().String() + ": too many answers without the work.")
 						return
@@ -381,9 +426,17 @@ func (c *stratumClient) pushJobs(done <-chan struct{}, lastTip string) {
 		case <-ticker.C:
 		}
 		StateMutex.RLock()
-		tipHash := GetLatestBlockInternal().Hash
+		tip := GetLatestBlockInternal()
 		StateMutex.RUnlock()
-		if tipHash == lastTip && time.Since(lastSent) < stratumJobRefresh {
+		tipHash := tip.Hash
+		// On a pool, a miner whose difficulty has just been changed is sent
+		// work at the new one straight away.
+		retargeted := false
+		if poolRunning() {
+			c.pool.easeIfQuiet(time.Now(), tip.Difficulty)
+			retargeted = c.pool.takeChanged()
+		}
+		if tipHash == lastTip && time.Since(lastSent) < stratumJobRefresh && !retargeted {
 			continue
 		}
 		job, ok := c.newJob()
@@ -400,6 +453,9 @@ func (c *stratumClient) pushJobs(done <-chan struct{}, lastTip string) {
 // submit checks a nonce an external miner found and, if it makes a valid
 // block, adds that block to the chain. It returns "" on success.
 func (c *stratumClient) submit(jobID, nonceHex string) string {
+	if poolRunning() {
+		return c.submitShare(jobID, nonceHex)
+	}
 	// While the node is replacing or extending its chain from another node,
 	// the tip is not settled, and the built-in miner is paused for the same
 	// reason.

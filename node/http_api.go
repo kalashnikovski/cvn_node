@@ -243,6 +243,8 @@ func syncAPI() *http.ServeMux {
 		}
 		json.NewEncoder(w).Encode(payload)
 	})
+	// On a node that runs a pool: the pool's record (pool_page.go).
+	addPoolPages(winMux)
 	return winMux
 }
 
