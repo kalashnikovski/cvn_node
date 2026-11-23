@@ -257,6 +257,18 @@ func looksLikeHex(text string) bool {
 	return true
 }
 
+// wholeKeyAtLeast is the fewest characters a text of 0-9 and a-f may have
+// and still be taken for a whole private key where it might be a password.
+// A key is 64 characters, and older programs wrote it without its leading
+// zeros: one key in 16 was a character short, one in 256 two. Only one key
+// in four thousand million is shorter than 56, and nobody types a password
+// of 56 such characters by hand.
+const wholeKeyAtLeast = 56
+
+func looksLikeWholeKey(text string) bool {
+	return looksLikeHex(text) && len(text) >= wholeKeyAtLeast && len(text) <= 64
+}
+
 // signingKeyFrom works out the private key from what a person typed where a
 // wallet asks for it. That may be:
 //
@@ -273,15 +285,21 @@ func signingKeyFrom(typed string) (privateKeyHex, publicKeyHex string, err error
 		return "", "", fmt.Errorf("no private key was given")
 	case len(strings.Fields(typed)) == recoveryWordCount:
 		privateKeyHex, err = keyFromRecoveryWords(typed)
-	case looksLikeHex(typed) && len(typed) >= 63 && len(typed) <= 64:
-		privateKeyHex = typed
 	case haveSavedKey:
-		// With a key saved, anything that is not the words or a whole key
-		// is taken as the password, and a wrong password is refused. It used
-		// to be tried as a short private key when it was made only of the
-		// characters 0-9 and a-f, so a mistyped password such as 19841207
-		// was accepted as the key of some other, empty address.
+		// With a key saved, anything that is not the words is tried as the
+		// password first. A password may itself be made only of the
+		// characters 0-9 and a-f, as one made by a program often is, and
+		// must not be taken for a key.
+		//
+		// If it does not open the saved key, a text long enough to be a
+		// whole key is taken as one: the key of this wallet or of another.
+		// Anything shorter is refused as a wrong password. It used to be
+		// tried as a short private key, so a mistyped password such as
+		// 19841207 was accepted as the key of some other, empty address.
 		privateKeyHex, err = openSavedKey(typed)
+		if err != nil && looksLikeWholeKey(typed) {
+			privateKeyHex, err = typed, nil
+		}
 	case looksLikeHex(typed) && len(typed) <= 64:
 		privateKeyHex = typed
 	case len(strings.Fields(typed)) > 1:

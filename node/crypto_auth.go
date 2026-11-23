@@ -29,9 +29,11 @@ func GenerateKeyPair() (string, string, string, error) {
 		return "", "", "", fmt.Errorf("cryptographic entropy path failure: %w", err)
 	}
 
-	// Extract private key scalar parameter D securely into a fixed hexadecimal representation
-	privBytes := privateKey.D.Bytes()
-	privHex := hex.EncodeToString(privBytes)
+	// The private key is always written as 64 characters. It used to be
+	// written without its leading zeros, so that one key in 256 came out
+	// with 62 characters, and a wallet that has a saved key took such a key
+	// for that key's password.
+	privHex := padHex64(privateKey.D)
 
 	// Format public key by serializing coordinate markers cleanly into a uniform 128-character hex string
 	pubHex := fmt.Sprintf("%064x%064x", privateKey.PublicKey.X, privateKey.PublicKey.Y)

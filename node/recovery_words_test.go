@@ -203,3 +203,114 @@ func TestWithNoSavedKeyAPasswordIsNotAKey(t *testing.T) {
 		t.Errorf("the key 1 was refused: %v", err)
 	}
 }
+
+// A key is 32 bytes, written as 64 characters. About one key in 256 begins
+// with a zero byte, and programs up to rc12 wrote such a key without its
+// zeros: 62 characters. A wallet with a key saved on the computer then took
+// it for that key's password and refused it. These are such keys, typed each
+// way they have ever been written, with no key saved, with this key saved
+// and with another wallet's key saved.
+func TestAKeyThatBeginsWithZerosIsStillAKey(t *testing.T) {
+	useTemporarySavedKey(t)
+	const password = "correct horse battery"
+	anotherWallet := strings.Repeat("5c", 32)
+	for _, whole := range []string{
+		"00" + strings.Repeat("7a", 31),       // written as 62 characters
+		"0" + strings.Repeat("7a3", 21),       // written as 63
+		"0000" + strings.Repeat("7a", 30),     // written as 60
+		"00000000" + strings.Repeat("7a", 28), // written as 56
+	} {
+		short := strings.TrimLeft(whole, "0")
+		wantPublic, err := publicKeyFromPrivateKey(whole)
+		if err != nil {
+			t.Fatalf("the test's own key of %d characters is not a key: %v", len(short), err)
+		}
+		for _, saved := range []string{"", whole, anotherWallet} {
+			_ = os.Remove(savedKeyFile)
+			if saved != "" {
+				if _, err := saveKeyWithPassword(saved, password); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, typed := range []string{whole, short, strings.ToUpper(short)} {
+				got, gotPublic, err := signingKeyFrom(typed)
+				if err != nil || got != whole || gotPublic != wantPublic {
+					t.Errorf("a key of %d characters typed with %d (a key saved: %v, this one: %v) was not read as itself: %v",
+						len(short), len(typed), saved != "", saved == whole, err)
+				}
+			}
+			// The saved key's password still opens the saved key.
+			if saved != "" {
+				if got, _, err := signingKeyFrom(password); err != nil || got != saved {
+					t.Errorf("the password stopped opening the saved key: %v", err)
+				}
+			}
+		}
+	}
+}
+
+// A new key is written with all 64 characters, zeros included. One key in
+// 256 begins with a zero byte, so among 4,000 there are about fifteen: a
+// program that dropped them would not get through this.
+func TestANewKeyIsAlwaysWrittenAtFullLength(t *testing.T) {
+	for i := 0; i < 4000; i++ {
+		privateKeyHex, publicKeyHex, address, err := GenerateKeyPair()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(privateKeyHex) != 64 || len(publicKeyHex) != 128 {
+			t.Fatalf("key %d was written with %d characters and its public key with %d", i, len(privateKeyHex), len(publicKeyHex))
+		}
+		if i%400 != 0 {
+			continue
+		}
+		// And it is the key of the address it came with.
+		rebuilt, err := publicKeyFromPrivateKey(privateKeyHex)
+		if err != nil || rebuilt != publicKeyHex {
+			t.Fatalf("key %d does not give back its own public key: %v", i, err)
+		}
+		if again, _ := DeriveAddressFromPublicKey(rebuilt); again != address {
+			t.Fatalf("key %d does not give back its own address", i)
+		}
+	}
+}
+
+// A password may be made only of the characters 0-9 and a-f, as one made by
+// a program often is ("openssl rand -hex 32" gives 64 of them). It is the
+// password all the same, and must not be taken for some other wallet's key.
+func TestAPasswordThatLooksLikeAKeyIsStillThePassword(t *testing.T) {
+	useTemporarySavedKey(t)
+	key := strings.Repeat("3d", 32)
+	wantPublic, err := publicKeyFromPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, password := range []string{
+		strings.Repeat("ab12", 16), // 64 characters
+		strings.Repeat("ab12", 14), // 56
+		strings.Repeat("ab12", 8),  // 32
+		"19841207",
+	} {
+		if _, err := saveKeyWithPassword(key, password); err != nil {
+			t.Fatal(err)
+		}
+		got, gotPublic, err := signingKeyFrom(password)
+		if err != nil || got != key || gotPublic != wantPublic {
+			t.Errorf("a password of %d characters, all of them 0-9 and a-f, did not open the saved key: %v", len(password), err)
+		}
+	}
+
+	// A password typed wrongly is refused and is never taken for a key,
+	// unless it is as long as a key.
+	for _, typed := range []string{"19841208", "deadbeef", strings.Repeat("ab12", 8)[1:], strings.Repeat("a", wholeKeyAtLeast-1)} {
+		if _, _, err := signingKeyFrom(typed); err == nil || !strings.Contains(err.Error(), "not the password") {
+			t.Errorf("a wrong password of %d characters gave: %v", len(typed), err)
+		}
+	}
+
+	// Another wallet's whole key is still that wallet's key.
+	anotherWallet := strings.Repeat("5c", 32)
+	if got, _, err := signingKeyFrom(anotherWallet); err != nil || got != anotherWallet {
+		t.Errorf("another wallet's key was not read as itself with a key saved: %v", err)
+	}
+}
