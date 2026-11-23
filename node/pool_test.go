@@ -577,10 +577,10 @@ func TestPoolBlockCountsOnceItIsDeepEnough(t *testing.T) {
 	if confirmed, lost := poolSettle(); confirmed != 0 || lost != 0 {
 		t.Errorf("settling again: %d confirmed, %d lost", confirmed, lost)
 	}
-	if _, changed, _ := poolLedger.decide(1, firstBlock, true, 3); changed {
+	if _, changed, _ := poolLedger.decide(1, firstBlock, true, 3, ""); changed {
 		t.Error("a block that already counts was decided a second time")
 	}
-	if _, changed, _ := poolLedger.decide(9, strings.Repeat("cd", 32), true, 30); changed {
+	if _, changed, _ := poolLedger.decide(9, strings.Repeat("cd", 32), true, 30, ""); changed {
 		t.Error("a block the pool never found was decided")
 	}
 	if again := poolLedger.view(64, time.Now().Unix(), 10); again.Owed != cvn("50") {

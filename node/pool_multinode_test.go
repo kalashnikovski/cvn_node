@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -215,14 +218,24 @@ func poolPageOf(pool *localNode) (poolPage, bool) {
 	return page, ok
 }
 
+// payOut runs the paying command beside a pool, as its operator's timer
+// would, with the pool's key in a file. It returns what the command printed.
+func (n *localNode) payOut(keyFile string) (string, error) {
+	command := exec.Command(n.cluster.program, "--network", localnetName, "--pool-pay", "--password-file", keyFile)
+	command.Dir = n.folder
+	command.Env = n.env
+	out, err := command.CombinedOutput()
+	return string(out), err
+}
+
 // TestMultiNodeAPool is a pool with three miners of different speeds, on a
-// network with two seeds. Blocks are found, counted once they are six deep,
-// and their rewards owed to the miners; at the end every unit is accounted
-// for.
+// network with two seeds. Blocks are found and counted once they are six
+// deep; the paying command pays what is owed; and at the end every unit is
+// accounted for, in the pool's record and on the chain.
 func TestMultiNodeAPool(t *testing.T) {
 	c := poolCluster(t)
-	const wait = 4 * time.Minute
-	_, _, poolsAddress := newTestWallet(t)
+	const wait = 5 * time.Minute
+	poolsKey, _, poolsAddress := newTestWallet(t)
 	_, _, fastAddress := newTestWallet(t)
 	_, _, middleAddress := newTestWallet(t)
 	_, _, slowAddress := newTestWallet(t)
@@ -240,6 +253,13 @@ func TestMultiNodeAPool(t *testing.T) {
 	middle := startPoolWorker(t, pool, middleAddress, 40*time.Millisecond)
 	slow := startPoolWorker(t, pool, slowAddress, 160*time.Millisecond)
 	workers := []*poolWorker{fast, middle, slow}
+	minersAreWell := func() {
+		for _, worker := range workers {
+			if fault := worker.problem(); fault != "" {
+				t.Fatalf("a miner was told: %s", fault)
+			}
+		}
+	}
 
 	c.eventually(wait, "the pool did not see its three miners", func() bool {
 		page, _ := poolPageOf(pool)
@@ -247,13 +267,40 @@ func TestMultiNodeAPool(t *testing.T) {
 	})
 	// Mine until four of the pool's blocks count.
 	c.eventually(wait, "four of the pool's blocks did not come to count", func() bool {
-		for _, worker := range workers {
-			if fault := worker.problem(); fault != "" {
-				t.Fatalf("a miner was told: %s", fault)
-			}
-		}
+		minersAreWell()
 		page, _ := poolPageOf(pool)
 		return page.BlocksConfirmed >= 4
+	})
+
+	// Pay what is owed, with the pool's key in a file as a timer would have
+	// it. A key that is not the pool's signs nothing.
+	strangersKey, _, _ := newTestWallet(t)
+	wrongFile := filepath.Join(c.folder, "wrong-key.txt")
+	keyFile := filepath.Join(c.folder, "pool-key.txt")
+	if err := os.WriteFile(wrongFile, []byte(strangersKey+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte(poolsKey+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := pool.payOut(wrongFile); err == nil || !strings.Contains(out, "Nothing was signed") {
+		t.Fatalf("the paying command with a stranger's key: %v\n%s", err, out)
+	}
+	if page, _ := poolPageOf(pool); len(page.Payments) != 0 && page.Payments[0].State != poolPaymentReturned {
+		t.Fatalf("after a stranger's key the pool shows a payment that is %s", page.Payments[0].State)
+	}
+	out, err := pool.payOut(keyFile)
+	if err != nil || !strings.Contains(out, "All sent") {
+		t.Fatalf("the paying command: %v\n%s", err, out)
+	}
+	if strings.Contains(out, poolsKey) {
+		t.Error("the paying command printed the pool's key")
+	}
+	// The payment is mined by the pool's own miners and, six blocks on, settled.
+	c.eventually(wait, "the payment did not settle", func() bool {
+		minersAreWell()
+		page, _ := poolPageOf(pool)
+		return page.PaymentsSettled >= 1
 	})
 	for _, worker := range workers {
 		worker.halt()
@@ -318,50 +365,104 @@ func TestMultiNodeAPool(t *testing.T) {
 		}
 	}
 
-	// What is owed is exactly the rewards of the blocks that count. Nothing
-	// has been paid, and nothing is owed for a block still waiting.
-	owed := map[string]int64{}
-	var owedInAll int64
+	// The payments: every one that was sent is in a block, and what each
+	// address received on the chain is what the payments say it received.
+	received := map[string]int64{}
+	var debited, fees int64
+	for _, payment := range page.Payments {
+		if payment.State == poolPaymentReturned {
+			continue // the stranger's key
+		}
+		if payment.State != poolPaymentSettled && payment.MinedAtHeight == 0 {
+			t.Errorf("payment %d is %s and in no block, with the chain standing still", payment.Serial, payment.State)
+			continue
+		}
+		var debits, receives int64
+		for _, line := range payment.Lines {
+			debits += line.Debit
+			receives += line.Receives
+			received[line.Address] += line.Receives
+		}
+		if debits != payment.Units || debits-receives != payment.FeeUnits || payment.FeeUnits != cvn("0.001") {
+			t.Errorf("payment %d: debited %d, received %d, fee %d", payment.Serial, debits, receives, payment.FeeUnits)
+		}
+		debited += debits
+		fees += payment.FeeUnits
+	}
+	if debited == 0 {
+		t.Fatal("no payment was made")
+	}
+
+	// The pool's record adds up: what each address earned is what it has
+	// been paid, what is on its way and what it is still owed; and what was
+	// earned in all is the rewards of the blocks that count.
+	earned := map[string]int64{}
+	var earnedInAll, paidAndOnItsWay int64
 	for _, address := range page.Addresses {
-		owed[address.Address] = address.OwedUnits
-		owedInAll += address.OwedUnits
-		if address.EarnedUnits != address.OwedUnits || address.PaidUnits != 0 {
-			t.Errorf("%s: earned %d, owed %d, paid %d", address.Address, address.EarnedUnits, address.OwedUnits, address.PaidUnits)
+		earned[address.Address] = address.EarnedUnits
+		earnedInAll += address.EarnedUnits
+		paidAndOnItsWay += address.PaidUnits + address.PendingUnits
+		if address.EarnedUnits != address.PaidUnits+address.PendingUnits+address.OwedUnits {
+			t.Errorf("%s: earned %d, paid %d, on its way %d, owed %d", address.Address, address.EarnedUnits, address.PaidUnits, address.PendingUnits, address.OwedUnits)
 		}
 	}
-	if owedInAll != confirmedUnits || page.OwedUnits != confirmedUnits || confirmedUnits == 0 {
-		t.Errorf("the blocks that count paid %d units; %d are owed (the pool says %d)", confirmedUnits, owedInAll, page.OwedUnits)
+	if earnedInAll != confirmedUnits || page.EarnedUnits != confirmedUnits || confirmedUnits == 0 {
+		t.Errorf("the blocks that count paid %d units; %d were earned (the pool says %d)", confirmedUnits, earnedInAll, page.EarnedUnits)
 	}
-	// The pool's address holds every reward, on every node.
-	if page.HeldUnits != allUnits {
-		t.Errorf("the pool's address holds %d units by the pool's count; its blocks paid %d", page.HeldUnits, allUnits)
+	if paidAndOnItsWay != debited {
+		t.Errorf("the payments debited %d units; the accounts show %d paid or on its way", debited, paidAndOnItsWay)
+	}
+
+	// On the chain: the pool's address holds every reward less what it paid
+	// out, and each miner holds what it received, on every node.
+	if page.HeldUnits != allUnits-debited {
+		t.Errorf("the pool's address holds %d units by the pool's count; its blocks paid %d and it paid out %d", page.HeldUnits, allUnits, debited)
 	}
 	for _, seed := range []*localNode{seedA, seedB} {
-		if got := seed.balances()[poolsAddress]; got != UnitsAmount(allUnits).CVN() {
-			t.Errorf("%s counts %v CVN at the pool's address; its blocks paid %v", seed.name, got, UnitsAmount(allUnits).CVN())
+		balances := seed.balances()
+		if got, want := balances[poolsAddress], UnitsAmount(allUnits-debited).CVN(); got != want {
+			t.Errorf("%s counts %v CVN at the pool's address, want %v", seed.name, got, want)
+		}
+		for _, worker := range workers {
+			if got, want := balances[worker.address], UnitsAmount(received[worker.address]).CVN(); got != want {
+				t.Errorf("%s counts %v CVN at the miner %s; the payments say it received %v", seed.name, got, worker.address, want)
+			}
 		}
 	}
-	// Each miner is owed something, and the fast one more than the slow one.
+	// Each miner earned something, and the fast one more than the slow one.
 	for _, worker := range workers {
-		if owed[worker.address] <= 0 {
-			t.Errorf("the miner at %s is owed nothing", worker.address)
+		if earned[worker.address] <= 0 {
+			t.Errorf("the miner at %s earned nothing", worker.address)
 		}
 	}
-	if owed[fastAddress] <= owed[slowAddress] {
-		t.Errorf("the fast miner is owed %d units and the slow one %d", owed[fastAddress], owed[slowAddress])
+	if earned[fastAddress] <= earned[slowAddress] {
+		t.Errorf("the fast miner earned %d units and the slow one %d", earned[fastAddress], earned[slowAddress])
+	}
+	if received[fastAddress] <= 0 {
+		t.Error("the fast miner was paid nothing")
 	}
 	// One address asked for by itself gets the same answer.
 	var one poolPageAddress
-	if !pool.get("/pool.json?address="+fastAddress, &one) || one.OwedUnits != owed[fastAddress] {
-		t.Errorf("asked for alone, the fast miner is owed %d; the list says %d", one.OwedUnits, owed[fastAddress])
+	if !pool.get("/pool.json?address="+fastAddress, &one) || one.EarnedUnits != earned[fastAddress] {
+		t.Errorf("asked for alone, the fast miner earned %d; the list says %d", one.EarnedUnits, earned[fastAddress])
+	}
+	// A second run ends well, whether or not there is more to pay by now.
+	if out, err := pool.payOut(keyFile); err != nil {
+		t.Errorf("a second run of the paying command: %v\n%s", err, out)
 	}
 	for _, node := range []*localNode{seedA, seedB, pool} {
 		if log := node.log(); strings.Contains(log, "CONSENSUS REJECTION") || strings.Contains(log, "panic:") {
 			t.Errorf("%s refused a block or stopped", node.name)
 		}
 	}
-	if !strings.Contains(pool.log(), "counts: 6 blocks stand on it") {
-		t.Error("the pool's log does not say that a block came to count")
+	log := pool.log()
+	for _, want := range []string{"counts: 6 blocks stand on it", "sent:", "is settled:"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("the pool's log does not say %q", want)
+		}
+	}
+	if strings.Contains(log, poolsKey) {
+		t.Error("the pool's log holds the pool's key")
 	}
 }
 

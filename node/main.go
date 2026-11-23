@@ -114,6 +114,12 @@ func Run(frontendAssets embed.FS) {
 		return
 	}
 
+	// `--pool-pay` signs the payments the pool on this machine has prepared,
+	// and never starts a node (pool_pay.go).
+	if paying, _ := poolPayRequested(os.Args); paying {
+		os.Exit(RunPoolPay(os.Args))
+	}
+
 	// `--randomx-bench` measures this machine's RandomX speed and exits.
 	for _, arg := range os.Args {
 		if arg == "--randomx-bench" {

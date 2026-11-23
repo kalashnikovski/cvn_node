@@ -23,6 +23,7 @@ import (
 const (
 	poolPageBlocks    = 50
 	poolPageAddresses = 500
+	poolPagePayments  = 30
 	poolPageKeptFor   = 5 * time.Second
 )
 
@@ -53,12 +54,37 @@ type poolPageAddress struct {
 	LastShare int64   `json:"last_share"`
 	// Its parts of the blocks that count, what of that has been paid, and
 	// what is owed, in CVN and in whole units.
-	Earned      string `json:"earned"`
-	Owed        string `json:"owed"`
-	Paid        string `json:"paid"`
-	EarnedUnits int64  `json:"earned_units"`
-	OwedUnits   int64  `json:"owed_units"`
-	PaidUnits   int64  `json:"paid_units"`
+	Earned       string `json:"earned"`
+	Owed         string `json:"owed"`
+	Pending      string `json:"pending"`
+	Paid         string `json:"paid"`
+	EarnedUnits  int64  `json:"earned_units"`
+	OwedUnits    int64  `json:"owed_units"`
+	PendingUnits int64  `json:"pending_units"`
+	PaidUnits    int64  `json:"paid_units"`
+}
+
+// poolPagePayment is one payment as the page shows it.
+type poolPagePayment struct {
+	Serial        uint64 `json:"serial"`
+	State         string `json:"state"`
+	At            int64  `json:"time"`
+	TxID          string `json:"tx_id,omitempty"`
+	Addresses     int    `json:"addresses"`
+	Amount        string `json:"amount"`
+	Units         int64  `json:"units"`
+	FeeUnits      int64  `json:"fee_units"`
+	MinedAtHeight int64  `json:"mined_at_height,omitempty"`
+	// What each address was debited and received, in whole units.
+	Lines []poolPaymentLine `json:"lines"`
+}
+
+func pageAddress(address string, work int64, percent float64, lastShare int64, account poolAccount) poolPageAddress {
+	return poolPageAddress{
+		Address: address, Work: work, Percent: percent, LastShare: lastShare,
+		Earned: FormatUnits(account.Earned), Owed: FormatUnits(account.Owed), Pending: FormatUnits(account.Pending), Paid: FormatUnits(account.Paid),
+		EarnedUnits: account.Earned, OwedUnits: account.Owed, PendingUnits: account.Pending, PaidUnits: account.Paid,
+	}
 }
 
 // poolPage is everything the pool page shows.
@@ -81,7 +107,14 @@ type poolPage struct {
 	Owed              string            `json:"owed"`
 	OwedUnits         int64             `json:"owed_units"`
 	EarnedUnits       int64             `json:"earned_units"`
+	PendingUnits      int64             `json:"pending_units"`
+	Pending           string            `json:"pending"`
 	PaidUnits         int64             `json:"paid_units"`
+	Paid              string            `json:"paid"`
+	MinimumPayment    string            `json:"minimum_payment"`
+	PaymentFee        string            `json:"payment_fee"`
+	PaymentsSettled   int               `json:"payments_settled"`
+	Payments          []poolPagePayment `json:"payments"`
 	Held              string            `json:"held"`
 	HeldUnits         int64             `json:"held_units"`
 	Blocks            []poolPageBlock   `json:"blocks"`
@@ -128,6 +161,20 @@ func readPoolPage(now time.Time) poolPage {
 		BlocksWaiting: view.Waiting, BlocksConfirmed: view.Confirmed, BlocksLost: view.Lost,
 		ConfirmBlocks: poolConfirmDepth(),
 		Owed:          FormatUnits(view.Owed), OwedUnits: view.Owed, EarnedUnits: view.Earned, PaidUnits: view.Paid,
+		Paid: FormatUnits(view.Paid), PendingUnits: view.Pending, Pending: FormatUnits(view.Pending),
+		MinimumPayment: FormatUnits(poolMinimumPaymentUnits), PaymentFee: FormatUnits(poolPaymentFeeUnits),
+		PaymentsSettled: view.PaymentsSettled,
+	}
+	for _, payment := range poolLedger.recentPayments(poolPagePayments) {
+		at := payment.PreparedAt
+		if payment.SentAt > 0 {
+			at = payment.SentAt
+		}
+		page.Payments = append(page.Payments, poolPagePayment{
+			Serial: payment.Serial, State: payment.State, At: at, TxID: payment.TxID, Addresses: len(payment.Lines),
+			Amount: FormatUnits(payment.debits()), Units: payment.debits(), FeeUnits: payment.FeeUnits,
+			MinedAtHeight: payment.MinedAtHeight, Lines: payment.Lines,
+		})
 	}
 	// What the pool's address holds on the chain: the rewards of its blocks,
 	// less what has been paid out.
@@ -157,11 +204,7 @@ func readPoolPage(now time.Time) poolPage {
 		if view.WindowWork > 0 {
 			percent = float64(address.Work) * 100 / float64(view.WindowWork)
 		}
-		page.Addresses = append(page.Addresses, poolPageAddress{
-			Address: address.Address, Work: address.Work, Percent: percent, LastShare: address.LastShare,
-			Earned: FormatUnits(address.Account.Earned), Owed: FormatUnits(address.Account.Owed), Paid: FormatUnits(address.Account.Paid),
-			EarnedUnits: address.Account.Earned, OwedUnits: address.Account.Owed, PaidUnits: address.Account.Paid,
-		})
+		page.Addresses = append(page.Addresses, pageAddress(address.Address, address.Work, percent, address.LastShare, address.Account))
 	}
 	return page
 }
@@ -191,11 +234,7 @@ func addPoolPages(pages *http.ServeMux) {
 			if page.WindowWork > 0 {
 				percent = float64(work) * 100 / float64(page.WindowWork)
 			}
-			json.NewEncoder(w).Encode(poolPageAddress{
-				Address: address, Work: work, Percent: percent,
-				Earned: FormatUnits(account.Earned), Owed: FormatUnits(account.Owed), Paid: FormatUnits(account.Paid),
-				EarnedUnits: account.Earned, OwedUnits: account.Owed, PaidUnits: account.Paid,
-			})
+			json.NewEncoder(w).Encode(pageAddress(address, work, percent, 0, account))
 			return
 		}
 		json.NewEncoder(w).Encode(currentPoolPage())
@@ -261,7 +300,7 @@ summary { cursor: pointer; }
 <main>
 <h1>CVN pool</h1>
 <p>Network: <b>{{.Network}}</b>. This pool takes no fee. A block's reward is divided among the most recent shares, counted back over the work of {{.WindowBlocks}} blocks.</p>
-<p class="quiet">Blocks found by this pool pay <code>{{.PoolAddress}}</code>. A block counts once {{.ConfirmBlocks}} more blocks stand on it; from then on each address is owed its part. A block that another block has replaced by then counts for nothing. Paying out is not switched on yet: what is owed is shown here and will be paid when it is.</p>
+<p class="quiet">Blocks found by this pool pay <code>{{.PoolAddress}}</code>. A block counts once {{.ConfirmBlocks}} more blocks stand on it; from then on each address is owed its part. A block that another block has replaced by then counts for nothing. What is owed is paid by ordinary transfers from that address, to every address owed {{.MinimumPayment}} CVN or more; each transfer carries a fee of {{.PaymentFee}} CVN, shared among the addresses it pays.</p>
 
 <div class="scroll">
 <table>
@@ -269,6 +308,8 @@ summary { cursor: pointer; }
 <tr><th>Miners connected</th><td>{{.Miners}}</td></tr>
 <tr><th>Blocks found</th><td>{{.BlocksFound}} ({{.BlocksConfirmed}} count, {{.BlocksWaiting}} waiting, {{.BlocksLost}} lost)</td></tr>
 <tr><th>Owed to miners</th><td>{{.Owed}} CVN</td></tr>
+<tr><th>In payments on their way</th><td>{{.Pending}} CVN</td></tr>
+<tr><th>Paid so far</th><td>{{.Paid}} CVN in {{.PaymentsSettled}} payment(s)</td></tr>
 <tr><th>Held at the pool's address</th><td>{{.Held}} CVN</td></tr>
 <tr><th>Chain height</th><td>{{.Height}}</td></tr>
 <tr><th>Network difficulty</th><td>{{.NetworkDifficulty}}</td></tr>
@@ -280,12 +321,12 @@ summary { cursor: pointer; }
 <p><code>xmrig -o THIS-POOL:PORT -u CVN_YOUR_ADDRESS --keepalive</code></p>
 
 <h2>Miners</h2>
-<p class="quiet">Work is what each address has in the window a block found now would be divided over. Owed is its part of the blocks that count, not yet paid.</p>
+<p class="quiet">Work is what each address has in the window a block found now would be divided over. Owed is its part of the blocks that count, not yet paid. On its way is in a payment that has been sent and is not yet too deep to be replaced.</p>
 {{if .Addresses}}
 <div class="scroll">
 <table>
-<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th class="n">Owed</th><th class="n">Paid</th><th>Last share</th></tr>
-{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td class="n">{{.Owed}}</td><td class="n">{{.Paid}}</td><td>{{when .LastShare}}</td></tr>
+<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th class="n">Owed</th><th class="n">On its way</th><th class="n">Paid</th><th>Last share</th></tr>
+{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td class="n">{{.Owed}}</td><td class="n">{{.Pending}}</td><td class="n">{{.Paid}}</td><td>{{when .LastShare}}</td></tr>
 {{end}}
 </table>
 </div>
@@ -301,6 +342,19 @@ summary { cursor: pointer; }
 <tr><th class="n">Height</th><th>Block</th><th>Found</th><th class="n">Reward</th><th>State</th><th>Divided among</th></tr>
 {{range .Blocks}}<tr><td class="n">{{.Height}}</td><td><code>{{short .Hash}}</code></td><td>{{when .At}}</td><td class="n">{{.Reward}}</td><td>{{.State}}{{if .CountsAtHeight}} until #{{.CountsAtHeight}}{{end}}</td>
 <td><details><summary>{{len .Parts}} address(es)</summary>{{range .Parts}}<div><code>{{.Address}}</code> {{.Amount}} CVN</div>{{end}}</details></td></tr>
+{{end}}
+</table>
+</div>
+{{else}}
+<p class="quiet">None yet.</p>
+{{end}}
+
+<h2>Payments</h2>
+{{if .Payments}}
+<div class="scroll">
+<table>
+<tr><th class="n">Number</th><th>When</th><th>State</th><th class="n">Amount</th><th class="n">Addresses</th><th>Transfer</th></tr>
+{{range .Payments}}<tr><td class="n">{{.Serial}}</td><td>{{when .At}}</td><td>{{.State}}{{if .MinedAtHeight}} (block #{{.MinedAtHeight}}){{end}}</td><td class="n">{{.Amount}}</td><td class="n">{{.Addresses}}</td><td><code>{{short .TxID}}</code></td></tr>
 {{end}}
 </table>
 </div>

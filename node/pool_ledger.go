@@ -56,12 +56,14 @@ const (
 )
 
 // poolAccount is what the record says of one address: its parts of every
-// confirmed block, how much of that has been paid, and how much is owed.
-// Owed is always Earned less Paid.
+// confirmed block, how much of that has been paid, how much is in a payment
+// on its way, and how much is owed. Earned is always Paid, Pending and Owed
+// together.
 type poolAccount struct {
-	Earned int64 `json:"earned"`
-	Owed   int64 `json:"owed"`
-	Paid   int64 `json:"paid"`
+	Earned  int64 `json:"earned"`
+	Owed    int64 `json:"owed"`
+	Pending int64 `json:"pending"`
+	Paid    int64 `json:"paid"`
 }
 
 // poolBlock is a block the pool found, with the division of its reward.
@@ -83,6 +85,8 @@ var (
 	poolSharesBucket   = []byte("shares")
 	poolBlocksBucket   = []byte("blocks")
 	poolAccountsBucket = []byte("accounts")
+	poolPaymentsBucket = []byte("payments")
+	poolCoinsBucket    = []byte("coins")
 )
 
 // poolSharesKeptAtMost bounds the record whatever the difficulty does.
@@ -97,12 +101,23 @@ type poolRecord struct {
 	db      *bbolt.DB
 	shares  []poolShare // oldest first
 	nextSeq uint64
-	blocks  []poolBlock // oldest first
+	// The blocks the pool found, oldest first: every one still waiting, and
+	// the newest of those decided. All of them stay in the file; these are
+	// how many there are in all.
+	blocks                       []poolBlock
+	found, confirmed, blocksLost int
 	// What each address has earned, been paid and is owed.
 	accounts map[string]poolAccount
 	names    map[string]string
-	opened   time.Time
-	added    int
+	// Paying out (pool_payments.go): the coins the pool may spend, the
+	// payments under way and the newest finished ones, the number the next
+	// payment gets, and how many have settled in all.
+	coins           map[string]poolCoin
+	payments        []poolPayment
+	nextPayment     uint64
+	paymentsSettled int
+	opened          time.Time
+	added           int
 }
 
 // poolLedger is the record of the pool this node runs, if it runs one.
@@ -120,7 +135,10 @@ func openPoolLedger(path string) (*poolRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the pool's record %s could not be opened: %v", path, err)
 	}
-	record := &poolRecord{db: db, names: make(map[string]string), accounts: make(map[string]poolAccount), opened: time.Now()}
+	record := &poolRecord{
+		db: db, names: make(map[string]string), accounts: make(map[string]poolAccount),
+		coins: make(map[string]poolCoin), nextPayment: 1, opened: time.Now(),
+	}
 	err = db.Update(func(tx *bbolt.Tx) error {
 		shares, err := tx.CreateBucketIfNotExists(poolSharesBucket)
 		if err != nil {
@@ -143,6 +161,39 @@ func openPoolLedger(path string) (*poolRecord, error) {
 		}); err != nil {
 			return err
 		}
+		coins, err := tx.CreateBucketIfNotExists(poolCoinsBucket)
+		if err != nil {
+			return err
+		}
+		if err := coins.ForEach(func(key, value []byte) error {
+			var coin poolCoin
+			if json.Unmarshal(value, &coin) == nil {
+				record.coins[string(key)] = coin
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		payments, err := tx.CreateBucketIfNotExists(poolPaymentsBucket)
+		if err != nil {
+			return err
+		}
+		if err := payments.ForEach(func(_, value []byte) error {
+			var payment poolPayment
+			if json.Unmarshal(value, &payment) == nil && payment.Serial > 0 {
+				record.payments = append(record.payments, payment)
+				if payment.Serial >= record.nextPayment {
+					record.nextPayment = payment.Serial + 1
+				}
+				if payment.State == poolPaymentSettled {
+					record.paymentsSettled++
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		record.forgetOldPaymentsLocked()
 		if err := shares.ForEach(func(_, value []byte) error {
 			var share poolShare
 			if json.Unmarshal(value, &share) == nil && share.Weight > 0 {
@@ -160,6 +211,13 @@ func openPoolLedger(path string) (*poolRecord, error) {
 			var block poolBlock
 			if json.Unmarshal(value, &block) == nil {
 				record.blocks = append(record.blocks, block)
+				record.found++
+				switch block.State {
+				case poolBlockConfirmed:
+					record.confirmed++
+				case poolBlockLost:
+					record.blocksLost++
+				}
 			}
 			return nil
 		})
@@ -168,6 +226,7 @@ func openPoolLedger(path string) (*poolRecord, error) {
 		db.Close()
 		return nil, fmt.Errorf("the pool's record %s could not be read: %v", path, err)
 	}
+	record.forgetOldBlocksLocked()
 	return record, nil
 }
 
@@ -354,7 +413,36 @@ func (r *poolRecord) addBlock(block Block, finder string, winning uint64, at int
 		return poolBlock{}, err
 	}
 	r.blocks = append(r.blocks, found)
+	r.found++
 	return found, nil
+}
+
+// poolBlocksKept is how many decided blocks are kept in memory for the pool
+// page. A pool that runs for a year finds a great many.
+var poolBlocksKept = 200
+
+// forgetOldBlocksLocked keeps in memory every block still waiting and the
+// newest of those decided.
+func (r *poolRecord) forgetOldBlocksLocked() {
+	decided := 0
+	for _, block := range r.blocks {
+		if block.State != poolBlockWaiting {
+			decided++
+		}
+	}
+	if decided <= poolBlocksKept {
+		return
+	}
+	drop := decided - poolBlocksKept
+	kept := r.blocks[:0:0]
+	for _, block := range r.blocks {
+		if drop > 0 && block.State != poolBlockWaiting {
+			drop--
+			continue
+		}
+		kept = append(kept, block)
+	}
+	r.blocks = kept
 }
 
 // waitingBlocks are the blocks whose fate is not decided yet, oldest first.
@@ -376,7 +464,11 @@ func (r *poolRecord) waitingBlocks() []poolBlock {
 // are written together or not at all, so that a program stopped half-way can
 // neither credit a block twice nor confirm one without crediting it. A block
 // that is not waiting is left as it is.
-func (r *poolRecord) decide(height int64, hash string, onChain bool, chainHeight int64) (poolBlock, bool, error) {
+//
+// rewardTx is the identifier of the block's reward transaction, as the chain
+// holds it. The coin it made is from now on one the pool may spend: it is
+// too deep to be replaced.
+func (r *poolRecord) decide(height int64, hash string, onChain bool, chainHeight int64, rewardTx string) (poolBlock, bool, error) {
 	r.Lock()
 	defer r.Unlock()
 	if r.db == nil {
@@ -411,6 +503,10 @@ func (r *poolRecord) decide(height int64, hash string, onChain bool, chainHeight
 			credited[part.Address] = account
 		}
 	}
+	var reward *poolCoin
+	if onChain && rewardTx != "" && decided.RewardUnits > 0 {
+		reward = &poolCoin{TxID: rewardTx, Index: 0, Units: decided.RewardUnits}
+	}
 	rawBlock, err := json.Marshal(decided)
 	if err != nil {
 		return poolBlock{}, false, err
@@ -418,6 +514,11 @@ func (r *poolRecord) decide(height int64, hash string, onChain bool, chainHeight
 	if err := r.db.Update(func(tx *bbolt.Tx) error {
 		if err := tx.Bucket(poolBlocksBucket).Put(poolBlockKey(decided.Height, decided.Hash), rawBlock); err != nil {
 			return err
+		}
+		if reward != nil {
+			if err := putJSON(tx.Bucket(poolCoinsBucket), []byte(reward.key()), *reward); err != nil {
+				return err
+			}
 		}
 		accounts := tx.Bucket(poolAccountsBucket)
 		for address, account := range credited {
@@ -434,9 +535,18 @@ func (r *poolRecord) decide(height int64, hash string, onChain bool, chainHeight
 		return poolBlock{}, false, err
 	}
 	r.blocks[index] = decided
+	if decided.State == poolBlockConfirmed {
+		r.confirmed++
+	} else {
+		r.blocksLost++
+	}
 	for address, account := range credited {
 		r.accounts[address] = account
 	}
+	if reward != nil {
+		r.coins[reward.key()] = *reward
+	}
+	r.forgetOldBlocksLocked()
 	return decided, true, nil
 }
 
@@ -476,8 +586,9 @@ type poolView struct {
 	Speed       float64           // hashes a second, over the last ten minutes
 	Shares      int               // shares held
 	// Blocks by what became of them, and the accounts added up.
-	Waiting, Confirmed, Lost int
-	Earned, Owed, Paid       int64
+	Waiting, Confirmed, Lost    int
+	Earned, Owed, Pending, Paid int64
+	PaymentsSettled             int
 }
 
 // view reads the record for the page. The window is the one a block found
@@ -485,7 +596,10 @@ type poolView struct {
 func (r *poolRecord) view(networkDifficulty int, now int64, blocks int) poolView {
 	r.Lock()
 	defer r.Unlock()
-	view := poolView{BlocksFound: len(r.blocks), Shares: len(r.shares)}
+	view := poolView{
+		BlocksFound: r.found, Shares: len(r.shares),
+		Confirmed: r.confirmed, Lost: r.blocksLost, Waiting: r.found - r.confirmed - r.blocksLost,
+	}
 	for i := len(r.blocks) - 1; i >= 0 && len(view.Blocks) < blocks; i-- {
 		view.Blocks = append(view.Blocks, r.blocks[i])
 	}
@@ -512,28 +626,20 @@ func (r *poolRecord) view(networkDifficulty int, now int64, blocks int) poolView
 	for address, account := range r.accounts {
 		view.Earned += account.Earned
 		view.Owed += account.Owed
+		view.Pending += account.Pending
 		view.Paid += account.Paid
-		if !listed[address] && account.Owed > 0 {
+		if !listed[address] && (account.Owed > 0 || account.Pending > 0) {
 			others = append(others, poolAddressWork{Address: address, Account: account})
 		}
 	}
 	sort.Slice(others, func(i, j int) bool {
-		if others[i].Account.Owed != others[j].Account.Owed {
-			return others[i].Account.Owed > others[j].Account.Owed
+		if a, b := others[i].Account.Owed+others[i].Account.Pending, others[j].Account.Owed+others[j].Account.Pending; a != b {
+			return a > b
 		}
 		return others[i].Address < others[j].Address
 	})
 	view.Addresses = append(view.Addresses, others...)
-	for _, block := range r.blocks {
-		switch block.State {
-		case poolBlockWaiting:
-			view.Waiting++
-		case poolBlockConfirmed:
-			view.Confirmed++
-		case poolBlockLost:
-			view.Lost++
-		}
-	}
+	view.PaymentsSettled = r.paymentsSettled
 	view.Speed = poolSpeedFrom(r.shares, r.opened, time.Unix(now, 0))
 	return view
 }

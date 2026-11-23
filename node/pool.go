@@ -18,9 +18,9 @@ import (
 // block the node builds pays the pool's address; the node keeps a record of
 // how much work each miner did, and a block's reward is divided among them
 // by that record (pool_ledger.go). A block counts once it is too deep to be
-// replaced, and from then on each miner is owed its part. Paying that out is
-// a later stage and is never done by this part of the program, which holds
-// no key.
+// replaced, and from then on each miner is owed its part. What is owed is
+// paid by ordinary transfers, which this node prepares and a separate
+// command signs (pool_pay.go): the node itself holds no key.
 //
 // Nothing here is a rule of the chain. A block found by a pool is an
 // ordinary block, checked by every node like any other, and anyone can run a
@@ -119,6 +119,9 @@ func startPool() error {
 		return fmt.Errorf("the pool could not open port %d for miners", Params.StratumPort)
 	}
 	announceNetworkStatus(fmt.Sprintf("⛏️ [POOL] This node is a pool. Its blocks pay %s. Miners connect to port %d and log in with their own CVN address.", poolAddress, Params.StratumPort))
+	if err := startPoolPayListener(); err != nil {
+		return err
+	}
 	go runPoolSettler()
 	return nil
 }
@@ -145,6 +148,7 @@ func runPoolSettler() {
 	for {
 		time.Sleep(poolSettleEvery)
 		poolSettle()
+		poolSettlePayments(time.Now())
 	}
 }
 
@@ -166,12 +170,17 @@ func poolSettle() (confirmed, lost int) {
 		}
 		StateMutex.RLock()
 		tipHeight := GetLatestBlockInternal().Index
-		onChain := GetBlockByHeightFromDB(waiting.Height).Hash == waiting.Hash
+		held := GetBlockByHeightFromDB(waiting.Height)
 		StateMutex.RUnlock()
+		onChain := held.Hash == waiting.Hash
+		rewardTx := ""
+		if onChain && len(held.Transactions) > 0 && len(held.Transactions[0].Outputs) > 0 {
+			rewardTx = held.Transactions[0].ID
+		}
 		if tipHeight < waiting.Height+depth || atomic.LoadInt32(&IsSyncingActive) == 1 {
 			continue
 		}
-		decided, changed, err := poolLedger.decide(waiting.Height, waiting.Hash, onChain, tipHeight)
+		decided, changed, err := poolLedger.decide(waiting.Height, waiting.Hash, onChain, tipHeight, rewardTx)
 		if err != nil {
 			announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d could not be settled in the pool's record: %v", waiting.Height, err))
 			continue
