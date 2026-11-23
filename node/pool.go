@@ -17,8 +17,10 @@ import (
 // point the fast miner at it and log in with their own CVN address. Every
 // block the node builds pays the pool's address; the node keeps a record of
 // how much work each miner did, and a block's reward is divided among them
-// by that record (pool_ledger.go). Paying it out is a later stage and is
-// never done by this part of the program, which holds no key.
+// by that record (pool_ledger.go). A block counts once it is too deep to be
+// replaced, and from then on each miner is owed its part. Paying that out is
+// a later stage and is never done by this part of the program, which holds
+// no key.
 //
 // Nothing here is a rule of the chain. A block found by a pool is an
 // ordinary block, checked by every node like any other, and anyone can run a
@@ -117,7 +119,75 @@ func startPool() error {
 		return fmt.Errorf("the pool could not open port %d for miners", Params.StratumPort)
 	}
 	announceNetworkStatus(fmt.Sprintf("⛏️ [POOL] This node is a pool. Its blocks pay %s. Miners connect to port %d and log in with their own CVN address.", poolAddress, Params.StratumPort))
+	go runPoolSettler()
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// When a block counts
+// ---------------------------------------------------------------------------
+
+// poolConfirmDepth is how many blocks must stand on a block the pool found
+// before it counts. It is the number of its own blocks a node will never
+// replace (the reorganisation limit): once that many stand on a block, this
+// node holds it for good, and the pool was really paid for it.
+func poolConfirmDepth() int64 {
+	if Params.Economics == nil || Params.Economics.ReorgLimitBlocks <= 0 {
+		return 100
+	}
+	return Params.Economics.ReorgLimitBlocks
+}
+
+// poolSettleEvery is how often the pool looks at the blocks still waiting.
+const poolSettleEvery = 15 * time.Second
+
+func runPoolSettler() {
+	for {
+		time.Sleep(poolSettleEvery)
+		poolSettle()
+	}
+}
+
+// poolSettle decides every block the pool found that has waited long enough.
+// A block still on the chain is confirmed, and its parts are owed. A block
+// whose place another block has taken is lost, and nothing is owed for it:
+// its reward never reached the pool. It returns how many it confirmed and
+// how many it found lost.
+func poolSettle() (confirmed, lost int) {
+	if poolLedger == nil {
+		return 0, 0
+	}
+	depth := poolConfirmDepth()
+	for _, waiting := range poolLedger.waitingBlocks() {
+		// While this node is replacing or extending its chain from another
+		// node, what stands at a height is not settled. Looked at again later.
+		if atomic.LoadInt32(&IsSyncingActive) == 1 {
+			return confirmed, lost
+		}
+		StateMutex.RLock()
+		tipHeight := GetLatestBlockInternal().Index
+		onChain := GetBlockByHeightFromDB(waiting.Height).Hash == waiting.Hash
+		StateMutex.RUnlock()
+		if tipHeight < waiting.Height+depth || atomic.LoadInt32(&IsSyncingActive) == 1 {
+			continue
+		}
+		decided, changed, err := poolLedger.decide(waiting.Height, waiting.Hash, onChain, tipHeight)
+		if err != nil {
+			announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d could not be settled in the pool's record: %v", waiting.Height, err))
+			continue
+		}
+		if !changed {
+			continue
+		}
+		if decided.State == poolBlockConfirmed {
+			confirmed++
+			announceNetworkStatus(fmt.Sprintf("✅ [POOL] Block #%d counts: %d blocks stand on it. %s CVN is now owed to %d address(es).", decided.Height, depth, FormatUnits(decided.RewardUnits), len(decided.Parts)))
+		} else {
+			lost++
+			announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d was replaced by another block. Nothing is owed for it.", decided.Height))
+		}
+	}
+	return confirmed, lost
 }
 
 // ---------------------------------------------------------------------------

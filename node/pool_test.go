@@ -450,3 +450,250 @@ func TestPoolLimitsConnectionsFromOneAddress(t *testing.T) {
 		t.Errorf("after everyone left, %d addresses and %d connections are still counted", left, all)
 	}
 }
+
+// confirmAfter makes a block count once `blocks` more stand on it, in place
+// of the hundred a real network needs.
+func confirmAfter(t *testing.T, blocks int64) {
+	t.Helper()
+	economics := NewGenesisEconomics
+	if Params.Economics != nil {
+		economics = *Params.Economics
+	}
+	economics.ReorgLimitBlocks = blocks
+	Params.Economics = &economics
+	if poolConfirmDepth() != blocks {
+		t.Fatalf("the pool waits for %d blocks, want %d", poolConfirmDepth(), blocks)
+	}
+}
+
+// mineThroughPool has a stand-in miner find the block its work is for, and
+// returns its work for the block after.
+func (m *fakeMiner) mineThroughPool(job minerJob) minerJob {
+	m.t.Helper()
+	tip := GetLatestBlockInternal()
+	difficulty := CalculateNextDifficulty(tip, minerBlockDate(tip, time.Now().Unix()))
+	var from uint32
+	var pushed []minerJob
+	for GetLatestBlockInternal().Index < job.Height {
+		var nonce string
+		nonce, from = m.searchWork(job, from, meets(difficulty))
+		_, errorText, more := m.call("submit", map[string]string{"job_id": job.JobID, "nonce": nonce})
+		if errorText != "" {
+			m.t.Fatalf("an answer for block %d was refused: %s", job.Height, errorText)
+		}
+		pushed = append(pushed, more...)
+	}
+	for _, next := range pushed {
+		if next.Height > job.Height {
+			return next
+		}
+	}
+	for {
+		if next := m.waitForPushedJob(); next.Height > job.Height {
+			return next
+		}
+	}
+}
+
+func TestPoolBlockCountsOnceItIsDeepEnough(t *testing.T) {
+	startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 64}})
+	Params.HeartbeatInitialDifficulty = 64
+	confirmAfter(t, 2)
+	server, recordPath := startPoolForTest(t, 4)
+	alice, bob := testAddress("alice"), testAddress("bob")
+	first := connectFakeMiner(t, server)
+	aliceJob := poolLogin(t, first, alice)
+	second := connectFakeMiner(t, server)
+	bobJob := poolLogin(t, second, bob)
+
+	shareOnly := func(work string) bool { return meets(4)(work) && !meets(64)(work) }
+	var nonce string
+	var from uint32
+	for i := 0; i < 3; i++ {
+		nonce, from = first.searchWork(aliceJob, from, shareOnly)
+		if _, errorText, _ := first.call("submit", map[string]string{"job_id": aliceJob.JobID, "nonce": nonce}); errorText != "" {
+			t.Fatalf("share refused: %s", errorText)
+		}
+	}
+	blockNonce, _ := second.searchWork(bobJob, 0, meets(64))
+	_, errorText, pushed := second.call("submit", map[string]string{"job_id": bobJob.JobID, "nonce": blockNonce})
+	if errorText != "" || GetLatestBlockInternal().Index != 1 {
+		t.Fatalf("block 1 was not found: %s", errorText)
+	}
+	firstBlock := GetLatestBlockInternal().Hash
+
+	// Found, and not counted yet: nothing stands on it.
+	if confirmed, lost := poolSettle(); confirmed != 0 || lost != 0 {
+		t.Fatalf("a block with nothing on it was settled: %d confirmed, %d lost", confirmed, lost)
+	}
+	view := poolLedger.view(64, time.Now().Unix(), 10)
+	if view.Waiting != 1 || view.Confirmed != 0 || view.Owed != 0 || view.Earned != 0 {
+		t.Fatalf("before it counts: %d waiting, %d confirmed, %s owed", view.Waiting, view.Confirmed, FormatUnits(view.Owed))
+	}
+
+	// Two more blocks on top of it.
+	var next minerJob
+	for _, job := range pushed {
+		if job.Height == 2 {
+			next = job
+		}
+	}
+	for next.Height != 2 {
+		next = second.waitForPushedJob()
+	}
+	next = second.mineThroughPool(next)
+	if confirmed, _ := poolSettle(); confirmed != 0 {
+		t.Fatal("a block with one block on it was counted; it needs two")
+	}
+	second.mineThroughPool(next)
+	if GetLatestBlockInternal().Index != 3 {
+		t.Fatalf("the chain is at %d, want 3", GetLatestBlockInternal().Index)
+	}
+	if confirmed, lost := poolSettle(); confirmed != 1 || lost != 0 {
+		t.Fatalf("with two blocks on block 1: %d confirmed, %d lost; want 1 and 0", confirmed, lost)
+	}
+
+	// Block 1 counts, and its parts are owed: 37.5 and 12.5, as it was
+	// divided when it was found. Blocks 2 and 3 are still waiting.
+	view = poolLedger.view(64, time.Now().Unix(), 10)
+	owed := map[string]int64{}
+	for _, address := range view.Addresses {
+		owed[address.Address] = address.Account.Owed
+		if address.Account.Earned != address.Account.Owed || address.Account.Paid != 0 {
+			t.Errorf("%s: earned %d, owed %d, paid %d", address.Address, address.Account.Earned, address.Account.Owed, address.Account.Paid)
+		}
+	}
+	if view.Confirmed != 1 || view.Waiting != 2 || view.Lost != 0 || view.Owed != cvn("50") || owed[alice] != cvn("37.5") || owed[bob] != cvn("12.5") {
+		t.Fatalf("after block 1 counts: %d confirmed, %d waiting, owed %s (Alice %s, Bob %s)",
+			view.Confirmed, view.Waiting, FormatUnits(view.Owed), FormatUnits(owed[alice]), FormatUnits(owed[bob]))
+	}
+	for _, block := range view.Blocks {
+		if block.Height == 1 && (block.Hash != firstBlock || block.State != poolBlockConfirmed || block.DecidedAtHeight != 3) {
+			t.Errorf("block 1 is recorded as %+v", block)
+		}
+	}
+
+	// Looking again changes nothing: a block is credited once.
+	if confirmed, lost := poolSettle(); confirmed != 0 || lost != 0 {
+		t.Errorf("settling again: %d confirmed, %d lost", confirmed, lost)
+	}
+	if _, changed, _ := poolLedger.decide(1, firstBlock, true, 3); changed {
+		t.Error("a block that already counts was decided a second time")
+	}
+	if _, changed, _ := poolLedger.decide(9, strings.Repeat("cd", 32), true, 30); changed {
+		t.Error("a block the pool never found was decided")
+	}
+	if again := poolLedger.view(64, time.Now().Unix(), 10); again.Owed != cvn("50") {
+		t.Errorf("after settling again %s is owed, want 50", FormatUnits(again.Owed))
+	}
+
+	// The pages show what is owed, in all and for one address.
+	pages := http.NewServeMux()
+	addPoolPages(pages)
+	reply := httptest.NewRecorder()
+	pages.ServeHTTP(reply, httptest.NewRequest("GET", "/pool.json", nil))
+	var page poolPage
+	if err := json.Unmarshal(reply.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.OwedUnits != cvn("50") || page.BlocksConfirmed != 1 || page.BlocksWaiting != 2 || page.ConfirmBlocks != 2 || page.HeldUnits != cvn("150") {
+		t.Errorf("pool.json: owed %s, %d confirmed, %d waiting, held %s", page.Owed, page.BlocksConfirmed, page.BlocksWaiting, page.Held)
+	}
+	reply = httptest.NewRecorder()
+	pages.ServeHTTP(reply, httptest.NewRequest("GET", "/pool.json?address="+alice, nil))
+	var one poolPageAddress
+	if err := json.Unmarshal(reply.Body.Bytes(), &one); err != nil || one.Address != alice || one.Owed != "37.5" || one.Work != 12 {
+		t.Errorf("pool.json for Alice: %s", reply.Body.String())
+	}
+	reply = httptest.NewRecorder()
+	pages.ServeHTTP(reply, httptest.NewRequest("GET", "/pool.json?address=nonsense", nil))
+	if reply.Code != http.StatusBadRequest {
+		t.Errorf("pool.json for something that is not an address answered %d", reply.Code)
+	}
+
+	// What is owed is still owed when the record is opened again.
+	first.conn.Close()
+	second.conn.Close()
+	for i := 0; i < 200 && atomic.LoadInt32(&externalMinersConnected) != 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	poolLedger.close()
+	again, err := openPoolLedger(recordPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	poolLedger = again
+	view = again.view(64, time.Now().Unix(), 10)
+	if view.Owed != cvn("50") || view.Confirmed != 1 || view.Waiting != 2 {
+		t.Errorf("opened again: owed %s, %d confirmed, %d waiting", FormatUnits(view.Owed), view.Confirmed, view.Waiting)
+	}
+	if account, _ := again.account(alice, 64); account.Owed != cvn("37.5") {
+		t.Errorf("opened again, Alice is owed %s", FormatUnits(account.Owed))
+	}
+}
+
+func TestPoolBlockThatWasReplacedCountsForNothing(t *testing.T) {
+	startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 64}})
+	Params.HeartbeatInitialDifficulty = 64
+	confirmAfter(t, 2)
+	server, _ := startPoolForTest(t, 4)
+	carol, dave := testAddress("carol"), testAddress("dave")
+
+	// The pool once found a block 1 of its own, on work of Carol's, and
+	// recorded it. The network settled on another block 1.
+	place, err := poolLedger.addShare(carol, 4, time.Now().Unix(), 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replaced := Block{Index: 1, Hash: strings.Repeat("ab", 32), Difficulty: 64, Transactions: []Transaction{
+		{Outputs: []UTXOOutput{{Recipient: testAddress("pool"), Amount: UnitsAmount(cvn("50"))}}},
+	}}
+	recorded, err := poolLedger.addBlock(replaced, carol, place, time.Now().Unix())
+	if err != nil || len(recorded.Parts) != 1 || recorded.Parts[0].Units != cvn("50") {
+		t.Fatalf("recording the block: %v %+v", err, recorded)
+	}
+
+	miner := connectFakeMiner(t, server)
+	job := poolLogin(t, miner, dave)
+	for i := 0; i < 3; i++ {
+		job = miner.mineThroughPool(job)
+	}
+	if GetLatestBlockInternal().Index != 3 || GetBlockByHeightFromDB(1).Hash == replaced.Hash {
+		t.Fatal("the chain should hold three blocks, the first of them not the replaced one")
+	}
+	if confirmed, lost := poolSettle(); confirmed != 1 || lost != 1 {
+		t.Fatalf("%d confirmed and %d lost; want the real block 1 confirmed and the replaced one lost", confirmed, lost)
+	}
+
+	view := poolLedger.view(64, time.Now().Unix(), 10)
+	if view.Lost != 1 || view.Confirmed != 1 || view.Waiting != 2 {
+		t.Errorf("%d lost, %d confirmed, %d waiting", view.Lost, view.Confirmed, view.Waiting)
+	}
+	// Exactly the real block's reward is owed. The replaced block added
+	// nothing, though it was recorded as paying Carol 50.
+	if view.Owed != cvn("50") {
+		t.Errorf("%s CVN is owed; the one block that counts paid 50", FormatUnits(view.Owed))
+	}
+	var realParts []poolPart
+	for _, block := range view.Blocks {
+		switch {
+		case block.Hash == replaced.Hash:
+			if block.State != poolBlockLost || block.DecidedAtHeight != 3 {
+				t.Errorf("the replaced block is recorded as %+v", block)
+			}
+		case block.Height == 1:
+			realParts = block.Parts
+		}
+	}
+	// Carol's share came before the real block 1 too, so she has a part in
+	// that one, and that part is all she is owed.
+	var carolPart int64
+	for _, part := range realParts {
+		if part.Address == carol {
+			carolPart = part.Units
+		}
+	}
+	if account, _ := poolLedger.account(carol, 64); account.Owed != carolPart || account.Owed >= cvn("50") {
+		t.Errorf("Carol is owed %s; her part of the block that counts is %s", FormatUnits(account.Owed), FormatUnits(carolPart))
+	}
+}

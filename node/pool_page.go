@@ -27,14 +27,16 @@ const (
 )
 
 type poolPageBlock struct {
-	Height      int64          `json:"height"`
-	Hash        string         `json:"hash"`
-	At          int64          `json:"time"`
-	Finder      string         `json:"finder"`
-	Reward      string         `json:"reward"`
-	RewardUnits int64          `json:"reward_units"`
-	State       string         `json:"state"`
-	Parts       []poolPagePart `json:"parts"`
+	Height      int64  `json:"height"`
+	Hash        string `json:"hash"`
+	At          int64  `json:"time"`
+	Finder      string `json:"finder"`
+	Reward      string `json:"reward"`
+	RewardUnits int64  `json:"reward_units"`
+	State       string `json:"state"`
+	// For a block still waiting: the height of the chain at which it counts.
+	CountsAtHeight int64          `json:"counts_at_height,omitempty"`
+	Parts          []poolPagePart `json:"parts"`
 }
 
 type poolPagePart struct {
@@ -49,6 +51,14 @@ type poolPageAddress struct {
 	Work      int64   `json:"window_work"`
 	Percent   float64 `json:"window_percent"`
 	LastShare int64   `json:"last_share"`
+	// Its parts of the blocks that count, what of that has been paid, and
+	// what is owed, in CVN and in whole units.
+	Earned      string `json:"earned"`
+	Owed        string `json:"owed"`
+	Paid        string `json:"paid"`
+	EarnedUnits int64  `json:"earned_units"`
+	OwedUnits   int64  `json:"owed_units"`
+	PaidUnits   int64  `json:"paid_units"`
 }
 
 // poolPage is everything the pool page shows.
@@ -64,6 +74,16 @@ type poolPage struct {
 	Speed             float64           `json:"speed_hashes_per_second"`
 	SpeedText         string            `json:"speed"`
 	BlocksFound       int               `json:"blocks_found"`
+	BlocksWaiting     int               `json:"blocks_waiting"`
+	BlocksConfirmed   int               `json:"blocks_confirmed"`
+	BlocksLost        int               `json:"blocks_lost"`
+	ConfirmBlocks     int64             `json:"confirm_blocks"`
+	Owed              string            `json:"owed"`
+	OwedUnits         int64             `json:"owed_units"`
+	EarnedUnits       int64             `json:"earned_units"`
+	PaidUnits         int64             `json:"paid_units"`
+	Held              string            `json:"held"`
+	HeldUnits         int64             `json:"held_units"`
 	Blocks            []poolPageBlock   `json:"blocks"`
 	WindowWork        int64             `json:"window_work"`
 	Addresses         []poolPageAddress `json:"addresses"`
@@ -105,11 +125,23 @@ func readPoolPage(now time.Time) poolPage {
 		Height: tip.Index, NetworkDifficulty: difficulty, Miners: miners,
 		Speed: view.Speed, SpeedText: formatHashrate(view.Speed / 1000000.0),
 		BlocksFound: view.BlocksFound, WindowWork: view.WindowWork, At: now.Unix(),
+		BlocksWaiting: view.Waiting, BlocksConfirmed: view.Confirmed, BlocksLost: view.Lost,
+		ConfirmBlocks: poolConfirmDepth(),
+		Owed:          FormatUnits(view.Owed), OwedUnits: view.Owed, EarnedUnits: view.Earned, PaidUnits: view.Paid,
 	}
+	// What the pool's address holds on the chain: the rewards of its blocks,
+	// less what has been paid out.
+	BalanceCacheMutex.RLock()
+	page.HeldUnits = StateBalanceCache[poolAddress]
+	BalanceCacheMutex.RUnlock()
+	page.Held = FormatUnits(page.HeldUnits)
 	for _, block := range view.Blocks {
 		shown := poolPageBlock{
 			Height: block.Height, Hash: block.Hash, At: block.At, Finder: block.Finder,
 			Reward: FormatUnits(block.RewardUnits), RewardUnits: block.RewardUnits, State: block.State,
+		}
+		if block.State == poolBlockWaiting {
+			shown.CountsAtHeight = block.Height + page.ConfirmBlocks
 		}
 		for _, part := range block.Parts {
 			shown.Parts = append(shown.Parts, poolPagePart{Address: part.Address, Amount: FormatUnits(part.Units), Units: part.Units, Work: part.Work})
@@ -125,7 +157,11 @@ func readPoolPage(now time.Time) poolPage {
 		if view.WindowWork > 0 {
 			percent = float64(address.Work) * 100 / float64(view.WindowWork)
 		}
-		page.Addresses = append(page.Addresses, poolPageAddress{Address: address.Address, Work: address.Work, Percent: percent, LastShare: address.LastShare})
+		page.Addresses = append(page.Addresses, poolPageAddress{
+			Address: address.Address, Work: address.Work, Percent: percent, LastShare: address.LastShare,
+			Earned: FormatUnits(address.Account.Earned), Owed: FormatUnits(address.Account.Owed), Paid: FormatUnits(address.Account.Paid),
+			EarnedUnits: address.Account.Earned, OwedUnits: address.Account.Owed, PaidUnits: address.Account.Paid,
+		})
 	}
 	return page
 }
@@ -139,6 +175,27 @@ func addPoolPages(pages *http.ServeMux) {
 		if !poolRunning() || poolLedger == nil {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]string{"error": "this node is not a pool"})
+			return
+		}
+		// `?address=CVN_...` answers for one address, whether or not it is
+		// among those the page has room to list.
+		if address := r.URL.Query().Get("address"); address != "" {
+			if !looksLikeWalletAddress(address) {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": "that is not a CVN wallet address"})
+				return
+			}
+			page := currentPoolPage()
+			account, work := poolLedger.account(address, page.NetworkDifficulty)
+			percent := 0.0
+			if page.WindowWork > 0 {
+				percent = float64(work) * 100 / float64(page.WindowWork)
+			}
+			json.NewEncoder(w).Encode(poolPageAddress{
+				Address: address, Work: work, Percent: percent,
+				Earned: FormatUnits(account.Earned), Owed: FormatUnits(account.Owed), Paid: FormatUnits(account.Paid),
+				EarnedUnits: account.Earned, OwedUnits: account.Owed, PaidUnits: account.Paid,
+			})
 			return
 		}
 		json.NewEncoder(w).Encode(currentPoolPage())
@@ -204,13 +261,15 @@ summary { cursor: pointer; }
 <main>
 <h1>CVN pool</h1>
 <p>Network: <b>{{.Network}}</b>. This pool takes no fee. A block's reward is divided among the most recent shares, counted back over the work of {{.WindowBlocks}} blocks.</p>
-<p class="quiet">Blocks found by this pool pay <code>{{.PoolAddress}}</code>. A block counts once 100 more blocks stand on it. Paying out is not switched on yet: this page shows the record only.</p>
+<p class="quiet">Blocks found by this pool pay <code>{{.PoolAddress}}</code>. A block counts once {{.ConfirmBlocks}} more blocks stand on it; from then on each address is owed its part. A block that another block has replaced by then counts for nothing. Paying out is not switched on yet: what is owed is shown here and will be paid when it is.</p>
 
 <div class="scroll">
 <table>
 <tr><th>Pool speed</th><td>{{.SpeedText}}</td></tr>
 <tr><th>Miners connected</th><td>{{.Miners}}</td></tr>
-<tr><th>Blocks found</th><td>{{.BlocksFound}}</td></tr>
+<tr><th>Blocks found</th><td>{{.BlocksFound}} ({{.BlocksConfirmed}} count, {{.BlocksWaiting}} waiting, {{.BlocksLost}} lost)</td></tr>
+<tr><th>Owed to miners</th><td>{{.Owed}} CVN</td></tr>
+<tr><th>Held at the pool's address</th><td>{{.Held}} CVN</td></tr>
 <tr><th>Chain height</th><td>{{.Height}}</td></tr>
 <tr><th>Network difficulty</th><td>{{.NetworkDifficulty}}</td></tr>
 </table>
@@ -220,12 +279,13 @@ summary { cursor: pointer; }
 <p>Run the CVN edition of XMRig with this pool's address and port, and your own CVN address as the user name:</p>
 <p><code>xmrig -o THIS-POOL:PORT -u CVN_YOUR_ADDRESS --keepalive</code></p>
 
-<h2>Work in the window now</h2>
+<h2>Miners</h2>
+<p class="quiet">Work is what each address has in the window a block found now would be divided over. Owed is its part of the blocks that count, not yet paid.</p>
 {{if .Addresses}}
 <div class="scroll">
 <table>
-<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th>Last share</th></tr>
-{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td>{{when .LastShare}}</td></tr>
+<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th class="n">Owed</th><th class="n">Paid</th><th>Last share</th></tr>
+{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td class="n">{{.Owed}}</td><td class="n">{{.Paid}}</td><td>{{when .LastShare}}</td></tr>
 {{end}}
 </table>
 </div>
@@ -239,7 +299,7 @@ summary { cursor: pointer; }
 <div class="scroll">
 <table>
 <tr><th class="n">Height</th><th>Block</th><th>Found</th><th class="n">Reward</th><th>State</th><th>Divided among</th></tr>
-{{range .Blocks}}<tr><td class="n">{{.Height}}</td><td><code>{{short .Hash}}</code></td><td>{{when .At}}</td><td class="n">{{.Reward}}</td><td>{{.State}}</td>
+{{range .Blocks}}<tr><td class="n">{{.Height}}</td><td><code>{{short .Hash}}</code></td><td>{{when .At}}</td><td class="n">{{.Reward}}</td><td>{{.State}}{{if .CountsAtHeight}} until #{{.CountsAtHeight}}{{end}}</td>
 <td><details><summary>{{len .Parts}} address(es)</summary>{{range .Parts}}<div><code>{{.Address}}</code> {{.Amount}} CVN</div>{{end}}</details></td></tr>
 {{end}}
 </table>
