@@ -294,10 +294,11 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int6
 	if !strings.HasPrefix(coinbase.ID, fmt.Sprintf("TX_COINBASE_H%d_", b.Index)) || len(coinbase.ID) > 200 {
 		return none, nil, fmt.Errorf("reward transaction ID does not name height %d", b.Index)
 	}
-	// A reward has one output. The reward eventually reaches zero, and a
-	// block with no fees then has nothing to pay out, so none is allowed too.
-	if len(coinbase.Outputs) > 1 {
-		return none, nil, fmt.Errorf("reward transaction must have at most one output")
+	// A reward may pay up to RewardMaxOutputs addresses, each of them once.
+	// The reward eventually reaches zero, and a block with no fees then has
+	// nothing to pay out, so no output at all is allowed too.
+	if len(coinbase.Outputs) > RewardMaxOutputs {
+		return none, nil, fmt.Errorf("reward transaction pays %d addresses (limit %d)", len(coinbase.Outputs), RewardMaxOutputs)
 	}
 	if err := checkRewardFormat(coinbase, b); err != nil {
 		return none, nil, err
@@ -309,10 +310,17 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int6
 	}
 	var coinbaseUnits int64
 	var err error
+	rewarded := make(map[string]bool, len(coinbase.Outputs))
 	for _, output := range coinbase.Outputs {
 		if !validRecipient(output.Recipient) || !output.Amount.Spendable() {
 			return none, nil, fmt.Errorf("invalid reward output")
 		}
+		// One coin for each address: paying an address twice in one
+		// reward would only make more coins of the same amount.
+		if rewarded[output.Recipient] {
+			return none, nil, fmt.Errorf("reward transaction pays %s twice", output.Recipient)
+		}
+		rewarded[output.Recipient] = true
 		// A reward coin obeys the same minimum as every other coin. What a
 		// block cannot pay because of it stays in the vault.
 		if output.Amount.Units() < minimumOutputUnits() {

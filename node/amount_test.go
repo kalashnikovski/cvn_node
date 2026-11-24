@@ -226,21 +226,27 @@ func TestRewardRules(t *testing.T) {
 					Version: 1, ID: fmt.Sprintf("TX_COINBASE_H%d_0a", 100), Inputs: []UTXOInput{}, Witness: testAddress("miner"),
 					PublicKey: CoinbasePublicKeyMarker, Signature: CoinbaseSignatureMarker,
 				}
-				for _, units := range rewards {
-					coinbase.Outputs = append(coinbase.Outputs, UTXOOutput{Recipient: testAddress("miner"), Amount: UnitsAmount(units)})
+				for i, units := range rewards {
+					coinbase.Outputs = append(coinbase.Outputs, UTXOOutput{Recipient: testAddress(fmt.Sprintf("paid %d", i)), Amount: UnitsAmount(units)})
 				}
 				return Block{Index: 100, Transactions: []Transaction{coinbase}}
 			}
 			nothing := func(string) (UTXORecord, bool) { return UTXORecord{}, false }
 
+			// A reward may pay several addresses, as a pool's does, and
+			// together they may be paid the reward and not a unit more.
 			accept := map[string]Block{
-				"exactly the reward":   block(cvn("50")),
-				"less than the reward": block(cvn("49.5")),
+				"exactly the reward":             block(cvn("50")),
+				"less than the reward":           block(cvn("49.5")),
+				"the reward between two":         block(cvn("40"), cvn("10")),
+				"the reward between three":       block(cvn("20"), cvn("20"), cvn("10")),
+				"less than the reward, in parts": block(cvn("20"), cvn("20"), cvn("9")),
 			}
-			// A reward has one output. (Two were once the "uncle" split.)
-			split := block(cvn("40"), cvn("10"))
-			if _, _, err := ValidateBlockTransactions(split, nothing, 0); err == nil {
-				t.Error("a reward split in two was accepted")
+			// The same address twice in one reward is refused.
+			twice := block(cvn("40"), cvn("10"))
+			twice.Transactions[0].Outputs[1].Recipient = twice.Transactions[0].Outputs[0].Recipient
+			if _, _, err := ValidateBlockTransactions(twice, nothing, 0); err == nil {
+				t.Error("a reward paying one address twice was accepted")
 			}
 			for name, b := range accept {
 				if _, _, err := ValidateBlockTransactions(b, nothing, 0); err != nil {
@@ -248,10 +254,11 @@ func TestRewardRules(t *testing.T) {
 				}
 			}
 			refuse := map[string]Block{
-				"one unit too much":             block(cvn("50") + 1),
-				"uncle split one unit too much": block(cvn("40"), cvn("10")+1),
-				"three reward outputs":          block(cvn("20"), cvn("20"), cvn("10")),
-				"a reward output of zero":       block(cvn("50"), 0),
+				"one unit too much":              block(cvn("50") + 1),
+				"two parts, one unit too much":   block(cvn("40"), cvn("10")+1),
+				"three parts, one unit too much": block(cvn("20"), cvn("20"), cvn("10")+1),
+				"a reward output of zero":        block(cvn("50"), 0),
+				"a part too small to be a coin":  block(cvn("49"), minimumOutputUnits()-1),
 			}
 			for name, b := range refuse {
 				if _, _, err := ValidateBlockTransactions(b, nothing, 0); err == nil {

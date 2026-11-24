@@ -38,8 +38,15 @@ const (
 	rewardIDSuffixMax = 64
 
 	// blockRewardReserveBytes is the room a miner leaves in a block for its
-	// header and reward transaction when choosing transfers.
-	blockRewardReserveBytes = 2000
+	// header and reward transaction when choosing transfers. It holds a
+	// reward that pays as many addresses as a reward may.
+	blockRewardReserveBytes = 6000
+
+	// RewardMaxOutputs is how many addresses one block's reward may pay.
+	// A miner working alone pays one: itself. A pool pays the miners who
+	// did the work in the block itself, so that it never holds their
+	// coins. The figure is the one an ordinary transfer has (TxMaxOutputs).
+	RewardMaxOutputs = 50
 )
 
 // blockHeaderEncoding is the exact text whose hash is a block's identifier.
@@ -164,8 +171,8 @@ func checkRewardFormat(coinbase Transaction, b Block) error {
 	if !validRecipient(coinbase.Witness) {
 		return fmt.Errorf("reward transaction names no valid miner")
 	}
-	if len(coinbase.Outputs) > 1 {
-		return fmt.Errorf("a block pays one reward output at most")
+	if len(coinbase.Outputs) > RewardMaxOutputs {
+		return fmt.Errorf("a block's reward pays %d addresses at most", RewardMaxOutputs)
 	}
 	return nil
 }

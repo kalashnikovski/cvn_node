@@ -99,6 +99,8 @@ The vault's share is deliberately small. A miner can avoid it by including their
 
 **A block** holds at most 500 transactions, one of which is its miner's reward, so at most 499 transfers; and at most 300,000 bytes.
 
+**A block's reward** may be paid to as many as 50 addresses, each of them once, and together no more than the block may pay. A miner working alone pays one address, its own. A pool pays the miners who did the work in the block itself, and so never has to hold their coins.
+
 **One way to write everything.** A block's identifier is the SHA-256 hash of its header fields, each written with its length in front, so no two different blocks can share an identifier. Every header field has exactly one permitted form. The identifier covers the full contents of every transaction in the block.
 
 **Time.** A block must be dated later than its parent, and no more than two minutes ahead of the clock of the node checking it. Because dates always move forward along a chain, every block is also later than the median of those before it, the rule older chains state separately.

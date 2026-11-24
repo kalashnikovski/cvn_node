@@ -1,6 +1,7 @@
 package node
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -85,8 +86,14 @@ func TestBlocksOutsideTheLaunchFormatAreRefused(t *testing.T) {
 		"a long identifier":     func(tx *Transaction) { tx.ID += strings.Repeat("a", 70) },
 		"an identifier not hex": func(tx *Transaction) { tx.ID += "zz" },
 		"another public key":    func(tx *Transaction) { tx.PublicKey = "x" },
-		"two outputs": func(tx *Transaction) {
-			tx.Outputs = append(tx.Outputs, UTXOOutput{Recipient: testAddress("friend"), Amount: UnitsAmount(1000000)})
+		"fifty-one outputs": func(tx *Transaction) {
+			tx.Outputs[0].Amount = UnitsAmount(cvn("1"))
+			for i := 0; i < RewardMaxOutputs; i++ {
+				tx.Outputs = append(tx.Outputs, UTXOOutput{Recipient: testAddress(fmt.Sprintf("friend %d", i)), Amount: UnitsAmount(1000000)})
+			}
+		},
+		"one address paid twice": func(tx *Transaction) {
+			tx.Outputs = append(tx.Outputs, UTXOOutput{Recipient: tx.Outputs[0].Recipient, Amount: UnitsAmount(1000000)})
 			tx.Outputs[0].Amount = UnitsAmount(cvn("49"))
 		},
 		"an output below minimum": func(tx *Transaction) { tx.Outputs[0].Amount = UnitsAmount(minimumOutputUnits() - 1) },
