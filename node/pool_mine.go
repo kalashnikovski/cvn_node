@@ -351,8 +351,15 @@ func poolMinerReport(state *poolMinerState, account *poolPageAddress, now time.T
 	}
 	parts = append(parts, shares)
 	if account != nil {
-		parts = append(parts, fmt.Sprintf("blocks have paid this address %s CVN; the pool owes it %s CVN, has %s CVN on its way and has paid %s CVN",
-			FormatUnits(account.InBlockUnits), FormatUnits(account.OwedUnits), FormatUnits(account.PendingUnits), FormatUnits(account.PaidUnits)))
+		// What blocks have paid is on the chain as soon as each block is.
+		// The pool counts a block as sure only once it is deep enough, so
+		// for the first hour or so all of it is still waiting.
+		paidByBlocks := fmt.Sprintf("blocks have paid this address %s CVN", FormatUnits(account.InBlockUnits+account.InBlockWaitingUnits))
+		if account.InBlockWaitingUnits > 0 {
+			paidByBlocks += fmt.Sprintf(" (%s of it in blocks still waiting to be sure)", FormatUnits(account.InBlockWaitingUnits))
+		}
+		parts = append(parts, fmt.Sprintf("%s; the pool owes it %s CVN, has %s CVN on its way and has paid %s CVN",
+			paidByBlocks, FormatUnits(account.OwedUnits), FormatUnits(account.PendingUnits), FormatUnits(account.PaidUnits)))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -364,7 +371,7 @@ func poolAccountAt(pageAddress, minerAddress string) *poolPageAddress {
 	if poolPageRead(pageAddress+"/pool.json?address="+url.QueryEscape(minerAddress), &account) != nil {
 		return nil
 	}
-	if account.Address != minerAddress || account.OwedUnits < 0 || account.PendingUnits < 0 || account.PaidUnits < 0 || account.InBlockUnits < 0 {
+	if account.Address != minerAddress || account.OwedUnits < 0 || account.PendingUnits < 0 || account.PaidUnits < 0 || account.InBlockUnits < 0 || account.InBlockWaitingUnits < 0 {
 		return nil
 	}
 	return &account

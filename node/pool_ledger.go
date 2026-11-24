@@ -664,6 +664,33 @@ type poolAddressWork struct {
 	Work      int64
 	LastShare int64
 	Account   poolAccount
+	// What blocks still waiting have paid the address themselves. It is
+	// on the chain already, and counted once those blocks are deep enough.
+	WaitingInBlock int64
+}
+
+// waitingInBlocksLocked adds up, for each address, what the blocks still
+// waiting have paid it themselves.
+func (r *poolRecord) waitingInBlocksLocked() map[string]int64 {
+	paid := make(map[string]int64)
+	for _, block := range r.blocks {
+		if block.State != poolBlockWaiting {
+			continue
+		}
+		for _, part := range block.Parts {
+			if part.InBlock {
+				paid[part.Address] += part.Units
+			}
+		}
+	}
+	return paid
+}
+
+// waitingInBlocks is what the blocks still waiting have paid one address.
+func (r *poolRecord) waitingInBlocks(address string) int64 {
+	r.Lock()
+	defer r.Unlock()
+	return r.waitingInBlocksLocked()[address]
 }
 
 // poolView is the record as the pool page shows it.
@@ -678,6 +705,7 @@ type poolView struct {
 	Waiting, Confirmed, Lost    int
 	Earned, Owed, Pending, Paid int64
 	InBlock                     int64 // paid by the blocks themselves
+	WaitingInBlock              int64 // the same, by blocks still waiting
 	PaymentsSettled             int
 }
 
@@ -705,10 +733,14 @@ func (r *poolRecord) view(networkDifficulty int, now int64, blocks int) poolView
 			last[r.shares[i].Address] = r.shares[i].At
 		}
 	}
+	waiting := r.waitingInBlocksLocked()
+	for _, units := range waiting {
+		view.WaitingInBlock += units
+	}
 	listed := make(map[string]bool, len(parts))
 	for _, part := range parts {
 		listed[part.Address] = true
-		view.Addresses = append(view.Addresses, poolAddressWork{Address: part.Address, Work: part.Work, LastShare: last[part.Address], Account: r.accounts[part.Address]})
+		view.Addresses = append(view.Addresses, poolAddressWork{Address: part.Address, Work: part.Work, LastShare: last[part.Address], Account: r.accounts[part.Address], WaitingInBlock: waiting[part.Address]})
 	}
 	// Then the addresses that are owed something and are not mining now,
 	// the most owed first.
@@ -720,7 +752,7 @@ func (r *poolRecord) view(networkDifficulty int, now int64, blocks int) poolView
 		view.Pending += account.Pending
 		view.Paid += account.Paid
 		if !listed[address] && (account.Owed > 0 || account.Pending > 0) {
-			others = append(others, poolAddressWork{Address: address, Account: account})
+			others = append(others, poolAddressWork{Address: address, Account: account, WaitingInBlock: waiting[address]})
 		}
 	}
 	sort.Slice(others, func(i, j int) bool {

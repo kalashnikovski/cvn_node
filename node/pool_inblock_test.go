@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -277,4 +278,56 @@ func TestAPoolKeepsOnlyThePartsTooSmallForTheBlock(t *testing.T) {
 		t.Errorf("Alice holds %s CVN on the chain; the blocks paid her %s", FormatUnits(got), FormatUnits(want))
 	}
 	takeCopy(t, filepath.Join(t.TempDir(), "backups"), "a pool that keeps the small parts")
+}
+
+// What blocks still waiting have paid a miner is shown beside what the
+// blocks that count have paid: it is on the chain already. And the commands
+// on the pool page name the pool as the visitor reached it.
+func TestThePageShowsWaitingBlocksAndThePoolsOwnName(t *testing.T) {
+	pool := startPayingPoolAt(t, 16, cvn("0.01"))
+	waiting := poolLedger.waitingInBlocks(pool.bob)
+	if waiting == 0 {
+		t.Fatal("the test needs a block still waiting that paid Bob")
+	}
+	pages := http.NewServeMux()
+	addPoolPages(pages)
+	ask := func(path, host string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest("GET", path, nil)
+		request.Host = host
+		reply := httptest.NewRecorder()
+		pages.ServeHTTP(reply, request)
+		return reply
+	}
+	var one poolPageAddress
+	if err := json.Unmarshal(ask("/pool.json?address="+pool.bob, "pool.example.org:28081").Body.Bytes(), &one); err != nil {
+		t.Fatal(err)
+	}
+	if one.InBlockWaitingUnits != waiting || one.InBlockUnits != cvn("12.5") {
+		t.Errorf("Bob: %d units by blocks that count and %d by blocks waiting; the record says 12.5 CVN and %d", one.InBlockUnits, one.InBlockWaitingUnits, waiting)
+	}
+	var page poolPage
+	if err := json.Unmarshal(ask("/pool.json", "pool.example.org:28081").Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if page.InBlockWaitingUnits < waiting || page.InBlockUnits != cvn("50") {
+		t.Errorf("the page: %s CVN by blocks that count, %s by blocks waiting", page.InBlock, page.InBlockWaiting)
+	}
+	// With the account as the miner's program reads it, its line says both.
+	if line := poolMinerReport(&poolMinerState{}, &one, time.Now()); !strings.Contains(line, "still waiting to be sure") {
+		t.Errorf("the miner's line does not say what is still waiting: %s", line)
+	}
+
+	body := ask("/pool", "pool.example.org:28081").Body.String()
+	if !strings.Contains(body, "--pool-mine pool.example.org</code>") || strings.Contains(body, "THIS-POOL") || !strings.Contains(body, "xmrig -o pool.example.org:") {
+		t.Error("reached as pool.example.org, the page does not give that name in its commands")
+	}
+	if body := ask("/pool", "203.0.113.5:28081").Body.String(); !strings.Contains(body, "--pool-mine 203.0.113.5</code>") {
+		t.Error("reached by number, the page does not give that number in its commands")
+	}
+	// A name that is not one is not repeated on the page.
+	for _, host := range []string{"<script>alert(1)</script>", "pool example", "a b:28081", ""} {
+		if body := ask("/pool", host).Body.String(); !strings.Contains(body, "--pool-mine THIS-POOL</code>") || strings.Contains(body, "<script>alert") {
+			t.Errorf("reached as %q, the page's commands are wrong", host)
+		}
+	}
 }

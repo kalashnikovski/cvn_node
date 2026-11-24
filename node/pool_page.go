@@ -3,7 +3,9 @@ package node
 import (
 	"encoding/json"
 	"html/template"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -60,13 +62,17 @@ type poolPageAddress struct {
 	Earned       string `json:"earned"`
 	InBlock      string `json:"in_block"`
 	InBlockUnits int64  `json:"in_block_units"`
-	Owed         string `json:"owed"`
-	Pending      string `json:"pending"`
-	Paid         string `json:"paid"`
-	EarnedUnits  int64  `json:"earned_units"`
-	OwedUnits    int64  `json:"owed_units"`
-	PendingUnits int64  `json:"pending_units"`
-	PaidUnits    int64  `json:"paid_units"`
+	// The same by blocks still waiting: on the chain already, and counted
+	// in the figure above once those blocks are deep enough.
+	InBlockWaiting      string `json:"in_block_waiting"`
+	InBlockWaitingUnits int64  `json:"in_block_waiting_units"`
+	Owed                string `json:"owed"`
+	Pending             string `json:"pending"`
+	Paid                string `json:"paid"`
+	EarnedUnits         int64  `json:"earned_units"`
+	OwedUnits           int64  `json:"owed_units"`
+	PendingUnits        int64  `json:"pending_units"`
+	PaidUnits           int64  `json:"paid_units"`
 }
 
 // poolPagePayment is one payment as the page shows it.
@@ -87,11 +93,12 @@ type poolPagePayment struct {
 	Lines []poolPaymentLine `json:"lines"`
 }
 
-func pageAddress(address string, work int64, percent float64, lastShare int64, account poolAccount) poolPageAddress {
+func pageAddress(address string, work int64, percent float64, lastShare int64, account poolAccount, waitingInBlock int64) poolPageAddress {
 	return poolPageAddress{
 		Address: address, Work: work, Percent: percent, LastShare: lastShare,
 		Earned: FormatUnits(account.Earned), Owed: FormatUnits(account.Owed), Pending: FormatUnits(account.Pending), Paid: FormatUnits(account.Paid),
 		InBlock: FormatUnits(account.InBlock), InBlockUnits: account.InBlock,
+		InBlockWaiting: FormatUnits(waitingInBlock), InBlockWaitingUnits: waitingInBlock,
 		EarnedUnits: account.Earned, OwedUnits: account.Owed, PendingUnits: account.Pending, PaidUnits: account.Paid,
 	}
 }
@@ -129,6 +136,9 @@ type poolPage struct {
 	InBlock      string `json:"in_block"`
 	InBlockUnits int64  `json:"in_block_units"`
 	InBlockFloor string `json:"in_block_floor"`
+	// What blocks still waiting have paid miners themselves.
+	InBlockWaiting      string `json:"in_block_waiting"`
+	InBlockWaitingUnits int64  `json:"in_block_waiting_units"`
 	// Transfers the pool's address has sent that the record does not know
 	// yet. While there are any, nothing is paid (pool_chain.go).
 	TransfersNotInRecord int               `json:"transfers_not_in_record"`
@@ -183,6 +193,7 @@ func readPoolPage(now time.Time) poolPage {
 		MinimumPayment: FormatUnits(poolMinimumPaymentUnits), PaymentFee: FormatUnits(poolPaymentFeeUnits),
 		PaymentsSettled: view.PaymentsSettled,
 		InBlock:         FormatUnits(view.InBlock), InBlockUnits: view.InBlock, InBlockFloor: FormatUnits(poolInBlockFloorUnits),
+		InBlockWaiting: FormatUnits(view.WaitingInBlock), InBlockWaitingUnits: view.WaitingInBlock,
 	}
 	for _, payment := range poolLedger.recentPayments(poolPagePayments) {
 		at := payment.PreparedAt
@@ -224,7 +235,7 @@ func readPoolPage(now time.Time) poolPage {
 		if view.WindowWork > 0 {
 			percent = float64(address.Work) * 100 / float64(view.WindowWork)
 		}
-		page.Addresses = append(page.Addresses, pageAddress(address.Address, address.Work, percent, address.LastShare, address.Account))
+		page.Addresses = append(page.Addresses, pageAddress(address.Address, address.Work, percent, address.LastShare, address.Account, address.WaitingInBlock))
 	}
 	return page
 }
@@ -254,7 +265,7 @@ func addPoolPages(pages *http.ServeMux) {
 			if page.WindowWork > 0 {
 				percent = float64(work) * 100 / float64(page.WindowWork)
 			}
-			json.NewEncoder(w).Encode(pageAddress(address, work, percent, 0, account))
+			json.NewEncoder(w).Encode(pageAddress(address, work, percent, 0, account, poolLedger.waitingInBlocks(address)))
 			return
 		}
 		json.NewEncoder(w).Encode(currentPoolPage())
@@ -268,8 +279,27 @@ func addPoolPages(pages *http.ServeMux) {
 		// The page carries no script and loads nothing from anywhere else.
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		_ = poolPageTemplate.Execute(w, currentPoolPage())
+		_ = poolPageTemplate.Execute(w, struct {
+			poolPage
+			PoolName string
+		}{currentPoolPage(), poolNameFor(r.Host)})
 	})
+}
+
+// poolNameFor is the name a visitor reached this pool by, for the commands
+// the page shows: what they typed to open the page is what a miner types to
+// mine here. Anything that is not plainly a machine's name or number is not
+// repeated on the page.
+func poolNameFor(host string) string {
+	name := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		name = h
+	}
+	name = strings.Trim(name, "[]")
+	if net.ParseIP(name) == nil && !looksLikeHostName(name) {
+		return "THIS-POOL"
+	}
+	return name
 }
 
 var poolPageTemplate = template.Must(template.New("pool").Funcs(template.FuncMap{
@@ -327,7 +357,7 @@ summary { cursor: pointer; }
 <tr><th>Pool speed</th><td>{{.SpeedText}}</td></tr>
 <tr><th>Miners connected</th><td>{{.Miners}}</td></tr>
 <tr><th>Blocks found</th><td>{{.BlocksFound}} ({{.BlocksConfirmed}} count, {{.BlocksWaiting}} waiting, {{.BlocksLost}} lost)</td></tr>
-<tr><th>Paid to miners by the blocks themselves</th><td>{{.InBlock}} CVN</td></tr>
+<tr><th>Paid to miners by the blocks themselves</th><td>{{.InBlock}} CVN in blocks that count, and {{.InBlockWaiting}} CVN in blocks still waiting</td></tr>
 <tr><th>Owed to miners by the pool</th><td>{{.Owed}} CVN</td></tr>
 <tr><th>In payments on their way</th><td>{{.Pending}} CVN</td></tr>
 <tr><th>Paid by the pool so far</th><td>{{.Paid}} CVN in {{.PaymentsSettled}} payment(s)</td></tr>
@@ -339,16 +369,16 @@ summary { cursor: pointer; }
 
 <h2>To mine here</h2>
 <p>Put the fast miner (the CVN edition of XMRig) in your CVN folder, as the mining guide describes, and start the miner with this pool's name:</p>
-<p><code>LaunchMiner.bat --pool-mine THIS-POOL</code> on Windows, <code>./cvn_node --network {{.Network}} --pool-mine THIS-POOL</code> on Linux.</p>
-<p class="quiet">The mining address saved on your machine is the one this pool counts your work for and pays. No node runs on your machine and no chain is downloaded. The fast miner can also be started by hand: <code>xmrig -o THIS-POOL:{{.WorkPort}} -u CVN_YOUR_ADDRESS -a rx/0 --keepalive</code></p>
+<p><code>LaunchMiner.bat --network {{.Network}} --pool-mine {{.PoolName}}</code> on Windows, <code>./cvn_node --network {{.Network}} --pool-mine {{.PoolName}}</code> on Linux.</p>
+<p class="quiet">The mining address saved on your machine is the one this pool counts your work for and pays. No node runs on your machine and no chain is downloaded. The fast miner can also be started by hand: <code>xmrig -o {{.PoolName}}:{{.WorkPort}} -u CVN_YOUR_ADDRESS -a rx/0 --keepalive</code></p>
 
 <h2>Miners</h2>
-<p class="quiet">Work is what each address has in the window a block found now would be divided over. In blocks is what the blocks that count paid it themselves. Owed is what went to the pool's address for it and is not yet paid. On its way is in a payment that has been sent and is not yet too deep to be replaced.</p>
+<p class="quiet">Work is what each address has in the window a block found now would be divided over. In blocks is what the blocks that count paid it themselves; waiting is the same for blocks not yet 100 deep, which is on the chain already. Owed is what went to the pool's address for it and is not yet paid. On its way is in a payment that has been sent and is not yet too deep to be replaced.</p>
 {{if .Addresses}}
 <div class="scroll">
 <table>
-<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th class="n">In blocks</th><th class="n">Owed</th><th class="n">On its way</th><th class="n">Paid</th><th>Last share</th></tr>
-{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td class="n">{{.InBlock}}</td><td class="n">{{.Owed}}</td><td class="n">{{.Pending}}</td><td class="n">{{.Paid}}</td><td>{{when .LastShare}}</td></tr>
+<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th class="n">In blocks</th><th class="n">Waiting</th><th class="n">Owed</th><th class="n">On its way</th><th class="n">Paid</th><th>Last share</th></tr>
+{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td class="n">{{.InBlock}}</td><td class="n">{{.InBlockWaiting}}</td><td class="n">{{.Owed}}</td><td class="n">{{.Pending}}</td><td class="n">{{.Paid}}</td><td>{{when .LastShare}}</td></tr>
 {{end}}
 </table>
 </div>
