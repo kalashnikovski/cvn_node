@@ -351,6 +351,35 @@ func (r *poolRecord) preparePayments(plan poolPaymentPlan) ([]poolPayment, strin
 			break
 		}
 	}
+	// Nobody could be paid, though the pool holds enough in all: its coins
+	// are too many and too small for the 200 a transfer may spend. They are
+	// combined first, in a transfer to the pool's own address with no fee
+	// and nobody paid, and the payment follows on a later run (review of the
+	// pool, round 2, finding 4).
+	if len(prepared) == 0 && len(free) > 1 {
+		var all int64
+		for _, coin := range free {
+			all += coin.Units
+		}
+		smallestDue := due[len(due)-1].units
+		if all >= smallestDue {
+			chosen := free
+			if len(chosen) > TxMaxInputs {
+				chosen = chosen[:TxMaxInputs]
+			}
+			combine := poolPayment{Serial: serial, State: poolPaymentPrepared, PreparedAt: plan.Now}
+			serial++
+			for _, coin := range chosen {
+				combine.Inputs = append(combine.Inputs, UTXOInput{SourceTxID: coin.TxID, Index: coin.Index, AmountUnits: coin.Units})
+				combine.ChangeUnits += coin.Units
+				coin.HeldBy = combine.Serial
+				held[coin.key()] = coin
+			}
+			combine.Outputs = []UTXOOutput{{Recipient: plan.PoolAddress, Amount: UnitsAmount(combine.ChangeUnits)}}
+			prepared = append(prepared, combine)
+			reason = "the pool's coins are too small to pay with; this run combines them, and the payments follow on a later run"
+		}
+	}
 	if len(prepared) == 0 {
 		return nil, reason, nil
 	}

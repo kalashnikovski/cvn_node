@@ -227,8 +227,63 @@ var poolConnections = struct {
 	all    int
 }{byHost: make(map[string]int)}
 
+// Answers without the work cost the pool a proof check each. An address
+// that sends poolStrikesAllowed of them within poolStrikesOver, across all
+// its connections, is refused for poolStrikeoutFor. Variables so tests need
+// not wait.
+var (
+	poolStrikesAllowed = 100
+	poolStrikesOver    = 10 * time.Minute
+	poolStrikeoutFor   = 10 * time.Minute
+)
+
+var poolStrikes = struct {
+	sync.Mutex
+	byHost map[string]poolStrikeCount
+}{byHost: make(map[string]poolStrikeCount)}
+
+type poolStrikeCount struct {
+	count       int
+	since, till time.Time
+}
+
+// poolNoteBadWork counts an answer without the work from a host, and reports
+// whether that host is now refused.
+func poolNoteBadWork(host string, now time.Time) bool {
+	poolStrikes.Lock()
+	defer poolStrikes.Unlock()
+	strikes := poolStrikes.byHost[host]
+	if now.Sub(strikes.since) > poolStrikesOver {
+		strikes = poolStrikeCount{since: now}
+	}
+	strikes.count++
+	if strikes.count >= poolStrikesAllowed {
+		strikes.till = now.Add(poolStrikeoutFor)
+	}
+	poolStrikes.byHost[host] = strikes
+	// The table is kept small: what is long past is forgotten.
+	if len(poolStrikes.byHost) > 4*poolMinersAtMost {
+		for other, counted := range poolStrikes.byHost {
+			if now.Sub(counted.since) > poolStrikesOver && now.After(counted.till) {
+				delete(poolStrikes.byHost, other)
+			}
+		}
+	}
+	return now.Before(strikes.till)
+}
+
+// poolStruckOut reports whether a host is refused for now.
+func poolStruckOut(host string, now time.Time) bool {
+	poolStrikes.Lock()
+	defer poolStrikes.Unlock()
+	return now.Before(poolStrikes.byHost[host].till)
+}
+
 // poolAdmit takes a place for a connection from a host, or refuses it.
 func poolAdmit(host string) bool {
+	if poolStruckOut(host, time.Now()) {
+		return false
+	}
 	poolConnections.Lock()
 	defer poolConnections.Unlock()
 	if poolConnections.all >= poolMinersAtMost || poolConnections.byHost[host] >= poolConnectionsPerHost {
@@ -415,6 +470,12 @@ func (c *stratumClient) submitShare(jobID, nonceHex string) string {
 	if job.seen[nonce] {
 		return poolDuplicateShare
 	}
+	// Written down before it is checked: the same nonce sent again, good
+	// or not, costs no second proof check.
+	if job.seen == nil {
+		job.seen = make(map[uint32]bool)
+	}
+	job.seen[nonce] = true
 	blob, ok := powBlob(job.commitment, nonce)
 	if !ok {
 		return "malformed job"
@@ -427,10 +488,6 @@ func (c *stratumClient) submitShare(jobID, nonceHex string) string {
 	if work > HeartbeatTargetHex(asked) {
 		return stratumBadWork
 	}
-	if job.seen == nil {
-		job.seen = make(map[uint32]bool)
-	}
-	job.seen[nonce] = true
 
 	now := time.Now()
 	place, err := poolLedger.addShare(c.address, int64(asked), now.Unix(), job.template.Difficulty)

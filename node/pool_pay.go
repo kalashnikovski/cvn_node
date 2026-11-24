@@ -526,7 +526,23 @@ func poolPayCall(path string, request, reply interface{}) (int, error) {
 // is the node's record. It can refuse to sign something that does not hang
 // together.
 func poolPaymentLooksRight(payment poolPayment, ownAddress string, feeUnits int64) error {
-	if len(payment.Lines) == 0 || len(payment.Inputs) == 0 || len(payment.Inputs) > TxMaxInputs || len(payment.Outputs) > TxMaxOutputs {
+	// A transfer that combines the pool's own coins pays nobody, carries no
+	// fee, and sends all of it back to the pool's address.
+	if len(payment.Lines) == 0 {
+		var spent int64
+		for _, input := range payment.Inputs {
+			if input.AmountUnits <= 0 {
+				return fmt.Errorf("it spends a coin of no amount")
+			}
+			spent += input.AmountUnits
+		}
+		if len(payment.Inputs) < 2 || len(payment.Inputs) > TxMaxInputs || payment.FeeUnits != 0 || payment.ChangeUnits != spent ||
+			len(payment.Outputs) != 1 || payment.Outputs[0].Recipient != ownAddress || payment.Outputs[0].Amount.Units() != spent {
+			return fmt.Errorf("it pays nobody and is not a combining of the pool's own coins")
+		}
+		return nil
+	}
+	if len(payment.Inputs) == 0 || len(payment.Inputs) > TxMaxInputs || len(payment.Outputs) > TxMaxOutputs {
 		return fmt.Errorf("it pays %d addresses from %d coins", len(payment.Lines), len(payment.Inputs))
 	}
 	if payment.FeeUnits != feeUnits || payment.FeeUnits < 0 || payment.FeeUnits > 10*poolPaymentFeeUnits {

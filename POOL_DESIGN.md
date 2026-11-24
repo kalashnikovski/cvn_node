@@ -95,6 +95,8 @@ The two talk over a port that answers on the server's own address only (the work
 
 **Which coins the pool spends.** Only what blocks that count paid to the pool's address, and the change of payments that have settled. Both are too deep to be replaced, so a payment cannot be undone by the chain changing. Anything else that arrives at the pool's address is left alone.
 
+**Coins too small to pay with.** A transfer may spend at most 200 coins. If the pool holds enough in all but its largest 200 coins do not add up to anyone's payment, it first combines them: a transfer of its own coins back to its own address, with no fee and nobody paid. The payments follow on a later run. The paying command signs such a transfer only if it pays nobody, carries no fee and returns every unit to the pool's address.
+
 **The fee** is 0.001 CVN for each transfer, shared equally among the addresses it pays. Units that do not divide fall one each on the first addresses.
 
 **A payment that has been sent is never made a second time.** Its transfer is kept in the record and handed to the network again every five minutes until it is mined. Only a payment that was prepared and never signed is undone, after ten minutes or at once if the command gives it back. (Paying again after a wait would not be safe: the first transfer stays valid for as long as its coins are unspent, and could be mined after the second.)
@@ -123,6 +125,8 @@ The record is the only place that says what each address is owed, and it cannot 
 
 **The check.** Everything in the file can be read. The parts of every block that counts add up to its reward. What each address has earned is its parts of those blocks, and is what it is owed, has on its way and has been paid together. What is on its way and what has been paid are what the payments say. Every coin set aside is set aside for a payment under way, which has exactly the coins it spends. The coins the record holds are what it owes and has on its way.
 
+**A copy does not say how far the chain had been read** for the pool's own transfers, and a copy put back with the command has anything it says of it taken out. A pool given a copy back therefore reads the chain again from the copy's first block, and no payment made after the copy can be skipped, however the file was edited.
+
 `--check-pool-backup FILE` runs that check on any copy. `--restore-pool-backup FILE` puts a checked copy in place of the record, with the pool stopped, and keeps the file it replaces.
 
 ## 8. The page
@@ -149,7 +153,7 @@ starts the fast miner (the CVN edition of XMRig) pointed at the pool, with the m
 | The operator does not pay the small parts it holds | The record is public and every payment is a transfer anyone can see on the chain. It cannot be prevented, only seen |
 | The pool's node is taken over | It could ask the paying command to sign a wrong payment, up to what the address holds. It could not learn the key |
 | The record is lost | What the blocks paid is on the chain and is not touched. Copies every hour and after every payment hold what is owed. A copy put back cannot pay twice (section 6). For blocks found since the copy, who is owed the small parts is lost |
-| A miner floods the pool with useless answers | Each costs the pool one hash and the miner far more; thirty in a row closes the connection; connections from one address are limited |
+| A miner floods the pool with useless answers | Each costs the pool one hash and the miner far more. Thirty on one connection close it; a hundred from one internet address within ten minutes, across all its connections, refuse that address for ten minutes. The same answer twice is not checked twice. Fresh work is built at most once a second for a miner, and a connection stays with the address it logged in with |
 | A miner hands in shares but keeps back a block | No pool can detect it. It costs the attacker their own part of that block |
 | The pool becomes most of the network | The program is public so that others run pools; mining alone stays fully supported; both guides say so |
 | A miner's connection is tampered with on the way | Not encrypted in this version. Work is not secret, but someone in the path could put their own address in place of the miner's |

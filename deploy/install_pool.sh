@@ -63,6 +63,9 @@ esac
 case "${ADDRESS#CVN_}" in
   ''|*[!0-9a-f]*) echo "That is not an address as a wallet shows it: CVN_ followed by digits and the letters a to f. Got: $ADDRESS"; exit 1 ;;
 esac
+if [ "${#ADDRESS}" -ne 52 ]; then
+  echo "That is not an address as a wallet shows it: CVN_ followed by 48 characters. It has ${#ADDRESS} in all. Got: $ADDRESS"; exit 1
+fi
 # The seeds end up in a service file written by root: nothing but
 # addresses and the commas between them is let through.
 case "$SEEDS" in

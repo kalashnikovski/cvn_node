@@ -82,6 +82,8 @@ const (
 
 type stratumClient struct {
 	badWork int
+	host    string // on a pool: the address it connected from
+	lastJob time.Time
 	conn    net.Conn
 	writeMu sync.Mutex
 	session string
@@ -290,12 +292,27 @@ func (c *stratumClient) newJob() (*stratumJob, bool) {
 		return nil, false
 	}
 	c.jobsMu.Lock()
+	c.lastJob = time.Now()
 	c.jobs = append(c.jobs, job)
 	if len(c.jobs) > stratumJobsKept {
 		c.jobs = c.jobs[len(c.jobs)-stratumJobsKept:]
 	}
 	c.jobsMu.Unlock()
 	return job, true
+}
+
+// stratumJobAtMostEvery is how often one miner may be built fresh work for
+// when it asks for it.
+var stratumJobAtMostEvery = time.Second
+
+// newestJob is the work this miner was given last.
+func (c *stratumClient) newestJob() *stratumJob {
+	c.jobsMu.Lock()
+	defer c.jobsMu.Unlock()
+	if len(c.jobs) == 0 {
+		return nil
+	}
+	return c.jobs[len(c.jobs)-1]
 }
 
 func (c *stratumClient) findJob(id string) *stratumJob {
@@ -314,11 +331,11 @@ func handleStratumClient(conn net.Conn) {
 	defer conn.Close()
 	onPool := poolRunning()
 	if onPool {
-		host := hostOf(conn)
-		if !poolAdmit(host) {
+		client.host = hostOf(conn)
+		if !poolAdmit(client.host) {
 			return
 		}
-		defer poolRelease(host)
+		defer poolRelease(client.host)
 	}
 
 	loggedIn := false
@@ -370,6 +387,16 @@ func handleStratumClient(conn net.Conn) {
 				client.reply(request.ID, nil, "log in with a CVN wallet address: "+addressFormDescription())
 				return
 			}
+			// One connection works for one address. Changing it on the same
+			// connection would let one machine put its work under as many
+			// addresses as it liked without reconnecting (review of the
+			// pool, round 2, finding 5).
+			if loggedIn && login != client.address {
+				if !client.reply(request.ID, nil, "this connection is already logged in as "+client.address+"; connect again to mine for another address") {
+					return
+				}
+				continue
+			}
 			client.address = login
 			if onPool && !loggedIn {
 				client.pool.begin(time.Now())
@@ -420,6 +447,14 @@ func handleStratumClient(conn net.Conn) {
 				// or hostile, and is disconnected. Answers that were good
 				// but arrived after the chain moved on are not counted.
 				if errorText == stratumBadWork || errorText == poolDuplicateShare {
+					// On a pool the answers without the work are also
+					// counted for the address they come from, across its
+					// connections: reconnecting does not start the count
+					// again (review of the pool, round 2, finding 2).
+					if onPool && poolNoteBadWork(client.host, time.Now()) {
+						noteNetworkEvent("⛏️ [POOL] Refusing " + client.host + " for a while: too many answers without the work.")
+						return
+					}
 					if client.badWork++; client.badWork >= stratumBadWorkLimit {
 						noteNetworkEvent("⛏️ [WORK SERVER] Disconnecting " + conn.RemoteAddr().String() + ": too many answers without the work.")
 						return
@@ -433,7 +468,12 @@ func handleStratumClient(conn net.Conn) {
 				return
 			}
 		case "getjob":
-			if job, ok := client.newJob(); ok {
+			// Fresh work is built at most once a second for one miner. Asked
+			// more often, it is sent the work it was given last (review of
+			// the pool, round 2, finding 3).
+			if newest := client.newestJob(); newest != nil && time.Since(client.lastJob) < stratumJobAtMostEvery {
+				client.reply(request.ID, newest.describe(), "")
+			} else if job, ok := client.newJob(); ok {
 				client.reply(request.ID, job.describe(), "")
 			} else {
 				client.reply(request.ID, nil, "no work available")

@@ -27,6 +27,11 @@ func startPoolForTest(t *testing.T, shareDifficulty int) (server, recordPath str
 	savedFloor := poolInBlockFloorUnits
 	poolInBlockFloorUnits = MaxAmountUnits
 	t.Cleanup(func() { poolInBlockFloorUnits = savedFloor })
+	// The tests ask for fresh work straight after a share and expect it to
+	// carry the new division. A real pool builds it at most once a second.
+	savedEvery := stratumJobAtMostEvery
+	stratumJobAtMostEvery = 0
+	t.Cleanup(func() { stratumJobAtMostEvery = savedEvery })
 	// The difficulty stays where the test put it.
 	poolRetargetShares, poolRetargetAfter = 1000000, time.Hour
 	poolAddress = testAddress("pool")

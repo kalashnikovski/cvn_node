@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // MINING AT A POOL
@@ -260,7 +261,9 @@ func shownPlainly(text string, atMost int) string {
 			plain.WriteString("...")
 			break
 		}
-		if c < 0x20 || c == 0x7f || (c >= 0x80 && c < 0xa0) {
+		// Control characters, and the invisible ones that turn text
+		// round or hide it (review of the pool, round 2, finding 8).
+		if c < 0x20 || c == 0x7f || (c >= 0x80 && c < 0xa0) || unicode.In(c, unicode.Cf, unicode.Zl, unicode.Zp) {
 			plain.WriteByte(' ')
 			continue
 		}

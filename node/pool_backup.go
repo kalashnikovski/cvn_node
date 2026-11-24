@@ -266,6 +266,7 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 		}
 
 		held := make(map[uint64]int64)
+		heldCoins := make(map[string]poolCoin)
 		if err := bCoins.ForEach(func(key, raw []byte) error {
 			var coin poolCoin
 			if json.Unmarshal(raw, &coin) != nil || coin.Units <= 0 || coin.key() != string(key) {
@@ -276,6 +277,7 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 					return fmt.Errorf("a coin is set aside for payment %d, which is not under way", coin.HeldBy)
 				}
 				held[coin.HeldBy] += coin.Units
+				heldCoins[coin.key()] = coin
 			}
 			report.Coins++
 			report.CoinUnits += coin.Units
@@ -283,9 +285,24 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 		}); err != nil {
 			return err
 		}
+		heldBy := make(map[uint64]int)
+		for _, coin := range heldCoins {
+			heldBy[coin.HeldBy]++
+		}
 		for serial, payment := range underWay {
 			if spends := payment.debits() + payment.ChangeUnits; held[serial] != spends {
 				return fmt.Errorf("payment %d spends %s CVN and has coins of %s set aside for it", serial, FormatUnits(spends), FormatUnits(held[serial]))
+			}
+			// The coins set aside are exactly the coins it spends, one for
+			// one (review of the pool, round 2, finding 6).
+			for _, input := range payment.Inputs {
+				coin, found := heldCoins[utxoKey(input.SourceTxID, input.Index)]
+				if !found || coin.HeldBy != serial || coin.Units != input.AmountUnits {
+					return fmt.Errorf("payment %d spends a coin that is not set aside for it", serial)
+				}
+			}
+			if heldBy[serial] != len(payment.Inputs) {
+				return fmt.Errorf("payment %d has %d coins set aside for it and spends %d", serial, heldBy[serial], len(payment.Inputs))
 			}
 		}
 		// A record that has taken a payment in from the chain may hold more
@@ -383,6 +400,14 @@ func (r *poolRecord) writeBackup(directory string, keep int) (string, poolRecord
 		_ = os.Remove(partial)
 		return "", report, fmt.Errorf("the snapshot could not be written: %v", err)
 	}
+	// A copy does not say how far the chain had been read. A pool that is
+	// given it back reads the chain again from the copy's first block, so
+	// that a payment made after the copy cannot be skipped however the file
+	// has been edited (review of the pool, round 2, finding 1).
+	if err = forgetHowFarReadIn(partial); err != nil {
+		_ = os.Remove(partial)
+		return "", report, fmt.Errorf("the snapshot could not be made ready: %v", err)
+	}
 	if report, err = checkPoolRecordFile(partial); err != nil {
 		// Kept under a name that says what it is: a record that does not
 		// add up is something its operator will want to look at.
@@ -421,6 +446,25 @@ func prunePoolBackups(directory string, keep int) {
 			_ = os.Remove(old)
 		}
 	}
+}
+
+// forgetHowFarReadIn takes out of a record's file the height to which the
+// chain had been read for the pool's own transfers (pool_chain.go).
+func forgetHowFarReadIn(path string) error {
+	db, err := bbolt.Open(path, 0600, &bbolt.Options{Timeout: poolRecordOpenWait})
+	if err != nil {
+		return err
+	}
+	err = db.Update(func(tx *bbolt.Tx) error {
+		if meta := tx.Bucket(poolMetaBucket); meta != nil {
+			return meta.Delete(poolReadToKey)
+		}
+		return nil
+	})
+	if closeErr := db.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 // poolBackupWanted is told when a copy should be made now and not at the
@@ -533,6 +577,11 @@ func restorePoolBackup(backupPath string) (report poolRecordReport, kept string,
 	}
 	partial := record + ".restoring"
 	if err = copyFile(backupPath, partial); err == nil {
+		// Whatever the copy says of how far the chain had been read is
+		// not believed: the pool reads it again (see forgetHowFarReadIn).
+		err = forgetHowFarReadIn(partial)
+	}
+	if err == nil {
 		err = os.Rename(partial, record)
 	}
 	if err != nil {
