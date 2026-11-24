@@ -5,11 +5,12 @@
 #
 # Read POOL_GUIDE.md first. In short:
 #
-#   - The pool's blocks pay one address, the pool's. Make that wallet on a
-#     computer of your own, write its 24 words down, and give this script
-#     the address. The node set up here never holds the key.
-#   - The miners are paid by a timer this script installs: every five
-#     hours, counted from the last payment run. The timer does nothing
+#   - The pool's blocks pay the miners themselves. Only parts too small for
+#     a block go to the pool's own address. Make that wallet on a computer
+#     of your own, write its 24 words down, and give this script the
+#     address. The node set up here never holds the key.
+#   - What the pool's address holds for miners is paid on by a timer this
+#     script installs: every five hours, counted from the last payment run. The timer does nothing
 #     until you have saved the pool's key on this server, locked with a
 #     password (see the end of this script's output, and POOL_GUIDE.md).
 #     That is done once. Nobody has to run a command to pay after that.
@@ -231,7 +232,8 @@ if ! systemctl is-active --quiet "$UNIT"; then
   exit 1
 fi
 echo "Done. The pool for $NETWORK is running and will start by itself after a reboot."
-echo "  Its blocks pay:         $ADDRESS"
+echo "  Its blocks pay:         the miners themselves; parts too small for a block go to"
+echo "                          $ADDRESS"
 echo "  Miners connect to:      this server, port $WORK_PORT"
 echo "  The pool page:          http://THIS-SERVER:${NODE_PORTS#*:}/pool"
 echo "  See what it is doing:   journalctl -u $UNIT -f"
@@ -242,9 +244,10 @@ echo
 if [ -f "$KEYS/wallet_key.json" ] && [ -f "$KEYS/password" ]; then
   echo "Payments go out by themselves every $PAY_HOURS hours. The last run:  journalctl -u $PAY_UNIT -n 30"
 else
-  echo "ONE THING IS LEFT TO DO, ONCE. The pool pays its miners by itself every $PAY_HOURS hours,"
-  echo "and for that it needs the pool's key. Until these three steps are done, what miners"
-  echo "earn is recorded and owed, and nothing is sent:"
+  echo "ONE THING IS LEFT TO DO, ONCE. The pool's blocks pay the miners themselves, and that"
+  echo "works already. Parts too small for a block go to the pool's address; the pool pays"
+  echo "those on by itself every $PAY_HOURS hours, and for that it needs the pool's key. Until these"
+  echo "three steps are done, those small parts are recorded and owed, and are not sent:"
   echo
   echo "  1. Save the pool's key on this server, locked with a password of at least"
   echo "     8 characters. In the wallet choose 6 (Recovery words and saved key), then c:"

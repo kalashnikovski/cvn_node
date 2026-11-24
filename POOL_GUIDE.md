@@ -4,7 +4,7 @@ This guide is for someone who wants to run a mining pool for others. To mine at 
 
 A pool is the ordinary CVN program started with one more option. There is no separate pool software, no database server and no website to build. Anyone may run one.
 
-Read all of this guide before you start. Running a pool means holding other people's coins for some hours at a time, and section 7 says plainly what that asks of you.
+Read all of this guide before you start. A pool's blocks pay the miners themselves, so most of what your miners earn never passes through your hands. The small parts that do are other people's coins, and section 7 says plainly what that asks of you.
 
 ## 1. What a pool does
 
@@ -15,8 +15,8 @@ Read all of this guide before you start. Running a pool means holding other peop
 Started like this, the node:
 
 - **Takes miners in from anywhere,** on the network's work port (18083 on the CVN Testnet, 28083 on `devnet`). Each miner logs in with its own CVN address and is asked for work its machine can do about once every 30 seconds. One such piece of work is a share.
-- **Builds every block to pay the pool's address.** When a miner's share is also good enough for the network, it is a block.
-- **Keeps a record** of every share, every block and what each address is owed, in a file of its own beside the chain: `pool_cvn_testnet.db`.
+- **Builds every block to pay the miners themselves.** A block's reward is divided among the addresses that did the recent work, and each part of 0.01 CVN or more is paid in the block, straight to its address, for up to 50 addresses. The pool never holds those coins. Smaller parts, and the parts of miners beyond the fifty, go to the pool's address in the same block and are owed.
+- **Keeps a record** of every share, every block, what each address was paid by the blocks and what it is owed, in a file of its own beside the chain: `pool_cvn_testnet.db`.
 - **Does not mine itself,** so the server's processor is free for checking shares.
 - **Shows a pool page** at `/pool` (and the same figures for programs at `/pool.json`) on the port its explorer is on.
 - **Holds no key.** It cannot spend the pool's coins. Paying is done by a separate program on a timer (section 4).
@@ -25,10 +25,12 @@ The rules are part of the program and the same for every pool run with it:
 
 | | |
 |---|---|
-| How a block is divided | By the most recent shares, counted back until they add up to twice the work of one block |
+| How a block is divided | By the most recent shares, counted back until they add up to twice the work of one block. The division is fixed when a miner's work is made, and miners are sent fresh work at least every 15 seconds |
+| What the block pays itself | Every part of 0.01 CVN or more, to up to 50 addresses (49 and the pool's own output, if there are more) |
+| What the pool holds and owes | The parts under 0.01 CVN, and the parts of miners beyond those the block has room for |
 | The pool's fee | None. There is no setting for one |
-| When a block counts | When 100 more blocks stand on it, about 75 minutes. A block replaced before then counts for nothing |
-| Smallest payment | 1 CVN. Less stays owed until it grows |
+| When a block counts | When 100 more blocks stand on it, about 75 minutes. A block replaced before then counts for nothing, and its payments go with it |
+| Smallest payment of what is owed | 1 CVN. Less stays owed until it grows |
 | Fee on a payment | 0.001 CVN for each transfer, shared equally among the addresses it pays |
 | Addresses in one transfer | Up to 49 |
 | Connections from one internet address | 32 |
@@ -89,7 +91,9 @@ Running it again later with the same words updates the program and restarts the 
 
 ## 4. Paying the miners
 
-**The pool pays by itself, every five hours.** Nobody runs a command to pay. Five hours after one payment run the next one starts, and so on for as long as the server is up; after a restart the first run comes fifteen minutes after the server starts. Each run pays every address owed 1 CVN or more.
+**Most of the paying is done by the blocks.** Every part of a reward of 0.01 CVN or more is paid in the block that earned it, and needs nothing from you. This section is about the rest: the small parts, and the parts of miners a block had no room for. They go to the pool's address and are owed. A pool with few miners may never owe anything.
+
+**The pool pays what it owes by itself, every five hours.** Nobody runs a command to pay. Five hours after one payment run the next one starts, and so on for as long as the server is up; after a restart the first run comes fifteen minutes after the server starts. Each run pays every address owed 1 CVN or more.
 
 For that the pool needs its key, and giving it the key is the one thing you do by hand, once.
 
@@ -117,7 +121,7 @@ For that the pool needs its key, and giving it the key is the one thing you do b
    systemctl start cvn-pool-pay-cvn_testnet; journalctl -u cvn-pool-pay-cvn_testnet -n 30 --no-pager
    ```
 
-Until these three steps are done nothing is paid: what each address has earned is recorded and owed, and waits. The installer says so at the end of its output for as long as it is true.
+Until these three steps are done the pool pays nothing of what it owes: those amounts are recorded, and wait. What the blocks pay the miners themselves does not depend on this. The installer says so at the end of its output for as long as it is true.
 
 | To do this | Type |
 |---|---|
@@ -141,7 +145,7 @@ The key is opened only for the seconds a run takes, by a program that listens to
 
 ### What this costs in safety, and paying by hand instead
 
-With the key and its password both on the server, somebody who becomes root there can take every coin the pool's address holds. The node that listens to miners runs as another user and cannot read either file, so a fault in the node alone does not give the key away; a fault that gives an attacker root does. What stands to be lost is what the address holds at that moment: the blocks of the last five hours or so, and amounts under 1 CVN. It is never nothing. Use the pool's wallet for the pool only, so that nothing else is ever at that address.
+With the key and its password both on the server, somebody who becomes root there can take every coin the pool's address holds. The node that listens to miners runs as another user and cannot read either file, so a fault in the node alone does not give the key away; a fault that gives an attacker root does. What stands to be lost is what the address holds at that moment: the small parts of the last five hours or so, and amounts under 1 CVN. What the blocks paid the miners themselves was never there to lose. Use the pool's wallet for the pool only, so that nothing else is ever at that address.
 
 An operator who will not keep the key on a server can leave the three steps undone and pay by hand:
 
@@ -155,7 +159,7 @@ To stop automatic payments later: `systemctl disable --now cvn-pool-pay-cvn_test
 
 ## 5. Looking after it
 
-- **Watch the pool page.** "Owed" should fall after each payment run. "Held at the pool's address" should be close to what is owed plus the blocks still waiting.
+- **Watch the pool page.** "Paid to miners by the blocks themselves" should grow with every block that counts. "Owed" should fall after each payment run. "Held at the pool's address" should be close to what is owed plus what waiting blocks paid the pool.
 - **Lost blocks are normal** in small numbers: two miners sometimes find a block at the same moment, and one of them loses. Many lost blocks mean the server is badly connected to the rest of the network.
 - **The pool's record is one file,** `/var/lib/cvn_pool/NETWORK/pool_NETWORK.db`. It is the only place that says what each address is owed for work already done; the chain cannot tell you that. The pool makes copies of it by itself, and the next section is about them.
 - **Keep the server updated:** `apt-get update && apt-get upgrade` for the system, and the installer again for the program when a release says so. Allow remote login with a key only, not a password.
@@ -192,15 +196,15 @@ Each copy is the size of the record. That is a few megabytes for most pools, and
 
 **What the pool does then.** A copy knows nothing of what happened after it was made. Payments made since are on the chain, and the pool reads the chain for every transfer its address has sent. Before it pays anybody, it takes each one it did not know of into its record: what each address received comes off what the record says it is owed. Nobody is paid twice. Until every such transfer is 100 blocks deep, the pool prepares no payment, and the pool page says "Payments are waiting".
 
-**What cannot be got back.** Who did the work for a block is written in the record and nowhere else. For blocks found after the copy was made, the record put back does not know whose they are. Their rewards arrive at the pool's address like any others, and stay there, outside what the record counts as owed. The same goes for shares handed in after the copy. Because a copy is made every hour and after every payment, this is an hour's blocks at most, if you put back the newest copy.
+**What cannot be got back.** What the blocks paid the miners themselves is on the chain and is not touched by any of this. What can be lost is smaller: for blocks found after the copy was made, the record put back does not know whose the small parts are that went to the pool's address. Those coins stay there, outside what the record counts as owed. The same goes for shares handed in after the copy. Because a copy is made every hour and after every payment, this is the small parts of an hour's blocks at most, if you put back the newest copy.
 
-Those rewards are yours to settle by hand, and you should say publicly how you did it. The fairest simple way is to divide them among the same addresses, in the same proportions, as the last blocks the record does know. Send them from the pool's wallet in the ordinary way. The pool notices a transfer sent by hand from its address, waits until it is 100 blocks deep, and writes it into the record as a payment to whoever received it. If an address is paid more than the record says it was owed, the record owes it nothing, never less than nothing, and shows the difference with the payment.
+Those coins are yours to settle by hand, and you should say publicly how you did it. The fairest simple way is to divide them among the same addresses, in the same proportions, as the last blocks the record does know. Send them from the pool's wallet in the ordinary way. The pool notices a transfer sent by hand from its address, waits until it is 100 blocks deep, and writes it into the record as a payment to whoever received it. If an address is paid more than the record says it was owed, the record owes it nothing, never less than nothing, and shows the difference with the payment.
 
 **A transfer sent by hand at any other time** is treated the same way: as a payment to whoever received it. This is why the pool's wallet should be used for the pool and nothing else.
 
 ## 7. What you owe your miners
 
-The program makes a pool's arithmetic public. It cannot make its operator honest. People who mine at your pool are trusting you with their earnings, and deserve to know these things before they start:
+The program pays most of what your miners earn without you, and makes the rest of your pool's arithmetic public. It cannot make its operator honest. Two things remain in your hands: the small parts your pool holds until it pays them, and the work your pool hands out, which decides who each block pays. People who mine at your pool deserve to know these things before they start:
 
 - **Who you are,** or at least how to reach you.
 - **The pool's address,** so that anyone can see on the chain what it found and what it paid.

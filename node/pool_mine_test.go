@@ -143,9 +143,9 @@ func TestWhatTheFastMinerSaysAtAPoolIsUnderstood(t *testing.T) {
 	if speed != 17500 || !speedKnown || !connected || taken != 2 || late != 1 || refused != 2 {
 		t.Errorf("figures: speed %v (known %v), connected %v, taken %d, too late %d, refused %d", speed, speedKnown, connected, taken, late, refused)
 	}
-	account := &poolPageAddress{OwedUnits: 125000000, PendingUnits: 50000000, PaidUnits: 300000000}
+	account := &poolPageAddress{InBlockUnits: 700000000, OwedUnits: 125000000, PendingUnits: 50000000, PaidUnits: 300000000}
 	report := poolMinerReport(state, account, now)
-	for _, want := range []string{"17.50 kH/s", "shares taken 2", "too late 1", "refused 2", "owes this address 1.25 CVN", "0.5 CVN on its way", "paid 3 CVN"} {
+	for _, want := range []string{"17.50 kH/s", "shares taken 2", "too late 1", "refused 2", "blocks have paid this address 7 CVN", "the pool owes it 1.25 CVN", "0.5 CVN on its way", "has paid 3 CVN"} {
 		if !strings.Contains(report, want) {
 			t.Errorf("the report %q does not say %q", report, want)
 		}

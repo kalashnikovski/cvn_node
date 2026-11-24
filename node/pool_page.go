@@ -45,6 +45,9 @@ type poolPagePart struct {
 	Amount  string `json:"amount"`
 	Units   int64  `json:"units"`
 	Work    int64  `json:"work"`
+	// InBlock: the block itself paid this part to its address. Without it
+	// the part went to the pool's address in the block and is owed.
+	InBlock bool `json:"in_block"`
 }
 
 type poolPageAddress struct {
@@ -55,6 +58,8 @@ type poolPageAddress struct {
 	// Its parts of the blocks that count, what of that has been paid, and
 	// what is owed, in CVN and in whole units.
 	Earned       string `json:"earned"`
+	InBlock      string `json:"in_block"`
+	InBlockUnits int64  `json:"in_block_units"`
 	Owed         string `json:"owed"`
 	Pending      string `json:"pending"`
 	Paid         string `json:"paid"`
@@ -86,6 +91,7 @@ func pageAddress(address string, work int64, percent float64, lastShare int64, a
 	return poolPageAddress{
 		Address: address, Work: work, Percent: percent, LastShare: lastShare,
 		Earned: FormatUnits(account.Earned), Owed: FormatUnits(account.Owed), Pending: FormatUnits(account.Pending), Paid: FormatUnits(account.Paid),
+		InBlock: FormatUnits(account.InBlock), InBlockUnits: account.InBlock,
 		EarnedUnits: account.Earned, OwedUnits: account.Owed, PendingUnits: account.Pending, PaidUnits: account.Paid,
 	}
 }
@@ -118,6 +124,11 @@ type poolPage struct {
 	MinimumPayment    string  `json:"minimum_payment"`
 	PaymentFee        string  `json:"payment_fee"`
 	PaymentsSettled   int     `json:"payments_settled"`
+	// What the blocks themselves paid to miners, and the smallest part a
+	// block pays so (pool_inblock.go).
+	InBlock      string `json:"in_block"`
+	InBlockUnits int64  `json:"in_block_units"`
+	InBlockFloor string `json:"in_block_floor"`
 	// Transfers the pool's address has sent that the record does not know
 	// yet. While there are any, nothing is paid (pool_chain.go).
 	TransfersNotInRecord int               `json:"transfers_not_in_record"`
@@ -171,6 +182,7 @@ func readPoolPage(now time.Time) poolPage {
 		Paid: FormatUnits(view.Paid), PendingUnits: view.Pending, Pending: FormatUnits(view.Pending),
 		MinimumPayment: FormatUnits(poolMinimumPaymentUnits), PaymentFee: FormatUnits(poolPaymentFeeUnits),
 		PaymentsSettled: view.PaymentsSettled,
+		InBlock:         FormatUnits(view.InBlock), InBlockUnits: view.InBlock, InBlockFloor: FormatUnits(poolInBlockFloorUnits),
 	}
 	for _, payment := range poolLedger.recentPayments(poolPagePayments) {
 		at := payment.PreparedAt
@@ -199,7 +211,7 @@ func readPoolPage(now time.Time) poolPage {
 			shown.CountsAtHeight = block.Height + page.ConfirmBlocks
 		}
 		for _, part := range block.Parts {
-			shown.Parts = append(shown.Parts, poolPagePart{Address: part.Address, Amount: FormatUnits(part.Units), Units: part.Units, Work: part.Work})
+			shown.Parts = append(shown.Parts, poolPagePart{Address: part.Address, Amount: FormatUnits(part.Units), Units: part.Units, Work: part.Work, InBlock: part.InBlock})
 		}
 		page.Blocks = append(page.Blocks, shown)
 	}
@@ -308,16 +320,17 @@ summary { cursor: pointer; }
 <main>
 <h1>CVN pool</h1>
 <p>Network: <b>{{.Network}}</b>. This pool takes no fee. A block's reward is divided among the most recent shares, counted back over the work of {{.WindowBlocks}} blocks.</p>
-<p class="quiet">Blocks found by this pool pay <code>{{.PoolAddress}}</code>. A block counts once {{.ConfirmBlocks}} more blocks stand on it; from then on each address is owed its part. A block that another block has replaced by then counts for nothing. What is owed is paid by ordinary transfers from that address, to every address owed {{.MinimumPayment}} CVN or more; each transfer carries a fee of {{.PaymentFee}} CVN, shared among the addresses it pays.</p>
+<p class="quiet"><strong>A block this pool finds pays the miners itself.</strong> Its reward is divided among the addresses that did the recent work, and each part of {{.InBlockFloor}} CVN or more is paid in the block, straight to its address: the pool never holds it. A block has room for 50 addresses. Parts that are smaller, or that do not fit, go to the pool's address <code>{{.PoolAddress}}</code> and are owed. What is owed is paid by ordinary transfers from that address, to every address owed {{.MinimumPayment}} CVN or more; each transfer carries a fee of {{.PaymentFee}} CVN, shared among the addresses it pays. A block counts in these figures once {{.ConfirmBlocks}} more blocks stand on it; one that another block has replaced by then counts for nothing.</p>
 
 <div class="scroll">
 <table>
 <tr><th>Pool speed</th><td>{{.SpeedText}}</td></tr>
 <tr><th>Miners connected</th><td>{{.Miners}}</td></tr>
 <tr><th>Blocks found</th><td>{{.BlocksFound}} ({{.BlocksConfirmed}} count, {{.BlocksWaiting}} waiting, {{.BlocksLost}} lost)</td></tr>
-<tr><th>Owed to miners</th><td>{{.Owed}} CVN</td></tr>
+<tr><th>Paid to miners by the blocks themselves</th><td>{{.InBlock}} CVN</td></tr>
+<tr><th>Owed to miners by the pool</th><td>{{.Owed}} CVN</td></tr>
 <tr><th>In payments on their way</th><td>{{.Pending}} CVN</td></tr>
-<tr><th>Paid so far</th><td>{{.Paid}} CVN in {{.PaymentsSettled}} payment(s)</td></tr>
+<tr><th>Paid by the pool so far</th><td>{{.Paid}} CVN in {{.PaymentsSettled}} payment(s)</td></tr>
 <tr><th>Held at the pool's address</th><td>{{.Held}} CVN</td></tr>
 <tr><th>Chain height</th><td>{{.Height}}</td></tr>
 <tr><th>Network difficulty</th><td>{{.NetworkDifficulty}}</td></tr>
@@ -330,12 +343,12 @@ summary { cursor: pointer; }
 <p class="quiet">The mining address saved on your machine is the one this pool counts your work for and pays. No node runs on your machine and no chain is downloaded. The fast miner can also be started by hand: <code>xmrig -o THIS-POOL:{{.WorkPort}} -u CVN_YOUR_ADDRESS -a rx/0 --keepalive</code></p>
 
 <h2>Miners</h2>
-<p class="quiet">Work is what each address has in the window a block found now would be divided over. Owed is its part of the blocks that count, not yet paid. On its way is in a payment that has been sent and is not yet too deep to be replaced.</p>
+<p class="quiet">Work is what each address has in the window a block found now would be divided over. In blocks is what the blocks that count paid it themselves. Owed is what went to the pool's address for it and is not yet paid. On its way is in a payment that has been sent and is not yet too deep to be replaced.</p>
 {{if .Addresses}}
 <div class="scroll">
 <table>
-<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th class="n">Owed</th><th class="n">On its way</th><th class="n">Paid</th><th>Last share</th></tr>
-{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td class="n">{{.Owed}}</td><td class="n">{{.Pending}}</td><td class="n">{{.Paid}}</td><td>{{when .LastShare}}</td></tr>
+<tr><th>Address</th><th class="n">Work</th><th class="n">Part</th><th class="n">In blocks</th><th class="n">Owed</th><th class="n">On its way</th><th class="n">Paid</th><th>Last share</th></tr>
+{{range .Addresses}}<tr><td><code>{{.Address}}</code></td><td class="n">{{.Work}}</td><td class="n">{{printf "%.2f" .Percent}}%</td><td class="n">{{.InBlock}}</td><td class="n">{{.Owed}}</td><td class="n">{{.Pending}}</td><td class="n">{{.Paid}}</td><td>{{when .LastShare}}</td></tr>
 {{end}}
 </table>
 </div>
@@ -350,7 +363,7 @@ summary { cursor: pointer; }
 <table>
 <tr><th class="n">Height</th><th>Block</th><th>Found</th><th class="n">Reward</th><th>State</th><th>Divided among</th></tr>
 {{range .Blocks}}<tr><td class="n">{{.Height}}</td><td><code>{{short .Hash}}</code></td><td>{{when .At}}</td><td class="n">{{.Reward}}</td><td>{{.State}}{{if .CountsAtHeight}} until #{{.CountsAtHeight}}{{end}}</td>
-<td><details><summary>{{len .Parts}} address(es)</summary>{{range .Parts}}<div><code>{{.Address}}</code> {{.Amount}} CVN</div>{{end}}</details></td></tr>
+<td><details><summary>{{len .Parts}} address(es)</summary>{{range .Parts}}<div><code>{{.Address}}</code> {{.Amount}} CVN{{if .InBlock}}, paid in the block{{else}}, owed{{end}}</div>{{end}}</details></td></tr>
 {{end}}
 </table>
 </div>

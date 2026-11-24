@@ -20,6 +20,13 @@ func startPoolForTest(t *testing.T, shareDifficulty int) (server, recordPath str
 	t.Helper()
 	savedStart, savedMin, savedShares, savedAfter := poolStartDifficulty, poolMinShareDifficulty, poolRetargetShares, poolRetargetAfter
 	poolStartDifficulty, poolMinShareDifficulty = shareDifficulty, 1
+	// Unless a test says otherwise, its pool is one whose miners are all too
+	// small to be paid in the block: every part goes to the pool's address
+	// and is owed, which is the part of a pool that keeps a record of debts.
+	// Paying in the block has tests of its own (pool_inblock_test.go).
+	savedFloor := poolInBlockFloorUnits
+	poolInBlockFloorUnits = MaxAmountUnits
+	t.Cleanup(func() { poolInBlockFloorUnits = savedFloor })
 	// The difficulty stays where the test put it.
 	poolRetargetShares, poolRetargetAfter = 1000000, time.Hour
 	poolAddress = testAddress("pool")
@@ -42,6 +49,49 @@ func startPoolForTest(t *testing.T, shareDifficulty int) (server, recordPath str
 		poolPageKept.Unlock()
 	})
 	return startWorkServerForTest(t), recordPath
+}
+
+// addBlockKeptByThePool writes a block into a record as a pool does whose
+// miners are all too small to be paid in the block: divided among the shares
+// up to `winning`, and all of it paid to the pool's address.
+func addBlockKeptByThePool(record *poolRecord, block Block, finder string, winning uint64, at int64) (poolBlock, error) {
+	var rewardUnits int64
+	if len(block.Transactions) > 0 {
+		for _, output := range block.Transactions[0].Outputs {
+			rewardUnits += output.Amount.Units()
+		}
+	}
+	record.Lock()
+	parts, windowWork := poolSplit(record.shares, winning, poolWindowWork(block.Difficulty), rewardUnits)
+	record.Unlock()
+	return record.addBlock(block, finder, parts, 0, rewardUnits, windowWork, at)
+}
+
+// freshWork asks the pool for new work, as it stands now: with the division
+// of the shares handed in so far written into it.
+func (m *fakeMiner) freshWork() minerJob {
+	m.t.Helper()
+	result, errorText, _ := m.call("getjob", map[string]string{})
+	if errorText != "" {
+		m.t.Fatalf("no fresh work: %s", errorText)
+	}
+	var job minerJob
+	if err := json.Unmarshal(result, &job); err != nil || job.JobID == "" {
+		m.t.Fatalf("unexpected work: %s", result)
+	}
+	return job
+}
+
+// shareThenFreshWork has a miner hand in one share that is not a block, and
+// then take the work the pool makes now. A block's division is written into
+// its work when the work is made, so shares count from the next work on.
+func (m *fakeMiner) shareThenFreshWork(job minerJob, networkDifficulty int) minerJob {
+	m.t.Helper()
+	nonce, _ := m.searchWork(job, 0, func(work string) bool { return meets(4)(work) && !meets(networkDifficulty)(work) })
+	if _, errorText, _ := m.call("submit", map[string]string{"job_id": job.JobID, "nonce": nonce}); errorText != "" {
+		m.t.Fatalf("share refused: %s", errorText)
+	}
+	return m.freshWork()
 }
 
 // poolLogin logs a stand-in miner in and returns its first work.
@@ -146,7 +196,10 @@ func TestPoolCountsSharesAndDividesABlock(t *testing.T) {
 		t.Fatalf("after three shares at difficulty 4 the record holds %+v", view)
 	}
 
-	// Bob's answer meets the network's difficulty: it is a share and a block.
+	// Bob hands in one share and is sent fresh work. That work's reward is
+	// divided among the shares so far: Alice's three and Bob's one.
+	bobJob = second.shareThenFreshWork(bobJob, 64)
+	// Bob's next answer meets the network's difficulty: it is a block.
 	blockNonce, _ := second.searchWork(bobJob, 0, meets(64))
 	if result, errorText, _ := second.call("submit", map[string]string{"job_id": bobJob.JobID, "nonce": blockNonce}); errorText != "" || !strings.Contains(string(result), "OK") {
 		t.Fatalf("the block was refused: %s %s", errorText, result)
@@ -217,7 +270,7 @@ func TestPoolCountsSharesAndDividesABlock(t *testing.T) {
 	}
 	poolLedger = again
 	view = again.view(64, time.Now().Unix(), 10)
-	if view.Shares != 4 || view.BlocksFound != 1 || view.Blocks[0].Hash != tip.Hash || len(view.Blocks[0].Parts) != 2 {
+	if view.Shares != 5 || view.BlocksFound != 1 || view.Blocks[0].Hash != tip.Hash || len(view.Blocks[0].Parts) != 2 {
 		t.Errorf("after opening the record again it holds %d shares and %d blocks", view.Shares, view.BlocksFound)
 	}
 }
@@ -515,6 +568,7 @@ func TestPoolBlockCountsOnceItIsDeepEnough(t *testing.T) {
 			t.Fatalf("share refused: %s", errorText)
 		}
 	}
+	bobJob = second.shareThenFreshWork(bobJob, 64)
 	blockNonce, _ := second.searchWork(bobJob, 0, meets(64))
 	_, errorText, pushed := second.call("submit", map[string]string{"job_id": bobJob.JobID, "nonce": blockNonce})
 	if errorText != "" || GetLatestBlockInternal().Index != 1 {
@@ -648,7 +702,7 @@ func TestPoolBlockThatWasReplacedCountsForNothing(t *testing.T) {
 	replaced := Block{Index: 1, Hash: strings.Repeat("ab", 32), Difficulty: 64, Transactions: []Transaction{
 		{Outputs: []UTXOOutput{{Recipient: testAddress("pool"), Amount: UnitsAmount(cvn("50"))}}},
 	}}
-	recorded, err := poolLedger.addBlock(replaced, carol, place, time.Now().Unix())
+	recorded, err := addBlockKeptByThePool(poolLedger, replaced, carol, place, time.Now().Unix())
 	if err != nil || len(recorded.Parts) != 1 || recorded.Parts[0].Units != cvn("50") {
 		t.Fatalf("recording the block: %v %+v", err, recorded)
 	}
@@ -685,15 +739,16 @@ func TestPoolBlockThatWasReplacedCountsForNothing(t *testing.T) {
 			realParts = block.Parts
 		}
 	}
-	// Carol's share came before the real block 1 too, so she has a part in
-	// that one, and that part is all she is owed.
+	// Carol's share was the only one when the work for the real block 1
+	// was made, so that block is hers too, and it is all she is owed: once,
+	// for the block that counts, and nothing for the one that was replaced.
 	var carolPart int64
 	for _, part := range realParts {
 		if part.Address == carol {
 			carolPart = part.Units
 		}
 	}
-	if account, _ := poolLedger.account(carol, 64); account.Owed != carolPart || account.Owed >= cvn("50") {
+	if account, _ := poolLedger.account(carol, 64); account.Owed != carolPart || carolPart != cvn("50") || account.Earned != cvn("50") {
 		t.Errorf("Carol is owed %s; her part of the block that counts is %s", FormatUnits(account.Owed), FormatUnits(carolPart))
 	}
 }

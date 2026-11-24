@@ -968,20 +968,24 @@ Be specific or say nothing. Do not add a summary.
 
 ## Prompt 8: the pool
 
-Give `cvn_audit_pool.txt`. A review of the mining pool built into the node, which holds other people's coins between the moment a block is found and the moment its miners are paid. It does not cover the rules of validity, the networking or the wallets.
+Give `cvn_audit_pool.txt`. A review of the mining pool built into the node, and of the one rule of the chain that was changed for it: a block's reward may pay up to fifty addresses. A pool's block pays its miners itself; the pool holds only the parts too small for a block. It does not cover the other rules of validity, the networking or the wallets.
 
 ```text
-You are reviewing ONE part of a proof-of-work blockchain, written in Go, before it is used by the public: a mining pool built into the node. The pool takes miners in, counts their work, builds blocks that pay its own address, records what each miner is owed, and pays them. It changes no rule of the chain. Between a block and its payment it holds other people's coins, so a mistake here loses or misdirects money. Your job is to find what is wrong. Do not summarise, explain what a pool is, or praise.
+You are reviewing ONE part of a proof-of-work blockchain, written in Go, before it is used by the public: a mining pool built into the node, and one rule of the chain changed for it. The pool takes miners in, counts their work, and builds blocks whose reward pays those miners directly, in the block. Parts too small for a block go to the pool's own address, are recorded as owed, and are paid on later. The rule changed is that a block's reward may have up to fifty outputs where it had one. A mistake in the rule creates or loses coins for the whole network; a mistake in the pool loses or misdirects its miners' money. Your job is to find what is wrong. Do not summarise, explain what a pool is, or praise.
 
 WHAT YOU HAVE
 
-One file, attached or pasted below, holding nineteen files from a larger code base. The rules that decide whether a block or a transfer is valid are NOT here except node/tx_rules.go; assume a block or transfer the node accepted is valid. Do not guess at code you cannot see; where a finding depends on it, say so.
+One file, attached or pasted below, holding twenty-four files from a larger code base. Of the rules that decide whether a block or a transfer is valid, only node/tx_rules.go and node/block_format.go are here; assume the rest is correct. Do not guess at code you cannot see; where a finding depends on it, say so.
 
-The material numbers its files ("FILE n OF 19") and ends with the line "END OF PACK". Begin by stating the number of the last file you can see and whether you can see that line. If you cannot, your copy was cut short: say so and stop.
+The material numbers its files ("FILE n OF 24") and ends with the line "END OF PACK". Begin by stating the number of the last file you can see and whether you can see that line. If you cannot, your copy was cut short: say so and stop.
 
 Read POOL_DESIGN.md first. It states how the pool is meant to work, as claims. It was written by the authors and may be wrong; where the code does not do what it says, that is a finding.
 
 QUESTIONS
+
+A. The rule. In ValidateBlockTransactions and checkRewardFormat a reward may now have up to RewardMaxOutputs outputs, each to a different address. Find a reward that is accepted and should not be, or refused and should not be: more than the block may pay, in any combination of outputs; an overflow in adding them; the same address twice by any spelling; an output that is not a coin; the identifier check that looks only at output 0; a reward with no outputs. Does every output of a reward become a coin, and is every one removed again if the block is replaced? Does a block with a reward of fifty outputs and as many transfers as a miner puts in stay under the size limit?
+
+B. Paying in the block. poolRewardOutputs turns a division into a reward's outputs, and newJob writes it into each miner's work. Do the outputs always add up to exactly what the block may pay, with no address twice, for any division? Is what the record says a block paid (the parts marked InBlock, PoolIndex, PoolUnits) always what that block's reward on the chain really pays? The division is fixed when the work is made: can a miner gain by when it takes work, asks for fresh work, or hands in shares? Can it make the pool build work that pays it more than its part?
 
 1. Paying twice. Find any sequence of events in which an address receives on the chain more than its parts of the blocks that count: a program stopped between two writes, a payment prepared, signed, sent, mined, replaced by a change of chain, sent again, the paying command run twice at once, a record closed and opened. Trace markSent, noteMined, settlePayment, returnPayment and returnStalePayments, and say what is on disk at each point a crash could fall.
 
@@ -1001,13 +1005,13 @@ QUESTIONS
 
 DO NOT REPORT
 
-What POOL_DESIGN.md lists under "Not in this version" or in its table of risks as known. That a pool's operator must be trusted to pay. Style and wording.
+What POOL_DESIGN.md lists under "Not in this version" or in its table of risks as known. That a pool can hand out work that pays the wrong addresses, and that its operator must be trusted with the small parts it holds. Style and wording.
 
 HOW TO ANSWER
 
 Answer each question in order, in a few lines: what you checked and what you concluded. "Did not check" is acceptable; silence is not.
 
-Then findings, most serious first, each with: Title; Severity (Critical: coins are lost or paid to the wrong address / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps in order; the lines that allow it, quoted; the smallest fix.
+Then findings, most serious first, each with: Title; Severity (Critical: coins are created, lost or paid to the wrong address / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps in order; the lines that allow it, quoted; the smallest fix.
 
 Be specific or say nothing. Do not add a summary.
 ```

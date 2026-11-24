@@ -247,8 +247,8 @@ Over a long time the two come to the same. A pool does not add to what a machine
 |---|---|---|
 | What runs on your machine | The whole program: a node with its copy of the chain, and a miner | The fast miner only. No node and no chain |
 | Who builds the blocks | Your own node | The pool |
-| When you are paid | When your machine finds a block: all of it, straight to your address | Your part of every block the pool finds, sent by the pool once it owes you enough |
-| Whom you rely on | Nobody | The pool's operator, for the coins the pool holds until it pays them |
+| When you are paid | When your machine finds a block: all of it, straight to your address | In every block the pool finds while your work is recent: your part, straight to your address, in the block itself |
+| Whom you rely on | Nobody | The pool's operator, to hand out honest work, and for any parts too small for a block, which the pool holds until it pays them |
 
 Nobody has to use a pool. Mining by yourself works exactly as before, and you can change from one to the other whenever you like: the coins arrive at the same address either way.
 
@@ -302,7 +302,7 @@ Mind the comma at the end of every line but the last. On Windows, the first time
 ====================================================================
 2026/11/24 09:26:28 [POOL] Connected to the pool.
 2026/11/24 09:26:37 [POOL] The pool took this machine's first share. From here on it has a part in the blocks the pool finds.
-2026/11/24 09:27:28 [POOL] 17.85 kH/s · shares taken 2 · the pool owes this address 0 CVN, has 0 CVN on its way and has paid 0 CVN
+2026/11/24 09:27:28 [POOL] 17.85 kH/s · shares taken 2 · blocks have paid this address 0 CVN; the pool owes it 0 CVN, has 0 CVN on its way and has paid 0 CVN
 ```
 
 The last line comes once a minute. In it:
@@ -310,7 +310,7 @@ The last line comes once a minute. In it:
 - **Shares taken** are pieces of work the pool has counted for you. The pool asks each machine for work it can do about once every 30 seconds, so a fast machine and a slow one both hand in about two shares a minute; the fast machine's shares are simply worth more.
 - **Too late** counts shares that arrived just after somebody found a block. Every miner has a few. They are not a fault.
 - **Refused**, if it appears, counts shares the pool would not take for another reason, and the reason is printed when it happens. More than a handful means something is wrong: usually a miner that is not the CVN edition, or an unstable machine (section 4).
-- **Owes, on its way, has paid** are the pool's own figures for your address, read from its page.
+- **Blocks have paid** is what the pool's blocks have paid your address themselves, for blocks that are 100 deep. **Owes, on its way, has paid** are for any parts too small for a block, which the pool holds and pays on. All four are the pool's own figures, read from its page.
 
 The program checks that the pool is on the network it was started for, and stops with a message if it is not. If the pool cannot be reached, the fast miner keeps trying, and the line says "Not connected to the pool at the moment".
 
@@ -319,16 +319,19 @@ The program checks that the pool is on the network it was started for, and stops
 This is how a pool run with this program works. A pool run with other software has its own rules: read them before you mine there.
 
 1. **A block the pool finds is divided by recent work.** The pool looks back over the most recent shares, as far as it takes to add up to twice the work of one block, and divides the block's reward among their addresses by the work each did. A machine that has been at the pool for a while has a part in every block, whoever's machine found it.
-2. **The block has to last.** It counts once 100 more blocks stand on it, about 75 minutes. Until then it is "waiting". If the network replaces it in that time, which happens now and then to every miner, it counts for nothing and nobody is owed for it.
-3. **You are owed your part** from that moment. The pool page shows it.
-4. **The pool pays** every address it owes 1 CVN or more, by an ordinary transfer, by itself every five hours (a pool's operator may have set another interval). Each transfer carries a fee of 0.001 CVN, shared equally among the addresses it pays, so each receives at most 0.001 CVN less than it was owed.
-5. **An amount under 1 CVN stays owed** until it has grown. It does not expire.
+2. **The block pays you itself.** Your part is one of the block's own payments, straight from the network to your address. The pool never holds it. You can see it on any node's explorer as soon as the block is found, and it is sure once 100 more blocks stand on it, about 75 minutes. If the network replaces the block in that time, which happens now and then to every miner, the payment goes with it.
+3. **A block has room for 50 addresses, and pays no part under 0.01 CVN.** If your part of a block is smaller than that, or the pool has more miners than a block has room for and yours is among the smallest parts, the block pays it to the pool's address and the pool owes it to you.
+4. **What the pool owes, it pays** by itself every five hours (a pool's operator may have set another interval), to every address it owes 1 CVN or more, by an ordinary transfer. Each transfer carries a fee of 0.001 CVN, shared equally among the addresses it pays. An amount under 1 CVN stays owed until it has grown. It does not expire.
+
+**You will receive many coins.** Every pool block that pays you makes a new coin at your address, perhaps hundreds a day. They add up to your balance like any others. A single transfer can spend 200 coins, so before sending a large amount, use "Combine my coins" in the wallet, which gathers them into one.
 
 The pool page, at `http://POOL-NAME:18081/pool` on the CVN Testnet and `http://POOL-NAME:28081/pool` on devnet, shows every block the pool found, what became of it, and how its reward was divided address by address. Anyone can add the division up. The coins themselves are on the chain: the pool's address, and every payment from it, can be looked up on any node's explorer.
 
 ### What a pool can and cannot do
 
-- **It holds your coins until it pays them.** A block's reward is paid by the network to the pool's address, and the pool sends each miner's part on later. An operator who is dishonest, careless or broken into could fail to pay. The pool page lets you check that the division is right and that payments are made; it cannot make an operator pay. Mine at a pool whose operator you have reason to trust, and notice if the amount it owes you keeps growing without being paid.
+- **It does not hold what its blocks pay you.** Those coins go from the network to your address in the block. No operator, and nobody who breaks into a pool, can keep them.
+- **It holds the small parts.** A part under 0.01 CVN, or one the block had no room for, goes to the pool's address and is owed to you. An operator who is dishonest, careless or broken into could fail to pay those. Notice if the amount a pool owes you keeps growing without being paid.
+- **It decides what work it hands out.** Your machine searches the work it is given without reading it, so a dishonest pool could hand out work that pays somebody else. It cannot hide it: every block's payments are on the chain, and the pool page shows who each block paid. Look now and then that the blocks pay you.
 - **It cannot touch your wallet.** The pool is given your address and nothing else. Never give a pool, or anyone, your private key or recovery words.
 - **It may keep a fee.** A pool run with this program keeps none: there is no fee in it to switch on. A pool run with other software sets its own.
 - **The connection is not encrypted** in this version. Somebody between you and the pool could see your address and your work. That is all it carries.

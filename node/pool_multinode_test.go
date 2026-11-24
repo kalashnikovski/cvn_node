@@ -202,11 +202,147 @@ func (w *poolWorker) problem() string {
 
 // poolCluster is a cluster whose network mines with RandomX, on which a
 // block counts after six more and a pool asks its miners for difficulty 4.
+// Its pool pays nothing in the block: every part goes to the pool's address
+// and is owed, so that these tests see the whole of the pool's keeping of
+// debts and paying them. A pool that pays in its blocks is inBlockCluster.
 func poolCluster(t *testing.T) *localCluster {
+	c := inBlockCluster(t)
+	c.env = append(c.env, fmt.Sprintf("CVN_LOCALNET_POOL_FLOOR=%d", MaxAmountUnits))
+	return c
+}
+
+// inBlockCluster is poolCluster with a pool as it really runs: every part of
+// a hundredth of a coin or more is paid by the block itself.
+func inBlockCluster(t *testing.T) *localCluster {
 	c := newLocalCluster(t)
 	c.env = append(c.env, "CVN_LOCALNET_RANDOMX=1", "CVN_LOCALNET_REORG_LIMIT=6", "CVN_LOCALNET_POOL_SHARE=4")
 	c.start = 48 // a block takes about fifty hashes to begin with
 	return c
+}
+
+// TestMultiNodeAPoolPaysInItsBlocks is a pool as it really runs, with three
+// miners, beside two seeds. Every block the pool finds pays the miners
+// itself. The pool's address holds nothing, owes nothing, and there is
+// nothing for the paying command to pay; and what each miner holds, on
+// every node, is what the pool's record says the blocks paid it.
+func TestMultiNodeAPoolPaysInItsBlocks(t *testing.T) {
+	c := inBlockCluster(t)
+	const wait = 5 * time.Minute
+	poolsKey, _, poolsAddress := newTestWallet(t)
+	_, _, fastAddress := newTestWallet(t)
+	_, _, middleAddress := newTestWallet(t)
+	_, _, slowAddress := newTestWallet(t)
+
+	seedA := c.seed("seed-a", 1, nil).startNode()
+	seedB := c.seed("seed-b", 2, []int{1}).startNode()
+	c.waitForHeight(wait, 0, seedA, seedB)
+	pool := c.pool("pool", 5, []int{1, 2}, poolsAddress).startNode()
+	c.eventually(wait, "the pool did not publish its record", func() bool {
+		page, ok := poolPageOf(pool)
+		return ok && page.PoolAddress == poolsAddress
+	})
+	workers := []*poolWorker{
+		startPoolWorker(t, pool, fastAddress, 0),
+		startPoolWorker(t, pool, middleAddress, 40*time.Millisecond),
+		startPoolWorker(t, pool, slowAddress, 160*time.Millisecond),
+	}
+	c.eventually(wait, "six of the pool's blocks did not come to count", func() bool {
+		for _, worker := range workers {
+			if fault := worker.problem(); fault != "" {
+				t.Fatalf("a miner was told: %s", fault)
+			}
+		}
+		page, _ := poolPageOf(pool)
+		return page.BlocksConfirmed >= 6
+	})
+	for _, worker := range workers {
+		worker.halt()
+	}
+	c.eventually(wait, "the pool still counts miners that have left", func() bool {
+		page, _ := poolPageOf(pool)
+		return page.Miners == 0
+	})
+	height := seedA.height()
+	c.waitForHeight(wait, height, seedB, pool)
+	height = seedA.height()
+	var page poolPage
+	c.eventually(wait, "blocks six deep were left undecided", func() bool {
+		page, _ = poolPageOf(pool)
+		return allDeepBlocksDecided(page, height)
+	})
+	if page.BlocksFound != int(height) || len(page.Blocks) != page.BlocksFound {
+		t.Fatalf("the chain has %d blocks and the pool found %d (%d shown)", height, page.BlocksFound, len(page.Blocks))
+	}
+
+	// Every block of the pool's is the block the seeds hold, and its reward
+	// on the chain pays exactly the parts the record says it paid.
+	paid := make(map[string]int64) // by every block still standing
+	var keptByThePool int64
+	for _, block := range page.Blocks {
+		if block.State == poolBlockLost {
+			continue
+		}
+		if seedA.hashAt(block.Height) != block.Hash || seedB.hashAt(block.Height) != block.Hash {
+			t.Errorf("block %d in the pool's record is not the block the seeds hold", block.Height)
+		}
+		var parts int64
+		for _, part := range block.Parts {
+			parts += part.Units
+			if part.InBlock {
+				paid[part.Address] += part.Units
+			} else {
+				keptByThePool += part.Units
+			}
+		}
+		if parts != block.RewardUnits {
+			t.Errorf("the parts of block %d add up to %d units; its reward was %d", block.Height, parts, block.RewardUnits)
+		}
+	}
+	// Three miners, each with a real part of every window: no part was too
+	// small for the block, so the pool was paid nothing and owes nothing.
+	if keptByThePool != 0 || page.OwedUnits != 0 || page.HeldUnits != 0 || page.InBlockUnits == 0 {
+		t.Errorf("the pool kept %d units, owes %d, holds %d; the blocks that count paid %d", keptByThePool, page.OwedUnits, page.HeldUnits, page.InBlockUnits)
+	}
+	for _, seed := range []*localNode{seedA, seedB} {
+		balances := seed.balances()
+		if got := balances[poolsAddress]; got != 0 {
+			t.Errorf("%s counts %v CVN at the pool's address; its blocks paid the miners", seed.name, got)
+		}
+		for _, worker := range workers {
+			if got, want := balances[worker.address], UnitsAmount(paid[worker.address]).CVN(); got != want || want == 0 {
+				t.Errorf("%s counts %v CVN at the miner %s; the pool's blocks paid it %v", seed.name, got, worker.address, want)
+			}
+		}
+	}
+	if paid[fastAddress] <= paid[slowAddress] {
+		t.Errorf("the blocks paid the fast miner %d units and the slow one %d", paid[fastAddress], paid[slowAddress])
+	}
+	// In the record, for the blocks that count: earned is what the blocks paid.
+	for _, address := range page.Addresses {
+		if address.EarnedUnits != address.InBlockUnits || address.OwedUnits != 0 || address.PaidUnits != 0 {
+			t.Errorf("the account of %s: %+v", address.Address, address)
+		}
+	}
+	// The paying command has nothing to pay, and says so.
+	keyFile := filepath.Join(c.folder, "pool-key.txt")
+	if err := os.WriteFile(keyFile, []byte(poolsKey+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := pool.payOut(keyFile); err != nil || !strings.Contains(out, "Nothing to pay") {
+		t.Errorf("the paying command at a pool that owes nothing: %v\n%s", err, out)
+	}
+	for _, node := range []*localNode{seedA, seedB, pool} {
+		if log := node.log(); strings.Contains(log, "CONSENSUS REJECTION") || strings.Contains(log, "panic:") {
+			t.Errorf("%s refused a block or stopped", node.name)
+		}
+	}
+	// The record the pool leaves behind adds up.
+	pool.stopNode()
+	if report, err := checkPoolRecordFile(filepath.Join(pool.folder, "pool_"+localnetName+".db")); err != nil {
+		t.Errorf("the record the pool left behind does not add up: %v", err)
+	} else if report.InBlockUnits != page.InBlockUnits || report.CoinUnits != 0 {
+		t.Errorf("the record the pool left behind says: %s", report)
+	}
 }
 
 func (c *localCluster) pool(name string, number int, seeds []int, address string) *localNode {

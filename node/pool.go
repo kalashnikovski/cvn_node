@@ -15,13 +15,15 @@ import (
 // A POOL: MANY MINERS, ONE NODE
 //
 // Started with `--pool CVN_ADDRESS`, a node becomes a pool. Miners anywhere
-// point the fast miner at it and log in with their own CVN address. Every
-// block the node builds pays the pool's address; the node keeps a record of
-// how much work each miner did, and a block's reward is divided among them
-// by that record (pool_ledger.go). A block counts once it is too deep to be
-// replaced, and from then on each miner is owed its part. What is owed is
-// paid by ordinary transfers, which this node prepares and a separate
-// command signs (pool_pay.go): the node itself holds no key.
+// point the fast miner at it and log in with their own CVN address. The node
+// keeps a record of how much work each miner did (pool_ledger.go), and every
+// block it builds pays the miners themselves, by that record: the block's
+// reward has an output for each of them (pool_inblock.go). The pool never
+// holds those coins. Only parts too small for the block, or more than a
+// block has room for, go to the pool's address; each is owed to its miner
+// once the block is too deep to be replaced, and paid by ordinary transfers
+// which this node prepares and a separate command signs (pool_pay.go). The
+// node itself holds no key.
 //
 // Nothing here is a rule of the chain. A block found by a pool is an
 // ordinary block, checked by every node like any other, and anyone can run a
@@ -33,7 +35,8 @@ import (
 // to work on and checks each answer with CVN's RandomX. A pool changes three
 // things:
 //
-//   - The block pays the pool's address, whoever is working on it.
+//   - The block's reward is divided among the miners who did the recent
+//     work, whoever is working on it.
 //   - The miner is asked for much less than the network asks: a difficulty
 //     of its own, chosen so that it sends an answer about every
 //     poolShareSeconds. Each answer that meets it is a share, recorded with
@@ -198,7 +201,14 @@ func poolSettle() (confirmed, lost int) {
 		}
 		if decided.State == poolBlockConfirmed {
 			confirmed++
-			announceNetworkStatus(fmt.Sprintf("✅ [POOL] Block #%d counts: %d blocks stand on it. %s CVN is now owed to %d address(es).", decided.Height, depth, FormatUnits(decided.RewardUnits), len(decided.Parts)))
+			inBlock := 0
+			for _, part := range decided.Parts {
+				if part.InBlock {
+					inBlock++
+				}
+			}
+			announceNetworkStatus(fmt.Sprintf("✅ [POOL] Block #%d counts: %d blocks stand on it. It paid %s CVN to %d address(es) itself, and %s CVN is now owed to %d more.",
+				decided.Height, depth, FormatUnits(decided.RewardUnits-decided.PoolUnits), inBlock, FormatUnits(decided.PoolUnits), len(decided.Parts)-inBlock))
 		} else {
 			lost++
 			announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d was replaced by another block. Nothing is owed for it.", decided.Height))
@@ -451,7 +461,7 @@ func (c *stratumClient) poolBlockFound(job *stratumJob, nonce uint32, winningSha
 		noteNetworkEvent(fmt.Sprintf("⛏️ [POOL] A miner found block #%d, but the chain had moved on before it could be placed.", block.Index))
 		return
 	}
-	found, err := poolLedger.addBlock(block, c.address, winningShare, now.Unix())
+	found, err := poolLedger.addBlock(block, c.address, job.parts, job.poolIndex, job.poolUnits, job.windowWork, now.Unix())
 	if err != nil {
 		announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d was found and placed, but could not be written into the pool's record: %v", block.Index, err))
 		return

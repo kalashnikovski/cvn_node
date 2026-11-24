@@ -55,6 +55,13 @@ type stratumJob struct {
 	// nonces it has already handed in for it (see pool.go).
 	shareDifficulty int
 	seen            map[uint32]bool
+	// On a pool: the division written into this work's reward, the pool's
+	// own output in it, and the work the division was counted over
+	// (pool_inblock.go).
+	parts      []poolPart
+	poolIndex  int
+	poolUnits  int64
+	windowWork int64
 }
 
 // askedDifficulty is what an answer to this job must meet: the network's
@@ -161,6 +168,13 @@ func workWaitsForClock() bool {
 
 // buildStratumJob prepares work on top of the current tip paying `address`.
 func buildStratumJob(address string) (*stratumJob, bool) {
+	return buildStratumJobDivided(address, nil)
+}
+
+// buildStratumJobDivided is buildStratumJob with the reward's outputs chosen
+// by `divide`, which is given what the block may pay and the difficulty the
+// block will have.
+func buildStratumJobDivided(address string, divide func(totalUnits int64, difficulty int) []UTXOOutput) (*stratumJob, bool) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 {
 		return nil, false
 	}
@@ -180,10 +194,15 @@ func buildStratumJob(address string) (*stratumJob, bool) {
 		return nil, false
 	}
 	serial := atomic.AddInt64(&stratumSerial, 1)
-	transactions := buildBlockContents(tip, address, timestamp, fmt.Sprintf("external-%d-%d", serial, time.Now().UnixNano()))
+	difficulty := CalculateNextDifficulty(tip, timestamp)
+	var chosen func(int64) []UTXOOutput
+	if divide != nil {
+		chosen = func(totalUnits int64) []UTXOOutput { return divide(totalUnits, difficulty) }
+	}
+	transactions := buildBlockContentsDivided(tip, address, timestamp, fmt.Sprintf("external-%d-%d", serial, time.Now().UnixNano()), chosen)
 	template := Block{
 		Version: 1, Index: nextIndex, Timestamp: timestamp, Transactions: transactions, PrevHash: tip.Hash,
-		Difficulty: CalculateNextDifficulty(tip, timestamp), UncleHash: emptyUncleHash, UncleMiner: emptyUncleMiner,
+		Difficulty: difficulty, UncleHash: emptyUncleHash, UncleMiner: emptyUncleMiner,
 	}
 	txDigest := BlockTransactionsDigest(nextIndex, transactions)
 	return &stratumJob{
@@ -245,16 +264,30 @@ func (c *stratumClient) reply(id json.RawMessage, result interface{}, errorText 
 
 // newJob builds fresh work for this client and remembers it.
 func (c *stratumClient) newJob() (*stratumJob, bool) {
-	payTo := c.address
+	var job *stratumJob
+	var ok bool
 	if poolRunning() {
-		payTo = poolAddress // the miner is credited in the pool's record
+		// The block's reward pays the miners who did the recent work, as
+		// that work stands now (pool_inblock.go).
+		var parts []poolPart
+		var poolIndex int
+		var poolUnits, windowWork int64
+		job, ok = buildStratumJobDivided(poolAddress, func(totalUnits int64, difficulty int) []UTXOOutput {
+			var shared []poolPart
+			shared, windowWork = poolLedger.division(poolWindowWork(difficulty), totalUnits)
+			var outputs []UTXOOutput
+			outputs, parts, poolIndex, poolUnits = poolRewardOutputs(shared, poolAddress, c.address, totalUnits)
+			return outputs
+		})
+		if ok {
+			job.parts, job.poolIndex, job.poolUnits, job.windowWork = parts, poolIndex, poolUnits, windowWork
+			job.shareDifficulty = c.shareDifficultyFor(job.template.Difficulty)
+		}
+	} else {
+		job, ok = buildStratumJob(c.address)
 	}
-	job, ok := buildStratumJob(payTo)
 	if !ok {
 		return nil, false
-	}
-	if poolRunning() {
-		job.shareDifficulty = c.shareDifficultyFor(job.template.Difficulty)
 	}
 	c.jobsMu.Lock()
 	c.jobs = append(c.jobs, job)

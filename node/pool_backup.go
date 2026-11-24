@@ -64,6 +64,7 @@ type poolRecordReport struct {
 	Addresses                        int
 	EarnedUnits, OwedUnits           int64
 	PendingUnits, PaidUnits          int64
+	InBlockUnits                     int64 // paid by the blocks themselves
 	Payments, PaymentsUnderWay       int
 	Coins                            int
 	CoinUnits                        int64
@@ -73,8 +74,8 @@ type poolRecordReport struct {
 }
 
 func (r poolRecordReport) String() string {
-	return fmt.Sprintf("%d address(es) owed %s CVN, with %s CVN on its way and %s CVN paid; %d block(s) found, of which %d count, %d are waiting and %d were lost; %d payment(s); %d recent share(s)",
-		r.Addresses, FormatUnits(r.OwedUnits), FormatUnits(r.PendingUnits), FormatUnits(r.PaidUnits),
+	return fmt.Sprintf("%d address(es), paid %s CVN by the blocks themselves, owed %s CVN, with %s CVN on its way and %s CVN paid by the pool; %d block(s) found, of which %d count, %d are waiting and %d were lost; %d payment(s); %d recent share(s)",
+		r.Addresses, FormatUnits(r.InBlockUnits), FormatUnits(r.OwedUnits), FormatUnits(r.PendingUnits), FormatUnits(r.PaidUnits),
 		r.Blocks, r.Confirmed, r.Waiting, r.Lost, r.Payments, r.Shares)
 }
 
@@ -82,9 +83,11 @@ func (r poolRecordReport) String() string {
 // that it is whole and that it adds up:
 //
 //   - every share, block, account, payment and coin in it can be read;
-//   - the parts of every block that counts add up to its reward;
+//   - the parts of every block that counts add up to its reward, and those
+//     the block did not pay itself add up to what it paid the pool;
 //   - what each address has earned is its parts of the blocks that count,
-//     and is what it is owed, has on its way and has been paid together;
+//     and is what the blocks paid it and what it is owed, has on its way
+//     and has been paid by the pool together;
 //   - what is on its way and what has been paid are what the payments say;
 //   - every coin set aside is set aside for a payment that is under way,
 //     and each such payment has exactly the coins it spends;
@@ -135,6 +138,7 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 
 		// What the blocks and the payments say each address should have.
 		earned, pending, paid := make(map[string]int64), make(map[string]int64), make(map[string]int64)
+		inBlock := make(map[string]int64)
 		if err := bBlocks.ForEach(func(_, raw []byte) error {
 			var block poolBlock
 			if json.Unmarshal(raw, &block) != nil || block.Hash == "" || block.Height < 1 {
@@ -151,15 +155,23 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 				report.Lost++
 			case poolBlockConfirmed:
 				report.Confirmed++
-				var parts int64
+				var parts, kept int64
 				for _, part := range block.Parts {
 					if part.Units > 0 {
 						parts += part.Units
 						earned[part.Address] += part.Units
+						if part.InBlock {
+							inBlock[part.Address] += part.Units
+						} else {
+							kept += part.Units
+						}
 					}
 				}
 				if parts != block.RewardUnits {
 					return fmt.Errorf("the parts of block #%d add up to %s CVN and its reward was %s", block.Height, FormatUnits(parts), FormatUnits(block.RewardUnits))
+				}
+				if kept != block.PoolUnits {
+					return fmt.Errorf("block #%d paid the pool's address %s CVN, and the parts it did not pay itself add up to %s", block.Height, FormatUnits(block.PoolUnits), FormatUnits(kept))
 				}
 			default:
 				return fmt.Errorf("block #%d is neither waiting, counted nor lost", block.Height)
@@ -211,9 +223,12 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 			if json.Unmarshal(raw, &account) != nil {
 				return fmt.Errorf("the account of %s cannot be read", address)
 			}
-			if account.Owed < 0 || account.Pending < 0 || account.Paid < 0 || account.Earned != account.Owed+account.Pending+account.Paid {
-				return fmt.Errorf("the account of %s does not add up: earned %s CVN, owed %s, on its way %s, paid %s",
-					address, FormatUnits(account.Earned), FormatUnits(account.Owed), FormatUnits(account.Pending), FormatUnits(account.Paid))
+			if account.Owed < 0 || account.Pending < 0 || account.Paid < 0 || account.InBlock < 0 || account.Earned != account.InBlock+account.Owed+account.Pending+account.Paid {
+				return fmt.Errorf("the account of %s does not add up: earned %s CVN, paid in blocks %s, owed %s, on its way %s, paid %s",
+					address, FormatUnits(account.Earned), FormatUnits(account.InBlock), FormatUnits(account.Owed), FormatUnits(account.Pending), FormatUnits(account.Paid))
+			}
+			if account.InBlock != inBlock[address] {
+				return fmt.Errorf("the record says the blocks themselves paid %s %s CVN, and the blocks that count paid it %s", address, FormatUnits(account.InBlock), FormatUnits(inBlock[address]))
 			}
 			if account.Earned != earned[address] {
 				return fmt.Errorf("the record says %s has earned %s CVN, and the blocks that count give it %s", address, FormatUnits(account.Earned), FormatUnits(earned[address]))
@@ -227,6 +242,7 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 			accounted[address] = true
 			report.Addresses++
 			report.EarnedUnits += account.Earned
+			report.InBlockUnits += account.InBlock
 			report.OwedUnits += account.Owed
 			report.PendingUnits += account.Pending
 			report.PaidUnits += account.Paid

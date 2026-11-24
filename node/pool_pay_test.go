@@ -35,7 +35,11 @@ func startPayingPool(t *testing.T) *payingPool {
 // startPayingPoolAt is startPayingPool on a chain whose blocks take
 // `difficulty` hashes. Nothing these tests check depends on the figure, and
 // they mine many blocks, so it is kept small.
-func startPayingPoolAt(t *testing.T, difficulty int) *payingPool {
+//
+// With `floor` given, parts of that many units or more are paid in the block
+// itself (pool_inblock.go), and what Alice and Bob are owed is for the test
+// to check. Without it nothing is paid in the block: every part is owed.
+func startPayingPoolAt(t *testing.T, difficulty int, floor ...int64) *payingPool {
 	t.Helper()
 	startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: int64(difficulty)}})
 	Params.HeartbeatInitialDifficulty = int64(difficulty)
@@ -45,6 +49,9 @@ func startPayingPoolAt(t *testing.T, difficulty int) *payingPool {
 		t.Fatal(err)
 	}
 	server, recordPath := startPoolForTest(t, 4)
+	if len(floor) > 0 {
+		poolInBlockFloorUnits = floor[0]
+	}
 	pool := &payingPool{privateKey: privateKey, publicKey: publicKey, address: strings.TrimSpace(address),
 		alice: testAddress("alice"), bob: testAddress("bob"), recordPath: recordPath}
 	poolAddress = pool.address
@@ -68,6 +75,9 @@ func startPayingPoolAt(t *testing.T, difficulty int) *payingPool {
 		}
 	}
 	first.conn.Close()
+	// Bob hands in a share too and takes fresh work: its reward is divided
+	// among Alice's three shares and Bob's one.
+	bobJob = pool.miner.shareThenFreshWork(bobJob, difficulty)
 	blockNonce, _ := pool.miner.searchWork(bobJob, 0, meets(difficulty))
 	_, errorText, pushed := pool.miner.call("submit", map[string]string{"job_id": bobJob.JobID, "nonce": blockNonce})
 	if errorText != "" || GetLatestBlockInternal().Index != 1 {
@@ -85,7 +95,7 @@ func startPayingPoolAt(t *testing.T, difficulty int) *payingPool {
 	if confirmed, lost := poolSettle(); confirmed != 1 || lost != 0 {
 		t.Fatalf("block 1 should count by now: %d confirmed, %d lost", confirmed, lost)
 	}
-	if alice, _ := poolLedger.account(pool.alice, difficulty); alice.Owed != cvn("37.5") {
+	if alice, _ := poolLedger.account(pool.alice, difficulty); len(floor) == 0 && alice.Owed != cvn("37.5") {
 		t.Fatalf("Alice is owed %s, want 37.5", FormatUnits(alice.Owed))
 	}
 	return pool
@@ -342,7 +352,7 @@ func recordWithOwed(t *testing.T, rewardUnits int64, weights []int64) (*poolReco
 	block := Block{Index: 1, Hash: strings.Repeat("ab", 32), Difficulty: int(total), Transactions: []Transaction{
 		{ID: "TX_COINBASE_H1_test", Outputs: []UTXOOutput{{Recipient: testAddress("pool"), Amount: UnitsAmount(rewardUnits)}}},
 	}}
-	if _, err := record.addBlock(block, addresses[0], place, 1000); err != nil {
+	if _, err := addBlockKeptByThePool(record, block, addresses[0], place, 1000); err != nil {
 		t.Fatal(err)
 	}
 	if _, changed, err := record.decide(1, block.Hash, true, 101, "TX_COINBASE_H1_test"); err != nil || !changed {
@@ -641,7 +651,7 @@ func TestPoolRecordKeepsOnlyTheNewestBlocksInMemory(t *testing.T) {
 		block := Block{Index: height, Hash: fmt.Sprintf("%064d", height), Difficulty: 10, Transactions: []Transaction{
 			{Outputs: []UTXOOutput{{Recipient: testAddress("pool"), Amount: UnitsAmount(cvn("50"))}}},
 		}}
-		if _, err := record.addBlock(block, member, place, 1000); err != nil {
+		if _, err := addBlockKeptByThePool(record, block, member, place, 1000); err != nil {
 			t.Fatal(err)
 		}
 	}

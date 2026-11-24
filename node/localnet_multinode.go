@@ -43,6 +43,10 @@ import (
 //	CVN_LOCALNET_POOL_SHARE  the difficulty a pool on this network asks of its
 //	                         miners, in place of the tens of thousands a real
 //	                         pool starts from
+//	CVN_LOCALNET_POOL_FLOOR  the smallest part of a reward, in units, that a
+//	                         pool pays in the block itself. Set far above a
+//	                         reward, nothing is paid in the block and every
+//	                         part is owed: the pool as a keeper of debts
 
 const localnetName = "localnet"
 
@@ -88,6 +92,9 @@ func localnetParams() (ChainParams, error) {
 	}
 	if given, err := strconv.Atoi(os.Getenv("CVN_LOCALNET_POOL_SHARE")); err == nil && given > 0 {
 		poolStartDifficulty, poolMinShareDifficulty = given, 1
+	}
+	if given, err := strconv.ParseInt(os.Getenv("CVN_LOCALNET_POOL_FLOOR"), 10, 64); err == nil && given > 0 {
+		poolInBlockFloorUnits = given
 	}
 	economics := NewGenesisEconomics
 	// The limit on replacing one's own blocks is 100. A test of it would

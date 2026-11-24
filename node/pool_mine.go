@@ -351,8 +351,8 @@ func poolMinerReport(state *poolMinerState, account *poolPageAddress, now time.T
 	}
 	parts = append(parts, shares)
 	if account != nil {
-		parts = append(parts, fmt.Sprintf("the pool owes this address %s CVN, has %s CVN on its way and has paid %s CVN",
-			FormatUnits(account.OwedUnits), FormatUnits(account.PendingUnits), FormatUnits(account.PaidUnits)))
+		parts = append(parts, fmt.Sprintf("blocks have paid this address %s CVN; the pool owes it %s CVN, has %s CVN on its way and has paid %s CVN",
+			FormatUnits(account.InBlockUnits), FormatUnits(account.OwedUnits), FormatUnits(account.PendingUnits), FormatUnits(account.PaidUnits)))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -364,7 +364,7 @@ func poolAccountAt(pageAddress, minerAddress string) *poolPageAddress {
 	if poolPageRead(pageAddress+"/pool.json?address="+url.QueryEscape(minerAddress), &account) != nil {
 		return nil
 	}
-	if account.Address != minerAddress || account.OwedUnits < 0 || account.PendingUnits < 0 || account.PaidUnits < 0 {
+	if account.Address != minerAddress || account.OwedUnits < 0 || account.PendingUnits < 0 || account.PaidUnits < 0 || account.InBlockUnits < 0 {
 		return nil
 	}
 	return &account

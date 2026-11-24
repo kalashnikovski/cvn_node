@@ -43,6 +43,10 @@ type poolPart struct {
 	Address string `json:"address"`
 	Units   int64  `json:"units"`
 	Work    int64  `json:"work"`
+	// InBlock marks a part the block itself paid to its address. A part
+	// without the mark went to the pool's address in the block, and is owed
+	// (pool_inblock.go).
+	InBlock bool `json:"in_block,omitempty"`
 }
 
 // What has become of a block the pool found. It is recorded as waiting. When
@@ -56,11 +60,12 @@ const (
 )
 
 // poolAccount is what the record says of one address: its parts of every
-// confirmed block, how much of that has been paid, how much is in a payment
-// on its way, and how much is owed. Earned is always Paid, Pending and Owed
-// together.
+// confirmed block, how much of that the blocks themselves paid it, how much
+// the pool has paid, how much is in a payment on its way, and how much is
+// owed. Earned is always InBlock, Paid, Pending and Owed together.
 type poolAccount struct {
 	Earned  int64 `json:"earned"`
+	InBlock int64 `json:"in_block"`
 	Owed    int64 `json:"owed"`
 	Pending int64 `json:"pending"`
 	Paid    int64 `json:"paid"`
@@ -77,6 +82,11 @@ type poolBlock struct {
 	WindowWork  int64      `json:"window_work"`
 	State       string     `json:"state"`
 	Parts       []poolPart `json:"parts"`
+	// The pool's own output in the block's reward: where it is among the
+	// outputs, and how much it holds. That is the parts the block did not
+	// pay to their addresses. PoolUnits is zero when the block paid them all.
+	PoolIndex int   `json:"pool_output"`
+	PoolUnits int64 `json:"pool_units"`
 	// The height of the chain when the block was confirmed or lost.
 	DecidedAtHeight int64 `json:"decided_at_height,omitempty"`
 }
@@ -123,6 +133,15 @@ type poolRecord struct {
 	// how far the chain had been read when the file last said; whether it
 	// has been read in this run, how far, and the block read at each recent
 	// height; and the transfers found that the record does not know.
+	// The division of a block found now, kept until the next share
+	// (pool_inblock.go).
+	divided struct {
+		parts                   []poolPart
+		total                   int64
+		seq                     uint64
+		shares                  int
+		windowWork, rewardUnits int64
+	}
 	paymentTx  map[string]uint64
 	readTo     int64
 	readBegun  bool
@@ -406,7 +425,10 @@ func poolSplit(shares []poolShare, winning uint64, windowWork, rewardUnits int64
 
 // addBlock records a block the pool found, dividing its reward among the
 // shares up to and including the one that won it.
-func (r *poolRecord) addBlock(block Block, finder string, winning uint64, at int64) (poolBlock, error) {
+// The division is the one written into the block's work when the work was
+// made (pool_inblock.go): `parts`, of which those marked were paid by the
+// block itself, and the rest went to the pool's output.
+func (r *poolRecord) addBlock(block Block, finder string, parts []poolPart, poolIndex int, poolUnits, windowWork, at int64) (poolBlock, error) {
 	var rewardUnits int64
 	if len(block.Transactions) > 0 {
 		for _, output := range block.Transactions[0].Outputs {
@@ -418,10 +440,10 @@ func (r *poolRecord) addBlock(block Block, finder string, winning uint64, at int
 	if r.db == nil {
 		return poolBlock{}, fmt.Errorf("the pool's record is closed")
 	}
-	parts, windowWork := poolSplit(r.shares, winning, poolWindowWork(block.Difficulty), rewardUnits)
 	found := poolBlock{
 		Height: block.Index, Hash: block.Hash, At: at, Finder: finder, Difficulty: block.Difficulty,
 		RewardUnits: rewardUnits, WindowWork: windowWork, State: poolBlockWaiting, Parts: parts,
+		PoolIndex: poolIndex, PoolUnits: poolUnits,
 	}
 	raw, err := json.Marshal(found)
 	if err != nil {
@@ -519,13 +541,19 @@ func (r *poolRecord) decide(height int64, hash string, onChain bool, chainHeight
 				account = r.accounts[part.Address]
 			}
 			account.Earned += part.Units
-			account.Owed += part.Units
+			if part.InBlock {
+				account.InBlock += part.Units // the block paid it; nothing is owed
+			} else {
+				account.Owed += part.Units
+			}
 			credited[part.Address] = account
 		}
 	}
+	// What the block paid to the pool's own address is the pool's to spend
+	// on the parts it owes.
 	var reward *poolCoin
-	if onChain && rewardTx != "" && decided.RewardUnits > 0 {
-		reward = &poolCoin{TxID: rewardTx, Index: 0, Units: decided.RewardUnits}
+	if onChain && rewardTx != "" && decided.PoolUnits > 0 {
+		reward = &poolCoin{TxID: rewardTx, Index: decided.PoolIndex, Units: decided.PoolUnits}
 	}
 	rawBlock, err := json.Marshal(decided)
 	if err != nil {
@@ -608,6 +636,7 @@ type poolView struct {
 	// Blocks by what became of them, and the accounts added up.
 	Waiting, Confirmed, Lost    int
 	Earned, Owed, Pending, Paid int64
+	InBlock                     int64 // paid by the blocks themselves
 	PaymentsSettled             int
 }
 
@@ -645,6 +674,7 @@ func (r *poolRecord) view(networkDifficulty int, now int64, blocks int) poolView
 	var others []poolAddressWork
 	for address, account := range r.accounts {
 		view.Earned += account.Earned
+		view.InBlock += account.InBlock
 		view.Owed += account.Owed
 		view.Pending += account.Pending
 		view.Paid += account.Paid

@@ -218,6 +218,14 @@ func miningWorker(ctx context.Context, workerID int64) {
 // blocks. `uniqueness` only has to differ between attempts; it keeps reward
 // transaction IDs distinct.
 func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniqueness string) []Transaction {
+	return buildBlockContentsDivided(tip, minerAddress, timestamp, uniqueness, nil)
+}
+
+// buildBlockContentsDivided is buildBlockContents with the reward's outputs
+// chosen by `divide`, which is given what the block may pay and returns who
+// is paid how much. A pool uses it to pay its miners in the block itself
+// (pool_inblock.go). With no `divide` the whole reward pays minerAddress.
+func buildBlockContentsDivided(tip Block, minerAddress string, timestamp int64, uniqueness string, divide func(totalUnits int64) []UTXOOutput) []Transaction {
 	nextIndex := tip.Index + 1
 	coinbaseTxID := rewardTransactionID(nextIndex, uniqueness)
 	var coinbaseOutputs []UTXOOutput
@@ -233,7 +241,11 @@ func buildBlockContents(tip Block, minerAddress string, timestamp int64, uniquen
 	feeUnits = accounting.MinerFeeUnits
 	if rewardUnits+feeUnits >= minimumOutputUnits() {
 		// An amount too small to be a coin is not paid; it stays in the vault.
-		coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
+		if divide != nil {
+			coinbaseOutputs = divide(rewardUnits + feeUnits)
+		} else {
+			coinbaseOutputs = append(coinbaseOutputs, UTXOOutput{Recipient: minerAddress, Amount: UnitsAmount(rewardUnits + feeUnits)})
+		}
 	}
 	contents := []Transaction{
 		{
