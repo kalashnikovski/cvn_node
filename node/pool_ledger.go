@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"path/filepath"
 	"sort"
@@ -141,6 +142,13 @@ type poolRecord struct {
 		seq                     uint64
 		shares                  int
 		windowWork, rewardUnits int64
+	}
+	// The work of each address in the window, kept until the next share.
+	worked struct {
+		byAddress  map[string]int64
+		seq        uint64
+		shares     int
+		windowWork int64
 	}
 	paymentTx  map[string]uint64
 	readTo     int64
@@ -331,7 +339,35 @@ func poolWindowWork(networkDifficulty int) int64 {
 	if networkDifficulty < 1 {
 		networkDifficulty = 1
 	}
+	// A difficulty no network will ever see, but one that would otherwise
+	// wrap round to a window of less than nothing.
+	if int64(networkDifficulty) > math.MaxInt64/poolWindowBlocks {
+		return math.MaxInt64
+	}
 	return int64(networkDifficulty) * poolWindowBlocks
+}
+
+// dropBlock takes out of the record a block that was written into it and
+// then could not be placed on the chain: it was never a block.
+func (r *poolRecord) dropBlock(height int64, hash string) {
+	r.Lock()
+	defer r.Unlock()
+	if r.db == nil {
+		return
+	}
+	for i := len(r.blocks) - 1; i >= 0; i-- {
+		if r.blocks[i].Height != height || r.blocks[i].Hash != hash || r.blocks[i].State != poolBlockWaiting {
+			continue
+		}
+		if r.db.Update(func(tx *bbolt.Tx) error {
+			return tx.Bucket(poolBlocksBucket).Delete(poolBlockKey(height, hash))
+		}) != nil {
+			return // left as waiting: it is counted as lost when its time comes
+		}
+		r.blocks = append(r.blocks[:i], r.blocks[i+1:]...)
+		r.found--
+		return
+	}
 }
 
 // forgetOldSharesLocked drops the shares that no block found from now on
@@ -603,18 +639,23 @@ func (r *poolRecord) decide(height int64, hash string, onChain bool, chainHeight
 func (r *poolRecord) account(address string, networkDifficulty int) (poolAccount, int64) {
 	r.Lock()
 	defer r.Unlock()
-	var winning uint64
-	if r.nextSeq > 0 {
-		winning = r.nextSeq - 1
-	}
-	parts, _ := poolSplit(r.shares, winning, poolWindowWork(networkDifficulty), 0)
-	var work int64
-	for _, part := range parts {
-		if part.Address == address {
-			work = part.Work
+	// Anybody may ask this of the pool page, as often as they like. The
+	// work of every address is worked out once for each new share and kept
+	// (review of the pool, finding 7).
+	windowWork := poolWindowWork(networkDifficulty)
+	if r.worked.byAddress == nil || r.worked.seq != r.nextSeq || r.worked.shares != len(r.shares) || r.worked.windowWork != windowWork {
+		var newest uint64
+		if r.nextSeq > 0 {
+			newest = r.nextSeq - 1
 		}
+		parts, _ := poolSplit(r.shares, newest, windowWork, 0)
+		byAddress := make(map[string]int64, len(parts))
+		for _, part := range parts {
+			byAddress[part.Address] = part.Work
+		}
+		r.worked.byAddress, r.worked.seq, r.worked.shares, r.worked.windowWork = byAddress, r.nextSeq, len(r.shares), windowWork
 	}
-	return r.accounts[address], work
+	return r.accounts[address], r.worked.byAddress[address]
 }
 
 // poolAddressWork is what one address has done lately, and its account.

@@ -108,7 +108,11 @@ func (r *poolRecord) readFrom(tip, depth int64, hashAt func(int64) string) int64
 	defer r.Unlock()
 	if !r.readBegun {
 		from := r.readTo - depth + 1
-		if r.readTo == 0 {
+		// A file that says the chain was read further than the chain goes
+		// is wrong, by damage or by somebody's hand, and is not believed:
+		// everything since the record's first block is read again (review
+		// of the pool, finding 3).
+		if r.readTo == 0 || r.readTo > tip {
 			// A record that has never read the chain. If it holds blocks
 			// it is older than this reading, and everything since its
 			// first block is read; a new record starts from now.

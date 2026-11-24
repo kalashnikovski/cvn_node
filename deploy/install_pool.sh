@@ -63,6 +63,11 @@ esac
 case "${ADDRESS#CVN_}" in
   ''|*[!0-9a-f]*) echo "That is not an address as a wallet shows it: CVN_ followed by digits and the letters a to f. Got: $ADDRESS"; exit 1 ;;
 esac
+# The seeds end up in a service file written by root: nothing but
+# addresses and the commas between them is let through.
+case "$SEEDS" in
+  *[!A-Za-z0-9.,:-]*) echo "Give the other machines' addresses alone, with commas between them and nothing else: HOST,HOST,..."; exit 1 ;;
+esac
 if [ "$NETWORK" = devnet ] && [ -z "$SEEDS" ]; then
   echo "The development network has no seeds of its own. Give the other machines' addresses third: HOST,HOST,..."; exit 1
 fi

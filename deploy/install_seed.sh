@@ -41,6 +41,11 @@ case "$NETWORK" in
   devnet)      PORTS=28080:28081 ;;
   *) echo "Unknown network: $NETWORK (use cvn_testnet or devnet)"; exit 1 ;;
 esac
+# The seeds end up in a service file written by root: nothing but
+# addresses and the commas between them is let through.
+case "$SEEDS" in
+  *[!A-Za-z0-9.,:-]*) echo "Give the other machines' addresses alone, with commas between them and nothing else: HOST,HOST,..."; exit 1 ;;
+esac
 if [ -n "$HEIGHT" ]; then
   if [ "$NETWORK" != devnet ]; then
     echo "A Bitcoin height can only be given for devnet. The other networks' first blocks are fixed in the program."; exit 1

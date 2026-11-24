@@ -456,14 +456,21 @@ func (c *stratumClient) poolBlockFound(job *stratumJob, nonce uint32, winningSha
 	if !BlockProofValid(block, block.Difficulty) {
 		return
 	}
-	// Checked and stored with the chain held still, as every other block is.
-	if !placeOnTip(block) {
-		noteNetworkEvent(fmt.Sprintf("⛏️ [POOL] A miner found block #%d, but the chain had moved on before it could be placed.", block.Index))
-		return
-	}
+	// Written into the record first, and placed second. A program stopped
+	// between the two then leaves a block in the record that is not in the
+	// chain, which is found out and counted as lost like any other. The
+	// other way round it would leave a block in the chain that the record
+	// never heard of, and the parts it paid the pool's address owed to
+	// nobody (review of the pool, finding 2).
 	found, err := poolLedger.addBlock(block, c.address, job.parts, job.poolIndex, job.poolUnits, job.windowWork, now.Unix())
 	if err != nil {
-		announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d was found and placed, but could not be written into the pool's record: %v", block.Index, err))
+		announceNetworkStatus(fmt.Sprintf("⚠️ [POOL] Block #%d was found, but could not be written into the pool's record, and was not placed: %v", block.Index, err))
+		return
+	}
+	// Checked and stored with the chain held still, as every other block is.
+	if !placeOnTip(block) {
+		poolLedger.dropBlock(block.Index, block.Hash)
+		noteNetworkEvent(fmt.Sprintf("⛏️ [POOL] A miner found block #%d, but the chain had moved on before it could be placed.", block.Index))
 		return
 	}
 	logMutex.Lock()

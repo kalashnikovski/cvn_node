@@ -194,6 +194,13 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 					return fmt.Errorf("payment %d has a line that does not hang together", payment.Serial)
 				}
 			}
+			// A payment that was sent is handed to the network again
+			// from its transfer until it is mined. Without the transfer
+			// it would wait for ever, with its coins set aside (review of
+			// the pool, finding 5).
+			if payment.State == poolPaymentSent && (payment.Tx == nil || payment.TxID == "" || payment.Tx.ID != payment.TxID) {
+				return fmt.Errorf("payment %d was sent, and the record no longer holds its transfer", payment.Serial)
+			}
 			switch payment.State {
 			case poolPaymentPrepared, poolPaymentSent:
 				report.PaymentsUnderWay++

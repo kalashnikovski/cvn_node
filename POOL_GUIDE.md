@@ -172,7 +172,7 @@ To stop automatic payments later: `systemctl disable --now cvn-pool-pay-cvn_test
 
 If the pool's log ever says that a copy "did not pass its check", stop paying and find out why before you go on. The record itself does not add up.
 
-**Copies on the server do not outlive the server.** Fetch them to another machine regularly; they are whole files and safe to copy while the pool runs. A copy holds no key. It holds what the pool page shows.
+**Copies on the server do not outlive the server.** Fetch them to another machine regularly; they are whole files and safe to copy while the pool runs. A copy holds no key. It holds what the pool page shows. Keep copies where nobody else can write to them: a copy that has been altered with care can mislead a pool that is given it.
 
 | To do this | Type |
 |---|---|
