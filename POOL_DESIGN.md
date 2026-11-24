@@ -14,7 +14,7 @@ How the mining pool built into the CVN program works, and why it works that way.
 |---|---|---|
 | The pool | A node started with `--pool CVN_ADDRESS`. It takes miners in, hands out work, checks answers and builds blocks that pay the pool's address | `node/pool.go`, `node/stratum.go` |
 | The record | One file beside the chain, `pool_NETWORK.db`: every share, every block the pool found and how its reward was divided, what each address is owed, every payment, and the coins the pool may spend | `node/pool_ledger.go`, `node/pool_payments.go` |
-| Paying | A separate command, `--pool-pay`, that signs the payments the pool has prepared. The pool's node never holds the key | `node/pool_pay.go` |
+| Paying | The pool pays by itself every five hours. A timer on the pool's server starts a separate program, `--pool-pay`, that signs the payments the pool's node has prepared. The node never holds the key | `node/pool_pay.go` |
 | The chain reader | The pool reads every block for transfers sent from its own address, so that its record cannot fall behind what has really been paid | `node/pool_chain.go` |
 | Copies | The pool copies its record every hour and after every payment, and checks each copy | `node/pool_backup.go` |
 | The page | `/pool` for people and `/pool.json` for programs: the whole record, in public | `node/pool_page.go` |
@@ -59,14 +59,18 @@ Each address has four figures, and the first is always the other three together:
 
 ## 5. Paying
 
-**The node holds no key.** It knows what each address is owed and which of the pool's coins are free, and from those it prepares payments. Signing them is the work of a separate command on the same machine:
+**A pool pays by itself, every five hours.** Nobody runs a command to pay. A timer on the pool's server starts a payment run five hours after the last one, and each run pays every address owed 1 CVN or more. The operator does one thing by hand, once: saves the pool's key on the server, locked with a password that only the administrator can read. [POOL_GUIDE.md](POOL_GUIDE.md) has the steps, what keeping the key there costs in safety, and how an operator who will not keep it there pays by hand instead.
+
+**The paying is done by two programs, and only one of them has the key.** The pool's node, which listens to miners, knows what each address is owed and which of the pool's coins are free. It prepares the payments and holds no key. The timer starts a second, short-lived program on the same machine that has the key and listens to nobody:
 
 ```
-cvn_node --network NAME --pool-pay
+cvn_node --network NAME --pool-pay --password-file FILE
 ```
 
-1. The command asks the pool's node to prepare the payments: every address owed 1 CVN or more, the most owed first, in transfers of up to 49 addresses, with the coins that pay for each. Those amounts are no longer "owed" but "on their way", and the coins are set aside.
-2. The command checks that each payment hangs together (the figures add up, the fee is the small one, the change comes back to the pool), signs it, and hands it back.
+In each run:
+
+1. The paying program asks the pool's node to prepare the payments: every address owed 1 CVN or more, the most owed first, in transfers of up to 49 addresses, with the coins that pay for each. Those amounts are no longer "owed" but "on their way", and the coins are set aside.
+2. The paying program checks that each payment hangs together (the figures add up, the fee is the small one, the change comes back to the pool), signs it, and hands it back.
 3. The node checks that the signed transfer is exactly the payment it prepared and is signed by the pool's address, writes it into the record as sent, and only then hands it to the network.
 4. When the transfer is in a block with 100 more on it, the payment is settled.
 
@@ -78,7 +82,9 @@ The two talk over a port that answers on the server's own address only (the work
 
 **A payment that has been sent is never made a second time.** Its transfer is kept in the record and handed to the network again every five minutes until it is mined. Only a payment that was prepared and never signed is undone, after ten minutes or at once if the command gives it back. (Paying again after a wait would not be safe: the first transfer stays valid for as long as its coins are unspent, and could be mined after the second.)
 
-**In practice** the paying command is run by a timer on the pool's server, every five hours, with the pool's key saved there under a password that only the administrator can read. The pool's node runs as another user and can read neither. [POOL_GUIDE.md](POOL_GUIDE.md) says what that costs in safety and how to pay by hand instead.
+**Why two programs and not one.** The node that listens to miners is the part of a pool that strangers can reach. If it held the key, a fault in it would be the loss of every coin at the pool's address. As built, the node runs as a user that can read neither the saved key nor its password, and the key is open only for the seconds a run takes.
+
+**Why five hours.** A shorter interval pays miners sooner and leaves less at the pool's address between runs. A longer one makes fewer transfers, so less goes in fees. Five hours is the figure the installer sets; an operator may name another.
 
 ## 6. A record that is behind the chain
 
@@ -86,7 +92,7 @@ Every payment is a transfer from the pool's address, and the chain holds them al
 
 So the pool reads every block for transfers sent from its own address.
 
-- **One the record does not know stops all paying at once.** The paying command also has the chain read to its newest block before anything is prepared, so there is no moment after a restart in which an old record can pay.
+- **One the record does not know stops all paying at once.** A payment run also has the chain read to its newest block before anything is prepared, so there is no moment after a restart in which an old record can pay.
 - **When that transfer is 100 blocks deep it is taken into the record** as a payment that has settled. What each address received, with its share of the fee, comes off what the record says it is owed. The coins it spent leave the record's list, and what it sent back to the pool's address joins it.
 - **Blocks that are deep enough to count are always counted first.** Otherwise a block that payment had paid for would be credited afterwards and owed a second time.
 - **An address paid more than the record says it was owed is owed nothing, never less than nothing,** and the difference is written down with the payment. That is what an older copy looks like: the difference was earned from blocks found after the copy was made.
@@ -122,7 +128,7 @@ starts the fast miner (the CVN edition of XMRig) pointed at the pool, with the m
 | Risk | What is done |
 |---|---|
 | The pool's key is stolen from the server | The node that listens to miners never has the key and runs as a user that cannot read it. The address holds only some hours of blocks. A key used for nothing else |
-| The operator does not pay | The record is public and every payment is a transfer anyone can see on the chain. It cannot be prevented, only shown |
+| The operator does not pay, or runs off with what the pool holds | The record is public and every payment is a transfer anyone can see on the chain, so it shows within hours. It cannot be prevented, only seen: this is true of every pool that receives the reward and pays it on. What a pool can hold at any moment is some hours of its blocks; a miner's own wallet is never within its reach |
 | The pool's node is taken over | It could ask the paying command to sign a wrong payment, up to what the address holds. It could not learn the key |
 | The record is lost | Copies every hour and after every payment. A copy put back cannot pay twice (section 6). Divisions of blocks found since the copy are lost |
 | A miner floods the pool with useless answers | Each costs the pool one hash and the miner far more; thirty in a row closes the connection; connections from one address are limited |
