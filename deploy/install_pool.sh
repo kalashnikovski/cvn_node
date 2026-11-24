@@ -230,6 +230,8 @@ echo "  Its blocks pay:         $ADDRESS"
 echo "  Miners connect to:      this server, port $WORK_PORT"
 echo "  The pool page:          http://THIS-SERVER:${NODE_PORTS#*:}/pool"
 echo "  See what it is doing:   journalctl -u $UNIT -f"
+echo "  Copies of its record:   $DATA/backups, one an hour. Fetch them to another machine:"
+echo "                          they do not outlive this server (POOL_GUIDE.md, section 6)."
 echo "  Update it later:        run this script again with the same words"
 echo
 if [ -f "$KEYS/wallet_key.json" ] && [ -f "$KEYS/password" ]; then

@@ -21,7 +21,9 @@ jobs:
           go-version-file: go.mod
       # The project's own code is vetted; internal/randomx is third-party code kept as published.
       - run: go vet . ./node
-      - run: go test ./...
+      # The whole suite takes eight to nine minutes on a fast desktop; go's
+      # own limit of ten is too near.
+      - run: go test -timeout 30m ./...
       # The RandomX engine, built with the published settings, must give
       # RandomX's own published test values.
       - run: go test -tags randomx_reference ./internal/randomx/

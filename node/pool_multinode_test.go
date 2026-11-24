@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -464,6 +465,208 @@ func TestMultiNodeAPool(t *testing.T) {
 	}
 	if strings.Contains(log, poolsKey) {
 		t.Error("the pool's log holds the pool's key")
+	}
+
+	// The record the pool leaves behind passes the check a copy of it has
+	// to pass, and the real program says the same of a copy.
+	pool.stopNode()
+	record := filepath.Join(pool.folder, "pool_"+localnetName+".db")
+	report, err := checkPoolRecordFile(record)
+	if err != nil {
+		t.Fatalf("the record the pool left behind does not add up: %v", err)
+	}
+	if report.EarnedUnits != confirmedUnits || report.Confirmed == 0 || report.Payments == 0 {
+		t.Errorf("the record the pool left behind says: %s", report)
+	}
+	duplicate := filepath.Join(c.folder, "a-copy-of-the-record.db")
+	if err := copyFile(record, duplicate); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := pool.command("--check-pool-backup", duplicate); err != nil || !strings.Contains(out, "it adds up") {
+		t.Errorf("the program asked to check a copy of the record: %v\n%s", err, out)
+	}
+}
+
+// command runs the program once in a node's folder, with the node's network
+// and settings and the options given, and returns what it printed.
+func (n *localNode) command(options ...string) (string, error) {
+	command := exec.Command(n.cluster.program, append([]string{"--network", localnetName}, options...)...)
+	command.Dir = n.folder
+	command.Env = n.env
+	out, err := command.CombinedOutput()
+	return string(out), err
+}
+
+// allDeepBlocksDecided reports whether a pool has decided every block of its
+// own that has six blocks on it, with the chain at `height`.
+func allDeepBlocksDecided(page poolPage, height int64) bool {
+	for _, block := range page.Blocks {
+		if block.State == poolBlockWaiting && block.Height+6 <= height {
+			return false
+		}
+	}
+	return page.Height == height
+}
+
+// poolCopies lists the copies a pool has made of its record, oldest first.
+func poolCopies(pool *localNode) []string {
+	copies, _ := filepath.Glob(filepath.Join(pool.folder, backupFolder, "pool_"+localnetName+"_*.db"))
+	sort.Strings(copies)
+	return copies
+}
+
+// TestMultiNodeAnOlderCopyOfThePoolsRecord loses a real pool's record and
+// puts back a copy the pool made before it paid anybody. The pool, started
+// again, finds its payments in the chain and takes them into the record
+// before it pays, so that what was paid is not paid a second time.
+func TestMultiNodeAnOlderCopyOfThePoolsRecord(t *testing.T) {
+	c := poolCluster(t)
+	const wait = 6 * time.Minute
+	poolsKey, _, poolsAddress := newTestWallet(t)
+	_, _, fastAddress := newTestWallet(t)
+	_, _, slowAddress := newTestWallet(t)
+
+	seed := c.seed("seed-a", 1, nil).startNode()
+	c.waitForHeight(wait, 0, seed)
+	pool := c.pool("pool", 5, []int{1}, poolsAddress)
+	// This pool makes copies of its record, as a real one does.
+	var options []string
+	for _, option := range pool.args {
+		if option != "--no-backups" {
+			options = append(options, option)
+		}
+	}
+	pool.args = options
+	pool.startNode()
+	c.eventually(wait, "the pool did not publish its record", func() bool {
+		page, ok := poolPageOf(pool)
+		return ok && page.PoolAddress == poolsAddress
+	})
+	workers := []*poolWorker{startPoolWorker(t, pool, fastAddress, 0), startPoolWorker(t, pool, slowAddress, 80*time.Millisecond)}
+
+	// The first copy is made a minute after the pool starts. It is the
+	// older copy of this test: it knows of no payment.
+	c.eventually(wait, "the pool made no copy of its record", func() bool { return len(poolCopies(pool)) > 0 })
+	older := poolCopies(pool)[0]
+	if report, err := checkPoolRecordFile(older); err != nil || report.Payments != 0 {
+		t.Fatalf("the pool's first copy: %d payment(s), %v", report.Payments, err)
+	}
+	c.eventually(wait, "four of the pool's blocks did not come to count", func() bool {
+		page, _ := poolPageOf(pool)
+		return page.BlocksConfirmed >= 4
+	})
+	keyFile := filepath.Join(c.folder, "pool-key.txt")
+	if err := os.WriteFile(keyFile, []byte(poolsKey+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := pool.payOut(keyFile); err != nil || !strings.Contains(out, "All sent") {
+		t.Fatalf("the paying command: %v\n%s", err, out)
+	}
+	c.eventually(wait, "the payment did not settle", func() bool {
+		page, _ := poolPageOf(pool)
+		return page.PaymentsSettled >= 1 && page.PendingUnits == 0
+	})
+	// Straight after payments are sent the pool makes another copy.
+	c.eventually(wait, "the pool made no copy after its payments were sent", func() bool { return len(poolCopies(pool)) >= 2 })
+
+	// The miners leave and the chain stands still. What the record says
+	// now is the truth this test holds the record put back against.
+	for _, worker := range workers {
+		worker.halt()
+	}
+	c.eventually(wait, "the pool still counts miners that have left", func() bool {
+		page, _ := poolPageOf(pool)
+		return page.Miners == 0
+	})
+	height := seed.height()
+	c.waitForHeight(wait, height, pool)
+	height = seed.height()
+	var truth poolPage
+	c.eventually(wait, "blocks six deep were left undecided", func() bool {
+		truth, _ = poolPageOf(pool)
+		return allDeepBlocksDecided(truth, height)
+	})
+	paidBefore, owedBefore := make(map[string]int64), make(map[string]int64)
+	for _, address := range truth.Addresses {
+		paidBefore[address.Address], owedBefore[address.Address] = address.PaidUnits, address.OwedUnits
+	}
+	if truth.PaidUnits == 0 || truth.PendingUnits != 0 {
+		t.Fatalf("before the record is lost: %d units paid, %d on their way", truth.PaidUnits, truth.PendingUnits)
+	}
+
+	// The record is lost. The older copy is put back with the program's
+	// own command, which will not do it under a running pool.
+	if out, err := pool.command("--restore-pool-backup", older); err == nil || !strings.Contains(out, "Stop it first") {
+		t.Errorf("putting a copy back under the running pool: %v\n%s", err, out)
+	}
+	pool.stopNode()
+	if out, err := pool.command("--restore-pool-backup", older); err != nil || !strings.Contains(out, "Restored") {
+		t.Fatalf("putting the older copy back: %v\n%s", err, out)
+	}
+	pool.startNode()
+
+	// Started again, the pool takes its own payments in from the chain.
+	var after poolPage
+	c.eventually(wait, "the pool did not take its payments in from the chain", func() bool {
+		var ok bool
+		after, ok = poolPageOf(pool)
+		return ok && after.TransfersNotInRecord == 0 && after.PaidUnits == truth.PaidUnits && allDeepBlocksDecided(after, height)
+	})
+	fromChain := 0
+	for _, payment := range after.Payments {
+		if payment.FromChain {
+			fromChain++
+		}
+	}
+	if fromChain == 0 {
+		t.Error("the page shows no payment found in the chain")
+	}
+	for _, address := range after.Addresses {
+		if address.PaidUnits != paidBefore[address.Address] {
+			t.Errorf("%s had been paid %d units; the record put back now says %d", address.Address, paidBefore[address.Address], address.PaidUnits)
+		}
+		// Never more than the lost record owed: the copy cannot know of
+		// blocks found after it, and nothing has been mined since.
+		if address.OwedUnits+address.PendingUnits > owedBefore[address.Address] {
+			t.Errorf("%s was owed %d units by the lost record; the record put back owes it %d with %d on their way",
+				address.Address, owedBefore[address.Address], address.OwedUnits, address.PendingUnits)
+		}
+		if address.EarnedUnits != address.OwedUnits+address.PendingUnits+address.PaidUnits {
+			t.Errorf("the account of %s does not add up: %+v", address.Address, address)
+		}
+	}
+	// On the chain each miner holds what it held before: the paying
+	// command, run now, pays at most what is still owed and nothing twice.
+	before := seed.balances()
+	if out, err := pool.payOut(keyFile); err != nil {
+		t.Errorf("the paying command after the copy was put back: %v\n%s", err, out)
+	}
+	final, _ := poolPageOf(pool)
+	var owedAfterRestore int64
+	for _, address := range after.Addresses {
+		owedAfterRestore += address.OwedUnits
+	}
+	if final.PendingUnits > owedAfterRestore {
+		t.Errorf("%d units were sent on their way; only %d were owed", final.PendingUnits, owedAfterRestore)
+	}
+	for _, worker := range workers {
+		if got := seed.balances()[worker.address]; got != before[worker.address] {
+			t.Errorf("the chain stands still, and %s went from %v CVN to %v", worker.address, before[worker.address], got)
+		}
+	}
+	log := pool.log()
+	if !strings.Contains(log, "has been taken into it as payment") {
+		t.Error("the pool's log does not say it took a payment in from the chain")
+	}
+	if strings.Contains(log, "panic:") || strings.Contains(log, poolsKey) {
+		t.Error("the pool stopped, or its log holds the pool's key")
+	}
+	// And the record it leaves behind adds up.
+	pool.stopNode()
+	if report, err := checkPoolRecordFile(filepath.Join(pool.folder, "pool_"+localnetName+".db")); err != nil {
+		t.Errorf("the record put back and brought up to date does not add up: %v", err)
+	} else if report.PaidUnits != truth.PaidUnits {
+		t.Errorf("the record put back says %d units were paid; %d were", report.PaidUnits, truth.PaidUnits)
 	}
 }
 

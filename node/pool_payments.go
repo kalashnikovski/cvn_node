@@ -33,7 +33,10 @@ import (
 // A payment that was sent is never returned. The coins it spends are final
 // (see below), and only the pool's key can spend them, so the transfer stays
 // good until it is mined; making a second payment for the same amounts could
-// only ever pay somebody twice.
+// only ever pay somebody twice. There is one exception, and it needs the
+// pool's key used outside the pool: a transfer sent by hand that spends one
+// of the same coins and is too deep in the chain to be replaced. The payment
+// can then never be mined, and gives its amounts back (pool_chain.go).
 //
 // THE POOL'S COINS
 //
@@ -61,6 +64,10 @@ type poolPaymentLine struct {
 	// what reaches it, the debit less its share of the transfer's fee.
 	Debit    int64 `json:"debit"`
 	Receives int64 `json:"receives"`
+	// Beyond is set only in a payment taken into the record from the chain
+	// (pool_chain.go): how much of the debit was more than the record said
+	// the address was owed.
+	Beyond int64 `json:"beyond,omitempty"`
 }
 
 // poolPayment is one transfer paying up to 49 addresses.
@@ -84,6 +91,10 @@ type poolPayment struct {
 	MinedAtHeight   int64  `json:"mined_at_height,omitempty"`
 	MinedInBlock    string `json:"mined_in_block,omitempty"`
 	DecidedAtHeight int64  `json:"decided_at_height,omitempty"`
+	// FromChain marks a payment the record did not make: a transfer from
+	// the pool's address that was found in the chain and taken into the
+	// record (pool_chain.go).
+	FromChain bool `json:"from_chain,omitempty"`
 }
 
 // debits is what the payment takes from what its addresses were owed.
@@ -475,6 +486,7 @@ func (r *poolRecord) markSent(serial uint64, signed Transaction, now, chainHeigh
 		return poolPayment{}, false, err
 	}
 	r.payments[index] = payment
+	r.paymentTx[signed.ID] = serial
 	return payment, true, nil
 }
 

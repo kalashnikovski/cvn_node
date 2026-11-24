@@ -109,6 +109,11 @@ func Run(frontendAssets embed.FS) {
 	if !anchorRefused && runBackupCommand(os.Args, anchorErr == nil) {
 		return
 	}
+	// `--check-pool-backup FILE` and `--restore-pool-backup FILE`
+	// (pool_backup.go).
+	if runPoolBackupCommand(os.Args) {
+		return
+	}
 	// Tools that exist only in a program built for testing (none in a release).
 	if !anchorRefused && anchorErr == nil && devToolCommand != nil && devToolCommand(os.Args) {
 		return

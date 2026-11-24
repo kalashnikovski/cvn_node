@@ -109,6 +109,20 @@ func poolPrepare(now time.Time) ([]poolPayment, string, error) {
 	if atomic.LoadInt32(&IsSyncingActive) == 1 || atomic.LoadInt32(&MiningHoldActive) == 1 {
 		return nil, "", fmt.Errorf("the pool is catching up with the network; try again when it has")
 	}
+	// Nothing is paid from a record that does not know of everything the
+	// pool's address has sent: it would show as owed what has been paid
+	// already (pool_chain.go). The chain is read to its tip first, blocks
+	// that have come to count being counted before that.
+	poolSettle()
+	if _, readToTip := poolReadChain(); !readToTip {
+		return nil, "", fmt.Errorf("the pool could not read the chain to its newest block just now; try again in a minute")
+	}
+	if unknown := poolLedger.unknownTransfers(); len(unknown) > 0 {
+		return nil, "", fmt.Errorf("the pool's address has sent %d transfer(s) that the pool's record does not know of (the first is %s, in block #%d). "+
+			"That is what a record put back from an older copy looks like, or a transfer sent by hand with the pool's key. "+
+			"Nothing is paid until each is %d blocks deep and the pool has taken it into its record, so that nobody is paid twice",
+			len(unknown), unknown[0].Tx.ID, unknown[0].Height, poolConfirmDepth())
+	}
 	StateMutex.RLock()
 	height := GetLatestBlockInternal().Index
 	StateMutex.RUnlock()
@@ -200,6 +214,8 @@ func poolAcceptSigned(serial uint64, signed Transaction, now time.Time) (string,
 	poolResent.Lock()
 	poolResent.at[serial] = now
 	poolResent.Unlock()
+	// A copy of the record that knows of this payment (pool_backup.go).
+	poolBackupSoon()
 	announceNetworkStatus(fmt.Sprintf("💸 [POOL] Payment %d sent: %s CVN to %d address(es). Transfer %s", serial, FormatUnits(payment.debits()), len(payment.Lines), signed.ID))
 	return signed.ID, nil
 }

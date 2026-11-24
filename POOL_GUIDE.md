@@ -4,7 +4,7 @@ This guide is for someone who wants to run a mining pool for others. To mine at 
 
 A pool is the ordinary CVN program started with one more option. There is no separate pool software, no database server and no website to build. Anyone may run one.
 
-Read all of this guide before you start. Running a pool means holding other people's coins for an hour or two at a time, and section 6 says plainly what that asks of you.
+Read all of this guide before you start. Running a pool means holding other people's coins for an hour or two at a time, and section 7 says plainly what that asks of you.
 
 ## 1. What a pool does
 
@@ -154,12 +154,48 @@ To pay at another interval, run the installer again with `CVN_POOL_PAY_EVERY` se
 
 - **Watch the pool page.** "Owed" should fall after each payment run. "Held at the pool's address" should be close to what is owed plus the blocks still waiting.
 - **Lost blocks are normal** in small numbers: two miners sometimes find a block at the same moment, and one of them loses. Many lost blocks mean the server is badly connected to the rest of the network.
-- **The pool's record is one file,** `/var/lib/cvn_pool/NETWORK/pool_NETWORK.db`. It is the only place that says what each address is owed for work already done; the chain cannot tell you that. The program does not yet make a copy of it. Make your own: stop the pool (`systemctl stop cvn-pool-NETWORK`), copy the file somewhere off the server, and start the pool again. A pool that loses this file still has its coins and no longer knows whose they are.
+- **The pool's record is one file,** `/var/lib/cvn_pool/NETWORK/pool_NETWORK.db`. It is the only place that says what each address is owed for work already done; the chain cannot tell you that. The pool makes copies of it by itself, and the next section is about them.
 - **Keep the server updated:** `apt-get update && apt-get upgrade` for the system, and the installer again for the program when a release says so. Allow remote login with a key only, not a password.
 - **If the pool stops,** miners' machines keep trying to connect and earn nothing meanwhile. What they were owed is still owed. Start it again as soon as you can and say what happened.
 - **Closing a pool.** Tell your miners in advance, and name the day. On that day close the work port (`ufw delete allow 18083/tcp`) and restart the pool, so that no miner is connected. Leave it running about 75 minutes more, for the last blocks to count, then run the payments. Amounts under 1 CVN are not paid by the command; decide in advance what you will do about them and say so.
 
-## 6. What you owe your miners
+## 6. Copies of the pool's record, and losing it
+
+**The pool copies its record by itself:** every hour, and straight after payments have been sent, into the folder `backups` beside the record (`/var/lib/cvn_pool/NETWORK/backups`). Each copy is taken through the database, so it is the record exactly as it stood at one moment, and it is checked before it is kept: all of it can be read, and it adds up. The newest 48 are kept. A copy is named after the moment it was made, in universal time: `pool_NETWORK_20261124-101500-00.db`.
+
+If the pool's log ever says that a copy "did not pass its check", stop paying and find out why before you go on. The record itself does not add up.
+
+**Copies on the server do not outlive the server.** Fetch them to another machine regularly; they are whole files and safe to copy while the pool runs. A copy holds no key. It holds what the pool page shows.
+
+| To do this | Type |
+|---|---|
+| Check any copy | `/opt/cvn_node/cvn_node --network NETWORK --check-pool-backup FILE` |
+| Put a copy in place of the record (pool stopped) | see below |
+| Make no copies (not advised) | add `--no-backups` to the pool's command; it switches off the chain's backups too |
+
+Each copy is the size of the record. That is a few megabytes for most pools, and can pass a hundred for a pool with very many miners and a small part of the network's speed, because such a pool keeps many hours of shares.
+
+### If the record is lost or damaged
+
+1. Stop the pool: `systemctl stop cvn-pool-NETWORK`
+2. Put the newest good copy in place, as the pool's own user so that the pool can write to it:
+
+   ```bash
+   cd /var/lib/cvn_pool/NETWORK && sudo -u cvnpool /opt/cvn_node/cvn_node --network NETWORK --restore-pool-backup backups/pool_NETWORK_THE-NEWEST.db
+   ```
+
+   The copy is checked first. The file it replaces, if there is one, is kept beside it under another name.
+3. Start the pool: `systemctl start cvn-pool-NETWORK`
+
+**What the pool does then.** A copy knows nothing of what happened after it was made. Payments made since are on the chain, and the pool reads the chain for every transfer its address has sent. Before it pays anybody, it takes each one it did not know of into its record: what each address received comes off what the record says it is owed. Nobody is paid twice. Until every such transfer is 100 blocks deep, the pool prepares no payment, and the pool page says "Payments are waiting".
+
+**What cannot be got back.** Who did the work for a block is written in the record and nowhere else. For blocks found after the copy was made, the record put back does not know whose they are. Their rewards arrive at the pool's address like any others, and stay there, outside what the record counts as owed. The same goes for shares handed in after the copy. Because a copy is made every hour and after every payment, this is an hour's blocks at most, if you put back the newest copy.
+
+Those rewards are yours to settle by hand, and you should say publicly how you did it. The fairest simple way is to divide them among the same addresses, in the same proportions, as the last blocks the record does know. Send them from the pool's wallet in the ordinary way. The pool notices a transfer sent by hand from its address, waits until it is 100 blocks deep, and writes it into the record as a payment to whoever received it. If an address is paid more than the record says it was owed, the record owes it nothing, never less than nothing, and shows the difference with the payment.
+
+**A transfer sent by hand at any other time** is treated the same way: as a payment to whoever received it. This is why the pool's wallet should be used for the pool and nothing else.
+
+## 7. What you owe your miners
 
 The program makes a pool's arithmetic public. It cannot make its operator honest. People who mine at your pool are trusting you with their earnings, and deserve to know these things before they start:
 
@@ -176,9 +212,9 @@ And these you should hold yourself to:
 
 One more thing, for the network's sake. A pool that grows to hold a large part of a network's mining speed is a danger to it, however honest its operator: whoever controls that pool decides which transfers a large share of the blocks carry, and at more than half could rewrite recent history. If your pool grows that large, ask miners to go elsewhere.
 
-## 7. What the program does not do yet
+## 8. What the program does not do yet
 
 - The connection between a miner and the pool is not encrypted.
 - One pool is one server. Several servers cannot share one record.
-- The pool's record is not backed up by the program (section 5).
+- After an older copy of the record has been put back, the program cannot work out who earned the blocks found after that copy was made (section 6). That is left to the operator.
 - Only the fast miner (the CVN edition of XMRig) can mine at a pool. The miner built into the CVN program cannot.

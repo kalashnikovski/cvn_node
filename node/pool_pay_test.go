@@ -29,8 +29,16 @@ type payingPool struct {
 
 func startPayingPool(t *testing.T) *payingPool {
 	t.Helper()
-	startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: 64}})
-	Params.HeartbeatInitialDifficulty = 64
+	return startPayingPoolAt(t, 16)
+}
+
+// startPayingPoolAt is startPayingPool on a chain whose blocks take
+// `difficulty` hashes. Nothing these tests check depends on the figure, and
+// they mine many blocks, so it is kept small.
+func startPayingPoolAt(t *testing.T, difficulty int) *payingPool {
+	t.Helper()
+	startRandomXChain(t, []PowEra{{FromHeight: 1, Algorithm: PowRandomX, MinDifficulty: int64(difficulty)}})
+	Params.HeartbeatInitialDifficulty = int64(difficulty)
 	confirmAfter(t, 2)
 	privateKey, publicKey, address, err := GenerateKeyPair()
 	if err != nil {
@@ -50,7 +58,7 @@ func startPayingPool(t *testing.T) *payingPool {
 	aliceJob := poolLogin(t, first, pool.alice)
 	pool.miner = connectFakeMiner(t, server)
 	bobJob := poolLogin(t, pool.miner, pool.bob)
-	shareOnly := func(work string) bool { return meets(4)(work) && !meets(64)(work) }
+	shareOnly := func(work string) bool { return meets(4)(work) && !meets(difficulty)(work) }
 	var from uint32
 	for i := 0; i < 3; i++ {
 		var nonce string
@@ -60,7 +68,7 @@ func startPayingPool(t *testing.T) *payingPool {
 		}
 	}
 	first.conn.Close()
-	blockNonce, _ := pool.miner.searchWork(bobJob, 0, meets(64))
+	blockNonce, _ := pool.miner.searchWork(bobJob, 0, meets(difficulty))
 	_, errorText, pushed := pool.miner.call("submit", map[string]string{"job_id": bobJob.JobID, "nonce": blockNonce})
 	if errorText != "" || GetLatestBlockInternal().Index != 1 {
 		t.Fatalf("block 1 was not found: %s", errorText)
@@ -77,7 +85,7 @@ func startPayingPool(t *testing.T) *payingPool {
 	if confirmed, lost := poolSettle(); confirmed != 1 || lost != 0 {
 		t.Fatalf("block 1 should count by now: %d confirmed, %d lost", confirmed, lost)
 	}
-	if alice, _ := poolLedger.account(pool.alice, 64); alice.Owed != cvn("37.5") {
+	if alice, _ := poolLedger.account(pool.alice, difficulty); alice.Owed != cvn("37.5") {
 		t.Fatalf("Alice is owed %s, want 37.5", FormatUnits(alice.Owed))
 	}
 	return pool

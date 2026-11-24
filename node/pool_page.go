@@ -75,6 +75,9 @@ type poolPagePayment struct {
 	Units         int64  `json:"units"`
 	FeeUnits      int64  `json:"fee_units"`
 	MinedAtHeight int64  `json:"mined_at_height,omitempty"`
+	// FromChain marks a transfer the pool's address sent that the record
+	// did not make, and took in from the chain (pool_chain.go).
+	FromChain bool `json:"from_chain,omitempty"`
 	// What each address was debited and received, in whole units.
 	Lines []poolPaymentLine `json:"lines"`
 }
@@ -89,40 +92,43 @@ func pageAddress(address string, work int64, percent float64, lastShare int64, a
 
 // poolPage is everything the pool page shows.
 type poolPage struct {
-	Network           string            `json:"network"`
-	PoolAddress       string            `json:"pool_address"`
-	FeePercent        int               `json:"fee_percent"`
-	WorkPort          int               `json:"work_port"`
-	WindowBlocks      int64             `json:"window_blocks"`
-	ShareSeconds      float64           `json:"share_seconds"`
-	Height            int64             `json:"height"`
-	NetworkDifficulty int               `json:"network_difficulty"`
-	Miners            int               `json:"miners_connected"`
-	Speed             float64           `json:"speed_hashes_per_second"`
-	SpeedText         string            `json:"speed"`
-	BlocksFound       int               `json:"blocks_found"`
-	BlocksWaiting     int               `json:"blocks_waiting"`
-	BlocksConfirmed   int               `json:"blocks_confirmed"`
-	BlocksLost        int               `json:"blocks_lost"`
-	ConfirmBlocks     int64             `json:"confirm_blocks"`
-	Owed              string            `json:"owed"`
-	OwedUnits         int64             `json:"owed_units"`
-	EarnedUnits       int64             `json:"earned_units"`
-	PendingUnits      int64             `json:"pending_units"`
-	Pending           string            `json:"pending"`
-	PaidUnits         int64             `json:"paid_units"`
-	Paid              string            `json:"paid"`
-	MinimumPayment    string            `json:"minimum_payment"`
-	PaymentFee        string            `json:"payment_fee"`
-	PaymentsSettled   int               `json:"payments_settled"`
-	Payments          []poolPagePayment `json:"payments"`
-	Held              string            `json:"held"`
-	HeldUnits         int64             `json:"held_units"`
-	Blocks            []poolPageBlock   `json:"blocks"`
-	WindowWork        int64             `json:"window_work"`
-	Addresses         []poolPageAddress `json:"addresses"`
-	AddressesNotShown int               `json:"addresses_not_shown"`
-	At                int64             `json:"time"`
+	Network           string  `json:"network"`
+	PoolAddress       string  `json:"pool_address"`
+	FeePercent        int     `json:"fee_percent"`
+	WorkPort          int     `json:"work_port"`
+	WindowBlocks      int64   `json:"window_blocks"`
+	ShareSeconds      float64 `json:"share_seconds"`
+	Height            int64   `json:"height"`
+	NetworkDifficulty int     `json:"network_difficulty"`
+	Miners            int     `json:"miners_connected"`
+	Speed             float64 `json:"speed_hashes_per_second"`
+	SpeedText         string  `json:"speed"`
+	BlocksFound       int     `json:"blocks_found"`
+	BlocksWaiting     int     `json:"blocks_waiting"`
+	BlocksConfirmed   int     `json:"blocks_confirmed"`
+	BlocksLost        int     `json:"blocks_lost"`
+	ConfirmBlocks     int64   `json:"confirm_blocks"`
+	Owed              string  `json:"owed"`
+	OwedUnits         int64   `json:"owed_units"`
+	EarnedUnits       int64   `json:"earned_units"`
+	PendingUnits      int64   `json:"pending_units"`
+	Pending           string  `json:"pending"`
+	PaidUnits         int64   `json:"paid_units"`
+	Paid              string  `json:"paid"`
+	MinimumPayment    string  `json:"minimum_payment"`
+	PaymentFee        string  `json:"payment_fee"`
+	PaymentsSettled   int     `json:"payments_settled"`
+	// Transfers the pool's address has sent that the record does not know
+	// yet. While there are any, nothing is paid (pool_chain.go).
+	TransfersNotInRecord int               `json:"transfers_not_in_record"`
+	Payments             []poolPagePayment `json:"payments"`
+	Held                 string            `json:"held"`
+	HeldUnits            int64             `json:"held_units"`
+	Blocks               []poolPageBlock   `json:"blocks"`
+	WindowWork           int64             `json:"window_work"`
+	Addresses            []poolPageAddress `json:"addresses"`
+	AddressesNotShown    int               `json:"addresses_not_shown"`
+	At                   int64             `json:"time"`
 }
 
 var poolPageKept struct {
@@ -174,9 +180,10 @@ func readPoolPage(now time.Time) poolPage {
 		page.Payments = append(page.Payments, poolPagePayment{
 			Serial: payment.Serial, State: payment.State, At: at, TxID: payment.TxID, Addresses: len(payment.Lines),
 			Amount: FormatUnits(payment.debits()), Units: payment.debits(), FeeUnits: payment.FeeUnits,
-			MinedAtHeight: payment.MinedAtHeight, Lines: payment.Lines,
+			MinedAtHeight: payment.MinedAtHeight, FromChain: payment.FromChain, Lines: payment.Lines,
 		})
 	}
+	page.TransfersNotInRecord = len(poolLedger.unknownTransfers())
 	// What the pool's address holds on the chain: the rewards of its blocks,
 	// less what has been paid out.
 	BalanceCacheMutex.RLock()
@@ -352,11 +359,12 @@ summary { cursor: pointer; }
 {{end}}
 
 <h2>Payments</h2>
+{{if .TransfersNotInRecord}}<p><strong>Payments are waiting.</strong> The pool's address has sent {{.TransfersNotInRecord}} transfer(s) that this record does not know of: it was put back from an older copy, or a transfer was sent by hand. Nothing is paid until each is {{.ConfirmBlocks}} blocks deep and has been taken into the record, so that nobody is paid twice.</p>{{end}}
 {{if .Payments}}
 <div class="scroll">
 <table>
 <tr><th class="n">Number</th><th>When</th><th>State</th><th class="n">Amount</th><th class="n">Addresses</th><th>Transfer</th></tr>
-{{range .Payments}}<tr><td class="n">{{.Serial}}</td><td>{{when .At}}</td><td>{{.State}}{{if .MinedAtHeight}} (block #{{.MinedAtHeight}}){{end}}</td><td class="n">{{.Amount}}</td><td class="n">{{.Addresses}}</td><td><code>{{short .TxID}}</code></td></tr>
+{{range .Payments}}<tr><td class="n">{{.Serial}}</td><td>{{when .At}}</td><td>{{.State}}{{if .MinedAtHeight}} (block #{{.MinedAtHeight}}){{end}}{{if .FromChain}}, found in the chain{{end}}</td><td class="n">{{.Amount}}</td><td class="n">{{.Addresses}}</td><td><code>{{short .TxID}}</code></td></tr>
 {{end}}
 </table>
 </div>

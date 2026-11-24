@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -123,6 +124,10 @@ func startPool() error {
 		return err
 	}
 	go runPoolSettler()
+	// Copies of the record, kept beside the chain's backups (pool_backup.go).
+	if _, _, on := backupSettings(os.Args); on {
+		go runPoolBackupSchedule(poolBackupEvery, poolBackupsKept)
+	}
 	return nil
 }
 
@@ -147,7 +152,10 @@ const poolSettleEvery = 15 * time.Second
 func runPoolSettler() {
 	for {
 		time.Sleep(poolSettleEvery)
+		// In this order: blocks that have come to count are counted before
+		// the chain is read for payments the record does not know of.
 		poolSettle()
+		poolReadChain()
 		poolSettlePayments(time.Now())
 	}
 }

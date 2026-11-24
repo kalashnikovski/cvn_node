@@ -118,6 +118,17 @@ type poolRecord struct {
 	paymentsSettled int
 	opened          time.Time
 	added           int
+	// Reading the chain for the pool's own transfers (pool_chain.go): the
+	// transfer of every payment that was sent, with the payment's number;
+	// how far the chain had been read when the file last said; whether it
+	// has been read in this run, how far, and the block read at each recent
+	// height; and the transfers found that the record does not know.
+	paymentTx  map[string]uint64
+	readTo     int64
+	readBegun  bool
+	readMemory int64
+	readBlocks map[int64]string
+	unknown    map[string]poolUnknownTransfer
 }
 
 // poolLedger is the record of the pool this node runs, if it runs one.
@@ -138,8 +149,14 @@ func openPoolLedger(path string) (*poolRecord, error) {
 	record := &poolRecord{
 		db: db, names: make(map[string]string), accounts: make(map[string]poolAccount),
 		coins: make(map[string]poolCoin), nextPayment: 1, opened: time.Now(),
+		paymentTx: make(map[string]uint64), readBlocks: make(map[int64]string), unknown: make(map[string]poolUnknownTransfer),
 	}
 	err = db.Update(func(tx *bbolt.Tx) error {
+		meta, err := tx.CreateBucketIfNotExists(poolMetaBucket)
+		if err != nil {
+			return err
+		}
+		record.readTo = poolReadToFrom(meta)
 		shares, err := tx.CreateBucketIfNotExists(poolSharesBucket)
 		if err != nil {
 			return err
@@ -181,6 +198,9 @@ func openPoolLedger(path string) (*poolRecord, error) {
 		if err := payments.ForEach(func(_, value []byte) error {
 			var payment poolPayment
 			if json.Unmarshal(value, &payment) == nil && payment.Serial > 0 {
+				if payment.TxID != "" {
+					record.paymentTx[payment.TxID] = payment.Serial
+				}
 				record.payments = append(record.payments, payment)
 				if payment.Serial >= record.nextPayment {
 					record.nextPayment = payment.Serial + 1
