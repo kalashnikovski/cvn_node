@@ -453,6 +453,13 @@ func (c *stratumClient) submitShare(jobID, nonceHex string) string {
 	if job == nil {
 		return "unknown or expired job"
 	}
+	// Work made when the pool held no shares pays the whole block to the
+	// miner it was made for. Once another address has a share it is out of
+	// date, so that it cannot be kept back and used to take a block that
+	// others now have a part in (review of the pool, round 3, finding 6).
+	if job.noShares && poolLedger.hasSharesOtherThan(c.address) {
+		return "stale job: the pool's division has changed"
+	}
 	raw, err := hex.DecodeString(nonceHex)
 	if err != nil || len(raw) != 4 {
 		return "malformed nonce"

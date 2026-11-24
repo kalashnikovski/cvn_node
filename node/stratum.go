@@ -62,6 +62,9 @@ type stratumJob struct {
 	poolIndex  int
 	poolUnits  int64
 	windowWork int64
+	// noShares marks work made when the pool held no shares at all, which
+	// pays all of the block to the miner it was made for.
+	noShares bool
 }
 
 // askedDifficulty is what an answer to this job must meet: the network's
@@ -274,15 +277,17 @@ func (c *stratumClient) newJob() (*stratumJob, bool) {
 		var parts []poolPart
 		var poolIndex int
 		var poolUnits, windowWork int64
+		noShares := false
 		job, ok = buildStratumJobDivided(poolAddress, func(totalUnits int64, difficulty int) []UTXOOutput {
 			var shared []poolPart
 			shared, windowWork = poolLedger.division(poolWindowWork(difficulty), totalUnits)
+			noShares = len(shared) == 0
 			var outputs []UTXOOutput
 			outputs, parts, poolIndex, poolUnits = poolRewardOutputs(shared, poolAddress, c.address, totalUnits)
 			return outputs
 		})
 		if ok {
-			job.parts, job.poolIndex, job.poolUnits, job.windowWork = parts, poolIndex, poolUnits, windowWork
+			job.parts, job.poolIndex, job.poolUnits, job.windowWork, job.noShares = parts, poolIndex, poolUnits, windowWork, noShares
 			job.shareDifficulty = c.shareDifficultyFor(job.template.Difficulty)
 		}
 	} else {
@@ -300,6 +305,9 @@ func (c *stratumClient) newJob() (*stratumJob, bool) {
 	c.jobsMu.Unlock()
 	return job, true
 }
+
+// stratumLoginWithin is how long a connection has to log in.
+var stratumLoginWithin = 30 * time.Second
 
 // stratumJobAtMostEvery is how often one miner may be built fresh work for
 // when it asks for it.
@@ -357,8 +365,17 @@ func handleStratumClient(conn net.Conn) {
 	}()
 
 	reader := bufio.NewReaderSize(conn, stratumLineLimit)
+	opened := time.Now()
 	for {
-		_ = conn.SetReadDeadline(time.Now().Add(stratumIdleTimeout))
+		// A connection that has not logged in is given stratumLoginWithin
+		// from when it opened, however much else it sends: a stranger
+		// cannot hold places at the pool by saying it is still there
+		// (review of the pool, round 3, finding 10).
+		if loggedIn {
+			_ = conn.SetReadDeadline(time.Now().Add(stratumIdleTimeout))
+		} else {
+			_ = conn.SetReadDeadline(opened.Add(stratumLoginWithin))
+		}
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil || isPrefix {
 			return
@@ -393,6 +410,17 @@ func handleStratumClient(conn net.Conn) {
 			// pool, round 2, finding 5).
 			if loggedIn && login != client.address {
 				if !client.reply(request.ID, nil, "this connection is already logged in as "+client.address+"; connect again to mine for another address") {
+					return
+				}
+				continue
+			}
+			// Logging in again as the same address is answered with the
+			// work last given, within the same limit as a request for fresh
+			// work (review of the pool, round 3, finding 9).
+			if newest := client.newestJob(); loggedIn && newest != nil && time.Since(client.lastJob) < stratumJobAtMostEvery {
+				if !client.reply(request.ID, map[string]interface{}{
+					"id": client.session, "job": newest.describe(), "extensions": []string{"algo"}, "status": "OK",
+				}, "") {
 					return
 				}
 				continue
@@ -508,6 +536,11 @@ func (c *stratumClient) pushJobs(done <-chan struct{}, lastTip string) {
 		if poolRunning() {
 			c.pool.easeIfQuiet(time.Now(), tip.Difficulty)
 			retargeted = c.pool.takeChanged()
+			// Work that paid the whole block to this miner is replaced as
+			// soon as another miner has a share (see submitShare).
+			if newest := c.newestJob(); newest != nil && newest.noShares && poolLedger.hasSharesOtherThan(c.address) {
+				retargeted = true
+			}
 		}
 		if tipHash == lastTip && time.Since(lastSent) < stratumJobRefresh && !retargeted {
 			continue

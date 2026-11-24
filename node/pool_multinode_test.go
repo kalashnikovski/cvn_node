@@ -884,9 +884,15 @@ func TestMultiNodeAPoolLosesABlock(t *testing.T) {
 	if !strings.Contains(stray.log(), "was replaced by another block") {
 		t.Error("the returning pool's log does not say its blocks were replaced")
 	}
-	// The pool that stayed on the network lost nothing.
-	if page, _ := poolPageOf(mainPool); page.BlocksLost != 0 || page.BlocksConfirmed == 0 {
-		t.Errorf("the network's own pool records %d lost and %d confirmed", page.BlocksLost, page.BlocksConfirmed)
+	// The pool that stayed on the network lost nothing. It settles its
+	// blocks every fifteen seconds, so the first may take that long to count.
+	var mainPage poolPage
+	c.eventually(wait, "the network's own pool counted none of its blocks", func() bool {
+		mainPage, _ = poolPageOf(mainPool)
+		return mainPage.BlocksConfirmed > 0
+	})
+	if mainPage.BlocksLost != 0 {
+		t.Errorf("the network's own pool records %d lost and %d confirmed", mainPage.BlocksLost, mainPage.BlocksConfirmed)
 	}
 }
 

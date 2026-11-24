@@ -116,7 +116,12 @@ func (r *poolRecord) readFrom(tip, depth int64, hashAt func(int64) string) int64
 			// A record that has never read the chain. If it holds blocks
 			// it is older than this reading, and everything since its
 			// first block is read; a new record starts from now.
+			// From the first block in the file, not only the first of those
+			// kept in memory (review of the pool, round 3, finding 2).
 			from = tip + 1
+			if r.firstBlock > 0 && r.firstBlock < from {
+				from = r.firstBlock
+			}
 			for _, block := range r.blocks {
 				if block.Height < from {
 					from = block.Height
@@ -234,6 +239,13 @@ func poolReadChain() (takenIn int, readToTip bool) {
 	from := record.readFrom(tip, depth, func(height int64) string { return GetBlockByHeightFromDB(height).Hash })
 	hashes := make(map[int64]string)
 	var found []poolUnknownTransfer
+	// Each block read must follow from the one before it. If the chain
+	// changes while it is being read, the reading is thrown away and done
+	// again next time (review of the pool, round 3, finding 3).
+	previous := ""
+	if from > 1 {
+		previous = GetBlockByHeightFromDB(from - 1).Hash
+	}
 	for height := from; height <= tip; height++ {
 		// A download changing the chain under this reading would leave it
 		// half of one chain and half of another. It is done again later.
@@ -244,6 +256,10 @@ func poolReadChain() (takenIn int, readToTip bool) {
 		if block.Hash == "" || block.Index != height {
 			return 0, false
 		}
+		if previous != "" && block.PrevHash != previous {
+			return 0, false
+		}
+		previous = block.Hash
 		hashes[height] = block.Hash
 		for _, transaction := range block.Transactions {
 			if poolSentBy(transaction, poolAddress) && !record.knowsTransfer(transaction.ID) {

@@ -151,6 +151,7 @@ type poolRecord struct {
 		windowWork int64
 	}
 	paymentTx  map[string]uint64
+	firstBlock int64 // the lowest height of any block in the file
 	readTo     int64
 	readBegun  bool
 	readMemory int64
@@ -259,6 +260,9 @@ func openPoolLedger(path string) (*poolRecord, error) {
 			if json.Unmarshal(value, &block) == nil {
 				record.blocks = append(record.blocks, block)
 				record.found++
+				if record.firstBlock == 0 || block.Height < record.firstBlock {
+					record.firstBlock = block.Height
+				}
 				switch block.State {
 				case poolBlockConfirmed:
 					record.confirmed++
@@ -493,6 +497,19 @@ func (r *poolRecord) addBlock(block Block, finder string, parts []poolPart, pool
 	r.blocks = append(r.blocks, found)
 	r.found++
 	return found, nil
+}
+
+// hasSharesOtherThan reports whether the record holds a share of any
+// address but one.
+func (r *poolRecord) hasSharesOtherThan(address string) bool {
+	r.Lock()
+	defer r.Unlock()
+	for i := len(r.shares) - 1; i >= 0; i-- {
+		if r.shares[i].Address != address {
+			return true
+		}
+	}
+	return false
 }
 
 // poolBlocksKept is how many decided blocks are kept in memory for the pool

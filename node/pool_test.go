@@ -92,6 +92,9 @@ func (m *fakeMiner) freshWork() minerJob {
 // its work when the work is made, so shares count from the next work on.
 func (m *fakeMiner) shareThenFreshWork(job minerJob, networkDifficulty int) minerJob {
 	m.t.Helper()
+	// Work made before anybody else's share is out of date once there is
+	// one: the share is handed in on work made now.
+	job = m.freshWork()
 	nonce, _ := m.searchWork(job, 0, func(work string) bool { return meets(4)(work) && !meets(networkDifficulty)(work) })
 	if _, errorText, _ := m.call("submit", map[string]string{"job_id": job.JobID, "nonce": nonce}); errorText != "" {
 		m.t.Fatalf("share refused: %s", errorText)

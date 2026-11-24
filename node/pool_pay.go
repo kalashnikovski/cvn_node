@@ -96,10 +96,22 @@ func poolCoinUsable(coin poolCoin) bool {
 		}
 		record, found := bucketLookup(bucket)(coin.key())
 		usable = found && strings.TrimSpace(record.Recipient) == poolAddress && record.Amount.Units() == coin.Units && record.Amount.Spendable()
+		// A coin a day or less from being swept is left alone: a payment
+		// spending it could be made invalid by the sweep before it is
+		// mined (review of the pool, round 3, finding 5).
+		if usable && sweepEnabled() {
+			economics := Params.Economics
+			tip := atomic.LoadInt64(&localHeightState)
+			usable = record.Age+economics.SweepIntervalBlocks-poolSweepMarginBlocks > tip
+		}
 		return nil
 	})
 	return usable
 }
+
+// poolSweepMarginBlocks is how close to being swept a coin may come before
+// the pool stops spending it: about a day.
+const poolSweepMarginBlocks = 1920
 
 // poolPrepare prepares a run of payments (see preparePayments).
 func poolPrepare(now time.Time) ([]poolPayment, string, error) {
@@ -254,9 +266,10 @@ func poolHandToNetwork(signed Transaction) {
 // and how far the chain has been searched for it.
 var poolResent = struct {
 	sync.Mutex
-	at       map[uint64]time.Time
-	searched map[uint64]int64
-}{at: make(map[uint64]time.Time), searched: make(map[uint64]int64)}
+	at           map[uint64]time.Time
+	searched     map[uint64]int64
+	searchedHash map[uint64]string // the block at the height last looked at
+}{at: make(map[uint64]time.Time), searched: make(map[uint64]int64), searchedHash: make(map[uint64]string)}
 
 // poolFindTransfer looks for a transfer in the blocks from one height to
 // another, and returns the block that holds it.
@@ -308,12 +321,23 @@ func poolSettlePayments(now time.Time) (settled int) {
 			}
 		}
 		if payment.MinedAtHeight == 0 {
+			// The transfer is looked for from a little below where the chain
+			// stood when it was sent: the block at that height may itself be
+			// replaced by one that carries it. A height already looked at is
+			// looked at again if the block there has changed since (review of
+			// the pool, round 3, finding 1).
+			floor := payment.SentAtHeight - depth + 1
+			if floor < 1 {
+				floor = 1
+			}
 			poolResent.Lock()
-			from := poolResent.searched[payment.Serial] + 1
+			searched := poolResent.searched[payment.Serial]
 			lastSent := poolResent.at[payment.Serial]
+			searchedHash := poolResent.searchedHash[payment.Serial]
 			poolResent.Unlock()
-			if from <= payment.SentAtHeight {
-				from = payment.SentAtHeight + 1
+			from := searched + 1
+			if searched == 0 || searched < floor || GetBlockByHeightFromDB(searched).Hash != searchedHash {
+				from = floor
 			}
 			if height, hash, found := poolFindTransfer(payment.TxID, from, tipHeight); found {
 				if poolLedger.noteMined(payment.Serial, height, hash) == nil {
@@ -322,6 +346,7 @@ func poolSettlePayments(now time.Time) (settled int) {
 			} else {
 				poolResent.Lock()
 				poolResent.searched[payment.Serial] = tipHeight
+				poolResent.searchedHash[payment.Serial] = GetBlockByHeightFromDB(tipHeight).Hash
 				poolResent.Unlock()
 				if now.Sub(lastSent) >= poolResendEvery {
 					poolHandToNetwork(*payment.Tx)
@@ -545,15 +570,33 @@ func poolPaymentLooksRight(payment poolPayment, ownAddress string, feeUnits int6
 	if len(payment.Inputs) == 0 || len(payment.Inputs) > TxMaxInputs || len(payment.Outputs) > TxMaxOutputs {
 		return fmt.Errorf("it pays %d addresses from %d coins", len(payment.Lines), len(payment.Inputs))
 	}
-	if payment.FeeUnits != feeUnits || payment.FeeUnits < 0 || payment.FeeUnits > 10*poolPaymentFeeUnits {
+	// The fee is the one this program knows, not whatever the node says
+	// (review of the pool, round 3, finding 12).
+	if payment.FeeUnits != feeUnits || payment.FeeUnits != poolPaymentFeeUnits {
 		return fmt.Errorf("its fee is %s CVN", FormatUnits(payment.FeeUnits))
 	}
 	var spent, paid, debited int64
+	var err error
+	coinsSeen := make(map[string]bool, len(payment.Inputs))
 	for _, input := range payment.Inputs {
 		if input.AmountUnits <= 0 {
 			return fmt.Errorf("it spends a coin of no amount")
 		}
-		spent += input.AmountUnits
+		if key := utxoKey(input.SourceTxID, input.Index); coinsSeen[key] {
+			return fmt.Errorf("it spends one coin twice")
+		} else {
+			coinsSeen[key] = true
+		}
+		if spent, err = addUnits(spent, input.AmountUnits); err != nil {
+			return err
+		}
+	}
+	paidSeen := make(map[string]bool, len(payment.Lines))
+	for _, line := range payment.Lines {
+		if paidSeen[line.Address] {
+			return fmt.Errorf("it pays one address twice")
+		}
+		paidSeen[line.Address] = true
 	}
 	wantOutputs := len(payment.Lines)
 	if payment.ChangeUnits > 0 {
@@ -570,8 +613,12 @@ func poolPaymentLooksRight(payment poolPayment, ownAddress string, feeUnits int6
 		if line.Receives < minimumOutputUnits() || line.Receives > line.Debit {
 			return fmt.Errorf("it pays %s CVN against %s owed", FormatUnits(line.Receives), FormatUnits(line.Debit))
 		}
-		paid += line.Receives
-		debited += line.Debit
+		if paid, err = addUnits(paid, line.Receives); err != nil {
+			return err
+		}
+		if debited, err = addUnits(debited, line.Debit); err != nil {
+			return err
+		}
 	}
 	if payment.ChangeUnits > 0 {
 		change := payment.Outputs[len(payment.Outputs)-1]
@@ -663,11 +710,11 @@ func RunPoolPay(args []string) int {
 	if status != http.StatusOK || prepared.Error != "" {
 		// The same for a pool that is still catching up with the network.
 		if !byHand && (strings.Contains(prepared.Error, "catching up") || strings.Contains(prepared.Error, "could not read the chain")) {
-			fmt.Println(" The pool is not ready to pay yet: " + prepared.Error + ". Nothing was signed.")
+			fmt.Println(" The pool is not ready to pay yet: " + shownPlainly(prepared.Error, 500) + ". Nothing was signed.")
 			fmt.Println(" The next run will try again.")
 			return 0
 		}
-		fmt.Printf("❌ The pool's node could not prepare payments: %s\n", prepared.Error)
+		fmt.Printf("❌ The pool's node could not prepare payments: %s\n", shownPlainly(prepared.Error, 500))
 		return 1
 	}
 	if prepared.PoolAddress != ownAddress {
@@ -676,7 +723,7 @@ func RunPoolPay(args []string) int {
 		return 1
 	}
 	if len(prepared.Payments) == 0 {
-		fmt.Println(" Nothing to pay: " + prepared.Reason + ".")
+		fmt.Println(" Nothing to pay: " + shownPlainly(prepared.Reason, 500) + ".")
 		return 0
 	}
 	var total int64
@@ -693,7 +740,7 @@ func RunPoolPay(args []string) int {
 	fmt.Printf(" %s CVN is to be paid to %d address(es) in %d transfer(s).\n", FormatUnits(total), addresses, len(prepared.Payments))
 	fmt.Printf(" Each transfer carries a fee of %s CVN, shared among the addresses it pays.\n", FormatUnits(prepared.FeeUnits))
 	if prepared.Reason != "" {
-		fmt.Println(" Not everything that is owed: " + prepared.Reason + ".")
+		fmt.Println(" Not everything that is owed: " + shownPlainly(prepared.Reason, 500) + ".")
 	}
 	if byHand {
 		fmt.Print(" Type YES to sign and send them: ")

@@ -148,6 +148,25 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 			if block.Height > report.NewestBlock {
 				report.NewestBlock = block.Height
 			}
+			// The division of every block, waiting, counted or lost, adds
+			// up, and no part is less than nothing (review of the pool,
+			// round 3, finding 8).
+			var parts, kept int64
+			for _, part := range block.Parts {
+				if part.Units < 0 || part.Address == "" {
+					return fmt.Errorf("block #%d has a part that cannot be", block.Height)
+				}
+				parts += part.Units
+				if !part.InBlock {
+					kept += part.Units
+				}
+			}
+			if block.State != poolBlockLost && parts != block.RewardUnits {
+				return fmt.Errorf("the parts of block #%d add up to %s CVN and its reward was %s", block.Height, FormatUnits(parts), FormatUnits(block.RewardUnits))
+			}
+			if block.State != poolBlockLost && kept != block.PoolUnits {
+				return fmt.Errorf("block #%d paid the pool's address %s CVN, and the parts it did not pay itself add up to %s", block.Height, FormatUnits(block.PoolUnits), FormatUnits(kept))
+			}
 			switch block.State {
 			case poolBlockWaiting:
 				report.Waiting++
@@ -155,23 +174,13 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 				report.Lost++
 			case poolBlockConfirmed:
 				report.Confirmed++
-				var parts, kept int64
 				for _, part := range block.Parts {
 					if part.Units > 0 {
-						parts += part.Units
 						earned[part.Address] += part.Units
 						if part.InBlock {
 							inBlock[part.Address] += part.Units
-						} else {
-							kept += part.Units
 						}
 					}
-				}
-				if parts != block.RewardUnits {
-					return fmt.Errorf("the parts of block #%d add up to %s CVN and its reward was %s", block.Height, FormatUnits(parts), FormatUnits(block.RewardUnits))
-				}
-				if kept != block.PoolUnits {
-					return fmt.Errorf("block #%d paid the pool's address %s CVN, and the parts it did not pay itself add up to %s", block.Height, FormatUnits(block.PoolUnits), FormatUnits(kept))
 				}
 			default:
 				return fmt.Errorf("block #%d is neither waiting, counted nor lost", block.Height)
@@ -200,6 +209,16 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 			// the pool, finding 5).
 			if payment.State == poolPaymentSent && (payment.Tx == nil || payment.TxID == "" || payment.Tx.ID != payment.TxID) {
 				return fmt.Errorf("payment %d was sent, and the record no longer holds its transfer", payment.Serial)
+			}
+			// A transfer kept with a payment is the one its identifier
+			// names, and pays what the payment says (round 3, finding 8).
+			if payment.Tx != nil && ComputeTransactionID(*payment.Tx) != payment.Tx.ID {
+				return fmt.Errorf("payment %d holds a transfer that has been altered", payment.Serial)
+			}
+			if (payment.State == poolPaymentPrepared || payment.State == poolPaymentSent) && !payment.FromChain {
+				if problem := poolPaymentOutputsProblem(payment); problem != "" {
+					return fmt.Errorf("payment %d %s", payment.Serial, problem)
+				}
 			}
 			switch payment.State {
 			case poolPaymentPrepared, poolPaymentSent:
@@ -320,6 +339,38 @@ func checkPoolRecordFile(path string) (report poolRecordReport, err error) {
 		return report, fmt.Errorf("%s: %v", path, err)
 	}
 	return report, nil
+}
+
+// poolPaymentOutputsProblem says what is wrong with a payment whose
+// outputs are not its lines and its change, in order, or whose transfer pays
+// something else. It is empty when nothing is.
+func poolPaymentOutputsProblem(payment poolPayment) string {
+	want := len(payment.Lines)
+	if payment.ChangeUnits > 0 {
+		want++
+	}
+	if len(payment.Outputs) != want {
+		return "has outputs that are not its lines and its change"
+	}
+	for i, line := range payment.Lines {
+		if payment.Outputs[i].Recipient != line.Address || payment.Outputs[i].Amount.Units() != line.Receives {
+			return "has an output that is not what its line says"
+		}
+	}
+	if payment.ChangeUnits > 0 && payment.Outputs[want-1].Amount.Units() != payment.ChangeUnits {
+		return "has change that is not what it says"
+	}
+	if payment.Tx != nil {
+		if len(payment.Tx.Outputs) != len(payment.Outputs) || len(payment.Tx.Inputs) != len(payment.Inputs) || payment.Tx.FreeWillOffering.Units() != payment.FeeUnits {
+			return "holds a transfer that is not the payment"
+		}
+		for i, output := range payment.Outputs {
+			if strings.TrimSpace(payment.Tx.Outputs[i].Recipient) != output.Recipient || payment.Tx.Outputs[i].Amount.Units() != output.Amount.Units() {
+				return "holds a transfer that pays something else"
+			}
+		}
+	}
+	return ""
 }
 
 // poolBackupNamePrefix is what every copy of this network's pool record is

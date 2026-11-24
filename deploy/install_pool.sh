@@ -97,6 +97,15 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y git golang-go ufw
 
+# The project names the exact Go it needs, and Go fetches it by itself, but
+# only from Go 1.21 on. Ubuntu 24.04 has that; 22.04 does not (review of the
+# pool, round 3, finding 13).
+GO_MINOR=$(go version 2>/dev/null | sed -n 's/.*go1\.\([0-9]*\).*/\1/p')
+if [ -z "$GO_MINOR" ] || [ "$GO_MINOR" -lt 21 ]; then
+  echo "This needs Go 1.21 or newer to build the program, and this system's Go is $(go version 2>/dev/null || echo missing)."
+  echo "Use Ubuntu 24.04 or newer, or install Go from https://go.dev/dl/ and run this again."; exit 1
+fi
+
 echo "== Getting the source"
 if [ ! -d "$DIR/.git" ]; then
   git clone "$REPO" "$DIR"
@@ -161,8 +170,13 @@ if [ "$NETWORK" = devnet ]; then
     echo "== The first block has changed (Bitcoin height: was '${PREVIOUS:-none}', now '${HEIGHT:-none}'): starting the devnet chain afresh"
     systemctl stop "$UNIT" 2>/dev/null || true
     rm -f "$DATA/cvn_devnet.db" "$DATA/genesis_anchor_devnet.txt"
+    STAMP=$(date +%Y%m%d-%H%M%S)
     if [ -f "$DATA/pool_devnet.db" ]; then
-      mv "$DATA/pool_devnet.db" "$DATA/pool_devnet.db.before-$(date +%Y%m%d-%H%M%S)"
+      mv "$DATA/pool_devnet.db" "$DATA/pool_devnet.db.before-$STAMP"
+    fi
+    # The copies of the old record belong to the old chain: moved aside with it.
+    if [ -d "$DATA/backups" ]; then
+      mv "$DATA/backups" "$DATA/backups.before-$STAMP"
     fi
   fi
 fi

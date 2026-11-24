@@ -150,7 +150,7 @@ A node does not have to mine. Started with `--no-mining` it keeps the whole chai
 ./cvn_node --no-mining
 ```
 
-On a server you will want it to start by itself when the server boots and to restart if it stops. One command sets that up on a fresh Ubuntu server, run as root:
+On a server you will want it to start by itself when the server boots and to restart if it stops. One command sets that up on a fresh Ubuntu server (24.04 or newer), run as root:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kalashnikovski/cvn_node/main/deploy/install_seed.sh | bash

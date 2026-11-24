@@ -40,7 +40,7 @@ How these were chosen, and what was considered and set aside, is in [POOL_DESIGN
 
 ## 2. What you need
 
-- **A server that is always on,** with Ubuntu, a fixed internet address and its ports open to the world. A pool takes no more disk than any node. How many miners one server carries has not been measured yet: checking a share costs the server a few hundredths of a second of one processor core, and each miner sends about two a minute. Two cores and 2 GB of memory is a sensible start.
+- **A server that is always on,** with Ubuntu 24.04 or newer (older versions come with a Go too old to build the program), a fixed internet address and its ports open to the world. A pool takes no more disk than any node. How many miners one server carries has not been measured yet: checking a share costs the server a few hundredths of a second of one processor core, and each miner sends about two a minute. Two cores and 2 GB of memory is a sensible start.
 - **A name for it** (optional), such as `pool.example.org`, pointing at the server. Miners can use the server's number instead.
 - **A wallet for the pool,** made on a computer of your own and not on the server. Use it for nothing else. Write its 24 recovery words on paper.
 - **Time.** A pool that stops paying, or goes offline for a day, costs its miners money. Do not start one you will not look after.

@@ -91,7 +91,9 @@ func TestACopyWithASentPaymentAndNoTransferIsRefused(t *testing.T) {
 	if err != nil || len(payments) != 1 {
 		t.Fatalf("prepared %d payments: %v", len(payments), err)
 	}
-	if _, recorded, err := record.markSent(payments[0].Serial, Transaction{ID: "TX_the_payment"}, 3001, 101); err != nil || !recorded {
+	sent := Transaction{Version: 1, Inputs: payments[0].Inputs, Outputs: payments[0].Outputs, FreeWillOffering: UnitsAmount(payments[0].FeeUnits), Timestamp: 3001}
+	sent.ID = ComputeTransactionID(sent)
+	if _, recorded, err := record.markSent(payments[0].Serial, sent, 3001, 101); err != nil || !recorded {
 		t.Fatalf("the payment was not written down as sent: %v", err)
 	}
 	folder := filepath.Join(t.TempDir(), "backups")

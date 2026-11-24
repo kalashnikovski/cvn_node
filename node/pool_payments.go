@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"go.etcd.io/bbolt"
 )
@@ -249,6 +250,7 @@ func (r *poolRecord) preparePayments(plan poolPaymentPlan) ([]poolPayment, strin
 		}
 		return due[i].address < due[j].address
 	})
+	smallestDue := due[len(due)-1].units
 
 	var free []poolCoin
 	for _, coin := range r.coins {
@@ -300,8 +302,12 @@ func (r *poolRecord) preparePayments(plan poolPaymentPlan) ([]poolPayment, strin
 			group = group[:len(group)-1]
 		}
 		if len(group) == 0 {
+			// The address owed most cannot be paid from the coins there
+			// are. It waits, and the others are tried (review of the pool,
+			// round 3, finding 7).
 			reason = "the pool's address does not hold enough settled coins for everything that is owed; the rest is paid on a later run"
-			break
+			due = due[1:]
+			continue
 		}
 
 		payment := poolPayment{Serial: serial, State: poolPaymentPrepared, PreparedAt: plan.Now, FeeUnits: plan.FeeUnits, ChangeUnits: gathered - need}
@@ -361,7 +367,6 @@ func (r *poolRecord) preparePayments(plan poolPaymentPlan) ([]poolPayment, strin
 		for _, coin := range free {
 			all += coin.Units
 		}
-		smallestDue := due[len(due)-1].units
 		if all >= smallestDue {
 			chosen := free
 			if len(chosen) > TxMaxInputs {
@@ -478,11 +483,23 @@ func (r *poolRecord) returnPaymentLocked(serial uint64, chainHeight int64) (bool
 func (r *poolRecord) returnStalePayments(before, chainHeight int64) []uint64 {
 	r.Lock()
 	defer r.Unlock()
+	// A payment prepared before this record was opened may have been signed
+	// and handed to the network by the program that ran before, from a
+	// record that was then lost; the copy put back knows it only as
+	// prepared. It is not given back until any transfer signed for it has
+	// had time to be mined, and so to be found in the chain and taken in
+	// (review of the pool, round 3, finding 4).
+	now := before + int64(poolPreparedFor/time.Second)
+	openedLongEnough := now-r.opened.Unix() >= int64((MempoolMaxAge+poolPreparedFor)/time.Second)
 	var stale []uint64
 	for _, payment := range r.payments {
-		if payment.State == poolPaymentPrepared && payment.PreparedAt < before {
-			stale = append(stale, payment.Serial)
+		if payment.State != poolPaymentPrepared || payment.PreparedAt >= before {
+			continue
 		}
+		if payment.PreparedAt < r.opened.Unix() && !openedLongEnough {
+			continue
+		}
+		stale = append(stale, payment.Serial)
 	}
 	var returned []uint64
 	for _, serial := range stale {
