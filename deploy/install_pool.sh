@@ -8,10 +8,11 @@
 #   - The pool's blocks pay one address, the pool's. Make that wallet on a
 #     computer of your own, write its 24 words down, and give this script
 #     the address. The node set up here never holds the key.
-#   - Paying the miners is a separate command, run by hand or by a timer
-#     this script installs. The timer does nothing until you have saved the
-#     pool's key on this server, locked with a password (see the end of
-#     this script's output, and POOL_GUIDE.md).
+#   - The miners are paid by a timer this script installs: every five
+#     hours, counted from the last payment run. The timer does nothing
+#     until you have saved the pool's key on this server, locked with a
+#     password (see the end of this script's output, and POOL_GUIDE.md).
+#     That is done once. Nobody has to run a command to pay after that.
 #
 # Run as root:
 #
@@ -30,10 +31,9 @@
 #
 #   CVN_VERSION=v5.0.0 bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS
 #
-# Payments go out every hour unless another time is named, in the form
-# systemd's timers take (for example "*:0/30" for every half hour):
+# Payments go out every five hours unless another number of hours is named:
 #
-#   CVN_POOL_PAY_EVERY=daily bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS
+#   CVN_POOL_PAY_HOURS=2 bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS
 #
 # Running it again for the same network is safe: it updates the program and
 # restarts the pool. The chain, the pool's record and the saved key are kept.
@@ -43,7 +43,7 @@ NETWORK="${1:-}"
 ADDRESS="${2:-}"
 SEEDS="${3:-}"
 HEIGHT="${4:-}"
-PAY_EVERY="${CVN_POOL_PAY_EVERY:-hourly}"
+PAY_HOURS="${CVN_POOL_PAY_HOURS:-5}"
 DIR=/opt/cvn_node                  # the program and its source
 POOL_USER=cvnpool                  # the user the pool's node runs as
 DATA="/var/lib/cvn_pool/$NETWORK"  # the chain and the pool's record
@@ -76,8 +76,11 @@ fi
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this as root (or with sudo)."; exit 1
 fi
-if ! systemd-analyze calendar "$PAY_EVERY" >/dev/null 2>&1; then
-  echo "\"$PAY_EVERY\" is not a time systemd understands. Use, for example, hourly, daily or \"*:0/30\"."; exit 1
+case "$PAY_HOURS" in
+  ''|*[!0-9]*|0*) echo "The hours between payments must be a whole number from 1 to 168, for example 5. Got: $PAY_HOURS"; exit 1 ;;
+esac
+if [ "$PAY_HOURS" -gt 168 ]; then
+  echo "The hours between payments must be a whole number from 1 to 168, for example 5. Got: $PAY_HOURS"; exit 1
 fi
 
 echo "== Installing what the build needs"
@@ -181,7 +184,7 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-echo "== Installing the payment timer (every: $PAY_EVERY)"
+echo "== Installing the payment timer (every $PAY_HOURS hours)"
 PAY_UNIT="cvn-pool-pay-$NETWORK"
 cat > "/etc/systemd/system/$PAY_UNIT.service" <<EOF
 [Unit]
@@ -199,12 +202,14 @@ ExecStart=$DIR/cvn_node --network $NETWORK --pool-pay --password-file $KEYS/pass
 EOF
 cat > "/etc/systemd/system/$PAY_UNIT.timer" <<EOF
 [Unit]
-Description=Covenant Standard (CVN) pool, $NETWORK: pay what is owed, $PAY_EVERY
+Description=Covenant Standard (CVN) pool, $NETWORK: pay what is owed, every $PAY_HOURS hours
 
 [Timer]
-OnCalendar=$PAY_EVERY
-RandomizedDelaySec=120
-Persistent=true
+# The hours are counted from the last payment run, and from fifteen minutes
+# after the server starts: time for the pool to catch up with the network.
+OnBootSec=15min
+OnUnitActiveSec=${PAY_HOURS}h
+AccuracySec=1min
 
 [Install]
 WantedBy=timers.target
@@ -235,14 +240,11 @@ echo "                          they do not outlive this server (POOL_GUIDE.md, 
 echo "  Update it later:        run this script again with the same words"
 echo
 if [ -f "$KEYS/wallet_key.json" ] && [ -f "$KEYS/password" ]; then
-  echo "Payments go out by the timer ($PAY_EVERY). The last run:  journalctl -u $PAY_UNIT -n 30"
+  echo "Payments go out by themselves every $PAY_HOURS hours. The last run:  journalctl -u $PAY_UNIT -n 30"
 else
-  echo "PAYMENTS ARE NOT SET UP YET. Until they are, what miners earn is recorded and owed,"
-  echo "and nothing is sent. Either pay by hand whenever you choose:"
-  echo
-  echo "    cd $KEYS && $DIR/cvn_node --network $NETWORK --pool-pay"
-  echo
-  echo "which asks for the pool's 24 words each time and keeps nothing, or let the timer pay:"
+  echo "ONE THING IS LEFT TO DO, ONCE. The pool pays its miners by itself every $PAY_HOURS hours,"
+  echo "and for that it needs the pool's key. Until these three steps are done, what miners"
+  echo "earn is recorded and owed, and nothing is sent:"
   echo
   echo "  1. Save the pool's key on this server, locked with a password of at least"
   echo "     8 characters. In the wallet choose 6 (Recovery words and saved key), then c:"
@@ -252,5 +254,6 @@ else
   echo "  3. Try it once and read what it says:"
   echo "       systemctl start $PAY_UNIT; journalctl -u $PAY_UNIT -n 30 --no-pager"
   echo
-  echo "POOL_GUIDE.md says what each choice means for the safety of the pool's coins."
+  echo "After that nobody has to run anything to pay. POOL_GUIDE.md says what keeping the key"
+  echo "on the server means for the safety of the pool's coins, and how to pay by hand instead."
 fi

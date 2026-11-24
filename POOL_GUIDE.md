@@ -4,7 +4,7 @@ This guide is for someone who wants to run a mining pool for others. To mine at 
 
 A pool is the ordinary CVN program started with one more option. There is no separate pool software, no database server and no website to build. Anyone may run one.
 
-Read all of this guide before you start. Running a pool means holding other people's coins for an hour or two at a time, and section 7 says plainly what that asks of you.
+Read all of this guide before you start. Running a pool means holding other people's coins for some hours at a time, and section 7 says plainly what that asks of you.
 
 ## 1. What a pool does
 
@@ -19,7 +19,7 @@ Started like this, the node:
 - **Keeps a record** of every share, every block and what each address is owed, in a file of its own beside the chain: `pool_cvn_testnet.db`.
 - **Does not mine itself,** so the server's processor is free for checking shares.
 - **Shows a pool page** at `/pool` (and the same figures for programs at `/pool.json`) on the port its explorer is on.
-- **Holds no key.** It cannot spend the pool's coins. Paying is a separate command (section 4).
+- **Holds no key.** It cannot spend the pool's coins. Paying is done by a separate program on a timer (section 4).
 
 The rules are part of the program and the same for every pool run with it:
 
@@ -72,7 +72,7 @@ The script:
 - makes a user named `cvnpool` for the node to run as. That user can write in the pool's own folder, `/var/lib/cvn_pool/NETWORK`, and nowhere else, and cannot read root's files;
 - opens the network's two ports and the work port in the firewall;
 - installs the pool as a service, `cvn-pool-NETWORK`, that starts when the server boots and restarts if it stops;
-- installs a timer for payments, which does nothing until you set payments up (section 4).
+- installs the timer that pays the miners every five hours. It does nothing until you have given it the pool's key, which you do once (section 4).
 
 Running it again later with the same words updates the program and restarts the pool. The chain, the pool's record and the saved key are kept.
 
@@ -89,38 +89,11 @@ Running it again later with the same words updates the program and restarts the 
 
 ## 4. Paying the miners
 
-Nothing is paid until you pay. What each address has earned is recorded and owed, and waits.
+**The pool pays by itself, every five hours.** Nobody runs a command to pay. Five hours after one payment run the next one starts, and so on for as long as the server is up; after a restart the first run comes fifteen minutes after the server starts. Each run pays every address owed 1 CVN or more.
 
-```
-./cvn_node --network cvn_testnet --pool-pay
-```
+For that the pool needs its key, and giving it the key is the one thing you do by hand, once.
 
-run on the pool's server, pays every address owed 1 CVN or more. It works like this:
-
-1. The command asks the pool's node, on the same machine, to prepare the payments: who is paid what, and from which of the pool's coins.
-2. It checks that each payment hangs together, signs it with the pool's key, and hands it back.
-3. The node checks that what came back is exactly what it prepared, writes it into the record as sent, and hands it to the network.
-4. When the transfer is in a block with 100 more on it, the payment is settled.
-
-The key is in the computer's memory only for the seconds the command runs. A payment that has been sent is never made a second time: if its transfer is slow to be mined, the node hands the same transfer to the network again every five minutes until it is. Only coins from blocks that count, and change from payments that have settled, are spent, so no payment can be undone by the chain changing.
-
-There are two ways to run it. Choose one.
-
-### By hand
-
-Log in to the server and run:
-
-```bash
-cd /root/cvn_pool_keys/cvn_testnet && /opt/cvn_node/cvn_node --network cvn_testnet --pool-pay
-```
-
-It asks for the pool's 24 words (they are not shown as you type), says what it is about to pay, and asks you to type YES. Nothing is kept on the server afterwards.
-
-This is the safer way: somebody who breaks into the server finds no key there. It is also the way that depends on you. Miners are paid when you remember to do it.
-
-### By a timer
-
-The server pays by itself, once an hour. For that the pool's key has to be on the server, and so does the password that opens it.
+### Setting it up, once
 
 1. **Save the key on the server, locked with a password.** As root:
 
@@ -136,7 +109,7 @@ The server pays by itself, once an hour. For that the pool's key has to be on th
    ( umask 077; read -rsp 'Password: ' p; echo; printf '%s\n' "$p" > /root/cvn_pool_keys/cvn_testnet/password )
    ```
 
-   The paying command refuses a password file that other users of the machine can read.
+   The pool refuses a password file that other users of the machine can read.
 
 3. **Try it once and read what it says:**
 
@@ -144,11 +117,41 @@ The server pays by itself, once an hour. For that the pool's key has to be on th
    systemctl start cvn-pool-pay-cvn_testnet; journalctl -u cvn-pool-pay-cvn_testnet -n 30 --no-pager
    ```
 
-From then on the timer runs it every hour. `systemctl list-timers` shows when it will next run, and the pool page lists every payment.
+Until these three steps are done nothing is paid: what each address has earned is recorded and owed, and waits. The installer says so at the end of its output for as long as it is true.
 
-To pay at another interval, run the installer again with `CVN_POOL_PAY_EVERY` set, for example `CVN_POOL_PAY_EVERY=daily bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS`. To stop automatic payments: `systemctl disable --now cvn-pool-pay-cvn_testnet.timer`, then in the wallet choose 6 and d to remove the saved key, and delete the password file.
+| To do this | Type |
+|---|---|
+| See when the next payment run is | `systemctl list-timers cvn-pool-pay-cvn_testnet.timer` |
+| See what the last run did | `journalctl -u cvn-pool-pay-cvn_testnet -n 30 --no-pager` |
+| Pay now, without waiting | `systemctl start cvn-pool-pay-cvn_testnet` (the five hours then count from this run) |
+| Pay at another interval | run the installer again with the hours named: `CVN_POOL_PAY_HOURS=2 bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS` |
 
-**What the timer costs in safety.** With the key and its password both on the server, somebody who becomes root there can take every coin the pool's address holds. The node that listens to miners runs as another user and cannot read either file, so a fault in the node alone does not give the key away; a fault that gives an attacker root does. What stands to be lost is what the address holds at that moment: blocks found in the last 75 minutes, payments not yet made, and amounts under 1 CVN. Paying every hour keeps that small. It is never nothing.
+The pool page lists every payment.
+
+**Why five hours.** A shorter interval pays miners sooner and leaves less at the pool's address at any moment. A longer one makes fewer transfers, so less is taken from miners in fees and the chain carries less. Five hours is the middle chosen for the project's own pool; one hour to a day are all reasonable.
+
+### What happens in a payment run
+
+1. The paying command asks the pool's node, on the same machine, to prepare the payments: who is paid what, and from which of the pool's coins.
+2. It checks that each payment hangs together, signs it with the pool's key, and hands it back.
+3. The node checks that what came back is exactly what it prepared, writes it into the record as sent, and hands it to the network.
+4. When the transfer is in a block with 100 more on it, the payment is settled.
+
+The key is opened only for the seconds a run takes, by a program that listens to nobody. The node that listens to miners never has it. A payment that has been sent is never made a second time: if its transfer is slow to be mined, the node hands the same transfer to the network again every five minutes until it is. Only coins from blocks that count, and change from payments that have settled, are spent, so no payment can be undone by the chain changing.
+
+### What this costs in safety, and paying by hand instead
+
+With the key and its password both on the server, somebody who becomes root there can take every coin the pool's address holds. The node that listens to miners runs as another user and cannot read either file, so a fault in the node alone does not give the key away; a fault that gives an attacker root does. What stands to be lost is what the address holds at that moment: the blocks of the last five hours or so, and amounts under 1 CVN. It is never nothing. Use the pool's wallet for the pool only, so that nothing else is ever at that address.
+
+An operator who will not keep the key on a server can leave the three steps undone and pay by hand:
+
+```bash
+cd /root/cvn_pool_keys/cvn_testnet && /opt/cvn_node/cvn_node --network cvn_testnet --pool-pay
+```
+
+It asks for the pool's 24 words (they are not shown as you type), says what it is about to pay, and asks you to type YES. Nothing is kept on the server afterwards. Miners are then paid when you remember to do it, which is why it is not the usual way.
+
+To stop automatic payments later: `systemctl disable --now cvn-pool-pay-cvn_testnet.timer`, then in the wallet choose 6 and d to remove the saved key, and delete the password file.
 
 ## 5. Looking after it
 
@@ -157,7 +160,7 @@ To pay at another interval, run the installer again with `CVN_POOL_PAY_EVERY` se
 - **The pool's record is one file,** `/var/lib/cvn_pool/NETWORK/pool_NETWORK.db`. It is the only place that says what each address is owed for work already done; the chain cannot tell you that. The pool makes copies of it by itself, and the next section is about them.
 - **Keep the server updated:** `apt-get update && apt-get upgrade` for the system, and the installer again for the program when a release says so. Allow remote login with a key only, not a password.
 - **If the pool stops,** miners' machines keep trying to connect and earn nothing meanwhile. What they were owed is still owed. Start it again as soon as you can and say what happened.
-- **Closing a pool.** Tell your miners in advance, and name the day. On that day close the work port (`ufw delete allow 18083/tcp`) and restart the pool, so that no miner is connected. Leave it running about 75 minutes more, for the last blocks to count, then run the payments. Amounts under 1 CVN are not paid by the command; decide in advance what you will do about them and say so.
+- **Closing a pool.** Tell your miners in advance, and name the day. On that day close the work port (`ufw delete allow 18083/tcp`) and restart the pool, so that no miner is connected. Leave it running about 75 minutes more, for the last blocks to count, then start a payment run (`systemctl start cvn-pool-pay-NETWORK`). Amounts under 1 CVN are not paid by the command; decide in advance what you will do about them and say so.
 
 ## 6. Copies of the pool's record, and losing it
 
@@ -201,7 +204,7 @@ The program makes a pool's arithmetic public. It cannot make its operator honest
 
 - **Who you are,** or at least how to reach you.
 - **The pool's address,** so that anyone can see on the chain what it found and what it paid.
-- **How often you pay,** and whether by hand or by a timer.
+- **How often your pool pays.** Every five hours unless you have changed it.
 - **Any change you have made to the program.** A pool run with the published program takes no fee and divides blocks as section 1 says. If yours is built from changed source, say what you changed.
 
 And these you should hold yourself to:

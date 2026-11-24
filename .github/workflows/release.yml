@@ -76,7 +76,7 @@ jobs:
       - name: Package
         run: |
           New-Item -ItemType Directory -Force -Path package/cvn_node | Out-Null
-          Copy-Item cvn_miner.exe, cvn_node.exe, LaunchMiner.bat, LaunchWallet.bat, explorer.html, README.md, Installation_Guide.md, MINING_GUIDE.md, POOL_GUIDE.md, WHITEPAPER.md, LICENSE, THIRD_PARTY_NOTICES.md -Destination package/cvn_node
+          Copy-Item cvn_miner.exe, cvn_node.exe, LaunchMiner.bat, LaunchWallet.bat, explorer.html, README.md, Installation_Guide.md, MINING_GUIDE.md, POOL_GUIDE.md, POOL_DESIGN.md, WHITEPAPER.md, LICENSE, THIRD_PARTY_NOTICES.md -Destination package/cvn_node
           Compress-Archive -Path package/cvn_node -DestinationPath cvn_node_windows.zip
           # The SHA-256 of the package and of each program in it, so that
           # anyone can check a download, or a build of their own, against it.
@@ -126,7 +126,7 @@ jobs:
       - name: Package
         run: |
           for arch in amd64 arm64; do
-            cp explorer.html README.md Installation_Guide.md MINING_GUIDE.md POOL_GUIDE.md WHITEPAPER.md LICENSE THIRD_PARTY_NOTICES.md package/cvn_node_linux_$arch/
+            cp explorer.html README.md Installation_Guide.md MINING_GUIDE.md POOL_GUIDE.md POOL_DESIGN.md WHITEPAPER.md LICENSE THIRD_PARTY_NOTICES.md package/cvn_node_linux_$arch/
             tar -C package -czf cvn_node_linux_$arch.tar.gz cvn_node_linux_$arch
           done
           # The SHA-256 of each package and of the program in it, so that

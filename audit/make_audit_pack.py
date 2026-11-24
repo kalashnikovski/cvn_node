@@ -90,6 +90,15 @@ RULES = [
 PROGRAM = [
     "main.go",
     "node/main.go",
+    "node/proof_ahead.go",
+    "node/pool.go",
+    "node/pool_ledger.go",
+    "node/pool_payments.go",
+    "node/pool_pay.go",
+    "node/pool_chain.go",
+    "node/pool_backup.go",
+    "node/pool_page.go",
+    "node/pool_mine.go",
     "node/http_api.go",
     "node/dashboard.go",
     "node/builtin_miner.go",
@@ -273,6 +282,31 @@ def build(title, purpose, files):
     return NEWLINE.join(lines) + NEWLINE
 
 
+# The pool: a node that takes miners in, records their work and pays them.
+# It holds other people's coins, so it is reviewed by itself (Prompt 8).
+POOL = [
+    "POOL_DESIGN.md",
+    "POOL_GUIDE.md",
+    "node/pool.go",
+    "node/stratum.go",
+    "node/pool_ledger.go",
+    "node/pool_payments.go",
+    "node/pool_pay.go",
+    "node/pool_chain.go",
+    "node/pool_backup.go",
+    "node/pool_page.go",
+    "node/pool_mine.go",
+    "node/tx_rules.go",
+    "node/recovery_words.go",
+    "deploy/install_pool.sh",
+    "node/pool_test.go",
+    "node/pool_pay_test.go",
+    "node/pool_backup_test.go",
+    "node/pool_mine_test.go",
+    "node/pool_multinode_test.go",
+]
+
+
 def main():
     listed = set(RULES + PROGRAM)
     for name, selection in (("FOCUS", FOCUS), ("RULE_B", RULE_B), ("RULE_H", RULE_H)):
@@ -324,6 +358,11 @@ def main():
           "places them, compares chains, and finds the Bitcoin block it starts from. See",
           "audit/CHANGES_FOR_ROUND_6.md, sections 2 to 4. The rules of validity are NOT here."],
          NETWORK),
+        ("cvn_audit_pool.txt", "A SELECTION - THE POOL",
+         ["The pool built into the node: shares, the record of who is owed what, paying, the",
+          "record's copies, and the miner's side. See POOL_DESIGN.md, the first file. The rules of",
+          "validity, networking and the wallets are NOT here, apart from the two files the pool leans on."],
+         POOL),
     ]
     os.makedirs(OUT, exist_ok=True)
     for name, title, purpose, files in packs:

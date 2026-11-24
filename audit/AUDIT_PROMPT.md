@@ -966,6 +966,54 @@ Be specific or say nothing. Do not add a summary.
 
 ---
 
+## Prompt 8: the pool
+
+Give `cvn_audit_pool.txt`. A review of the mining pool built into the node, which holds other people's coins between the moment a block is found and the moment its miners are paid. It does not cover the rules of validity, the networking or the wallets.
+
+```text
+You are reviewing ONE part of a proof-of-work blockchain, written in Go, before it is used by the public: a mining pool built into the node. The pool takes miners in, counts their work, builds blocks that pay its own address, records what each miner is owed, and pays them. It changes no rule of the chain. Between a block and its payment it holds other people's coins, so a mistake here loses or misdirects money. Your job is to find what is wrong. Do not summarise, explain what a pool is, or praise.
+
+WHAT YOU HAVE
+
+One file, attached or pasted below, holding nineteen files from a larger code base. The rules that decide whether a block or a transfer is valid are NOT here except node/tx_rules.go; assume a block or transfer the node accepted is valid. Do not guess at code you cannot see; where a finding depends on it, say so.
+
+The material numbers its files ("FILE n OF 19") and ends with the line "END OF PACK". Begin by stating the number of the last file you can see and whether you can see that line. If you cannot, your copy was cut short: say so and stop.
+
+Read POOL_DESIGN.md first. It states how the pool is meant to work, as claims. It was written by the authors and may be wrong; where the code does not do what it says, that is a finding.
+
+QUESTIONS
+
+1. Paying twice. Find any sequence of events in which an address receives on the chain more than its parts of the blocks that count: a program stopped between two writes, a payment prepared, signed, sent, mined, replaced by a change of chain, sent again, the paying command run twice at once, a record closed and opened. Trace markSent, noteMined, settlePayment, returnPayment and returnStalePayments, and say what is on disk at each point a crash could fall.
+
+2. Paying too little, or never. Find a sequence that leaves an amount owed and never payable, a coin set aside for ever, or a payment stuck in "sent" that can never be mined and never gives its amounts back.
+
+3. The record put back. An older copy of the record replaces the present one (pool_backup.go, pool_chain.go). The design claims nobody is then paid twice. Find a case where that fails: a payment in the chain the reader does not find; one taken in before a block it paid for has been counted; a transfer taken in twice; the height the file says it has read to being ahead of a transfer still waiting; a change of chain between reading and taking in. Check readFrom, noteRead, saveReadToLocked and adoptTransfer against each other.
+
+4. The division. Check poolSplit and decide: do the parts always add up to exactly the reward, for any shares, any window and any reward, including one share, equal work and very large numbers? Can a miner gain more than its work by the timing or size of its shares, by many addresses, or by many connections? Can a share be counted twice, or for more than the difficulty it was asked for?
+
+5. The key. The design claims the node that listens to miners never holds the pool's key. Find any path by which it could: through the port the paying command uses (who may call it, from where, with what), through what the paying command accepts from the node before it signs (poolPaymentLooksRight), or through the files. What is the most a node that has been taken over can make the paying command sign?
+
+6. Strangers. A miner is anyone on the internet. Find input from a miner, or from a pool's page as read by a miner's machine (pool_mine.go), that crashes the program, grows a table without limit, costs the pool far more than the sender, or puts text of the sender's choosing on an operator's or miner's screen or command line.
+
+7. The check of a copy. checkPoolRecordFile is what decides that a copy is whole. Name a damaged or altered record it would pass, and a sound record it would refuse.
+
+8. The installer. Read deploy/install_pool.sh as a script run as root on a fresh server. Does the user the node runs as really have no way to the saved key or its password? Is anything left open, writable or readable that should not be? It has had no run on a real server: say what would fail.
+
+DO NOT REPORT
+
+What POOL_DESIGN.md lists under "Not in this version" or in its table of risks as known. That a pool's operator must be trusted to pay. Style and wording.
+
+HOW TO ANSWER
+
+Answer each question in order, in a few lines: what you checked and what you concluded. "Did not check" is acceptable; silence is not.
+
+Then findings, most serious first, each with: Title; Severity (Critical: coins are lost or paid to the wrong address / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps in order; the lines that allow it, quoted; the smallest fix.
+
+Be specific or say nothing. Do not add a summary.
+```
+
+---
+
 ## After the reviews
 
 Bring the findings back to the development session, with each reviewer's verdicts from Prompt 2. Each one that survives is then:
