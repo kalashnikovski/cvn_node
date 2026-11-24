@@ -606,6 +606,25 @@ func TestPoolPayCommandSignsAndSends(t *testing.T) {
 	}
 }
 
+// A payment run started by the timer before the pool is up is not a fault:
+// it says the pool is not running yet and ends well. Run by hand, the same
+// thing is said as the mistake it then is.
+func TestAPaymentRunBeforeThePoolIsUpEndsQuietly(t *testing.T) {
+	onNetwork(t, "devnet")
+	privateKey, _, _, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyFile := filepath.Join(t.TempDir(), "key")
+	if err := os.WriteFile(keyFile, []byte(privateKey+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// No pool listens on this network's paying port in a test.
+	if code := RunPoolPay([]string{"cvn_node", "--pool-pay", "--password-file", keyFile}); code != 0 {
+		t.Errorf("a timer's payment run with no pool running ended with %d, want 0", code)
+	}
+}
+
 // The password file opens the pool's key. One that anybody but its owner can
 // read or change is not used.
 func TestAPasswordFileOthersCanReadIsNotUsed(t *testing.T) {

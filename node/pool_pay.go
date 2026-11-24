@@ -623,6 +623,14 @@ func RunPoolPay(args []string) int {
 	var prepared poolPrepareReply
 	status, err := poolPayCall("/prepare", struct{}{}, &prepared)
 	if err != nil {
+		// Run by a timer, this is not a fault to be reported as one: the
+		// pool has not started yet, or is being restarted. Nothing was
+		// prepared, nothing is lost, and the next run tries again.
+		if !byHand {
+			fmt.Println(" The pool on this machine is not running yet, so there is nothing to pay from. Nothing was signed.")
+			fmt.Println(" The next run will try again.")
+			return 0
+		}
 		fmt.Printf("❌ The pool's node on this machine did not answer (%v).\n   It must be running, started with --pool, on the same network.\n", err)
 		return 1
 	}
@@ -637,6 +645,12 @@ func RunPoolPay(args []string) int {
 		}
 	}
 	if status != http.StatusOK || prepared.Error != "" {
+		// The same for a pool that is still catching up with the network.
+		if !byHand && (strings.Contains(prepared.Error, "catching up") || strings.Contains(prepared.Error, "could not read the chain")) {
+			fmt.Println(" The pool is not ready to pay yet: " + prepared.Error + ". Nothing was signed.")
+			fmt.Println(" The next run will try again.")
+			return 0
+		}
 		fmt.Printf("❌ The pool's node could not prepare payments: %s\n", prepared.Error)
 		return 1
 	}
