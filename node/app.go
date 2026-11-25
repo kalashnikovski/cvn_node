@@ -186,6 +186,11 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, priv
 // a new seven-year count. With `everything` set to "all", every coin is
 // renewed. Like a transfer, it is signed on this machine and the private
 // key is not kept.
+//
+// If a renewal this wallet sent with no fee has not gone through after some
+// days, the answer begins "NOT THROUGH:" and nothing is sent. The screen
+// then asks, and calls again with "again" (send that renewal again, with a
+// fee) or "skip" (leave it and renew as usual).
 func (a *App) RenewCoinsSubmit(feeStr, privateKeyHex, everything string) string {
 	feeUnits := int64(0)
 	var err error
@@ -204,6 +209,33 @@ func (a *App) RenewCoinsSubmit(feeStr, privateKeyHex, everything string) string 
 	}
 	if len(privateKeyHex)%2 == 1 {
 		privateKeyHex = "0" + privateKeyHex
+	}
+	// A renewal sent some days ago that has not gone through
+	// (renew_record.go). Asked plainly, the wallet first says so, with how
+	// many transfers a second try would be and what it would cost in all,
+	// and sends nothing. Asked with "again", it sends that renewal again
+	// with the fee the wallet proposed in its question. The screen sends no
+	// fee of its own with "again", so what is paid is what was shown.
+	// With "skip" or "all" it goes on to an ordinary renewal.
+	switch mode := strings.TrimSpace(everything); mode {
+	case "again":
+		result, err := RenewAgainFromWallet(privateKeyHex, publicKeyHex, feeUnits, time.Now())
+		if err != nil && len(result.Transfers) == 0 {
+			return "REJECTED: " + err.Error()
+		}
+		message := "SUCCESS: " + result.Summary()
+		if err != nil {
+			message += " Then it stopped: " + err.Error()
+		}
+		return message
+	case "":
+		if address, err := DeriveAddressFromPublicKey(publicKeyHex); err == nil {
+			if coins, _, err := FetchSpendableCoinsOverHTTP(strings.TrimSpace(address)); err == nil {
+				if waiting := renewalsNotGoneThrough(address, coins, time.Now()); waiting.any() {
+					return "NOT THROUGH: " + waiting.describe(time.Now()) + ". " + waiting.question(waiting.proposedFeeUnits())
+				}
+			}
+		}
 	}
 	result, err := RenewCoinsFromWallet(privateKeyHex, publicKeyHex, feeUnits, strings.TrimSpace(everything) == "all")
 	if err != nil && len(result.Transfers) == 0 {

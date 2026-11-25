@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // RENEW MY COINS
@@ -32,6 +33,13 @@ type RenewResult struct {
 	CoinsRenewed int   // coins sent back to their own address
 	EarliestDue  int64 // the earliest sweep block among the wallet's coins before (0 if none)
 	Transfers    []Transaction
+	// NoteProblem is set when the transfers were sent but the wallet could
+	// not write its note of them (see renew_record.go). The renewal itself
+	// is not affected.
+	NoteProblem error
+	// SentAgain is true when this was the second try of a renewal that had
+	// not gone through, and not an ordinary renewal.
+	SentAgain bool
 }
 
 // Summary is one sentence for the person using the wallet.
@@ -40,6 +48,12 @@ func (r RenewResult) Summary() string {
 		r.CoinsRenewed, len(r.Transfers), r.Address)
 	if len(r.Transfers) == combineMaxTransfers {
 		text += " There may be more to renew: run it again after that."
+	}
+	if r.SentAgain {
+		text += " Only the renewal that had not gone through was sent again. If other coins are near their date, renew once more for those."
+	}
+	if r.NoteProblem != nil {
+		text += fmt.Sprintf(" (The wallet could not write its note of this renewal in %s: %v. The renewal is not affected; the wallet will only be unable to remind you if it does not go through.)", renewalRecordPath(), r.NoteProblem)
 	}
 	return text
 }
@@ -154,16 +168,24 @@ func RenewCoinsFromWallet(privateKeyHex, publicKeyHex string, feeUnits int64, ev
 		return result, fmt.Errorf("no coin of this wallet is within a year of its date: the earliest is the end of block #%d, %s away. Nothing needs renewing yet",
 			result.EarliestDue, describeBlocksAway(result.EarliestDue-tipHeight))
 	}
+	var stopped error
 	for _, group := range groups {
 		tx, err := BuildSignedRenewal(privateKeyHex, publicKeyHex, feeUnits, group)
-		if err != nil {
-			return result, err
+		if err == nil {
+			err = SubmitTransferOverHTTP(gateway, tx)
 		}
-		if err := SubmitTransferOverHTTP(gateway, tx); err != nil {
-			return result, err
+		if err != nil {
+			stopped = err
+			break
 		}
 		result.Transfers = append(result.Transfers, tx)
 		result.CoinsRenewed += len(group)
 	}
-	return result, nil
+	// A renewal sent with no fee is written down, so that the wallet can
+	// say so if it has not gone through some days later, and offer to send
+	// it again with a small fee (renew_record.go).
+	if feeUnits == 0 && len(result.Transfers) > 0 {
+		result.NoteProblem = noteRenewalSent(ownerAddress, result.Transfers, 0, time.Now())
+	}
+	return result, stopped
 }

@@ -52,12 +52,15 @@ func TestTheShortTipAnswerIsQuickOnAFullBlock(t *testing.T) {
 		if len(transfers) == 70 {
 			break
 		}
-		each := (coin.Amount.Units() - 100000) / int64(TxMaxOutputs)
+		// Free transfers: ones that pay may fill only four fifths of a
+		// block, and this test wants a full one.
+		each := coin.Amount.Units() / int64(TxMaxOutputs)
 		outputs := make([]UTXOOutput, TxMaxOutputs)
 		for p := range outputs {
 			outputs[p] = UTXOOutput{Recipient: owner, Amount: UnitsAmount(each)}
 		}
-		tx, err := signTransfer(privateKey, publicKey, owner, []UTXOInput{walletInput(coin)}, outputs, coin.Amount.Units()-each*int64(TxMaxOutputs))
+		outputs[TxMaxOutputs-1].Amount = UnitsAmount(coin.Amount.Units() - each*int64(TxMaxOutputs-1))
+		tx, err := signTransfer(privateKey, publicKey, owner, []UTXOInput{walletInput(coin)}, outputs, 0)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -189,7 +189,10 @@ func TestBlockSizeLimit(t *testing.T) {
 	coins := ListSpendableCoins(owner)
 	var transfers []Transaction
 	for _, coin := range coins {
-		transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("1"), cvn("0.01"), []SpendableCoin{coin})
+		// Sent free: this test is about a block's size. Transfers that pay
+		// may fill only four fifths of the size limit, and the limit is set
+		// below to exactly this block's size.
+		transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("1"), 0, []SpendableCoin{coin})
 		if err != nil {
 			t.Fatal(err)
 		}

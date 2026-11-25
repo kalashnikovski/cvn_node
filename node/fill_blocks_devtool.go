@@ -35,7 +35,9 @@ import (
 //     had it each seed had it too.
 //
 // The coins never leave the wallet. They end up in many small pieces, which
-// the wallet's "Combine" puts back together. Each transfer pays a small fee.
+// the wallet's "Combine" puts back together. The transfers pay no fee: by
+// rule the transfers that pay may fill only four fifths of a block, so a
+// block is filled to its limit only with ones that do not.
 // It refuses to run on a network that is not for testing.
 
 func init() {
@@ -59,9 +61,11 @@ func fillTransfers(privateKeyHex, publicKeyHex, address string, coins []Spendabl
 		for p := range outputs {
 			outputs[p] = UTXOOutput{Recipient: address, Amount: UnitsAmount(each)}
 		}
-		// What does not divide evenly goes with the fee.
-		fee := coin.Amount.Units() - each*pieces
-		tx, err := signTransfer(privateKeyHex, publicKeyHex, address, []UTXOInput{walletInput(coin)}, outputs, fee)
+		// What does not divide evenly goes into the last piece, so that the
+		// fee is exactly the one asked for and a transfer asked to be free
+		// pays nothing.
+		outputs[pieces-1].Amount = UnitsAmount(coin.Amount.Units() - feeUnits - each*(pieces-1))
+		tx, err := signTransfer(privateKeyHex, publicKeyHex, address, []UTXOInput{walletInput(coin)}, outputs, feeUnits)
 		if err != nil {
 			continue
 		}
@@ -258,8 +262,8 @@ func runFillBlocksCommand(args []string) bool {
 	fmt.Println("====================================================================")
 	fmt.Printf(" A block holds up to %d bytes. The node at %s is at block #%d.\n", Params.MaxBlockBytes, local, startHeight)
 	fmt.Println(" This sends coins from your wallet back to your own wallet, cut into")
-	fmt.Println(" many small pieces, paying a small fee each time. Use the wallet's")
-	fmt.Println(" \"Combine\" afterwards to put them back together.")
+	fmt.Println(" many small pieces, with no fee. Use the wallet's \"Combine\"")
+	fmt.Println(" afterwards to put them back together.")
 	fmt.Println()
 	input := bufio.NewReader(os.Stdin)
 	typed := readSecretLine(input, " Private key, 24 recovery words, or the saved key's password (not shown while typing): ")
@@ -282,7 +286,8 @@ func runFillBlocksCommand(args []string) bool {
 		resp.Body.Close()
 	}
 	fmt.Printf(" Wallet %s holds %d coin(s) ready to spend.\n", address, len(coins))
-	const feeUnits = 100000 // 0.001 CVN
+	// No fee: transfers that pay may fill only four fifths of a block.
+	const feeUnits = 0
 	transfers, bytes, _ := fillTransfers(privateKeyHex, publicKeyHex, address, coins, budget*count, feeUnits)
 	if bytes < budget {
 		fmt.Printf("❌ These coins make only %d bytes of transfers, less than one full block (%d). Mine more blocks first: about %d coins are needed for each block to be filled.\n",
