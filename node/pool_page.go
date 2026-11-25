@@ -130,7 +130,12 @@ type poolPage struct {
 	Paid              string  `json:"paid"`
 	MinimumPayment    string  `json:"minimum_payment"`
 	PaymentFee        string  `json:"payment_fee"`
-	PaymentsSettled   int     `json:"payments_settled"`
+	// An address owed less than the minimum is paid whatever it is owed,
+	// from SmallestPayment up, once it has gone this many hours without a
+	// payment.
+	SmallestPayment        string `json:"smallest_payment"`
+	PayAnyAmountAfterHours int    `json:"pay_any_amount_after_hours"`
+	PaymentsSettled        int    `json:"payments_settled"`
 	// What the blocks themselves paid to miners, and the smallest part a
 	// block pays so (pool_inblock.go).
 	InBlock      string `json:"in_block"`
@@ -191,6 +196,7 @@ func readPoolPage(now time.Time) poolPage {
 		Owed:          FormatUnits(view.Owed), OwedUnits: view.Owed, EarnedUnits: view.Earned, PaidUnits: view.Paid,
 		Paid: FormatUnits(view.Paid), PendingUnits: view.Pending, Pending: FormatUnits(view.Pending),
 		MinimumPayment: FormatUnits(poolMinimumPaymentUnits), PaymentFee: FormatUnits(poolPaymentFeeUnits),
+		SmallestPayment: FormatUnits(poolSmallestPaymentUnits), PayAnyAmountAfterHours: int(poolPayAnyAmountAfter / time.Hour),
 		PaymentsSettled: view.PaymentsSettled,
 		InBlock:         FormatUnits(view.InBlock), InBlockUnits: view.InBlock, InBlockFloor: FormatUnits(poolInBlockFloorUnits),
 		InBlockWaiting: FormatUnits(view.WaitingInBlock), InBlockWaitingUnits: view.WaitingInBlock,
@@ -350,7 +356,7 @@ summary { cursor: pointer; }
 <main>
 <h1>CVN pool</h1>
 <p>Network: <b>{{.Network}}</b>. This pool takes no fee. A block's reward is divided among the most recent shares, counted back over the work of {{.WindowBlocks}} blocks.</p>
-<p class="quiet"><strong>A block this pool finds pays the miners itself.</strong> Its reward is divided among the addresses that did the recent work, and each part of {{.InBlockFloor}} CVN or more is paid in the block, straight to its address: the pool never holds it. A block has room for 50 addresses. Parts that are smaller, or that do not fit, go to the pool's address <code>{{.PoolAddress}}</code> and are owed. What is owed is paid by ordinary transfers from that address, to every address owed {{.MinimumPayment}} CVN or more; each transfer carries a fee of {{.PaymentFee}} CVN, shared among the addresses it pays. A block counts in these figures once {{.ConfirmBlocks}} more blocks stand on it; one that another block has replaced by then counts for nothing.</p>
+<p class="quiet"><strong>A block this pool finds pays the miners itself.</strong> Its reward is divided among the addresses that did the recent work, and each part of {{.InBlockFloor}} CVN or more is paid in the block, straight to its address: the pool never holds it. A block has room for 50 addresses. Parts that are smaller, or that do not fit, go to the pool's address <code>{{.PoolAddress}}</code> and are owed. What is owed is paid by ordinary transfers from that address: on every payment run to every address owed {{.MinimumPayment}} CVN or more, and to an address that has not been paid in the last {{.PayAnyAmountAfterHours}} hours whatever it is owed, if that is {{.SmallestPayment}} CVN or more. Each transfer carries a fee of {{.PaymentFee}} CVN, shared among the addresses it pays. A block counts in these figures once {{.ConfirmBlocks}} more blocks stand on it; one that another block has replaced by then counts for nothing.</p>
 
 <div class="scroll">
 <table>

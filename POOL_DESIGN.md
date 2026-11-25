@@ -76,7 +76,7 @@ Each address has five figures, and the first is always the other four together: 
 
 This section is about the parts a block did not pay to a miner itself: those under 0.01 CVN, and those of miners beyond the fifty a block has room for. They are the only coins a pool holds for anybody. For a pool with few miners there may be none.
 
-**A pool pays them by itself, every five hours.** Nobody runs a command to pay. A timer on the pool's server starts a payment run five hours after the last one, and each run pays every address owed 1 CVN or more. The operator does one thing by hand, once: saves the pool's key on the server, locked with a password that only the administrator can read. [POOL_GUIDE.md](POOL_GUIDE.md) has the steps, what keeping the key there costs in safety, and how an operator who will not keep it there pays by hand instead.
+**A pool pays them by itself, every five hours.** Nobody runs a command to pay. A timer on the pool's server starts a payment run five hours after the last one, and each run pays every address owed 1 CVN or more. An address owed less does not wait until it is owed that much: once it has gone twelve hours without a payment, a run pays it whatever it is owed, if that is 0.002 CVN or more. So a small miner is not sent a crumb every five hours, and a run reaches them within a day of their last payment: within fifteen hours when runs are five hours apart. An amount under 0.002 CVN waits until it has grown. A run that cannot pay (the pool is catching up with the network, or its settled coins do not reach) says so and leaves the payment to the next. The timer may be set to other hours, but never more than 24. The operator does one thing by hand, once: saves the pool's key on the server, locked with a password that only the administrator can read. [POOL_GUIDE.md](POOL_GUIDE.md) has the steps, what keeping the key there costs in safety, and how an operator who will not keep it there pays by hand instead.
 
 **The paying is done by two programs, and only one of them has the key.** The pool's node, which listens to miners, knows what each address is owed and which of the pool's coins are free. It prepares the payments and holds no key. The timer starts a second, short-lived program on the same machine that has the key and listens to nobody:
 
@@ -86,7 +86,7 @@ cvn_node --network NAME --pool-pay --password-file FILE
 
 In each run:
 
-1. The paying program asks the pool's node to prepare the payments: every address owed 1 CVN or more, the most owed first, in transfers of up to 49 addresses, with the coins that pay for each. Those amounts are no longer "owed" but "on their way", and the coins are set aside.
+1. The paying program asks the pool's node to prepare the payments: every address owed 1 CVN or more, and every address owed 0.002 CVN or more that no payment has been prepared for in the last twelve hours, the most owed first, in transfers of up to 49 addresses, with the coins that pay for each. Those amounts are no longer "owed" but "on their way", and the coins are set aside.
 2. The paying program checks that each payment hangs together (the figures add up, the fee is the small one, the change comes back to the pool), signs it, and hands it back.
 3. The node checks that the signed transfer is exactly the payment it prepared and is signed by the pool's address, writes it into the record as sent, and only then hands it to the network.
 4. When the transfer is in a block with 100 more on it, the payment is settled.

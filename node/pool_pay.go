@@ -46,9 +46,29 @@ import (
 // The settings of a payment run. They are variables so that tests can use
 // small figures.
 var (
-	// An address owed less than this waits until it is owed more (decided
+	// An address owed this much or more is paid on every run (decided
 	// 23 November 2026: 1 CVN).
 	poolMinimumPaymentUnits = int64(100000000)
+	// An address owed less than the minimum does not wait until it is owed
+	// that much: once it has gone poolPayAnyAmountAfter without a payment,
+	// a run pays it whatever it is owed, if that is at least this (decided
+	// 25 November 2026: nothing owed waits past a day). 0.002 CVN is twice
+	// the fee of a payment, so that even an address paid alone keeps at
+	// least half. It must always be more than that fee and the smallest
+	// coin together, or what is left would not be a coin.
+	poolSmallestPaymentUnits = int64(200000)
+	// Twelve hours, not twenty-four: runs come some hours apart (five,
+	// unless the operator chose otherwise, and at most a day), and a run
+	// must reach an address within a day of its last payment whatever the
+	// hours between runs.
+	poolPayAnyAmountAfter = 12 * time.Hour
+	// Runs do not begin to the second, and a run stamps its payments a
+	// little after it begins. With no slack, a run that came twelve hours
+	// after the last could find an address paid "eleven hours and fifty-nine
+	// minutes ago" and pass over it until the run after that. So the node
+	// looks back half an hour less than the figure it gives out: it does a
+	// little better than it says, never worse.
+	poolPayRunSlack = 30 * time.Minute
 	// The fee each payment transfer carries, shared equally among the
 	// addresses it pays (decided 23 November 2026: 0.001 CVN).
 	poolPaymentFeeUnits = int64(100000)
@@ -147,6 +167,7 @@ func poolPrepare(now time.Time) ([]poolPayment, string, error) {
 	return poolLedger.preparePayments(poolPaymentPlan{
 		Now: now.Unix(), PoolAddress: poolAddress,
 		MinimumUnits: poolMinimumPaymentUnits, FeeUnits: poolPaymentFeeUnits,
+		SmallestUnits: poolSmallestPaymentUnits, NotPaidSince: now.Add(poolPayRunSlack - poolPayAnyAmountAfter).Unix(),
 		Usable: poolCoinUsable,
 	})
 }

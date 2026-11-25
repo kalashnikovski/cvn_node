@@ -536,7 +536,34 @@ func TestMultiNodeAPool(t *testing.T) {
 	// earned in all is the rewards of the blocks that count.
 	earned := map[string]int64{}
 	var earnedInAll, paidAndOnItsWay int64
-	for _, address := range page.Addresses {
+	// The page lists an address while it has recent work or is owed
+	// something. A miner that has been paid in full, and whose work has
+	// left the window, is not listed, so each miner the page does not list
+	// is asked for by its address: what it earned counts all the same.
+	accounts := append([]poolPageAddress(nil), page.Addresses...)
+	listed := map[string]bool{}
+	for _, address := range accounts {
+		listed[address.Address] = true
+	}
+	for _, worker := range workers {
+		if listed[worker.address] {
+			continue
+		}
+		var one poolPageAddress
+		if !pool.get("/pool.json?address="+worker.address, &one) || one.Address != worker.address {
+			t.Fatalf("the pool did not answer for the miner at %s, which its page does not list", worker.address)
+		}
+		// The page may leave out only an address that is owed nothing and
+		// has nothing on its way.
+		if one.OwedUnits != 0 || one.PendingUnits != 0 {
+			t.Errorf("the pool's page does not list the miner at %s, which is owed %d units with %d on their way", worker.address, one.OwedUnits, one.PendingUnits)
+		}
+		accounts = append(accounts, one)
+	}
+	if page.AddressesNotShown != 0 {
+		t.Errorf("the pool's page left %d address(es) out for want of room, with three miners", page.AddressesNotShown)
+	}
+	for _, address := range accounts {
 		earned[address.Address] = address.EarnedUnits
 		earnedInAll += address.EarnedUnits
 		paidAndOnItsWay += address.PaidUnits + address.PendingUnits

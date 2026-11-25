@@ -282,6 +282,9 @@ type poolFacts struct {
 	BlocksFound    int     `json:"blocks_found"`
 	MinimumPayment string  `json:"minimum_payment"`
 	ConfirmBlocks  int64   `json:"confirm_blocks"`
+	// A pool of an earlier version does not say these two.
+	SmallestPayment        string `json:"smallest_payment"`
+	PayAnyAmountAfterHours int    `json:"pay_any_amount_after_hours"`
 }
 
 // poolFactsProblem says why this program cannot mine at a pool that
@@ -424,6 +427,9 @@ func RunPoolMiner(target, from string, args []string) int {
 		}
 		fmt.Printf(" The pool says: %d miner(s) connected, %s, %d block(s) found so far. It %s\n", facts.Miners, hashesText(facts.Speed), facts.BlocksFound, fee)
 		fmt.Printf("                and pays every address it owes %s CVN or more.\n", shownPlainly(facts.MinimumPayment, 24))
+		if facts.SmallestPayment != "" && facts.PayAnyAmountAfterHours > 0 && facts.PayAnyAmountAfterHours <= 24 {
+			fmt.Printf("                An address it has not paid for %d hours is paid whatever it is owed, from %s CVN up.\n", facts.PayAnyAmountAfterHours, shownPlainly(facts.SmallestPayment, 24))
+		}
 		fmt.Printf(" Its page:      %s/pool\n", pageAddress)
 	}
 	fmt.Println("====================================================================")
