@@ -392,7 +392,14 @@ func ValidateBlockSignatures(b Block) bool {
 			case b.Index == tipBlock.Index+1 && b.PrevHash == tipBlock.Hash:
 				lookup = bucketLookup(bUTXO)
 			case b.Index == tipBlock.Index && b.PrevHash == tipBlock.PrevHash:
-				lookup = lookupWithBlockUndone(dbTx, bUTXO, tipBlock)
+				var undoneErr error
+				if lookup, undoneErr = lookupWithBlockUndone(dbTx, bUTXO, tipBlock); undoneErr != nil {
+					// Not a fault in the block: this node cannot say what
+					// its coins were before its newest block.
+					fmt.Printf("🚨 A block for the place of block #%d could not be judged: %v\n", b.Index, undoneErr)
+					isBlockValid = false
+					return nil
+				}
 			default:
 				// A second copy of a block we already hold, arriving after the
 				// chain has moved on past it, lands here too. That is not a

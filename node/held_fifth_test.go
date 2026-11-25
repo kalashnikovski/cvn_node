@@ -330,7 +330,7 @@ func TestASmallCoinLosesOnlyTheFifthSetAside(t *testing.T) {
 	sweptAt := func(height int64) bool {
 		found := false
 		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			for _, record := range loadSweepRecords(dbTx, height) {
+			for _, record := range mustLoadSweepRecords(dbTx, height) {
 				if record.Key == key {
 					found = true
 				}
@@ -401,7 +401,7 @@ func TestSettingAsideAndExpiryAreUndoneWithTheirBlocks(t *testing.T) {
 	// for the second time.
 	blockTwoCoin := utxoKey(GetBlockByHeightFromDB(2).Transactions[0].ID, 0)
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-		record, found := lookupWithBlockUndone(dbTx, dbTx.Bucket(utxoBucket), tip)(blockTwoCoin)
+		record, found := mustLookupWithBlockUndone(dbTx, dbTx.Bucket(utxoBucket), tip)(blockTwoCoin)
 		raw, _ := json.Marshal(record)
 		var seen storedCoin
 		_ = json.Unmarshal(raw, &seen)
@@ -1100,7 +1100,7 @@ func sweepByHand(t testing.TB, db *bbolt.DB, coin UTXORecord) (after UTXORecord,
 		if err := json.Unmarshal(bUTXO.Get([]byte(key)), &after); err != nil {
 			return err
 		}
-		for _, record := range loadSweepRecords(dbTx, date) {
+		for _, record := range mustLoadSweepRecords(dbTx, date) {
 			if record.Key == key {
 				recorded = true
 				if before, _ := json.Marshal(record.Before); string(before) != string(raw) {
@@ -1558,5 +1558,181 @@ func TestTheWalletWarnsWhenADateIsNear(t *testing.T) {
 	plain := SpendableCoin{TxID: "TX_a", Amount: UnitsAmount(cvn("50")), SweepAt: 5000}
 	if lines := strings.Join(describeCoinDates([]SpendableCoin{plain, swept}, 5000-10, true), "\n"); !strings.Contains(lines, "less than two days") {
 		t.Errorf("ten blocks before a coin's first date the wallet said:\n%s", lines)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Outside review, round 10
+// ---------------------------------------------------------------------------
+
+// mustLoadSweepRecords is loadSweepRecords for tests whose records are whole.
+func mustLoadSweepRecords(dbTx *bbolt.Tx, height int64) []SweptCoin {
+	records, err := loadSweepRecords(dbTx, height)
+	if err != nil {
+		panic(err)
+	}
+	return records
+}
+
+// mustLookupWithBlockUndone is lookupWithBlockUndone for tests whose records
+// are whole.
+func mustLookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) utxoLookup {
+	lookup, err := lookupWithBlockUndone(dbTx, bUTXO, applied)
+	if err != nil {
+		panic(err)
+	}
+	return lookup
+}
+
+// A node's record of a sweep is what puts the sweep back when its block is
+// removed, and what finds the coin again at its next date. If that record is
+// damaged the node must not pass over it as if the sweep had touched nothing:
+// removing the block is given up and changes nothing, and the block at whose
+// end the coin is next due is refused. (Round 10, finding 2: the record used
+// to be skipped, the block came off with its sweep left in place, and the
+// coin was never looked at again.)
+func TestADamagedSweepRecordStopsTheNodeAndIsNotPassedOver(t *testing.T) {
+	timestamp := startSweepChain(t) // a coin's date is five blocks after it was made or last swept
+	idle := testAddress("idle")
+	mineNext(t, timestamp, idle)
+	mineTo(t, timestamp, 6, testAddress("other"))
+	wantCoin(t, "set-up", idle, cvn("40"), cvn("10"), 6)
+	if err := GlobalBoltEngine.Update(func(dbTx *bbolt.Tx) error {
+		return dbTx.Bucket(sweepBucket).Put(chainWorkKey(6), []byte("{"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, tip := coinSetFingerprint(), GetLatestBlockInternal()
+
+	// Removing block 6 is given up: nothing comes off, nothing changes.
+	StateMutex.Lock()
+	removed := rollbackChainToHeightLocked(5)
+	StateMutex.Unlock()
+	if len(removed) != 0 || GetLatestBlockInternal().Hash != tip.Hash {
+		t.Fatalf("with block 6's sweep record damaged, %d block(s) were removed and the newest block is #%d", len(removed), GetLatestBlockInternal().Index)
+	}
+	if coinSetFingerprint() != before {
+		t.Fatal("the rollback that was given up changed the coins")
+	}
+	wantCoin(t, "after the rollback was given up", idle, cvn("40"), cvn("10"), 6)
+
+	// A rival for block 6's place cannot be judged, and is not taken.
+	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+		if _, err := lookupWithBlockUndone(dbTx, dbTx.Bucket(utxoBucket), tip); err == nil {
+			t.Error("the coins as they were before block 6 were worked out from a damaged record")
+		}
+		return nil
+	})
+
+	// Blocks 7 to 10 need nothing of that record. Block 11 is where the
+	// coin is next due, and the sweep cannot find it without the record:
+	// the block is refused, and nothing changes.
+	mineTo(t, timestamp, 10, testAddress("other"))
+	before, tip = coinSetFingerprint(), GetLatestBlockInternal()
+	*timestamp += 45
+	block := mineTestBlock(t, *timestamp, testAddress("other"), nil, 0)
+	if SaveBlockToStorageInternal(block) || GetLatestBlockInternal().Hash != tip.Hash {
+		t.Fatal("block 11 was stored though the record that names the coins due at it cannot be read")
+	}
+	if coinSetFingerprint() != before {
+		t.Error("the refused block changed the coins")
+	}
+}
+
+// The same for the record of the coins a block spent: damaged, it stops the
+// block being removed, and nothing is changed.
+func TestADamagedRecordOfSpentCoinsStopsTheRollback(t *testing.T) {
+	timestamp := startSweepChain(t)
+	privateKey, publicKey, owner, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mineNext(t, timestamp, owner)
+	pay, err := BuildSignedTransfer(privateKey, publicKey, testAddress("shop"), cvn("10"), 0, ListSpendableCoins(owner))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mineNext(t, timestamp, testAddress("other"), pay) // block 2 spends the owner's coin
+	if err := GlobalBoltEngine.Update(func(dbTx *bbolt.Tx) error {
+		return dbTx.Bucket(undoBucket).Put(undoKey(2), []byte("{"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, tip := coinSetFingerprint(), GetLatestBlockInternal()
+	StateMutex.Lock()
+	removed := rollbackChainToHeightLocked(1)
+	StateMutex.Unlock()
+	if len(removed) != 0 || GetLatestBlockInternal().Hash != tip.Hash || coinSetFingerprint() != before {
+		t.Fatalf("with the record of what block 2 spent damaged, %d block(s) were removed; want none, and nothing changed", len(removed))
+	}
+}
+
+// A chain file's check works out the vault after every block and holds the
+// file to it. (Round 10, finding 1: only the newest block's vault was looked
+// at, so a file with an earlier vault figure altered passed; a node started
+// from it and then given a rival for a later block would have taken that
+// block's allowance from the altered figure, and paid out coins that were
+// never issued.)
+func TestAChainFileWhoseVaultWasAlteredAtAnEarlierBlockFailsItsCheck(t *testing.T) {
+	startTestChain(t, "devnet")
+	miner := testAddress("miner")
+	timestamp := Params.GenesisTimestamp + 100
+	// Block 1 claims 40 of its 50 CVN, leaving 10 in the vault.
+	timestamp += 45
+	first := mineTestBlock(t, timestamp, miner, nil, cvn("40"))
+	if !ValidateBlockSignatures(first) || !SaveBlockToStorageInternal(first) {
+		t.Fatal("set-up: the block that claims less than it may was refused")
+	}
+	for i := 0; i < 3; i++ {
+		timestamp += 45
+		extendTestChain(t, timestamp, miner, nil)
+	}
+	path := BlockchainFile
+	closeAndCheck := func() error {
+		t.Helper()
+		if err := GlobalBoltEngine.Close(); err != nil {
+			t.Fatal(err)
+		}
+		GlobalBoltEngine = nil
+		_, err := checkChainFile(path, buildGenesisBlock().Hash)
+		InitBoltEngine()
+		return err
+	}
+	if err := closeAndCheck(); err != nil {
+		t.Fatalf("set-up: the chain file as the node wrote it fails its check: %v", err)
+	}
+
+	alter := func(height int64, units int64) {
+		t.Helper()
+		if err := GlobalBoltEngine.Update(func(dbTx *bbolt.Tx) error {
+			bucket := dbTx.Bucket(vaultBucket)
+			var entry vaultEntry
+			if err := json.Unmarshal(bucket.Get(chainWorkKey(height)), &entry); err != nil {
+				return err
+			}
+			entry.Units = units
+			raw, err := json.Marshal(entry)
+			if err != nil {
+				return err
+			}
+			return bucket.Put(chainWorkKey(height), raw)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Block 1's vault raised to everything there can be. The newest block's
+	// vault and all the coins are untouched, so the totals still add up.
+	alter(1, MaxAmountUnits)
+	if err := closeAndCheck(); err == nil || !strings.Contains(err.Error(), "after block #1") {
+		t.Fatalf("a chain file whose vault after block 1 was raised to 2,100,000,000 CVN: %v; want it refused, naming block 1", err)
+	}
+	// Put right, and one unit off at block 2 instead.
+	alter(1, cvn("10"))
+	if err := closeAndCheck(); err != nil {
+		t.Fatalf("set-up: the file put right fails its check: %v", err)
+	}
+	alter(2, cvn("10")-cvn("10")/Params.Economics.VaultPayoutBlocks+1)
+	if err := closeAndCheck(); err == nil || !strings.Contains(err.Error(), "after block #2") {
+		t.Fatalf("a chain file whose vault after block 2 is one unit too high: %v; want it refused, naming block 2", err)
 	}
 }

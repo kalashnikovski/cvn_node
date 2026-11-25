@@ -445,7 +445,7 @@ func bucketLookup(bUTXO *bbolt.Bucket) utxoLookup {
 // (the block currently at the tip) was stored: coins it created are hidden
 // and coins it spent are visible again. Used to judge a competing block at
 // the same height.
-func lookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) utxoLookup {
+func lookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) (utxoLookup, error) {
 	created := make(map[string]bool)
 	for _, tx := range applied.Transactions {
 		for outIdx := range tx.Outputs {
@@ -453,12 +453,20 @@ func lookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) u
 		}
 	}
 	restored := make(map[string]UTXORecord)
-	for _, record := range loadUndoRecords(dbTx, applied.Index) {
+	spent, err := loadUndoRecords(dbTx, applied.Index)
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range spent {
 		restored[record.Key] = record.Record
 	}
 	// Coins its sweep changed are seen as they were before it, with
 	// whatever was set aside on them then.
-	for _, swept := range loadSweepRecords(dbTx, applied.Index) {
+	sweptCoins, err := loadSweepRecords(dbTx, applied.Index)
+	if err != nil {
+		return nil, err
+	}
+	for _, swept := range sweptCoins {
 		restored[swept.Key] = swept.Before
 	}
 	direct := bucketLookup(bUTXO)
@@ -470,25 +478,30 @@ func lookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) u
 			return UTXORecord{}, false
 		}
 		return direct(key)
-	}
+	}, nil
 }
 
 func undoKey(height int64) []byte {
 	return []byte(fmt.Sprintf("%016d", height))
 }
 
-func loadUndoRecords(dbTx *bbolt.Tx, height int64) []SpentRecord {
+// loadUndoRecords returns the coins the block at `height` spent, as they
+// were: nothing if it spent none. A record that is there and cannot be read
+// is an error, for the reason given at loadSweepRecords.
+func loadUndoRecords(dbTx *bbolt.Tx, height int64) ([]SpentRecord, error) {
 	bUndo := dbTx.Bucket(undoBucket)
 	if bUndo == nil {
-		return nil
+		return nil, nil
 	}
 	raw := bUndo.Get(undoKey(height))
 	if raw == nil {
-		return nil
+		return nil, nil
 	}
 	var records []SpentRecord
-	_ = json.Unmarshal(raw, &records)
-	return records
+	if err := json.Unmarshal(raw, &records); err != nil {
+		return nil, fmt.Errorf("the record of the coins block #%d spent cannot be read: this node's database is damaged", height)
+	}
+	return records, nil
 }
 
 func storeUndoRecords(dbTx *bbolt.Tx, height int64, records []SpentRecord) error {
@@ -510,22 +523,41 @@ func storeUndoRecords(dbTx *bbolt.Tx, height int64, records []SpentRecord) error
 // coins its sweep touched are restored, the coins it created are removed and
 // the coins it spent are put back.
 // Must run inside the write transaction that removes or replaces the block.
-func undoBlockCoinChanges(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) {
+//
+// It returns an error if a record it needs cannot be read or a coin cannot
+// be written. The caller must then give up the whole write: a block half
+// undone leaves coins that belong to no chain (outside review, round 10,
+// finding 2).
+func undoBlockCoinChanges(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) error {
+	// Read first, so that nothing has been changed if the record is damaged.
+	spent, err := loadUndoRecords(dbTx, block.Index)
+	if err != nil {
+		return err
+	}
 	// The sweep was the last thing the block did, so it is undone first.
-	undoSweep(dbTx, bUTXO, block.Index)
+	if err := undoSweep(dbTx, bUTXO, block.Index); err != nil {
+		return err
+	}
 	for _, tx := range block.Transactions {
 		for outIdx := range tx.Outputs {
-			_ = bUTXO.Delete([]byte(utxoKey(tx.ID, outIdx)))
+			if err := bUTXO.Delete([]byte(utxoKey(tx.ID, outIdx))); err != nil {
+				return err
+			}
 		}
 	}
-	for _, record := range loadUndoRecords(dbTx, block.Index) {
-		if raw, err := json.Marshal(record.Record); err == nil {
-			_ = bUTXO.Put([]byte(record.Key), raw)
+	for _, record := range spent {
+		raw, err := json.Marshal(record.Record)
+		if err != nil {
+			return err
+		}
+		if err := bUTXO.Put([]byte(record.Key), raw); err != nil {
+			return err
 		}
 	}
 	if bUndo := dbTx.Bucket(undoBucket); bUndo != nil {
-		_ = bUndo.Delete(undoKey(block.Index))
+		return bUndo.Delete(undoKey(block.Index))
 	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------

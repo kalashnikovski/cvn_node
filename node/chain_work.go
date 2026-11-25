@@ -381,7 +381,9 @@ func rollbackChainToHeightLocked(target int64) []Block {
 				if json.Unmarshal(data, &block) == nil {
 					// Newest block first, so coins spent and re-created across the
 					// removed blocks unwind in the right order.
-					undoBlockCoinChanges(tx, bUTXO, block)
+					if err := undoBlockCoinChanges(tx, bUTXO, block); err != nil {
+						return err
+					}
 					removed = append(removed, block)
 				}
 			}

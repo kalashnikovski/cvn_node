@@ -197,8 +197,8 @@ func TestSweepIsUndoneWithItsBlock(t *testing.T) {
 	// before the tip's sweep.
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		bUTXO := dbTx.Bucket(utxoBucket)
-		before := lookupWithBlockUndone(dbTx, bUTXO, tip)
-		swept := loadSweepRecords(dbTx, tip.Index)
+		before := mustLookupWithBlockUndone(dbTx, bUTXO, tip)
+		swept := mustLoadSweepRecords(dbTx, tip.Index)
 		if len(swept) != 1 {
 			t.Fatalf("block 7 swept %d coins, want 1", len(swept))
 		}

@@ -506,7 +506,7 @@ func TestARivalBlockThatBreaksTheRuleChangesNothing(t *testing.T) {
 		if err != nil {
 			t.Fatalf("the vault's record could not be read: %v", err)
 		}
-		_, _, verdict = ValidateBlockTransactions(rival, lookupWithBlockUndone(dbTx, dbTx.Bucket(utxoBucket), honest), vaultBefore)
+		_, _, verdict = ValidateBlockTransactions(rival, mustLookupWithBlockUndone(dbTx, dbTx.Bucket(utxoBucket), honest), vaultBefore)
 		return nil
 	})
 	if verdict == nil || !strings.Contains(verdict.Error(), "pay a fee") {

@@ -83,18 +83,26 @@ func sweepAmounts(units int64) (swept, kept int64) {
 	return swept, kept
 }
 
-func loadSweepRecords(dbTx *bbolt.Tx, height int64) []SweptCoin {
+// loadSweepRecords returns what the sweep of the block at `height` recorded:
+// nothing if it touched no coin. A record that is there and cannot be read
+// is an error and never "nothing": the record is what finds a swept coin
+// again at its next date and what puts a sweep back when its block is
+// removed, so a node that passed over a damaged one would go on with coins
+// that no other node has (outside review, round 10, finding 2).
+func loadSweepRecords(dbTx *bbolt.Tx, height int64) ([]SweptCoin, error) {
 	bucket := dbTx.Bucket(sweepBucket)
 	if bucket == nil {
-		return nil
+		return nil, nil
 	}
 	raw := bucket.Get(chainWorkKey(height))
 	if raw == nil {
-		return nil
+		return nil, nil
 	}
 	var records []SweptCoin
-	_ = json.Unmarshal(raw, &records)
-	return records
+	if err := json.Unmarshal(raw, &records); err != nil {
+		return nil, fmt.Errorf("the record of the sweep of block #%d cannot be read: this node's database is damaged", height)
+	}
+	return records, nil
 }
 
 func storeSweepRecords(dbTx *bbolt.Tx, height int64, records []SweptCoin) error {
@@ -142,7 +150,11 @@ func applySweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) (toVaultUnits 
 			}
 		}
 	}
-	for _, earlier := range loadSweepRecords(dbTx, bornAt) {
+	earlierSweep, err := loadSweepRecords(dbTx, bornAt)
+	if err != nil {
+		return 0, false, err
+	}
+	for _, earlier := range earlierSweep {
 		if earlier.Kept {
 			candidates = append(candidates, earlier.Key)
 		}
@@ -194,16 +206,28 @@ func applySweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) (toVaultUnits 
 }
 
 // undoSweep puts back every coin the sweep of the block at `height` touched.
-// It must run before the rest of that block's coin changes are undone.
-func undoSweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, height int64) {
-	for _, record := range loadSweepRecords(dbTx, height) {
-		if raw, err := json.Marshal(record.Before); err == nil {
-			_ = bUTXO.Put([]byte(record.Key), raw)
+// It must run before the rest of that block's coin changes are undone. If
+// the sweep's record cannot be read, or a coin cannot be written back, it
+// returns the error and the caller must give up the whole change: a sweep
+// half undone leaves coins that belong to no chain.
+func undoSweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, height int64) error {
+	records, err := loadSweepRecords(dbTx, height)
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		raw, err := json.Marshal(record.Before)
+		if err != nil {
+			return err
+		}
+		if err := bUTXO.Put([]byte(record.Key), raw); err != nil {
+			return err
 		}
 	}
 	if bucket := dbTx.Bucket(sweepBucket); bucket != nil {
-		_ = bucket.Delete(chainWorkKey(height))
+		return bucket.Delete(chainWorkKey(height))
 	}
+	return nil
 }
 
 // nextSweepHeight is the block at whose end the sweep will next change a

@@ -354,7 +354,10 @@ func SaveBlockToStorageInternal(block Block) bool {
 				}
 
 				// Take back the coins the old block created and return the ones it spent.
-				undoBlockCoinChanges(tx, bUTXO, historicalOldBlock)
+				if undoErr := undoBlockCoinChanges(tx, bUTXO, historicalOldBlock); undoErr != nil {
+					fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: the block in its place could not be taken off: %v\n", block.Index, undoErr)
+					return undoErr
+				}
 			} else {
 				// The very same block is already stored (our own block coming
 				// back from a peer, for example). Nothing to do.

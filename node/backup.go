@@ -60,6 +60,69 @@ type chainFileReport struct {
 	VaultUnits    int64
 }
 
+// vaultAfterBlockInFile works out what the vault holds after `block`, given
+// what it held before, by the same sum that stores a block
+// (SaveBlockToStorageInternal): less its payout, plus the fifths that the
+// block's sweep found unclaimed after their seven years, plus whatever the
+// block could have paid its miner and did not. It returns an error unless
+// the file records exactly that for the block.
+//
+// The fees and the reward's outputs are the block's own, which its
+// identifier covers. The expired fifths are read from the file's record of
+// the sweep, which no identifier covers: this check holds the file's
+// records to each other and to its blocks, and is not a replay of every
+// transfer.
+func vaultAfterBlockInFile(tx *bbolt.Tx, block Block, vaultBefore int64) (int64, error) {
+	if !vaultEnabled() {
+		return 0, nil
+	}
+	if len(block.Transactions) == 0 {
+		return 0, fmt.Errorf("block #%d has no reward", block.Index)
+	}
+	var feeUnits, claimedUnits, expiredUnits int64
+	var err error
+	for _, output := range block.Transactions[0].Outputs {
+		if claimedUnits, err = addUnits(claimedUnits, output.Amount.Units()); err != nil {
+			return 0, fmt.Errorf("the reward of block #%d cannot be added up", block.Index)
+		}
+	}
+	for _, transfer := range block.Transactions[1:] {
+		if feeUnits, err = addUnits(feeUnits, transfer.FreeWillOffering.Units()); err != nil {
+			return 0, fmt.Errorf("the fees of block #%d cannot be added up", block.Index)
+		}
+	}
+	swept, err := loadSweepRecords(tx, block.Index)
+	if err != nil {
+		return 0, err
+	}
+	for _, record := range swept {
+		if expiredUnits, err = addUnits(expiredUnits, record.Before.HeldUnits); err != nil {
+			return 0, fmt.Errorf("the record of the sweep of block #%d cannot be added up", block.Index)
+		}
+	}
+	account := accountForBlock(block.Index, feeUnits, vaultBefore)
+	unclaimedUnits := account.MinerAllowanceUnits() - claimedUnits
+	if unclaimedUnits < 0 {
+		return 0, fmt.Errorf("block #%d pays more than it is allowed", block.Index)
+	}
+	want, err := addUnits(account.VaultAfterUnits, expiredUnits)
+	if err == nil {
+		want, err = addUnits(want, unclaimedUnits)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("the vault after block #%d cannot be added up", block.Index)
+	}
+	recorded, err := readVaultUnits(tx, block.Index, block.Hash)
+	if err != nil {
+		return 0, fmt.Errorf("the vault's balance is missing for block #%d", block.Index)
+	}
+	if recorded != want {
+		return 0, fmt.Errorf("the vault's balance recorded after block #%d is %s CVN, and the blocks make it %s CVN: the file has been altered or damaged",
+			block.Index, FormatUnits(recorded), FormatUnits(want))
+	}
+	return want, nil
+}
+
 // checkChainFile opens a chain file without changing it and checks that it
 // is a whole chain of this network:
 //
@@ -69,6 +132,8 @@ type chainFileReport struct {
 //     identifier says, and names the block before it as its parent;
 //   - the coins it holds (with what sweeps have set aside on them for their
 //     owners), with the vault, are exactly what has been issued.
+//   - the vault recorded after every block is what that block and the vault
+//     before it make it (vaultAfterBlockInFile).
 //
 // It does not repeat the proof-of-work of every block: that takes hours on a
 // long chain, and this is a check that a copy is whole, not that a stranger's
@@ -105,7 +170,7 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 		}
 
 		var previous Block
-		var issued int64
+		var issued, vaultBefore int64
 		for h := int64(0); h <= height; h++ {
 			raw := bBlocks.Get([]byte(fmt.Sprintf("%016d", h)))
 			if raw == nil {
@@ -127,6 +192,15 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 					return fmt.Errorf("block #%d is not what its identifier says: its contents have been altered or damaged", h)
 				}
 				issued += BlockRewardUnits(h)
+				// The vault after this block is worked out from the block
+				// and the vault before it, and must be what the file
+				// records. A later block's allowance is taken from the
+				// vault recorded here, so a figure that was altered would
+				// let a node pay out coins that were never issued (outside
+				// review, round 10, finding 1).
+				if vaultBefore, err = vaultAfterBlockInFile(tx, block, vaultBefore); err != nil {
+					return err
+				}
 			}
 			previous = block
 		}

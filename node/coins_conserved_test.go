@@ -297,7 +297,7 @@ func TestCoinsAreNeverCreatedOrLost(t *testing.T) {
 		// had been set aside on those coins one date earlier.
 		var swept []SweptCoin
 		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
-			swept = loadSweepRecords(dbTx, tip.Index)
+			swept = mustLoadSweepRecords(dbTx, tip.Index)
 			return nil
 		})
 		var expired int64
