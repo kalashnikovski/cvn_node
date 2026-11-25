@@ -111,6 +111,7 @@ PROGRAM = [
     "node/sync_pass.go",
     "node/gossip_mesh.go",
     "node/relay_uplink.go",
+    "node/decode_limits.go",
     "node/block_relay.go",
     "node/peer_cache.go",
     "node/own_address.go",
@@ -215,6 +216,7 @@ NETWORK = [
     "node/block_relay.go",
     "node/gossip_mesh.go",
     "node/relay_uplink.go",
+    "node/decode_limits.go",
     "node/blockchain_core.go",
     "node/sync_pass.go",
     "node/join_check.go",
@@ -231,6 +233,7 @@ NETWORK = [
     "node/block_relay_test.go",
     "node/place_on_tip_test.go",
     "node/bitcoin_headers_test.go",
+    "node/decode_limits_test.go",
 ]
 
 

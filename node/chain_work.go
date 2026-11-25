@@ -237,16 +237,22 @@ func peerChainStatus(gateway string) (height int64, work *big.Int) {
 			resp.Body.Close()
 			return 0, nil
 		}
-		var data map[string]interface{}
-		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&data)
+		// Only the two fields that matter are read. Decoding the answer into
+		// a general map let a stranger's answer of nested empty lists take
+		// hundreds of megabytes (found 25 November); fields that are not
+		// wanted are now skipped without being kept. The old request sends a
+		// whole block, which is well under the limit.
+		var data struct {
+			Height    int64  `json:"current_height"`
+			TotalWork string `json:"total_work"`
+		}
+		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&data)
 		resp.Body.Close()
 		if decodeErr != nil {
 			return 0, nil
 		}
-		if h, ok := data["current_height"].(float64); ok {
-			height = int64(h)
-		}
-		if text, ok := data["total_work"].(string); ok && len(text) > 0 && len(text) <= 80 {
+		height = data.Height
+		if text := data.TotalWork; len(text) > 0 && len(text) <= 80 {
 			if parsed, valid := new(big.Int).SetString(text, 10); valid && parsed.Sign() > 0 {
 				work = parsed
 			}

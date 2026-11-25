@@ -3,7 +3,6 @@ package node
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -272,12 +271,11 @@ func runRelayUplink(address string, announcedID string) {
 				ActivePeerMap[address] = time.Now()
 			}
 			PeerMapMutex.Unlock()
-			var listed []string
-			if json.Unmarshal([]byte(strings.TrimPrefix(msg, "PEER_LIST:")), &listed) == nil {
+			if listed, err := decodePeerList([]byte(strings.TrimPrefix(msg, "PEER_LIST:"))); err == nil {
 				relayUplinkMutex.Lock()
 				for _, peer := range listed {
 					peer = strings.TrimSpace(strings.ReplaceAll(peer, "\r", ""))
-					if peer == "" || strings.HasPrefix(peer, "127.0.0.1") || len(relayCandidates) >= MaxPeerMapCapacity {
+					if !looksLikePeerAddress(peer) || strings.HasPrefix(peer, "127.0.0.1") || len(relayCandidates) >= MaxPeerMapCapacity {
 						continue
 					}
 					relayCandidates[peer] = time.Now()
@@ -287,7 +285,7 @@ func runRelayUplink(address string, announcedID string) {
 
 		case strings.HasPrefix(msg, "BLOCK_BROADCAST:"):
 			var incomingBlock Block
-			if json.Unmarshal([]byte(strings.TrimPrefix(msg, "BLOCK_BROADCAST:")), &incomingBlock) != nil {
+			if decodeBlockFromPeer([]byte(strings.TrimPrefix(msg, "BLOCK_BROADCAST:")), &incomingBlock) != nil {
 				continue
 			}
 			if !VerifyIncomingWireBlock(incomingBlock) {
@@ -314,7 +312,7 @@ func runRelayUplink(address string, announcedID string) {
 
 		case strings.HasPrefix(msg, "TX_BROADCAST:"):
 			var incomingTx Transaction
-			if json.Unmarshal([]byte(strings.TrimPrefix(msg, "TX_BROADCAST:")), &incomingTx) != nil {
+			if decodeTransferFromPeer([]byte(strings.TrimPrefix(msg, "TX_BROADCAST:")), &incomingTx) != nil {
 				continue
 			}
 			queueIncomingTransfer(incomingTx)

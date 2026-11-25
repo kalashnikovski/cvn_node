@@ -51,8 +51,16 @@ const (
 	// hundreds of kilobytes, so a fixed count alone could mean a reply far
 	// too large to send or check in time.
 	syncBatchMaxBlocks = 512
-	// syncReplyLimitBytes is the most a node will read of one reply.
-	syncReplyLimitBytes = 64 << 20
+	// syncReplyLimitBytes is the most a node will read of one reply. An
+	// honest reply stops growing once its blocks reach syncBatchMaxBytes by
+	// the rules' measure, so it ends within one block of that. As JSON it is
+	// larger: at worst about three times the rules' measure, for inputs that
+	// spend coins from rewards with the shortest identifiers allowed. So an
+	// honest reply is at most about 13 MB (TestAFullHonestBatchFitsTheReply
+	// Limit builds one), and 24 MB leaves a margin. It was 64 MB, which a
+	// stranger chosen as the source could fill with empty blocks that decoded
+	// to gigabytes (found 25 November); see decodeBlockBatchFromPeer as well.
+	syncReplyLimitBytes = 24 << 20
 )
 
 // syncBatchMaxBytes is the size at which a reply of blocks stops growing. A
@@ -166,7 +174,8 @@ func fetchBlockBatchChecked(source string, start int64) (batch []Block, answered
 	if resp.StatusCode != http.StatusOK {
 		return nil, false
 	}
-	if json.NewDecoder(io.LimitReader(resp.Body, syncReplyLimitBytes)).Decode(&batch) != nil {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, syncReplyLimitBytes+1))
+	if err != nil || len(body) > syncReplyLimitBytes || decodeBlockBatchFromPeer(body, &batch) != nil {
 		return nil, false
 	}
 	// A node sends at most syncBatchMaxBlocks in one reply. One that sends

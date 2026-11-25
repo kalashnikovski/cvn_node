@@ -337,7 +337,7 @@ func serveInboundConnection(conn net.Conn, pooled bool) {
 		if strings.HasPrefix(msg, "TX_BROADCAST:") {
 			txPayload := strings.TrimPrefix(msg, "TX_BROADCAST:")
 			var incomingTx Transaction
-			if err := json.Unmarshal([]byte(txPayload), &incomingTx); err != nil {
+			if err := decodeTransferFromPeer([]byte(txPayload), &incomingTx); err != nil {
 				flagMalformedIP(remoteIP)
 				continue
 			}
@@ -350,7 +350,7 @@ func serveInboundConnection(conn net.Conn, pooled bool) {
 		if strings.HasPrefix(msg, "BLOCK_BROADCAST:") {
 			blockPayload := strings.TrimPrefix(msg, "BLOCK_BROADCAST:")
 			var incomingBlock Block
-			if err := json.Unmarshal([]byte(blockPayload), &incomingBlock); err != nil {
+			if err := decodeBlockFromPeer([]byte(blockPayload), &incomingBlock); err != nil {
 				flagMalformedIP(remoteIP)
 				continue
 			}
@@ -424,9 +424,15 @@ func readFrame(conn net.Conn) (payload, signature []byte, err error) {
 	if _, err = io.ReadFull(conn, signature); err != nil {
 		return nil, nil, err
 	}
-	payload = make([]byte, length)
-	if _, err = io.ReadFull(conn, payload); err != nil {
+	// The space for the payload grows with what arrives, instead of being
+	// set aside in full on the word of the first four bytes: a stranger who
+	// states the largest size and then sends nothing holds almost nothing.
+	payload, err = io.ReadAll(io.LimitReader(conn, int64(length)))
+	if err != nil {
 		return nil, nil, err
+	}
+	if len(payload) != int(length) {
+		return nil, nil, io.ErrUnexpectedEOF
 	}
 	return payload, signature, nil
 }
@@ -661,13 +667,17 @@ func askForPeers(address string) {
 		ActivePeerMap[address] = time.Now()
 	}
 	PeerMapMutex.Unlock()
-	var listed []string
-	if json.Unmarshal([]byte(strings.TrimPrefix(response, "PEER_LIST:")), &listed) != nil {
+	listed, err := decodePeerList([]byte(strings.TrimPrefix(response, "PEER_LIST:")))
+	if err != nil {
 		return
 	}
+	greeted := make(map[string]bool)
 	for _, other := range listed {
+		if len(greeted) >= peerListDialsAtMost {
+			break
+		}
 		other = strings.TrimSpace(strings.ReplaceAll(other, "\r", ""))
-		if other == "" || strings.HasPrefix(other, "127.0.0.1") || isOwnGossipAddress(other) {
+		if !looksLikePeerAddress(other) || greeted[other] || strings.HasPrefix(other, "127.0.0.1") || isOwnGossipAddress(other) {
 			continue
 		}
 		PeerMapMutex.RLock()
@@ -676,6 +686,7 @@ func askForPeers(address string) {
 		if met {
 			continue
 		}
+		greeted[other] = true
 		// A ping is how the other node comes to list this one.
 		go func(other string) {
 			if hello, err := dialPeer(other, 2*time.Second); err == nil {

@@ -3,6 +3,7 @@ package node
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -185,7 +186,11 @@ func syncAPI() *http.ServeMux {
 			return
 		}
 		var tx Transaction
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024)).Decode(&tx); err != nil {
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256*1024))
+		if err == nil {
+			err = decodeTransferFromPeer(body, &tx)
+		}
+		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{"error": "transaction is not valid JSON"})
 			return
