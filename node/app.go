@@ -181,6 +181,87 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, priv
 	return "SUCCESS: Transfer " + tx.ID[:19] + "... sent from " + senderAddress + ". It will confirm in one of the next blocks."
 }
 
+// SendWithGiftSubmit sends a transfer like BroadcastLocalTransactionSubmit
+// and, in the same transfer, gives something to a second address the sender
+// has named: giftStr is an amount in CVN, or a share of the amount sent such
+// as "10%". The gift is in addition to the amount. Giving is the sender's
+// choice each time and no rule of the chain (giving.go); with both gift
+// fields empty this is an ordinary transfer, and with only one filled
+// nothing is sent.
+func (a *App) SendWithGiftSubmit(recipient, amountStr, feeStr, giftTo, giftStr, privateKeyHex string) string {
+	if strings.TrimSpace(giftTo) == "" && strings.TrimSpace(giftStr) == "" {
+		return a.BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, privateKeyHex)
+	}
+	amountUnits, err := ParseCVN(amountStr)
+	if err != nil || amountUnits < 1 {
+		return "REJECTED: Enter an amount greater than zero, with at most 8 decimal places."
+	}
+	feeUnits := int64(0)
+	if strings.TrimSpace(feeStr) != "" {
+		if feeUnits, err = ParseCVN(feeStr); err != nil {
+			return "REJECTED: The fee must be zero or a positive number, with at most 8 decimal places."
+		}
+	}
+	recipient = strings.TrimSpace(recipient)
+	if recipient == "" {
+		return "REJECTED: Enter a recipient address."
+	}
+	giftTo, giftUnits, err := giftFromWhatWasTyped(giftTo, giftStr, recipient, amountUnits)
+	if err != nil {
+		return "REJECTED: " + err.Error() + ". Nothing was sent."
+	}
+	privateKeyHex = strings.TrimSpace(privateKeyHex)
+	if privateKeyHex == "" {
+		return "REJECTED: Enter the private key of the wallet you are sending from."
+	}
+	privateKeyHex, publicKeyHex, err := signingKeyFrom(privateKeyHex)
+	if err != nil {
+		return "REJECTED: " + err.Error()
+	}
+	if len(privateKeyHex)%2 == 1 {
+		privateKeyHex = "0" + privateKeyHex
+	}
+	senderAddress, err := DeriveAddressFromPublicKey(publicKeyHex)
+	if err != nil {
+		return "REJECTED: " + err.Error()
+	}
+
+	tx, err := SendTransferWithGiftFromWallet(privateKeyHex, publicKeyHex, recipient, amountUnits, giftTo, giftUnits, feeUnits)
+	if err != nil {
+		return "REJECTED: " + err.Error() + " (sending from " + senderAddress + ")"
+	}
+	return "SUCCESS: Transfer " + tx.ID[:19] + "... sent from " + senderAddress + ": " + FormatUnits(amountUnits) + " CVN to the recipient and " +
+		FormatUnits(giftUnits) + " CVN given to " + giftTo + ". It will confirm in one of the next blocks."
+}
+
+// GiftPreview works out, without sending anything and without any key, what
+// a transfer with a gift would give and what would leave the wallet in all,
+// so that the screen can show the sender those figures before asking them to
+// agree. The figures come from the same code that builds the transfer, so
+// what is shown is what is sent. The answer begins "GIFT: " and is followed
+// by the sentence to show, or begins "REJECTED: " with the reason nothing
+// can be given as typed.
+func (a *App) GiftPreview(recipient, amountStr, feeStr, giftTo, giftStr string) string {
+	amountUnits, err := ParseCVN(amountStr)
+	if err != nil || amountUnits < 1 {
+		return "REJECTED: Enter an amount greater than zero, with at most 8 decimal places."
+	}
+	feeUnits := int64(0)
+	if strings.TrimSpace(feeStr) != "" {
+		if feeUnits, err = ParseCVN(feeStr); err != nil {
+			return "REJECTED: The fee must be zero or a positive number, with at most 8 decimal places."
+		}
+	}
+	giftTo, giftUnits, err := giftFromWhatWasTyped(giftTo, giftStr, recipient, amountUnits)
+	if err != nil {
+		return "REJECTED: " + err.Error() + ". Nothing was sent."
+	}
+	if giftUnits == 0 {
+		return "REJECTED: No gift was named. Nothing was sent."
+	}
+	return "GIFT: " + giftInWords(amountUnits, giftUnits, feeUnits, giftTo)
+}
+
 // RenewCoinsSubmit sends the coins of a wallet that are within a year of
 // their seven-year date back to the wallet's own address, which gives each
 // a new seven-year count. With `everything` set to "all", every coin is

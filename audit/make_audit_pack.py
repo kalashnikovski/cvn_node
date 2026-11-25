@@ -146,6 +146,7 @@ PROGRAM = [
     "node/wallet.go",
     "node/combine.go",
     "node/renew.go",
+    "node/giving.go",
     "node/app.go",
     "node/wails_desktop.go",
     "node/wallet_window_stub.go",

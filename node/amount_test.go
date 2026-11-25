@@ -268,3 +268,21 @@ func TestRewardRules(t *testing.T) {
 		})
 	}
 }
+
+// Eleven digits of whole coins can be more than the numbers used here hold.
+// Such an amount must be refused as more than can exist. It used to be
+// multiplied first, came out below nought, and was returned as an amount.
+func TestAnAmountTooLargeToCountIsRefused(t *testing.T) {
+	for _, text := range []string{"99999999999", "92233720369", "92233720368.54775808", "21000000000", "2100000000.00000001", "2100000001"} {
+		if units, err := ParseCVN(text); err == nil || units != 0 {
+			t.Errorf("%s CVN was read as %d units; want it refused", text, units)
+		}
+	}
+	// The largest amount there can be is still read exactly.
+	if units, err := ParseCVN("2100000000"); err != nil || units != MaxAmountUnits {
+		t.Errorf("2100000000 CVN was read as %d units (%v); want %d", units, err, MaxAmountUnits)
+	}
+	if units, err := ParseCVN("2099999999.99999999"); err != nil || units != MaxAmountUnits-1 {
+		t.Errorf("one unit less than everything was read as %d units (%v)", units, err)
+	}
+}
