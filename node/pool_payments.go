@@ -209,16 +209,24 @@ func (r *poolRecord) forgetOldPaymentsLocked() {
 type poolPaymentPlan struct {
 	Now          int64
 	PoolAddress  string
-	MinimumUnits int64 // an address owed less than this waits
+	MinimumUnits int64 // an address owed this much or more is paid
 	FeeUnits     int64 // the fee of each transfer, shared among those it pays
+	// An address owed less than the minimum is paid all the same if it is
+	// owed at least SmallestUnits and no payment to it has been prepared
+	// after NotPaidSince. With SmallestUnits nought there is no such second
+	// rule.
+	SmallestUnits int64
+	NotPaidSince  int64
 	// Usable reports whether a coin the record holds is really there to be
 	// spent: on the chain, the pool's, and not already in a waiting transfer.
 	Usable func(poolCoin) bool
 }
 
 // preparePayments works out a run of payments and sets it aside: every
-// address owed at least the minimum, in transfers of up to 49 addresses
-// each, the most owed first, for as far as the pool's free coins reach. It
+// address owed at least the minimum, and every address owed less that has
+// gone long enough without a payment (see poolPaymentPlan), in transfers of
+// up to 49 addresses each, the most owed first, for as far as the pool's
+// free coins reach. It
 // returns the payments prepared and, if some or all of what is due could
 // not be prepared, why.
 func (r *poolRecord) preparePayments(plan poolPaymentPlan) ([]poolPayment, string, error) {
@@ -230,18 +238,53 @@ func (r *poolRecord) preparePayments(plan poolPaymentPlan) ([]poolPayment, strin
 	if plan.FeeUnits < 0 || plan.MinimumUnits <= plan.FeeUnits+minimumOutputUnits() {
 		return nil, "", fmt.Errorf("the minimum payment must be more than the fee and the smallest coin together")
 	}
+	if plan.SmallestUnits != 0 && (plan.SmallestUnits <= plan.FeeUnits+minimumOutputUnits() || plan.SmallestUnits > plan.MinimumUnits) {
+		return nil, "", fmt.Errorf("the smallest payment must be more than the fee and the smallest coin together, and no more than the minimum payment")
+	}
+	// The addresses paid lately: those with a line in a payment prepared
+	// after the time the plan names. A payment that was undone paid nobody.
+	// A payment dated later than now was stamped by a clock that has since
+	// been set back; it is not counted, or its addresses would wait for as
+	// long as the clock had been wrong. (Only the newest payments are kept
+	// in memory, see forgetOldPaymentsLocked: a pool that makes more than a
+	// hundred payments in twelve hours forgets the oldest of them here, and
+	// may pay such an address a small amount sooner than twelve hours on.
+	// That errs towards paying.)
+	paidLately := make(map[string]bool)
+	if plan.SmallestUnits > 0 {
+		for _, payment := range r.payments {
+			if payment.State == poolPaymentReturned || payment.PreparedAt <= plan.NotPaidSince || payment.PreparedAt > plan.Now {
+				continue
+			}
+			for _, line := range payment.Lines {
+				paidLately[line.Address] = true
+			}
+		}
+	}
 
 	type owing struct {
 		address string
 		units   int64
 	}
 	var due []owing
+	waiting := 0 // owed enough to be paid, but paid too lately
 	for address, account := range r.accounts {
-		if account.Owed >= plan.MinimumUnits {
+		switch {
+		case account.Owed >= plan.MinimumUnits:
 			due = append(due, owing{address, account.Owed})
+		case plan.SmallestUnits > 0 && account.Owed >= plan.SmallestUnits && !paidLately[address]:
+			due = append(due, owing{address, account.Owed})
+		case plan.SmallestUnits > 0 && account.Owed >= plan.SmallestUnits:
+			waiting++
 		}
 	}
 	if len(due) == 0 {
+		switch {
+		case waiting > 0:
+			return nil, fmt.Sprintf("nobody is owed %s CVN or more; %d address(es) owed less were paid too lately to be paid again yet, and are paid on a later run", FormatUnits(plan.MinimumUnits), waiting), nil
+		case plan.SmallestUnits > 0:
+			return nil, fmt.Sprintf("nobody is owed %s CVN or more, the least the pool pays", FormatUnits(plan.SmallestUnits)), nil
+		}
 		return nil, fmt.Sprintf("nobody is owed %s CVN or more yet", FormatUnits(plan.MinimumUnits)), nil
 	}
 	sort.Slice(due, func(i, j int) bool {

@@ -32,7 +32,11 @@
 #
 #   CVN_VERSION=v5.0.0 bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS
 #
-# Payments go out every five hours unless another number of hours is named:
+# Payments go out every five hours unless another number of hours is named,
+# from 1 to 24. A pool pays an address that is owed only a little once it has
+# gone twelve hours without a payment, so that with runs at most a day apart
+# nobody waits longer than a day for a run to reach them; a pool that paid
+# less often than daily could not keep that.
 #
 #   CVN_POOL_PAY_HOURS=2 bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS
 #
@@ -86,10 +90,10 @@ if [ "$(id -u)" -ne 0 ]; then
   echo "Run this as root (or with sudo)."; exit 1
 fi
 case "$PAY_HOURS" in
-  ''|*[!0-9]*|0*) echo "The hours between payments must be a whole number from 1 to 168, for example 5. Got: $PAY_HOURS"; exit 1 ;;
+  ''|*[!0-9]*|0*|???*) echo "The hours between payments must be a whole number from 1 to 24, for example 5. Got: $PAY_HOURS"; exit 1 ;;
 esac
-if [ "$PAY_HOURS" -gt 168 ]; then
-  echo "The hours between payments must be a whole number from 1 to 168, for example 5. Got: $PAY_HOURS"; exit 1
+if [ "$PAY_HOURS" -gt 24 ]; then
+  echo "The hours between payments must be a whole number from 1 to 24, for example 5: a pool pays what it owes within a day. Got: $PAY_HOURS"; exit 1
 fi
 
 echo "== Installing what the build needs"

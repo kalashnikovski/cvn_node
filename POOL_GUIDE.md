@@ -30,7 +30,7 @@ The rules are part of the program and the same for every pool run with it:
 | What the pool holds and owes | The parts under 0.01 CVN, and the parts of miners beyond those the block has room for |
 | The pool's fee | None. There is no setting for one |
 | When a block counts | When 100 more blocks stand on it, about 75 minutes. A block replaced before then counts for nothing, and its payments go with it |
-| Smallest payment of what is owed | 1 CVN. Less stays owed until it grows |
+| Payment of what is owed | Every run pays each address owed 1 CVN or more. An address owed less is paid whatever it is owed once it has gone 12 hours without a payment, if that is 0.002 CVN or more. So a run reaches every such address within a day of its last payment |
 | Fee on a payment | 0.001 CVN for each transfer, shared equally among the addresses it pays |
 | Addresses in one transfer | Up to 49 |
 | Connections from one internet address | 32 |
@@ -93,7 +93,7 @@ Running it again later with the same words updates the program and restarts the 
 
 **Most of the paying is done by the blocks.** Every part of a reward of 0.01 CVN or more is paid in the block that earned it, and needs nothing from you. This section is about the rest: the small parts, and the parts of miners a block had no room for. They go to the pool's address and are owed. A pool with few miners may never owe anything.
 
-**The pool pays what it owes by itself, every five hours.** Nobody runs a command to pay. Five hours after one payment run the next one starts, and so on for as long as the server is up; after a restart the first run comes fifteen minutes after the server starts. Each run pays every address owed 1 CVN or more.
+**The pool pays what it owes by itself, every five hours.** Nobody runs a command to pay. Five hours after one payment run the next one starts, and so on for as long as the server is up; after a restart the first run comes fifteen minutes after the server starts. Each run pays every address owed 1 CVN or more. It also pays every address that has not been paid in the last twelve hours whatever it is owed, down to 0.002 CVN, so that a small miner is not sent a crumb every few hours, and a run reaches them within a day of their last payment (with runs five hours apart, within fifteen hours). Under 0.002 CVN an amount stays owed until it has grown: the fee of a payment is 0.001 CVN, shared among those it pays, and 0.002 CVN is the least of which even an address paid alone keeps half. Two things can put a payment off to a later run, and the run says so when they happen: the pool is still catching up with the network, or its settled coins do not reach everything that is due. "Paid" here means a payment was prepared and sent; like every transfer it is final once it is deep in the chain.
 
 For that the pool needs its key, and giving it the key is the one thing you do by hand, once.
 
@@ -128,7 +128,7 @@ Until these three steps are done the pool pays nothing of what it owes: those am
 | See when the next payment run is | `systemctl list-timers cvn-pool-pay-cvn_testnet.timer` |
 | See what the last run did | `journalctl -u cvn-pool-pay-cvn_testnet -n 30 --no-pager` |
 | Pay now, without waiting | `systemctl start cvn-pool-pay-cvn_testnet` (the five hours then count from this run) |
-| Pay at another interval | run the installer again with the hours named: `CVN_POOL_PAY_HOURS=2 bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS` |
+| Pay at another interval | run the installer again with the hours named, from 1 to 24: `CVN_POOL_PAY_HOURS=2 bash install_pool.sh cvn_testnet CVN_POOL_ADDRESS` |
 
 The pool page lists every payment.
 
@@ -145,7 +145,7 @@ The key is opened only for the seconds a run takes, by a program that listens to
 
 ### What this costs in safety, and paying by hand instead
 
-With the key and its password both on the server, somebody who becomes root there can take every coin the pool's address holds. The node that listens to miners runs as another user and cannot read either file, so a fault in the node alone does not give the key away; a fault that gives an attacker root does. What stands to be lost is what the address holds at that moment: the small parts of the last five hours or so, and amounts under 1 CVN. What the blocks paid the miners themselves was never there to lose. Use the pool's wallet for the pool only, so that nothing else is ever at that address.
+With the key and its password both on the server, somebody who becomes root there can take every coin the pool's address holds. The node that listens to miners runs as another user and cannot read either file, so a fault in the node alone does not give the key away; a fault that gives an attacker root does. What stands to be lost is what the address holds at that moment: the small parts of the last five hours or so, and the small amounts still waiting their turn (those under 1 CVN that were paid less than twelve hours ago, and anything under 0.002 CVN). What the blocks paid the miners themselves was never there to lose. Use the pool's wallet for the pool only, so that nothing else is ever at that address.
 
 An operator who will not keep the key on a server can leave the three steps undone and pay by hand:
 
@@ -164,7 +164,7 @@ To stop automatic payments later: `systemctl disable --now cvn-pool-pay-cvn_test
 - **The pool's record is one file,** `/var/lib/cvn_pool/NETWORK/pool_NETWORK.db`. It is the only place that says what each address is owed for work already done; the chain cannot tell you that. The pool makes copies of it by itself, and the next section is about them.
 - **Keep the server updated:** `apt-get update && apt-get upgrade` for the system, and the installer again for the program when a release says so. Allow remote login with a key only, not a password.
 - **If the pool stops,** miners' machines keep trying to connect and earn nothing meanwhile. What they were owed is still owed. Start it again as soon as you can and say what happened.
-- **Closing a pool.** Tell your miners in advance, and name the day. On that day close the work port (`ufw delete allow 18083/tcp`) and restart the pool, so that no miner is connected. Leave it running about 75 minutes more, for the last blocks to count, then start a payment run (`systemctl start cvn-pool-pay-NETWORK`). Amounts under 1 CVN are not paid by the command; decide in advance what you will do about them and say so.
+- **Closing a pool.** Tell your miners in advance, and name the day. On that day close the work port (`ufw delete allow 18083/tcp`) and restart the pool, so that no miner is connected. Leave it running about 75 minutes more, for the last blocks to count, then start a payment run (`systemctl start cvn-pool-pay-NETWORK`). The command pays every address owed 1 CVN or more, and every address owed 0.002 CVN or more that has not been paid in the last twelve hours. It does not pay an address owed less than 1 CVN that was paid within those twelve hours (run it again twelve hours later for those), nor any amount under 0.002 CVN; decide in advance what you will do about those and say so.
 
 ## 6. Copies of the pool's record, and losing it
 

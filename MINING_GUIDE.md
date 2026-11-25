@@ -298,6 +298,7 @@ Mind the comma at the end of every line but the last. On Windows, the first time
  No node runs on this machine and no chain is kept. The pool builds the blocks.
  The pool says: 12 miner(s) connected, 96.40 kH/s, 310 block(s) found so far. It takes no fee
                 and pays every address it owes 1 CVN or more.
+                An address it has not paid for 12 hours is paid whatever it is owed, from 0.002 CVN up.
  Its page:      http://pool.example.org:28081/pool
 ====================================================================
 2026/11/24 09:26:28 [POOL] Connected to the pool.
@@ -321,7 +322,7 @@ This is how a pool run with this program works. A pool run with other software h
 1. **A block the pool finds is divided by recent work.** The pool looks back over the most recent shares, as far as it takes to add up to twice the work of one block, and divides the block's reward among their addresses by the work each did. A machine that has been at the pool for a while has a part in every block, whoever's machine found it.
 2. **The block pays you itself.** Your part is one of the block's own payments, straight from the network to your address. The pool never holds it. You can see it on any node's explorer as soon as the block is found, and it is sure once 100 more blocks stand on it, about 75 minutes. If the network replaces the block in that time, which happens now and then to every miner, the payment goes with it.
 3. **A block has room for 50 addresses, and pays no part under 0.01 CVN.** If your part of a block is smaller than that, or the pool has more miners than a block has room for and yours is among the smallest parts, the block pays it to the pool's address and the pool owes it to you.
-4. **What the pool owes, it pays** by itself every five hours (a pool's operator may have set another interval), to every address it owes 1 CVN or more, by an ordinary transfer. Each transfer carries a fee of 0.001 CVN, shared equally among the addresses it pays. An amount under 1 CVN stays owed until it has grown. It does not expire.
+4. **What the pool owes, it pays** by itself every five hours (a pool's operator may have set another interval), to every address it owes 1 CVN or more, by an ordinary transfer. If you are owed less than 1 CVN you do not wait for it to grow: once twelve hours have passed since the pool last paid you, the next run pays you whatever you are owed, if that is 0.002 CVN or more. So a payment run reaches you within a day of your last payment, and with the usual five hours between runs within fifteen hours. Each transfer carries a fee of 0.001 CVN, shared equally among the addresses it pays. An amount under 0.002 CVN stays owed until it has grown. It does not expire.
 
 **You will receive many coins.** Every pool block that pays you makes a new coin at your address, perhaps hundreds a day. They add up to your balance like any others. A single transfer can spend 200 coins, so before sending a large amount, use "Combine my coins" in the wallet, which gathers them into one.
 
