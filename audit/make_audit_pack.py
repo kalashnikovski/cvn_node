@@ -317,6 +317,33 @@ POOL = [
 ]
 
 
+# The three rules changed for the restart of the development network, for a
+# review of those alone (Prompt 9): every fee to the miner, a fifth of every
+# block closed to paying transfers, a swept fifth kept on the coin.
+RESET = [
+    "audit/CHANGES_FOR_THE_RESTART.md",
+    "WHITEPAPER.md",
+    "node/chain_params.go",
+    "node/amount.go",
+    "node/blockchain_core.go",
+    "node/block_format.go",
+    "node/tx_rules.go",
+    "node/vault.go",
+    "node/sweep.go",
+    "node/database_core.go",
+    "node/chain_work.go",
+    "node/backup.go",
+    "node/builtin_miner.go",
+    "node/testchain_test.go",
+    "node/fees_test.go",
+    "node/paid_share_test.go",
+    "node/held_fifth_test.go",
+    "node/coins_conserved_test.go",
+    "node/sweep_test.go",
+    "node/vault_test.go",
+]
+
+
 def main():
     listed = set(RULES + PROGRAM)
     for name, selection in (("FOCUS", FOCUS), ("RULE_B", RULE_B), ("RULE_H", RULE_H)):
@@ -374,6 +401,13 @@ def main():
           "side. See POOL_DESIGN.md, the first file. With it the rule that a reward may pay fifty",
           "addresses. Networking and the wallets are NOT here."],
          POOL),
+        ("cvn_audit_reset.txt", "A SELECTION - THE THREE RULES CHANGED FOR THE RESTART",
+         ["Every fee to the miner, a fifth of every block closed to transfers that pay a fee, and",
+          "a swept fifth kept on the coin for its owner for seven years. The statement of the",
+          "changes is the first file. With it the design paper, the files that decide validity and",
+          "store and undo blocks, and the tests of these rules. The difficulty rule, networking,",
+          "the pool and the wallets are NOT here."],
+         RESET),
     ]
     os.makedirs(OUT, exist_ok=True)
     for name, title, purpose, files in packs:
