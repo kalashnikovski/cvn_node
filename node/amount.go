@@ -163,6 +163,12 @@ func ParseCVN(text string) (int64, error) {
 		padded := fractionText + strings.Repeat("0", 8-len(fractionText))
 		fraction, _ = strconv.ParseInt(padded, 10, 64)
 	}
+	// Checked before multiplying: eleven digits of whole coins can be more
+	// than the numbers used here hold, and the product would then come out
+	// as something else altogether, below nought, and pass the check after.
+	if whole > MaxAmountUnits/UnitsPerCVN {
+		return 0, fmt.Errorf("that is more CVN than can exist")
+	}
 	units := whole*UnitsPerCVN + fraction
 	if units > MaxAmountUnits {
 		return 0, fmt.Errorf("that is more CVN than can exist")

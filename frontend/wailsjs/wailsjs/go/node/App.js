@@ -18,6 +18,14 @@ export function GetLocalNodeTelemetry() {
   return window['go']['node']['App']['GetLocalNodeTelemetry']();
 }
 
+export function GiftPreview(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['node']['App']['GiftPreview'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function RenewCoinsSubmit(arg1, arg2, arg3) {
   return window['go']['node']['App']['RenewCoinsSubmit'](arg1, arg2, arg3);
+}
+
+export function SendWithGiftSubmit(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['node']['App']['SendWithGiftSubmit'](arg1, arg2, arg3, arg4, arg5, arg6);
 }

@@ -293,6 +293,12 @@ func serveWalletRequests(t *testing.T) {
 	if Params.SyncPort, err = strconv.Atoi(port); err != nil {
 		t.Fatal(err)
 	}
+	// A wallet that gets no answer from the first node tries the second
+	// port on this machine and then the network's seeds. In a test there
+	// must be nowhere else to go: not the miner that may be running on this
+	// machine, and not a real server.
+	Params.SyncFallbackPort = Params.SyncPort
+	Params.SeedHosts = nil
 	// A node gives each caller only so many lists of coins in a short
 	// time, and every test here asks from the same address. Each starts
 	// with a fresh allowance.

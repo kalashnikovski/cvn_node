@@ -9,4 +9,8 @@ export function FetchWalletBalanceQuery(arg1:string):Promise<number>;
 
 export function GetLocalNodeTelemetry():Promise<string>;
 
+export function GiftPreview(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
+
 export function RenewCoinsSubmit(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SendWithGiftSubmit(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;

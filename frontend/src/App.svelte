@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit, CombineCoinsSubmit, RenewCoinsSubmit } from '../wailsjs/wailsjs/go/node/App.js';
+	import { GetLocalNodeTelemetry, FetchWalletBalanceQuery, BroadcastLocalTransactionSubmit, CombineCoinsSubmit, RenewCoinsSubmit, SendWithGiftSubmit, GiftPreview } from '../wailsjs/wailsjs/go/node/App.js';
 
 	let localHeight = $state(0);
 	let globalTip = $state(0); 
@@ -11,6 +11,11 @@
 	let txRecipient = $state("");
 	let txAmount = $state("");
 	let txFee = $state("0");
+	// Giving: an address and an amount (or a share such as 10%) the sender
+	// may fill in to give something in the same transfer. Both are empty
+	// unless the sender types them, and both are cleared after sending.
+	let txGiftTo = $state("");
+	let txGiftAmount = $state("");
 	let txPrivateKey = $state("");
 	let txStatusMessage = $state("");
 	// Combining and renewing send coins back to their own wallet. They are
@@ -64,9 +69,38 @@
 			return;
 		}
 		
+		// A gift needs both its address and its amount. With only one of
+		// them typed nothing is sent, so that no gift is made or missed by
+		// accident.
+		const giftTo = String(txGiftTo ?? "").trim();
+		const giftAmount = String(txGiftAmount ?? "").trim();
+		if ((giftTo === "") !== (giftAmount === "")) {
+			txStatusMessage = "❌ ERROR: To give something, fill in both the address to give to and the amount. To give nothing, leave both empty.";
+			return;
+		}
+		// The figures of a gift (what a share such as 10% comes to in CVN,
+		// and everything that leaves the wallet) are worked out by the
+		// program itself, by the same code that builds the transfer, and
+		// shown before the sender agrees. Nothing is worked out here.
+		let giftInWords = "";
+		if (giftTo !== "") {
+			let preview = "";
+			try {
+				preview = await GiftPreview(String(txRecipient).trim(), String(txAmount), String(txFee ?? ""), giftTo, giftAmount);
+			} catch (error) {
+				txStatusMessage = `❌ The wallet could not work out the gift, so nothing was sent: ${error?.message ?? error}`;
+				return;
+			}
+			if (!preview.startsWith("GIFT: ")) {
+				txStatusMessage = `🚨 ${preview}`;
+				return;
+			}
+			giftInWords = `\n\n${preview.slice("GIFT: ".length)}\n`;
+		}
+
 		// A transfer cannot be undone, so the user sees exactly what will be
 		// sent, to whom and at what fee, and has to agree to it.
-		if (!window.confirm(`Send ${String(txAmount)} CVN\nto ${String(txRecipient).trim()}\nwith a fee of ${String(txFee || "0")} CVN?\n\nThis cannot be undone.`)) {
+		if (!window.confirm(`Send ${String(txAmount)} CVN\nto ${String(txRecipient).trim()}${giftInWords}\nwith a fee of ${String(txFee || "0")} CVN?\n\nThis cannot be undone.`)) {
 			txStatusMessage = "Nothing was sent.";
 			return;
 		}
@@ -74,17 +108,30 @@
 		txStatusMessage = "⏳ Signing and sending...";
 
 		try {
-			const resultMessage = await BroadcastLocalTransactionSubmit(
-				String(txRecipient).trim(),
-				String(txAmount),
-				String(txFee ?? ""),
-				String(txPrivateKey).trim()
-			);
-			
-			if (resultMessage.includes("SUCCESS")) {
+			const resultMessage = giftTo === ""
+				? await BroadcastLocalTransactionSubmit(
+					String(txRecipient).trim(),
+					String(txAmount),
+					String(txFee ?? ""),
+					String(txPrivateKey).trim()
+				)
+				: await SendWithGiftSubmit(
+					String(txRecipient).trim(),
+					String(txAmount),
+					String(txFee ?? ""),
+					giftTo,
+					giftAmount,
+					String(txPrivateKey).trim()
+				);
+
+			// Only an answer that begins with the word is a success: a
+			// refusal may repeat text from elsewhere that happens to hold it.
+			if (resultMessage.startsWith("SUCCESS")) {
 				txStatusMessage = `✅ ${resultMessage}`;
 				txRecipient = "";
 				txAmount = "";
+				txGiftTo = "";
+				txGiftAmount = "";
 				txPrivateKey = "";
 				updateNodeTelemetry();
 			} else {
@@ -263,6 +310,17 @@
 						<div style="display: flex; flex-direction: column; gap: 0.3rem;">
 							<label for="txFeeInput" style="color: #8a8a9e; font-size: 0.8rem;">VOLUNTARY PRIORITY FEE</label>
 							<input id="txFeeInput" type="text" bind:value={txFee} style="background: #06060a; border: 1px solid #333; color: #00ffff; padding: 0.6rem; font-family: monospace; border-radius: 3px;" />
+						</div>
+					</div>
+
+					<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem;">
+						<div style="display: flex; flex-direction: column; gap: 0.3rem;">
+							<label for="txGiftToInput" style="color: #8a8a9e; font-size: 0.8rem;">GIVE SOMETHING AS WELL, TO THIS ADDRESS (optional; leave empty to give nothing)</label>
+							<input id="txGiftToInput" type="text" autocomplete="off" bind:value={txGiftTo} placeholder="An address of your choosing: a church, a charity, a friend..." style="background: #06060a; border: 1px solid #333; color: #fff; padding: 0.6rem; font-family: monospace; border-radius: 3px;" />
+						</div>
+						<div style="display: flex; flex-direction: column; gap: 0.3rem;">
+							<label for="txGiftAmountInput" style="color: #8a8a9e; font-size: 0.8rem;">HOW MUCH TO GIVE (CVN, or 10%)</label>
+							<input id="txGiftAmountInput" type="text" autocomplete="off" bind:value={txGiftAmount} placeholder="" style="background: #06060a; border: 1px solid #333; color: #00ff66; padding: 0.6rem; font-family: monospace; border-radius: 3px;" />
 						</div>
 					</div>
 

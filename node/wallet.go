@@ -156,20 +156,59 @@ func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 		return
 	}
 
+	// Giving is the sender's choice each time: nothing is suggested and
+	// nothing is remembered (giving.go). It is asked after the key, which
+	// is typed unseen, and never before it: the question before the key
+	// has always been the fee, and anyone answering from habit must not
+	// find a question whose answer is shown where the key used to go. What
+	// is typed here is never shown back if it is not an address.
+	giftTo := ask("Give something to another address in the same transfer? Its address (press Enter for none): ")
+	giftUnits := int64(0)
+	if giftTo != "" {
+		if !looksLikeWalletAddress(giftTo) {
+			fmt.Printf("❌ %v. Nothing was sent.\n", errGiftAddress())
+			return
+		}
+		if giftTo == strings.TrimSpace(senderAddress) {
+			fmt.Printf("❌ %v. Nothing was sent.\n", errGiftToSender())
+			return
+		}
+		giftText := ask("How much to give: an amount in CVN, or a share of the amount such as 10%: ")
+		if giftTo, giftUnits, err = giftFromWhatWasTyped(giftTo, giftText, recipient, amountUnits); err != nil {
+			fmt.Printf("❌ %v. Nothing was sent.\n", err)
+			return
+		}
+	}
+
 	fmt.Println("\n--------------------------------------------------------------------")
 	fmt.Printf(" From:   %s\n", senderAddress)
 	fmt.Printf(" To:     %s\n", recipient)
 	fmt.Printf(" Amount: %s CVN\n", FormatUnits(amountUnits))
+	if giftUnits > 0 {
+		fmt.Printf(" Gift:   %s CVN to %s\n", FormatUnits(giftUnits), giftTo)
+	}
 	fmt.Printf(" Fee:    %s CVN\n", FormatUnits(feeUnits))
+	if giftUnits > 0 {
+		fmt.Printf(" In all: %s CVN leaves this wallet (and change of less than %s CVN, if there is any)\n", FormatUnits(amountUnits+giftUnits+feeUnits), FormatUnits(minimumOutputUnits()))
+	}
 	fmt.Println("--------------------------------------------------------------------")
 	if answer := strings.ToLower(ask("Send this transfer? It cannot be undone. (y/n): ")); answer != "y" && answer != "yes" {
 		fmt.Println("Nothing was sent.")
 		return
 	}
 
-	tx, err := SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amountUnits, feeUnits)
+	var tx Transaction
+	if giftUnits > 0 {
+		tx, err = SendTransferWithGiftFromWallet(privateKeyHex, publicKeyHex, recipient, amountUnits, giftTo, giftUnits, feeUnits)
+	} else {
+		tx, err = SendTransferFromWallet(privateKeyHex, publicKeyHex, recipient, amountUnits, feeUnits)
+	}
 	if err != nil {
 		fmt.Printf("❌ Not sent: %v\n", err)
+		return
+	}
+	if giftUnits > 0 {
+		fmt.Printf("✅ Sent, with %s CVN given to %s. Transfer ID: %s\n   It will confirm in one of the next blocks.\n", FormatUnits(giftUnits), giftTo, tx.ID)
 		return
 	}
 	fmt.Printf("✅ Sent. Transfer ID: %s\n   It will confirm in one of the next blocks.\n", tx.ID)
