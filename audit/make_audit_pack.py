@@ -319,7 +319,7 @@ POOL = [
 
 
 # The three rules changed for the restart of the development network, for a
-# review of those alone (Prompt 9): every fee to the miner, a fifth of every
+# review of those alone (Prompts 10 and 10A): every fee to the miner, a fifth of every
 # block closed to paying transfers, a swept fifth kept on the coin.
 RESET = [
     "audit/CHANGES_FOR_THE_RESTART.md",

@@ -1018,7 +1018,7 @@ Be specific or say nothing. Do not add a summary.
 
 ---
 
-## Prompt 9: the three rules changed for the restart
+## Prompt 10: the three rules changed for the restart
 
 Give `cvn_audit_reset.txt`. A review of three rules of the chain that were changed together before the development network is started afresh: every fee is the miner's; a fifth of every block is closed to transfers that pay a fee; and a fifth swept from a coin is kept on the coin for its owner for seven more years. It does not cover the difficulty rule, the networking, the pool or the wallets, except where a wallet must state what a rule requires.
 
@@ -1066,6 +1066,76 @@ HOW TO ANSWER
 Answer each question in order, in a few lines: what you checked and what you concluded. "Did not check" is acceptable; silence is not.
 
 Then findings, most serious first, each with: Title; Severity (Critical: coins are created, destroyed or taken, or honest nodes disagree / High / Medium / Low); Confidence (Certain / Likely / Possible); the function; the exact steps in order, as blocks and transfers with amounts; the lines that allow it, quoted; the smallest fix.
+
+Be specific or say nothing. Do not add a summary.
+```
+
+---
+
+## Prompt 10A: the same three rules, for a reviewer that can run the code
+
+For a coding agent with a shell and a copy of the repository. Replace nothing in the prompt; tell the reviewer the commit separately, in the first line of your message ("Review commit <hash>."). It asks the same questions as Prompt 10 and requires each finding to be proved.
+
+```text
+You are reviewing THREE CHANGED RULES of a proof-of-work blockchain, written in Go, before a public test network is started under them. You have the repository and a shell. Once that network starts the rules cannot be changed without everybody agreeing to start again. A mistake in a rule can create coins, destroy coins, let one person take another's, or make two honest nodes disagree about which blocks are valid and so split the network. Your job is to find what is wrong and to PROVE it, with a test that fails or a run that shows it. Do not summarise the code, explain what a blockchain is, or praise.
+
+SET UP
+
+1. Work only in a copy of your own. If you were started inside a working copy of the repository, do not change it: make a fresh copy at the commit you were given (for example with "git worktree add <a new folder outside the repository> <commit>"), go there, and state the commit you are on. Write every file you create in that copy. Never commit, push, tag, stash, or switch the branch of the folder you were started in.
+2. A node or a miner may be running on this machine from the original folder. Do not stop it. Do not run any build script (build_clean.bat, build.sh). Do not overwrite, move or delete any program or database file (*.exe, *.db) outside your own copy. The tests keep their chains in temporary folders and use loopback addresses, and do not touch a running node.
+3. Baseline, before you change anything, each with its exit code and last lines:
+     go build ./...
+     go vet ./node/
+     go test ./... -count=1 -timeout 30m
+   If freshly built test programs are blocked or removed by a virus scanner ("contains a virus", or "ok" with no tests run), set GOTMPDIR, TMP and TEMP to a folder the scanner leaves alone and say that you did.
+4. The tests with real nodes, once, if you can open sockets on loopback addresses:
+     go test -tags multinode -run MultiNode -timeout 120m ./node/
+   One of them (TestMultiNodeTheRealFastMinerAtAPool) is skipped unless CVN_REAL_FAST_MINER is set. Do not set it.
+5. Fuzz only with -parallel 2 and a -fuzztime of a minute or two for each target.
+
+WHAT TO READ FIRST
+
+audit/CHANGES_FOR_THE_RESTART.md states the three rules as claims. It was written by the authors and may be wrong; where the code does not do what it says, or WHITEPAPER.md says something else again, that is a finding. The code that decides validity is in node/tx_rules.go, node/vault.go, node/sweep.go, node/database_core.go, node/blockchain_core.go, node/block_format.go, node/chain_work.go, node/backup.go and node/chain_params.go. The tests of the three rules are node/fees_test.go, node/paid_share_test.go, node/held_fifth_test.go, node/coins_conserved_test.go and node/sweep_test.go; node/testchain_test.go holds the helpers that build a chain in a test, which you may use for your own.
+
+All amounts are whole numbers of units (100,000,000 to one coin) in 64-bit signed integers. There are no floating-point numbers in the rules, and finding one is a finding.
+
+QUESTIONS
+
+A. Nothing created, nothing lost. The claim is that after every block the amounts of all coins, plus everything set aside on coins, plus the vault, equal exactly what has been issued. Trace SaveBlockToStorageInternal from the check of the block to the vault's new balance, with accountForBlock, applySweep and storeVaultUnits. Find a block, or a sequence of blocks, after which the sum is wrong by even one unit: a fee, an unclaimed reward, a vault payout, a sweep that sets aside, a sweep that sends to the vault, a coin spent in the block of its own date, several of these in one block, the last block of emission and the first after it, an addition that overflows.
+
+B. Fees (rule 1). Is there any height, or any kind of block, at which part of a fee still goes to the vault by rule, or at which a miner may claim more than the new coins of the height, the fees of the block and the vault's payout together? Can a block claim a fee that its transfers do not pay?
+
+C. The paid share (rule 2). In ValidateBlockTransactions: find a block that is accepted with more than 400 paying transfers or more than 240,000 bytes of them, or refused with fewer. Consider the order of transfers in the block, free transfers standing before paying ones, a transfer whose fee is nought but whose inputs exceed its outputs or the reverse, the exact byte at the limit, and how a transfer's size is measured (is it the same measure everywhere, and can two nodes measure the same transfer differently?). In fillBlockFromCandidates: find a set of waiting transfers from which this program builds a block that its own rule refuses, or leaves out transfers it could have taken. Is there any other place in the pack that puts transfers into a block?
+
+D. The fifth set aside (rule 3), on one node. In applySweep and sweepAmounts: find a coin record, of any amount and with anything set aside, for which the sweep leaves a wrong amount, sets aside something other than a fifth rounded down or nothing, sends the vault anything other than what had been set aside one interval before, or loses track of the coin so that it is never looked at again while it still has something set aside. Which coins are due at a height is found from the block that made them and from the record of the sweep one interval earlier: find a coin that is due and is not found, or is swept twice. What does a coin record with a negative figure set aside do everywhere it is read?
+
+E. Spending (rule 3). In checkTransferAgainstCoins an input must state the coin's amount and what is set aside on it together. Find a transfer that is accepted while stating anything else; that spends a coin and leaves what was set aside behind, or takes it twice; or that lets somebody other than the owner take what is set aside. A transfer is signed with the stated amount: after a coin's first date the sum is unchanged, after its second it is smaller. Is every transfer signed before the second date really refused after it, in a block and among waiting transfers (SelectMempoolTransactionsForBlock)?
+
+F. Undoing. Blocks are removed and put back (rollbackChainToHeightLocked, restoreChainLocked, undoBlockCoinChanges, undoSweep), and a block that competes for the newest block's place is judged against the coins as they were before it (lookupWithBlockUndone). Find a sequence of blocks, removals and replacements after which a coin's amount, what is set aside on it, its age, or the vault differs from what a node that only ever saw the final chain would hold. Consider a removal that crosses both dates of one coin, a coin spent in a block that is then removed, a rival block that holds the owner's spend against a block whose sweep took the fifth, and errors that are ignored on the way (undoSweep and loadSweepRecords discard some).
+
+G. Two nodes. Find anything in the three rules whose result could differ between two honest nodes given the same blocks in the same order: the order coins are swept in, anything read from a map, a clock, the machine's word size, text compared before or after trimming, a JSON field read with a different type, a record written by one version of the program and read by another. The stored coin record gained an optional field: can a record be written that an honest node reads differently from the node that wrote it?
+
+H. The balance and the figures shown. RebuildStateBalanceCacheInternal and ApplyIncrementalDeltaCacheUpdate keep each address's balance and the sum of everything set aside. Find a block after which what a node reports differs from its coins. These are not rules, but a wallet builds transfers from what a node reports (ListSpendableCoins, SpendableCoin): can a wrong report make a wallet sign away something its owner did not mean to?
+
+I. A copy of the chain. checkChainFile decides that a chain file is whole before it is used. Name an altered file it passes that would let a node start from a state the rules could not have produced, and say how much that matters given that every node also checks every block it is given.
+
+J. The tests. Which of the claims in audit/CHANGES_FOR_THE_RESTART.md has no test that would fail if the claim were false? Name the claim and the fault that would go unnoticed.
+
+DO NOT REPORT
+
+That a miner cannot be made to include a free transfer, that a sender and a miner can settle outside the fee, and that the last fifth of a block may stay empty under heavy demand: the statement of changes says so. That there is no starting height and an earlier chain is not valid: that is intended. Anything about the difficulty rule, proof of work, networking or the pool. Style and wording.
+
+HOW TO ANSWER
+
+First the baseline: the commit, and the result of each command in SET UP.
+
+Then answer each question in order, in a few lines: what you checked, what you ran, and what you concluded. "Did not check" is acceptable; silence is not.
+
+Then findings, most serious first, each with: Title; Severity (Critical: coins are created, destroyed or taken, or honest nodes disagree / High / Medium / Low); the function; the exact steps in order, as blocks and transfers with amounts; the lines that allow it, quoted; THE PROOF: the full code of a test that fails because of it (a new _test.go file in package node), the command that runs it, and its output; the smallest fix. A finding you could not prove with a test or a run is listed separately under "Not proved", with what stopped you.
+
+For question J, a claim with no test: write the test, and say whether it passes.
+
+Give your whole answer as text. Leave nothing changed in the folder you were started in.
 
 Be specific or say nothing. Do not add a summary.
 ```
