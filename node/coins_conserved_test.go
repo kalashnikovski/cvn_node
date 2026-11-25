@@ -59,7 +59,7 @@ func issuedUpTo(height int64) int64 {
 }
 
 // TestCoinsAreNeverCreatedOrLost runs a small economy through everything that
-// moves coins: transfers with fees (part of each fee going to the vault),
+// moves coins: transfers with fees (every fee going to the block's miner),
 // coins swept into the vault, the vault paying out, blocks that claim less
 // than they may, the end of emission, and reorganisations. After every block,
 // every coin there is plus the vault must equal exactly what the schedule has
@@ -74,7 +74,7 @@ func TestCoinsAreNeverCreatedOrLost(t *testing.T) {
 	Params.Economics = &GenesisEconomics{
 		BlockSeconds: 45, EpochBlocks: 10, EmissionEpochs: 3, InitialRewardUnits: cvn("50"),
 		SweepIntervalBlocks: 6, SweepDivisor: 5,
-		VaultPayoutBlocks: 7, FeeVaultDivisor: 5, MinOutputUnits: 10000, ReorgLimitBlocks: 100,
+		VaultPayoutBlocks: 7, MinOutputUnits: 10000, ReorgLimitBlocks: 100,
 	}
 
 	type wallet struct{ private, public, address string }

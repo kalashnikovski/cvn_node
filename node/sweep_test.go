@@ -17,7 +17,7 @@ func startSweepChain(t *testing.T) *int64 {
 	Params.Economics = &GenesisEconomics{
 		BlockSeconds: 45, EpochBlocks: 1000000, EmissionEpochs: 7, InitialRewardUnits: cvn("50"),
 		SweepIntervalBlocks: 5, SweepDivisor: 5,
-		VaultPayoutBlocks: 1000000000000000, FeeVaultDivisor: 5, MinOutputUnits: 10000, ReorgLimitBlocks: 100,
+		VaultPayoutBlocks: 1000000000000000, MinOutputUnits: 10000, ReorgLimitBlocks: 100,
 	}
 	timestamp := Params.GenesisTimestamp + 100
 	return &timestamp

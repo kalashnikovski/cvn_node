@@ -163,12 +163,16 @@ func TestMinerReadsTheVaultOfTheBlockItBuildsOn(t *testing.T) {
 		extendTestChain(t, timestamp, owner, nil)
 	}
 	parent := GetLatestBlockInternal()
-	// The next block carries a fee, a fifth of which goes into the vault.
+	// The next block carries a 5 CVN fee and its miner claims 1 CVN less
+	// than it may, which goes into the vault.
 	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("someone"), cvn("10"), cvn("5"), ListSpendableCoins(owner))
 	if err != nil {
 		t.Fatal(err)
 	}
-	extendTestChain(t, timestamp+45, testAddress("other"), []Transaction{transfer})
+	modest := mineTestBlock(t, timestamp+45, testAddress("other"), []Transaction{transfer}, cvn("54"))
+	if !ValidateBlockSignatures(modest) || !SaveBlockToStorageInternal(modest) {
+		t.Fatal("a block that claimed less than it may was refused")
+	}
 	tip := GetLatestBlockInternal()
 
 	if got := vaultUnitsAfter(tip); got != cvn("1") || got != VaultBalanceUnits() {

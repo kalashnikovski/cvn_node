@@ -201,8 +201,13 @@ func TestSwitchingChainsMovesCoinsCorrectly(t *testing.T) {
 	if TotalChainWork().Cmp(lightWork) <= 0 {
 		t.Error("total work did not rise after switching to the heavier branch")
 	}
-	// Miner A: blocks 11 and 12 plus eight more, plus four fifths of the 0.5
-	// fee and the small vault payouts that follow it.
+	// Miner A: blocks 11 and 12 plus eight more, plus the 0.5 fee. (The vault
+	// is in the sum for anything a block left unclaimed; here it is empty.)
+	// Every fee is its miner's, so the whole 500.5 is miner A's and the
+	// vault holds nothing.
+	if balanceOf(testAddress("minerA")) != cvn("500.5") || vaultNow(t) != 0 {
+		t.Errorf("after the switch miner A has %s CVN and the vault %s; want 500.5 and nothing", FormatUnits(balanceOf(testAddress("minerA"))), FormatUnits(vaultNow(t)))
+	}
 	if balanceOf(testAddress("minerA"))+VaultBalanceUnits() != cvn("500.5") || balanceOf(testAddress("minerB")) != 0 || balanceOf(testAddress("recipient")) != cvn("120.25") {
 		t.Errorf("after the switch: A+vault=%s B=%s recipient=%s; want 500.5, 0, 120.25", FormatUnits(balanceOf(testAddress("minerA"))+VaultBalanceUnits()), FormatUnits(balanceOf(testAddress("minerB"))), FormatUnits(balanceOf(testAddress("recipient"))))
 	}

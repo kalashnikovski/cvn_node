@@ -357,8 +357,8 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int6
 	}
 
 	// The reward outputs may pay at most the newly issued reward, the vault's
-	// payout for this block, and the miner's share of the transfers' fees.
-	// Exact, with no tolerance.
+	// payout for this block, and the transfers' fees. Exact, with no
+	// tolerance.
 	accounting := accountForBlock(b.Index, totalFeeUnits, vaultBeforeUnits)
 	if coinbaseUnits > accounting.MinerAllowanceUnits() {
 		return none, nil, fmt.Errorf("reward of %s exceeds the allowed %s", FormatUnits(coinbaseUnits), FormatUnits(accounting.MinerAllowanceUnits()))

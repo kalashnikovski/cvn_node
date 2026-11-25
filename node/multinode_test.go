@@ -880,7 +880,43 @@ func TestMultiNodeFullBlocks(t *testing.T) { fullBlocksBetweenRealNodes(t, false
 // miner on this one. Blocks at the size limit have to reach all of them, by
 // announcement where both ends understand that and whole where one does not,
 // and every node has to end with the same chain and the same coins.
+//
+// The earlier release divides a fee between the miner and the vault, and
+// this version gives the miner all of it, so the two cannot share a chain on
+// which a transfer pays a fee: that is a change to the rules, and a network
+// has to start afresh for it. What this test is about is how blocks travel
+// between versions. Its transfers are therefore sent free, which both
+// versions take. It no longer shows that the two agree about fees; they do
+// not. When a release with the new rules exists, earlierVersion should name it.
 func TestMultiNodeOldAndNewVersionsTogether(t *testing.T) { fullBlocksBetweenRealNodes(t, true) }
+
+// The tool that fills blocks pays exactly the fee it is asked to pay. Asked
+// for none, its transfers are free: what does not divide into fifty pieces
+// goes into the last piece, where it once went with the fee. (No nodes are
+// started for this one; it is here because the tool is built only for these
+// tests and for the devtools.)
+func TestMultiNodeTheBlockFillingToolPaysExactlyTheFeeAsked(t *testing.T) {
+	onNetwork(t, "devnet")
+	key, pub, address, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An amount that does not divide by fifty, with or without the fee.
+	coin := SpendableCoin{TxID: "TX_" + strings.Repeat("ab", 32), Index: 0, Amount: UnitsAmount(cvn("50") + 37)}
+	for _, feeUnits := range []int64{0, 100000} {
+		transfers, _, _ := fillTransfers(key, pub, address, []SpendableCoin{coin}, 1<<30, feeUnits)
+		if len(transfers) != 1 {
+			t.Fatalf("asked for a fee of %d units: built %d transfers from one coin", feeUnits, len(transfers))
+		}
+		var paidOut int64
+		for _, output := range transfers[0].Outputs {
+			paidOut += output.Amount.Units()
+		}
+		if got := transfers[0].FreeWillOffering.Units(); got != feeUnits || coin.Amount.Units()-paidOut != feeUnits {
+			t.Errorf("asked for a fee of %d units: the transfer states %d and leaves %d", feeUnits, got, coin.Amount.Units()-paidOut)
+		}
+	}
+}
 
 // handOverTogether gives a node many transfers, eight at a time. One at a
 // time takes long enough on a busy machine for the miner to find several
@@ -918,6 +954,12 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 	c := newLocalCluster(t)
 	const wait = 4 * time.Minute
 	key, pub, address := newTestWallet(t)
+	// What each transfer pays: 0.001 CVN, or nothing beside the earlier
+	// release (see TestMultiNodeOldAndNewVersionsTogether).
+	feeUnits := int64(100000)
+	if withEarlierVersion {
+		feeUnits = 0
+	}
 
 	seedA := c.seed("seed-a", 1, []int{1, 2})
 	if withEarlierVersion {
@@ -945,7 +987,7 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 		rewards = miner.coins(address)
 		return len(rewards) >= 6
 	})
-	cuts, _, _ := fillTransfers(key, pub, address, rewards[:6], 1<<30, 100000)
+	cuts, _, _ := fillTransfers(key, pub, address, rewards[:6], 1<<30, feeUnits)
 	if len(cuts) != 6 {
 		t.Fatalf("built %d transfers from six coins", len(cuts))
 	}
@@ -969,7 +1011,7 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 	// block after them may be mined while they are still being handed over
 	// and hold only some; the blocks after it are full.
 	budget := blockTransferBudgetBytes()
-	transfers, bytes, _ := fillTransfers(key, pub, address, pieces, budget*15/4, 100000)
+	transfers, bytes, _ := fillTransfers(key, pub, address, pieces, budget*15/4, feeUnits)
 	if bytes < budget*3 {
 		t.Fatalf("built only %d bytes of transfers; a block holds %d", bytes, budget)
 	}
@@ -1021,7 +1063,7 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 		made = miner.coins(address)
 		return len(made) >= len(transfers)*TxMaxOutputs
 	})
-	combines, combineBytes := combineBack(key, pub, transfers, made, 100000)
+	combines, combineBytes := combineBack(key, pub, transfers, made, feeUnits)
 	if len(combines) < len(transfers)*TxMaxOutputs/TxMaxInputs {
 		t.Fatalf("built %d combining transfers for %d pieces", len(combines), len(transfers)*TxMaxOutputs)
 	}
@@ -1067,9 +1109,11 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 
 	miner.stopNode()
 	height := c.restAndCheckAccounts(wait, watched...)
-	// The pieces are all still the sender's: the coins moved nowhere.
-	if got, want := seedA.balances()[address], float64(height)*50; got >= want || got < want-1 {
-		t.Errorf("the wallet holds %v CVN at block #%d; it should hold just under %v (the fees' fifth is in the vault)", got, height, want)
+	// The pieces are all still the sender's: the coins moved nowhere. The
+	// sender is also the miner, and every fee is the miner's, so the fees
+	// came back with the rewards and the wallet holds every coin issued.
+	if got, want := seedA.balances()[address], float64(height)*50; got != want {
+		t.Errorf("the wallet holds %v CVN at block #%d; it should hold exactly %v (every reward, and every fee it paid came back to it as the miner)", got, height, want)
 	}
 	for _, n := range c.nodes {
 		log := n.log()

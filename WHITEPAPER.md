@@ -70,13 +70,13 @@ The sweep is a rule every node applies at the same block. No one can skip it and
 
 The vault is a number kept by the rules. It has no address and no key. Nobody can spend from it.
 
-**What goes in:** swept coins, a share of transaction fees (section 7), and anything a block could have paid its miner but did not.
+**What goes in:** swept coins, and anything a block could have paid its miner but did not. No part of a transaction fee goes in (section 7).
 
 **What comes out:** with every block, the vault pays out its balance divided by 9,811,200 (fourteen years of blocks), rounded down to whole units. That amount is added to the block's reward.
 
 The divisor only sets the pace. Over time the vault pays out everything that enters it. With this value, half of any amount entering the vault has reached miners within about ten years.
 
-Within a block, the payout is taken from the vault as it stood after the previous block; that block's own fees and sweeps are added afterwards.
+Within a block, the payout is taken from the vault as it stood after the previous block; that block's own sweeps, and anything it left unpaid, are added afterwards.
 
 After year 49 the block reward is zero, and miners are paid by fees and the vault.
 
@@ -84,10 +84,10 @@ After year 49 the block reward is zero, and miners are paid by fees and the vaul
 
 - A fee is whatever a transfer's inputs exceed its outputs by. It is chosen by the sender. **Zero is allowed.**
 - There is no percentage fee. The chain cannot tell a payment from a person moving their own coins, so a percentage would tax people for rearranging what they own.
-- Until block 34,339,200, **80% of a block's fees go to its miner and 20% to the vault**. After that the miner receives all of them.
+- **Every fee in a block goes to that block's miner**, at every height. Nothing is taken from a fee for the vault or for anyone else.
 - No fee is ever destroyed.
 
-The vault's share is deliberately small. A miner can avoid it by including their own transfers at no fee, and a sender can pay a miner privately. At a fifth, neither is worth the trouble.
+An earlier form of the rules sent a fifth of every fee to the vault while new coins were being issued. It was removed before any public network started. A fee is what a sender chooses to pay a miner, and the rules take no part of it. A miner who wishes to give to the vault can do so freely: a block may pay its miner less than it is allowed to, and what it does not pay goes to the vault (section 4).
 
 ## 8. Transfers and blocks
 

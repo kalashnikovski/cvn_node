@@ -431,7 +431,7 @@ func ValidateBlockSignatures(b Block) bool {
 		totalCoinbaseUnits += out.Amount.Units()
 	}
 	// What the block pays apart from fees: the new reward plus the vault's
-	// payout. Its miner may add the miner's share of the fees.
+	// payout. Its miner may add the fees of the block's transfers.
 	rewardUnits := accounting.SubsidyUnits()
 	minerFeeUnits := accounting.MinerFeeUnits
 	if totalCoinbaseUnits > rewardUnits+minerFeeUnits {

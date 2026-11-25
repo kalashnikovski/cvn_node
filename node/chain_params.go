@@ -420,8 +420,6 @@ type GenesisEconomics struct {
 
 	VaultPayoutBlocks int64 // each block pays vault balance / this
 
-	FeeVaultDivisor int64 // vault's share of fees is 1/this while emission lasts
-
 	MinOutputUnits int64 // smallest output that may be created
 
 	ReorgLimitBlocks int64 // a node will not replace more of its history than this
@@ -439,8 +437,6 @@ var NewGenesisEconomics = GenesisEconomics{
 	SweepDivisor:        5,
 
 	VaultPayoutBlocks: 9811200,
-
-	FeeVaultDivisor: 5,
 
 	MinOutputUnits: 10000,
 

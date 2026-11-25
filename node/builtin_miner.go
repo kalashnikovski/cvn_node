@@ -235,7 +235,7 @@ func buildBlockContentsDivided(tip Block, minerAddress string, timestamp int64, 
 	templateTransfers, feeUnits := selectionForTip(tip.Hash, TxMaxPerBlock-1)
 	// Everything is whole units, so the amounts written into the block are
 	// exact. rewardUnits is the new reward plus the vault's payout for this
-	// block; feeUnits becomes the miner's share of the fees.
+	// block; feeUnits is the fees, all of which are the miner's.
 	accounting := accountForBlock(nextIndex, feeUnits, vaultUnitsAfter(tip))
 	rewardUnits := accounting.SubsidyUnits()
 	feeUnits = accounting.MinerFeeUnits

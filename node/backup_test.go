@@ -30,7 +30,12 @@ func buildChainForBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	extendTestChain(t, timestamp+45, testAddress("other"), []Transaction{transfer})
+	// The miner of this block claims 1 CVN less than it may, so that the
+	// vault holds something for a backup to add up.
+	modest := mineTestBlock(t, timestamp+45, testAddress("other"), []Transaction{transfer}, cvn("54"))
+	if !ValidateBlockSignatures(modest) || !SaveBlockToStorageInternal(modest) {
+		t.Fatal("a block that claimed less than it may was refused")
+	}
 	extendTestChain(t, timestamp+90, owner, nil)
 }
 
@@ -50,7 +55,7 @@ func TestABackupIsAWholeCheckedChain(t *testing.T) {
 	if report.Height != tip.Index || report.TipHash != tip.Hash {
 		t.Errorf("the backup is of block #%d, and the chain is at #%d", report.Height, tip.Index)
 	}
-	// A fifth of the 5 CVN fee went in; the block after paid a sliver out.
+	// The 1 CVN a miner left unclaimed went in; the block after paid a sliver out.
 	if report.VaultUnits <= cvn("0.99") || report.VaultUnits >= cvn("1") {
 		t.Errorf("the backup's vault holds %s CVN, want a little under 1", FormatUnits(report.VaultUnits))
 	}

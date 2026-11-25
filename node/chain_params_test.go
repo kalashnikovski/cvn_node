@@ -124,12 +124,12 @@ func TestDevnetChainRuns(t *testing.T) {
 	if got := balanceOf(testAddress("someone_else")); got != cvn("75.5") {
 		t.Errorf("recipient has %s, want 75.5", FormatUnits(got))
 	}
-	// A fifth of the 0.25 fee goes to the vault; the miner keeps the rest.
-	if got := balanceOf(testAddress("other_miner")); got != cvn("50.2") {
-		t.Errorf("miner of the block has %s, want 50.2 (reward plus four fifths of the fee)", FormatUnits(got))
+	// The whole 0.25 fee is the miner's; no part of a fee goes to the vault.
+	if got := balanceOf(testAddress("other_miner")); got != cvn("50.25") {
+		t.Errorf("miner of the block has %s, want 50.25 (the reward and the fee)", FormatUnits(got))
 	}
-	if got := VaultBalanceUnits(); got != cvn("0.05") {
-		t.Errorf("vault holds %s, want 0.05 (a fifth of the fee)", FormatUnits(got))
+	if got := vaultNow(t); got != 0 {
+		t.Errorf("vault holds %s, want nothing", FormatUnits(got))
 	}
 	if got := balanceOf(address); got != cvn("524.25") {
 		t.Errorf("sender has %s, want 524.25", FormatUnits(got))
@@ -173,8 +173,8 @@ func TestNewGenesisEconomics(t *testing.T) {
 	if e.VaultPayoutBlocks != 2*e.EpochBlocks {
 		t.Errorf("vault constant is %d blocks, want 14 years", e.VaultPayoutBlocks)
 	}
-	if e.SweepDivisor != 5 || e.FeeVaultDivisor != 5 || e.MinOutputUnits != 10000 || e.ReorgLimitBlocks != 100 {
-		t.Error("sweep, fee split, minimum output or reorganisation limit differ from the specification")
+	if e.SweepDivisor != 5 || e.MinOutputUnits != 10000 || e.ReorgLimitBlocks != 100 {
+		t.Error("sweep, minimum output or reorganisation limit differ from the specification")
 	}
 }
 

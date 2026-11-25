@@ -14,17 +14,21 @@ import (
 // to it and nothing can spend from it. Coins enter it by rule and leave it by
 // rule:
 //
-//   - In: while new coins are still being issued, a fixed share of every
-//     block's fees; the swept share of long-unmoved coins (see sweep.go); and
+//   - In: the swept share of long-unmoved coins (see sweep.go), and
 //     anything a block was entitled to pay its miner but did not. Nothing
 //     the schedule issues is ever destroyed.
 //   - Out: every block pays out vault / VaultPayoutBlocks, added to that
 //     block's reward for its miner.
 //
+// No part of a fee goes to the vault by rule. Every fee in a block is its
+// miner's. (A fifth of each fee once went to the vault while new coins were
+// being issued. Giving is not to be compelled, and that share was removed.)
+// A miner who claims less than a block allows gives the rest to the vault by
+// its own choice.
+//
 // Order within a block, so every node computes the same figures: the payout
 // is worked out from the vault as it stood after the previous block and taken
-// out; then this block's share of fees, its sweep and anything it left
-// unclaimed are put in.
+// out; then this block's sweep and anything it left unclaimed are put in.
 
 var vaultBucket = []byte("vault")
 
@@ -38,16 +42,16 @@ type blockAccounting struct {
 	RewardUnits      int64 // newly issued by the schedule
 	VaultPayoutUnits int64 // paid out of the vault to this block's miner
 	FeeUnits         int64 // total fees of the block's transfers
-	MinerFeeUnits    int64 // the part of the fees the miner may claim
-	VaultFeeUnits    int64 // the part of the fees that goes into the vault
-	VaultAfterUnits  int64 // vault balance once this block is applied
+	MinerFeeUnits    int64 // the fees the miner may claim: all of them
+	VaultAfterUnits  int64 // vault balance once the payout is taken out
 }
 
 // SubsidyUnits is what the block pays apart from fees: the new reward plus
 // the vault's payout.
 func (a blockAccounting) SubsidyUnits() int64 { return a.RewardUnits + a.VaultPayoutUnits }
 
-// MinerAllowanceUnits is the most the block's reward outputs may add up to.
+// MinerAllowanceUnits is the most the block's reward outputs may add up to:
+// the new reward, the vault's payout and every fee in the block.
 func (a blockAccounting) MinerAllowanceUnits() int64 { return a.SubsidyUnits() + a.MinerFeeUnits }
 
 // vaultEnabled reports whether this network has a vault. Every network does;
@@ -56,6 +60,9 @@ func vaultEnabled() bool { return Params.Economics != nil }
 
 // accountForBlock works out the accounting of a block at `height` whose
 // transfers pay feeUnits in total, given the vault balance just before it.
+// The fees are the miner's whole, at every height. The vault's balance here
+// is before the block's sweep and anything the block leaves unclaimed are
+// added, which is done where the block is stored.
 func accountForBlock(height, feeUnits, vaultBeforeUnits int64) blockAccounting {
 	accounting := blockAccounting{
 		RewardUnits:   BlockRewardUnits(height),
@@ -69,11 +76,7 @@ func accountForBlock(height, feeUnits, vaultBeforeUnits int64) blockAccounting {
 	if economics.VaultPayoutBlocks > 0 {
 		accounting.VaultPayoutUnits = vaultBeforeUnits / economics.VaultPayoutBlocks
 	}
-	if economics.FeeVaultDivisor > 0 && height <= economics.EmissionEndHeight() {
-		accounting.VaultFeeUnits = feeUnits / economics.FeeVaultDivisor
-		accounting.MinerFeeUnits = feeUnits - accounting.VaultFeeUnits
-	}
-	accounting.VaultAfterUnits = vaultBeforeUnits - accounting.VaultPayoutUnits + accounting.VaultFeeUnits
+	accounting.VaultAfterUnits = vaultBeforeUnits - accounting.VaultPayoutUnits
 	return accounting
 }
 

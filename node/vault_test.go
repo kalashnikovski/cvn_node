@@ -9,19 +9,19 @@ func TestBlockAccounting(t *testing.T) {
 	onNetwork(t, "devnet")
 	e := Params.Economics
 
-	// Early in the chain: 50 CVN reward, a fifth of the fees to the vault.
+	// Early in the chain: 50 CVN reward, and every fee is the miner's.
 	a := accountForBlock(1000, cvn("10"), 0)
-	if a.RewardUnits != cvn("50") || a.VaultFeeUnits != cvn("2") || a.MinerFeeUnits != cvn("8") || a.VaultPayoutUnits != 0 || a.VaultAfterUnits != cvn("2") {
+	if a.RewardUnits != cvn("50") || a.MinerFeeUnits != cvn("10") || a.VaultPayoutUnits != 0 || a.VaultAfterUnits != 0 {
 		t.Errorf("block with 10 CVN of fees and an empty vault: %+v", a)
 	}
-	if a.MinerAllowanceUnits() != cvn("58") {
-		t.Errorf("miner may claim %s, want 58", FormatUnits(a.MinerAllowanceUnits()))
+	if a.MinerAllowanceUnits() != cvn("60") {
+		t.Errorf("miner may claim %s, want 60", FormatUnits(a.MinerAllowanceUnits()))
 	}
 
-	// The vault pays out 1/N of its balance per block, before fees are added.
+	// The vault pays out 1/N of its balance per block. Fees do not enter it.
 	vault := e.VaultPayoutBlocks * 7 // pays exactly 7 units
 	a = accountForBlock(1000, cvn("10"), vault)
-	if a.VaultPayoutUnits != 7 || a.VaultAfterUnits != vault-7+cvn("2") || a.SubsidyUnits() != cvn("50")+7 {
+	if a.VaultPayoutUnits != 7 || a.VaultAfterUnits != vault-7 || a.SubsidyUnits() != cvn("50")+7 || a.MinerAllowanceUnits() != cvn("60")+7 {
 		t.Errorf("payout from a vault of %d units: %+v", vault, a)
 	}
 	// Fractions of a unit stay in the vault.
@@ -29,19 +29,18 @@ func TestBlockAccounting(t *testing.T) {
 	if a.VaultPayoutUnits != 0 || a.VaultAfterUnits != e.VaultPayoutBlocks-1 {
 		t.Errorf("a vault too small to pay a whole unit must pay nothing: %+v", a)
 	}
-	// The fee share rounds down in the miner's favour: 9 units of fees give
-	// the vault 1 and the miner 8.
+	// No fee is divided, however small: 9 units of fees are 9 for the miner.
 	a = accountForBlock(1000, 9, 0)
-	if a.VaultFeeUnits != 1 || a.MinerFeeUnits != 8 {
-		t.Errorf("9 units of fees split %d / %d, want 1 to the vault and 8 to the miner", a.VaultFeeUnits, a.MinerFeeUnits)
+	if a.MinerFeeUnits != 9 || a.VaultAfterUnits != 0 {
+		t.Errorf("9 units of fees: the miner may take %d and the vault holds %d, want 9 and 0", a.MinerFeeUnits, a.VaultAfterUnits)
 	}
 
-	// The last block with a reward still shares fees; the next one does not.
+	// The same at the last block with a reward and at the one after it.
 	last := e.EmissionEndHeight()
-	if a = accountForBlock(last, cvn("10"), 0); a.VaultFeeUnits != cvn("2") || a.RewardUnits != cvn("0.78125") {
+	if a = accountForBlock(last, cvn("10"), 0); a.MinerFeeUnits != cvn("10") || a.VaultAfterUnits != 0 || a.RewardUnits != cvn("0.78125") {
 		t.Errorf("last rewarded block: %+v", a)
 	}
-	if a = accountForBlock(last+1, cvn("10"), 0); a.VaultFeeUnits != 0 || a.MinerFeeUnits != cvn("10") || a.RewardUnits != 0 {
+	if a = accountForBlock(last+1, cvn("10"), 0); a.MinerFeeUnits != cvn("10") || a.VaultAfterUnits != 0 || a.RewardUnits != 0 {
 		t.Errorf("after emission the miner keeps every fee: %+v", a)
 	}
 	// ...but the vault keeps paying out for as long as it holds anything.
@@ -56,7 +55,7 @@ func startVaultChain(t *testing.T) {
 	startTestChain(t, "devnet")
 	Params.Economics = &GenesisEconomics{
 		BlockSeconds: 45, EpochBlocks: 1000, EmissionEpochs: 7, InitialRewardUnits: cvn("50"),
-		VaultPayoutBlocks: 10, FeeVaultDivisor: 5, MinOutputUnits: 10000, ReorgLimitBlocks: 100,
+		VaultPayoutBlocks: 10, MinOutputUnits: 10000, ReorgLimitBlocks: 100,
 	}
 }
 
@@ -90,12 +89,18 @@ func TestVaultOnAChain(t *testing.T) {
 		t.Fatalf("vault holds %s before any fee was paid", FormatUnits(VaultBalanceUnits()))
 	}
 
-	// A transfer paying a 5 CVN fee: 4 to the miner, 1 into the vault.
+	// A transfer paying a 5 CVN fee. The miner may take the reward and the
+	// whole fee, 55 CVN. This miner claims 54 and so leaves 1 CVN to the
+	// vault: nothing but a sweep or a miner's own choice puts coins there.
 	transfer, err := BuildSignedTransfer(privateKey, publicKey, testAddress("recipient"), cvn("20"), cvn("5"), ListSpendableCoins(sender))
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine(testAddress("minerA"), []Transaction{transfer})
+	timestamp += 45
+	modest := mineTestBlock(t, timestamp, testAddress("minerA"), []Transaction{transfer}, cvn("54"))
+	if !ValidateBlockSignatures(modest) || !SaveBlockToStorageInternal(modest) {
+		t.Fatal("a block that claimed 54 of the 55 CVN it may was refused")
+	}
 	if balanceOf(testAddress("minerA")) != cvn("54") || VaultBalanceUnits() != cvn("1") {
 		t.Fatalf("after the fee block: miner %s, vault %s; want 54 and 1", FormatUnits(balanceOf(testAddress("minerA"))), FormatUnits(VaultBalanceUnits()))
 	}

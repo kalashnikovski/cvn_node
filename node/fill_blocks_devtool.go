@@ -59,9 +59,11 @@ func fillTransfers(privateKeyHex, publicKeyHex, address string, coins []Spendabl
 		for p := range outputs {
 			outputs[p] = UTXOOutput{Recipient: address, Amount: UnitsAmount(each)}
 		}
-		// What does not divide evenly goes with the fee.
-		fee := coin.Amount.Units() - each*pieces
-		tx, err := signTransfer(privateKeyHex, publicKeyHex, address, []UTXOInput{walletInput(coin)}, outputs, fee)
+		// What does not divide evenly goes into the last piece, so that the
+		// fee is exactly the one asked for and a transfer asked to be free
+		// pays nothing.
+		outputs[pieces-1].Amount = UnitsAmount(coin.Amount.Units() - feeUnits - each*(pieces-1))
+		tx, err := signTransfer(privateKeyHex, publicKeyHex, address, []UTXOInput{walletInput(coin)}, outputs, feeUnits)
 		if err != nil {
 			continue
 		}

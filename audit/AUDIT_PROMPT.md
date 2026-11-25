@@ -83,7 +83,7 @@ Read all of it before you answer. The material numbers its files ("FILE n OF N")
 
 WHAT THE PROJECT IS
 
-Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block so nobody can mine early.
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; and the first block is tied to a future Bitcoin block so nobody can mine early.
 
 The code runs on two networks, and both have the same rules:
 
@@ -94,7 +94,7 @@ One thing to look for in particular: anything left over from the older network's
 
 WHAT TO LOOK FOR, MOST IMPORTANT FIRST
 
-1. Creating coins. Any way for the total of all coins plus the vault to exceed what the schedule has issued: in the reward, the fee split, the vault payout, the sweep, rounding, overflow, a block that is accepted while paying too much, or a reorganisation that leaves a balance or the vault wrong.
+1. Creating coins. Any way for the total of all coins plus the vault to exceed what the schedule has issued: in the reward, the fees, the vault payout, the sweep, rounding, overflow, a block that is accepted while paying too much, or a reorganisation that leaves a balance or the vault wrong.
 
 2. Taking or double-spending coins. Any way to spend a coin you do not own, spend one coin twice, replay a transfer, or alter a transfer after it is signed in a way that matters.
 
@@ -207,7 +207,7 @@ Read all of it before you answer. The material numbers its files ("FILE n OF N")
 
 WHAT THE PROJECT IS
 
-Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so nobody can mine early.
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so nobody can mine early.
 
 The code runs on two networks, and both have the same rules:
 
@@ -242,7 +242,7 @@ PART 3: WHAT HAS NOBODY LOOKED AT?
 
 The first round concentrated on the network code and the start of the chain. Give the rest the same attention, most important first:
 
-1. Creating coins. Any way for the total of all coins plus the vault to exceed what the schedule has issued: in the reward, the fee split, the vault payout, the sweep, rounding, overflow, a block accepted while paying too much. Work one block through by hand, with real numbers.
+1. Creating coins. Any way for the total of all coins plus the vault to exceed what the schedule has issued: in the reward, the fees, the vault payout, the sweep, rounding, overflow, a block accepted while paying too much. Work one block through by hand, with real numbers.
 
 2. The Sabbatical sweep and the vault across a reorganisation. When blocks are removed and others applied, is every swept coin, every vault balance and every spent coin put back exactly? Follow one removal and one re-application by hand, for a block that contains a sweep.
 
@@ -332,7 +332,7 @@ Read all of it before you answer. The material numbers its files ("FILE n OF N")
 
 WHAT THE PROJECT IS
 
-Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so that nobody can mine early.
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so that nobody can mine early.
 
 The code runs on more than one network:
 
@@ -386,7 +386,7 @@ C8. Coins or signed transfers from a test network cannot be replayed on another 
 D. THE SUPPLY IS WHAT THE PAPER SAYS
 
 D1. The total that can ever be issued, computed from the code, equals the figure in the design paper. Do the sum.
-D2. Every block pays exactly: the scheduled reward, plus the miner's share of fees, plus the vault payout, and no more. Work one block through by hand with real numbers, including the rounding.
+D2. Every block pays exactly: the scheduled reward, plus the fees of its transfers (all of them: no part of a fee goes to the vault), plus the vault payout, and no more. Work one block through by hand with real numbers, including the rounding.
 D3. Coins plus vault never exceeds what has been issued, after a sweep, after a reorganisation, at each halving and after the last one.
 D4. Amounts cannot overflow or lose value through floating-point arithmetic or the way numbers are written and read.
 
@@ -499,7 +499,7 @@ Read all of it before you answer. The material numbers its files ("FILE n OF N")
 
 WHAT THE PROJECT IS
 
-Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Blocks are meant to come every 45 seconds; difficulty is adjusted on every block. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; a fifth of transaction fees also goes to the vault; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so nobody can mine early.
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, with no pre-mine. Coins are separate unspent outputs, as in Bitcoin, owned by addresses and spent with ECDSA signatures. Blocks are meant to come every 45 seconds; difficulty is adjusted on every block. Unusual features: coins nobody has moved for seven years have a fifth of their value moved to a "vault", a number kept by the rules that pays out a little to miners with every block; and the first block is tied to a future Bitcoin block, by that block's 80-byte header, so nobody can mine early.
 
 Two networks are defined, "cvn_testnet" (about to launch) and "devnet" (for development). They run the same rules and differ only in names, keys, ports, files, seeds and starting difficulty (node/chain_params.go). An older network, "testnet-1", has been removed.
 
@@ -597,7 +597,7 @@ The material numbers its files ("FILE n OF N") and ends with the line "END OF PA
 
 WHAT THE PROJECT IS
 
-Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, no pre-mine. Coins are unspent outputs owned by addresses, spent with ECDSA signatures. Blocks are meant to come every 45 seconds and difficulty is adjusted on every block. Coins unmoved for seven years have a fifth moved to a "vault" that pays a little to miners each block; a fifth of fees also goes there. Two networks, "cvn_testnet" and "devnet", run the same rules. An older network, "testnet-1", has been removed from the code.
+Covenant Standard (CVN): a coin with a fixed supply, mined with RandomX on ordinary processors, no pre-mine. Coins are unspent outputs owned by addresses, spent with ECDSA signatures. Blocks are meant to come every 45 seconds and difficulty is adjusted on every block. Coins unmoved for seven years have a fifth moved to a "vault" that pays a little to miners each block. Two networks, "cvn_testnet" and "devnet", run the same rules. An older network, "testnet-1", has been removed from the code.
 
 Since the last review the authors made two changes to the rules every node enforces. Nobody else has checked them.
 
