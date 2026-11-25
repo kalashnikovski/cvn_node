@@ -182,9 +182,11 @@ func (a *App) BroadcastLocalTransactionSubmit(recipient, amountStr, feeStr, priv
 }
 
 // RenewCoinsSubmit sends the coins of a wallet that are within a year of
-// their seven-year date back to the wallet's own address, which gives each
-// a new seven-year count. With `everything` set to "all", every coin is
-// renewed. Like a transfer, it is signed on this machine and the private
+// their seven-year date, and those with a fifth set aside at such a date,
+// back to the wallet's own address. Each becomes a new coin with a new
+// seven-year count, and anything set aside is taken back. With `everything`
+// set to "all", every coin is renewed. The screen sends no fee with it
+// unless the user has asked to pay one. Like a transfer, it is signed on this machine and the private
 // key is not kept.
 //
 // If a renewal this wallet sent with no fee has not gone through after some

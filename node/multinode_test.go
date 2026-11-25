@@ -920,6 +920,143 @@ func TestMultiNodeTheBlockFillingToolPaysExactlyTheFeeAsked(t *testing.T) {
 	}
 }
 
+// A sweep with real nodes. On this network a coin's date comes twelve blocks
+// after it was made or last swept (the launch figure is seven years), so in
+// a few minutes coins pass their first date, where a fifth is set aside,
+// and their second, where it goes to the vault. One coin's owner takes the
+// fifth back by renewing. A node that was not there for any of it then
+// downloads the whole chain. Every node must hold the same coins, the same
+// fifths set aside and the same vault, and together they must be exactly
+// what was issued.
+func TestMultiNodeFifthsSetAsideAreTheSameOnEveryNode(t *testing.T) {
+	const interval = 12
+	t.Setenv("CVN_LOCALNET_SWEEP_BLOCKS", fmt.Sprint(interval))
+	t.Setenv("CVN_LOCALNET_VAULT_BLOCKS", "50")
+	c := newLocalCluster(t)
+	const wait = 8 * time.Minute
+	key, pub, address := newTestWallet(t)
+
+	seedA := c.seed("seed-a", 1, []int{1, 2}).startNode()
+	seedB := c.seed("seed-b", 2, []int{1, 2}).startNode()
+	c.waitForHeight(30*time.Second, 0, seedA, seedB)
+	miner := c.miner("miner", 11, []int{1, 2}, address).startNode()
+
+	// Past the first date of the first coins: some have a fifth set aside.
+	c.waitForHeight(wait, interval+6, miner, seedA, seedB)
+	var chosen SpendableCoin
+	c.eventually(wait, "no coin of the miner's has a fifth set aside after its date", func() bool {
+		// Of the coins with a fifth set aside, the one whose next date is
+		// furthest off, so that the renewal has time to be mined before it.
+		chosen = SpendableCoin{}
+		for _, coin := range miner.coins(address) {
+			if coin.HeldUnits > 0 && coin.SweepAt > chosen.SweepAt {
+				chosen = coin
+			}
+		}
+		return chosen.HeldUnits > 0
+	})
+	if chosen.Amount.Units() != cvn("50") || chosen.HeldUnits != cvn("10") {
+		t.Fatalf("a reward coin past its first date is offered at %s with %s set aside; want 50 with 10", FormatUnits(chosen.Amount.Units()), FormatUnits(chosen.HeldUnits))
+	}
+	// Its owner takes the fifth back: one free transfer of the coin to its
+	// own address, handed to a seed, which has to pass it to the miner.
+	renewal, err := BuildSignedRenewal(key, pub, 0, []SpendableCoin{chosen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SubmitTransferOverHTTP(seedA.url(""), renewal); err != nil {
+		t.Fatalf("the seed refused the renewal: %v", err)
+	}
+	c.eventually(wait, "the renewal was not mined", func() bool {
+		for _, coin := range seedB.coins(address) {
+			if coin.TxID == renewal.ID {
+				return coin.Amount.Units() == cvn("50") && coin.HeldUnits == 0
+			}
+		}
+		return false
+	})
+
+	// Past the second date of the first coins: their fifths are the
+	// vault's, and the vault has begun to pay them out to the miner.
+	c.waitForHeight(wait, 2*interval+8, miner, seedA, seedB)
+
+	// A node that saw none of it downloads the chain from the two seeds.
+	late := c.seed("late", 21, []int{1, 2}).startNode()
+	c.waitForHeight(wait, 2*interval+8, late)
+
+	miner.stopNode()
+	height := c.restAndCheckAccounts(wait, seedA, seedB, late)
+	type figures struct {
+		Hash  string `json:"block_hash"`
+		Vault int64  `json:"vault_units"`
+		Held  int64  `json:"held_units"`
+	}
+	var first figures
+	if !seedA.get("/block", &first) {
+		t.Fatal("seed-a did not answer")
+	}
+	if first.Vault <= 0 || first.Held <= 0 {
+		t.Errorf("at block #%d the vault holds %d units and %d are set aside on coins; both should be above nought by now", height, first.Vault, first.Held)
+	}
+	// A node asked too often answers nothing for a moment, so each list of
+	// coins is asked for until it comes: an empty answer is never compared.
+	listed := func(n *localNode) []SpendableCoin {
+		var coins []SpendableCoin
+		c.eventually(time.Minute, n.name+" did not list the miner's coins", func() bool {
+			coins = n.coins(address)
+			return len(coins) > 0
+		})
+		return coins
+	}
+	reference := listed(seedA)
+	wantCoins, _ := json.Marshal(reference)
+	for _, n := range []*localNode{seedB, late} {
+		var other figures
+		if !n.get("/block", &other) || other != first {
+			t.Errorf("%s answers %+v and seed-a %+v", n.name, other, first)
+		}
+		if gotCoins, _ := json.Marshal(listed(n)); string(gotCoins) != string(wantCoins) {
+			t.Errorf("%s lists the miner's coins differently from seed-a (amounts, fifths set aside or dates differ)", n.name)
+		}
+	}
+	// Every coin on this network is the miner's, so the fifths on the coins
+	// a node lists must add up, to the unit, to the figure it gives for all
+	// that is set aside.
+	var heldListed int64
+	for _, coin := range reference {
+		heldListed += coin.HeldUnits
+	}
+	if heldListed != first.Held {
+		t.Errorf("seed-a says %d units are set aside in all; the coins it lists have %d set aside on them", first.Held, heldListed)
+	}
+	// A node that is stopped and started again counts its coins afresh from
+	// what it has stored, and must come to the same figures and the same
+	// coins.
+	seedB.stopNode()
+	seedB.startNode()
+	c.eventually(wait, "seed-b, started again, does not give the figures it gave before", func() bool {
+		var again figures
+		return seedB.get("/block", &again) && again == first
+	})
+	if gotCoins, _ := json.Marshal(listed(seedB)); string(gotCoins) != string(wantCoins) {
+		t.Errorf("seed-b, started again, lists the miner's coins differently from before")
+	}
+	var total float64
+	for _, amount := range seedA.balances() {
+		total += amount
+	}
+	t.Logf("came to rest at block #%d: %v CVN at addresses, of which %d units set aside; %d units in the vault", height, total, first.Held, first.Vault)
+	for _, n := range c.nodes {
+		log := n.log()
+		if strings.Contains(log, "panic:") {
+			t.Errorf("%s's log shows a panic", n.name)
+		}
+		if strings.Contains(log, "CONSENSUS REJECTION") || strings.Contains(log, "STORAGE REFUSAL") {
+			t.Errorf("%s's log shows a refused block", n.name)
+		}
+	}
+}
+
 // handOverTogether gives a node many transfers, eight at a time. One at a
 // time takes long enough on a busy machine for the miner to find several
 // blocks meanwhile, each holding only the transfers that had arrived by then

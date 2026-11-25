@@ -66,7 +66,7 @@ While the miner runs in one terminal, open another:
 
 On Windows: `cvn_miner.exe --wallet`, or `LaunchWallet.bat` for the desktop version.
 
-A miner receives a separate coin for every block won, and one transfer can spend at most 200 coins. **Combine my coins**, in both wallets, merges them into a few large coins in your own address. **Renew my coins** gives coins nearing their seven-year date a new count in one step.
+A miner receives a separate coin for every block won, and one transfer can spend at most 200 coins. **Combine my coins**, in both wallets, merges them into a few large coins in your own address. **Renew my coins** gives coins nearing their seven-year date a new count in one step, and takes back a fifth that was set aside on a coin at such a date. Neither needs a fee.
 
 **These commands run on the CVN Testnet** (`cvn_testnet`). Until its start has been announced you can create a wallet and open it, but the miner says the network is not scheduled yet and stops. What to do before and on the day it starts is in [Installation_Guide.md](Installation_Guide.md), section 7. For another network add `--network NAME` to every command, including the one that creates the wallet, for example `--network devnet`.
 
@@ -111,7 +111,7 @@ What reviewers found when they tested these claims against the code, and what wa
 | Block reward | 50 CVN, halving every 7 years for 49 years |
 | Total supply | 486,727,500 CVN |
 | Fees | Voluntary; zero is allowed. A fifth of every block is closed to transfers that pay a fee |
-| Lost coins | 20% of any coin unmoved for 7 years returns to miners over time |
+| Lost coins | 20% of any coin unmoved for 7 years is set aside. Its owner has 7 more years to take it back; after that it returns to miners over time |
 | Pre-mine | None |
 
 The launch rules run on a separate development network (`--network devnet`). The public test of them, the CVN Testnet (`--network cvn_testnet`), is defined but not started; its start will be announced as a Bitcoin block height.

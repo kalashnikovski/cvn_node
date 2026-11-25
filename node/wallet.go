@@ -101,24 +101,17 @@ func textWalletShowBalance(ask func(string) string, ownAddress string) {
 	balance, _ := data["balance"].(float64)
 	fmt.Printf("\n💰 Balance of %s\n   %s CVN\n", address, formatFloatExact(balance))
 	if coins, _, err := FetchSpendableCoinsOverHTTP(address); err == nil {
-		var spendable, earliestSweep int64
+		var spendable int64
 		for _, coin := range coins {
 			spendable += coin.Amount.Units()
-			if coin.SweepAt > 0 && (earliestSweep == 0 || coin.SweepAt < earliestSweep) {
-				earliestSweep = coin.SweepAt
-			}
 		}
 		fmt.Printf("   Ready to spend now: %s CVN in %d coin(s)\n", FormatUnits(spendable), len(coins))
 		if len(coins) > TxMaxInputs {
 			fmt.Printf("   One transfer can spend at most %d coins. \"Combine my coins\" in the menu merges them into fewer, larger coins.\n", TxMaxInputs)
 		}
-		if earliestSweep > 0 {
-			when := ""
-			if height, ok := walletChainHeight(); ok {
-				when = ", " + describeBlocksAway(earliestSweep-height) + " from now"
-			}
-			fmt.Printf("   Oldest coin: a fifth of it moves to the vault at the end of block #%d%s unless it is spent before then.\n", earliestSweep, when)
-			fmt.Println("   \"Renew my coins\" in the menu gives such coins a new seven-year count in one step.")
+		height, heightKnown := walletChainHeight()
+		for _, line := range describeCoinDates(coins, height, heightKnown) {
+			fmt.Println("   " + line)
 		}
 		// A renewal this wallet sent with no fee some days ago, whose
 		// coins are still as they were (renew_record.go).
@@ -182,15 +175,66 @@ func textWalletSend(ask func(string) string, reader *bufio.Reader) {
 	fmt.Printf("✅ Sent. Transfer ID: %s\n   It will confirm in one of the next blocks.\n", tx.ID)
 }
 
-// textWalletRenew sends the coins that are near their seven-year date back
-// to their own address, which gives each a new seven-year count.
+// describeCoinDates says, for the owner of these coins, what the seven-year
+// sweep has done to them and what it will do next: how much has been set
+// aside and until when it can be taken back, and when the oldest coin that
+// has nothing set aside reaches its date. It says nothing when no coin has
+// a date.
+func describeCoinDates(coins []SpendableCoin, height int64, heightKnown bool) []string {
+	var setAside, takeBackBy, nextFirstDate int64
+	for _, coin := range coins {
+		if coin.HeldUnits > 0 {
+			setAside += coin.HeldUnits
+			if coin.SweepAt > 0 && (takeBackBy == 0 || coin.SweepAt < takeBackBy) {
+				takeBackBy = coin.SweepAt
+			}
+		} else if coin.SweepAt > 0 && (nextFirstDate == 0 || coin.SweepAt < nextFirstDate) {
+			nextFirstDate = coin.SweepAt
+		}
+	}
+	when := func(block int64) string {
+		if !heightKnown {
+			return ""
+		}
+		return ", " + describeBlocksAway(block-height) + " from now"
+	}
+	var lines []string
+	if setAside > 0 {
+		lines = append(lines,
+			fmt.Sprintf("%s CVN of this was set aside at a seven-year date. It is still yours.", FormatUnits(setAside)),
+			fmt.Sprintf("To keep it, spend or renew each coin it is on before that coin's next date. The earliest: before the end of block #%d%s. After a coin's date, what was set aside on it goes to the vault.", takeBackBy, when(takeBackBy)))
+	}
+	if nextFirstDate > 0 {
+		lines = append(lines,
+			fmt.Sprintf("Oldest coin: at the end of block #%d%s a fifth of it is set aside, unless it is spent before then.", nextFirstDate, when(nextFirstDate)),
+			"What is set aside can be taken back by renewing in the seven years after; renewing before the date avoids it.")
+	}
+	if len(lines) > 0 {
+		soonest := takeBackBy
+		if nextFirstDate > 0 && (soonest == 0 || nextFirstDate < soonest) {
+			soonest = nextFirstDate
+		}
+		if heightKnown && soonest-height <= renewUrgentBlocks {
+			lines = append(lines, "\"Renew my coins\" in the menu does this in one step. A date is less than two days away: give the renewal a small fee, because one with no fee waits its turn when blocks are full.")
+		} else {
+			lines = append(lines, "\"Renew my coins\" in the menu does this in one step, with no fee.")
+		}
+	}
+	return lines
+}
+
+// textWalletRenew sends back to their own address the coins that are near
+// their seven-year date, and those with a fifth set aside. Each becomes a
+// new coin with a new seven-year count and nothing set aside.
 func textWalletRenew(ask func(string) string, reader *bufio.Reader) {
 	fmt.Println()
 	fmt.Println(" A coin that has not been spent for seven years has a fifth of its value")
-	fmt.Println(" moved to the vault. Spending it, even to your own address, makes it a new")
-	fmt.Println(" coin with a new seven-year count. Renewing sends the coins that are within")
-	fmt.Println(" a year of their date back to your own address. Your balance does not")
-	fmt.Println(" change, apart from any fee you choose to pay.")
+	fmt.Println(" set aside. It stays yours for seven more years and then goes to the vault.")
+	fmt.Println(" Spending the coin, even to your own address, makes it a new coin with a")
+	fmt.Println(" new seven-year count, and takes back anything that was set aside on it.")
+	fmt.Println(" Renewing sends back to your own address the coins that are within a year")
+	fmt.Println(" of their date and those with a fifth set aside. No fee is needed. Your")
+	fmt.Println(" balance does not change, apart from any fee you choose to pay.")
 	fmt.Println()
 
 	privateKeyHex := readSecretLine(reader, "Private key, 24 recovery words, or the saved key's password (not shown while typing): ")
@@ -239,6 +283,10 @@ func textWalletRenew(ask func(string) string, reader *bufio.Reader) {
 		everything = true
 		groups = planRenewal(coins, height, 0)
 	}
+	if earliest-height <= renewUrgentBlocks {
+		fmt.Println("\n A date is less than two days away. A renewal with no fee waits its turn when")
+		fmt.Println(" blocks are full; a small fee, such as 0.001, makes sure it is mined in time.")
+	}
 	feeUnits := int64(0)
 	if feeText := ask("Voluntary fee per transfer (press Enter for 0): "); feeText != "" {
 		if feeUnits, err = ParseCVN(feeText); err != nil {
@@ -247,12 +295,19 @@ func textWalletRenew(ask func(string) string, reader *bufio.Reader) {
 		}
 	}
 	renewing := 0
+	var takingBack int64
 	for _, group := range groups {
 		renewing += len(group)
+		for _, coin := range group {
+			takingBack += coin.HeldUnits
+		}
 	}
 	fmt.Println("\n--------------------------------------------------------------------")
 	fmt.Printf(" Wallet:          %s\n", address)
 	fmt.Printf(" Coins to renew:  %d of %d\n", renewing, len(coins))
+	if takingBack > 0 {
+		fmt.Printf(" To take back:    %s CVN that had been set aside on them\n", FormatUnits(takingBack))
+	}
 	fmt.Printf(" Earliest date:   end of block #%d, %s from now\n", earliest, describeBlocksAway(earliest-height))
 	fmt.Printf(" Transfers:       %d, each back to this same address as one new coin\n", len(groups))
 	fmt.Printf(" Total fee:       %s CVN\n", FormatUnits(feeUnits*int64(len(groups))))

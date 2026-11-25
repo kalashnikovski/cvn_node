@@ -95,7 +95,10 @@ func poolCoinUsable(coin poolCoin) bool {
 			return nil
 		}
 		record, found := bucketLookup(bucket)(coin.key())
-		usable = found && strings.TrimSpace(record.Recipient) == poolAddress && record.Amount.Units() == coin.Units && record.Amount.Spendable()
+		// A coin is worth what spending it gives (its amount and anything
+		// a sweep has set aside on it), which is what a payment spending
+		// it must state.
+		usable = found && strings.TrimSpace(record.Recipient) == poolAddress && record.SpendUnits() == coin.Units && record.Amount.Spendable() && record.HeldUnits >= 0
 		// A coin a day or less from being swept is left alone: a payment
 		// spending it could be made invalid by the sweep before it is
 		// mined (review of the pool, round 3, finding 5).

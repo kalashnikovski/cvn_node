@@ -257,6 +257,10 @@ func CheckTransferStandalone(tx Transaction) (string, error) {
 // alreadySpent) and belong to the signer, and outputs may not exceed inputs.
 // All amounts are whole units and the comparison is exact. It returns the fee
 // in units and the coins consumed.
+//
+// A coin gives its spender its amount and whatever a sweep has set aside on
+// it (UTXORecord.SpendUnits). That whole figure is what the input must state
+// and what the sender signed for.
 func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent map[string]bool) (int64, []SpentRecord, error) {
 	senderAddress, err := CheckTransferStandalone(tx)
 	if err != nil {
@@ -279,13 +283,18 @@ func checkTransferAgainstCoins(tx Transaction, lookup utxoLookup, alreadySpent m
 		if strings.TrimSpace(record.Recipient) != senderAddress {
 			return 0, nil, fmt.Errorf("coin %s does not belong to the signer", key)
 		}
-		if !record.Amount.ValidFee() {
+		if !record.Amount.ValidFee() || record.HeldUnits < 0 {
 			return 0, nil, fmt.Errorf("coin %s has an unusable amount", key)
 		}
-		if input.AmountUnits != record.Amount.Units() {
-			return 0, nil, fmt.Errorf("coin %s holds %s CVN, not the %s CVN the sender signed for", key, FormatUnits(record.Amount.Units()), FormatUnits(input.AmountUnits))
+		worth := record.SpendUnits()
+		if input.AmountUnits != worth {
+			if record.HeldUnits > 0 {
+				return 0, nil, fmt.Errorf("coin %s holds %s CVN and %s CVN set aside for its owner, %s CVN in all, not the %s CVN the sender signed for",
+					key, FormatUnits(record.Amount.Units()), FormatUnits(record.HeldUnits), FormatUnits(worth), FormatUnits(input.AmountUnits))
+			}
+			return 0, nil, fmt.Errorf("coin %s holds %s CVN, not the %s CVN the sender signed for", key, FormatUnits(worth), FormatUnits(input.AmountUnits))
 		}
-		if inputUnits, err = addUnits(inputUnits, record.Amount.Units()); err != nil {
+		if inputUnits, err = addUnits(inputUnits, worth); err != nil {
 			return 0, nil, err
 		}
 		consumed = append(consumed, SpentRecord{Key: key, Record: record})
@@ -447,7 +456,8 @@ func lookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) u
 	for _, record := range loadUndoRecords(dbTx, applied.Index) {
 		restored[record.Key] = record.Record
 	}
-	// Coins its sweep reduced or removed are seen as they were before it.
+	// Coins its sweep changed are seen as they were before it, with
+	// whatever was set aside on them then.
 	for _, swept := range loadSweepRecords(dbTx, applied.Index) {
 		restored[swept.Key] = swept.Before
 	}
@@ -980,11 +990,19 @@ func RemoveConfirmedFromMempool(block Block) {
 
 // SpendableCoin is one unspent output owned by an address.
 type SpendableCoin struct {
-	TxID   string `json:"tx_id"`
-	Index  int    `json:"output_index"`
+	TxID  string `json:"tx_id"`
+	Index int    `json:"output_index"`
+	// Amount is what spending the coin gives: its amount and anything a
+	// sweep has set aside on it. It is the figure a transfer must state.
 	Amount Amount `json:"amount"`
-	// SweepAt is the block at whose end this coin will be swept if it has
-	// not been spent by then (0 on a network that does not sweep).
+	// HeldUnits is the part of Amount that a sweep has set aside on the
+	// coin. It is its owner's until the block named by SweepAt; spending
+	// the coin before the end of that block takes it back.
+	HeldUnits int64 `json:"held_units,omitempty"`
+	// SweepAt is the block at whose end the sweep will next change this
+	// coin if it has not been spent by then: what is set aside goes to the
+	// vault, and a fifth of the rest is set aside. It is 0 when nothing
+	// will happen to the coin (see nextSweepHeight).
 	SweepAt int64 `json:"sweep_at,omitempty"`
 }
 
@@ -1005,7 +1023,7 @@ func ListSpendableCoins(address string) []SpendableCoin {
 		cursor := bUTXO.Cursor()
 		for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
 			var record UTXORecord
-			if json.Unmarshal(v, &record) != nil || strings.TrimSpace(record.Recipient) != address || !record.Amount.Spendable() {
+			if json.Unmarshal(v, &record) != nil || strings.TrimSpace(record.Recipient) != address || !record.Amount.Spendable() || record.HeldUnits < 0 {
 				continue
 			}
 			key := string(k)
@@ -1020,7 +1038,7 @@ func ListSpendableCoins(address string) []SpendableCoin {
 			if err != nil {
 				continue
 			}
-			coins = append(coins, SpendableCoin{TxID: key[:separator], Index: index, Amount: record.Amount, SweepAt: nextSweepHeight(record.Age)})
+			coins = append(coins, SpendableCoin{TxID: key[:separator], Index: index, Amount: UnitsAmount(record.SpendUnits()), HeldUnits: record.HeldUnits, SweepAt: nextSweepHeight(record)})
 		}
 		return nil
 	})
