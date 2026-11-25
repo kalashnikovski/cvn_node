@@ -167,6 +167,9 @@ func syncAPI() *http.ServeMux {
 			"total_work": chainWorkThrough(latest.Index).String(),
 			// Units held by the vault (always 0 on a network without one).
 			"vault_units": VaultBalanceUnits(),
+			// Units that sweeps have set aside on coins for their owners:
+			// part of the addresses' balances, not of the vault.
+			"held_units": SetAsideTotalUnits(),
 		}
 		json.NewEncoder(w).Encode(payload)
 	})

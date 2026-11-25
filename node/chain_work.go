@@ -405,7 +405,10 @@ func rollbackChainToHeightLocked(target int64) []Block {
 	// were told they were sent, and unless the blocks that replace these
 	// carry them too, they would otherwise be silently lost. Any that the
 	// new blocks do carry are dropped again when a miner next fills a block.
-	go func(blocks []Block) {
+	// (Started with inBackground so that a test waits for it to finish
+	// before closing its database; the program itself never waits.)
+	blocks := removed
+	inBackground(func() {
 		for _, block := range blocks {
 			if len(block.Transactions) > 1 {
 				for _, transfer := range block.Transactions[1:] {
@@ -413,7 +416,7 @@ func rollbackChainToHeightLocked(target int64) []Block {
 				}
 			}
 		}
-	}(removed)
+	})
 	return removed
 }
 

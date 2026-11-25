@@ -63,7 +63,19 @@ type UTXORecord struct {
 	// Age is the height of the block that created the coin, or that last
 	// swept it. Only kept on networks that sweep long-unmoved coins.
 	Age int64 `json:"age,omitempty"`
+	// HeldUnits is the fifth a sweep took off Amount and set aside on the
+	// coin for its owner (see sweep.go). It is still the owner's: spending
+	// the coin spends it too. At the coin's next sweep, one interval later,
+	// it goes to the vault. Nought for a coin no sweep has touched, and
+	// then it is not written at all.
+	HeldUnits int64 `json:"held,omitempty"`
 }
+
+// SpendUnits is what spending the coin gives its owner: its amount and
+// whatever is set aside on it. The two are never more together than the
+// coin held before its last sweep, which was a valid amount, so the sum
+// cannot run past what an amount may be.
+func (r UTXORecord) SpendUnits() int64 { return r.Amount.Units() + r.HeldUnits }
 
 type MempoolType struct {
 	sync.RWMutex

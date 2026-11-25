@@ -434,13 +434,19 @@ func SaveBlockToStorageInternal(block Block) bool {
 		if vaultEnabled() {
 			// Last, once the block's own coins are in place: sweep the coins
 			// that reach the sweep age at this block, and settle the vault.
-			// Whatever the block was entitled to pay its miner but did not
-			// goes into the vault, so nothing issued is ever destroyed.
-			sweptUnits, sweepErr := applySweep(tx, bUTXO, block)
+			// The sweep sends the vault the fifths that were set aside one
+			// interval ago and not taken back; what it sets aside now stays
+			// on the coins. Whatever the block was entitled to pay its
+			// miner but did not goes into the vault too, so nothing issued
+			// is ever destroyed.
+			expiredUnits, sweepChangedCoins, sweepErr := applySweep(tx, bUTXO, block)
 			if sweepErr != nil {
+				// Not a fault in the block: something this node has stored
+				// is damaged. The block is refused, so say why.
+				fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: the sweep at its end could not be done: %v\n", block.Index, sweepErr)
 				return sweepErr
 			}
-			sweptCoins = sweptUnits > 0
+			sweptCoins = sweepChangedCoins
 			var claimedUnits int64
 			for _, output := range block.Transactions[0].Outputs {
 				claimedUnits += output.Amount.Units()
@@ -449,7 +455,7 @@ func SaveBlockToStorageInternal(block Block) bool {
 			if unclaimedUnits < 0 {
 				return fmt.Errorf("block #%d pays more than it is allowed", block.Index)
 			}
-			vaultAfter, addErr := addUnits(blockAccount.VaultAfterUnits, sweptUnits)
+			vaultAfter, addErr := addUnits(blockAccount.VaultAfterUnits, expiredUnits)
 			if addErr == nil {
 				vaultAfter, addErr = addUnits(vaultAfter, unclaimedUnits)
 			}
@@ -511,6 +517,21 @@ func SaveBlockToStorageInternal(block Block) bool {
 // counted is not added again.
 var balancesCountedThrough int64 = -1
 
+// setAsideTotalUnits is every fifth that sweeps have set aside on coins and
+// that is still there: part of the balances above, shown apart by the
+// explorer. It is read and written under BalanceCacheMutex, and counted
+// afresh with the balances. Only a transfer, a sweep or a change of chain
+// can alter it, and each of those brings a fresh count.
+var setAsideTotalUnits int64
+
+// SetAsideTotalUnits is the total that sweeps have set aside on coins for
+// their owners, as of the last count of the balances.
+func SetAsideTotalUnits() int64 {
+	BalanceCacheMutex.RLock()
+	defer BalanceCacheMutex.RUnlock()
+	return setAsideTotalUnits
+}
+
 // ApplyIncrementalDeltaCacheUpdate updates the memory cache using only the block's deltas
 func ApplyIncrementalDeltaCacheUpdate(block Block) {
 	BalanceCacheMutex.Lock()
@@ -550,6 +571,7 @@ func RebuildStateBalanceCacheInternal() {
 
 	StateBalanceCache = make(map[string]int64)
 	balancesCountedThrough = -1
+	setAsideTotalUnits = 0
 	if GlobalBoltEngine == nil {
 		return
 	}
@@ -571,8 +593,12 @@ func RebuildStateBalanceCacheInternal() {
 			for k, v := c.First(); k != nil; k, v = c.Next() {
 				var record UTXORecord
 				if json.Unmarshal(v, &record) == nil {
+					// An address's balance is what its coins give when
+					// spent: what a sweep has set aside on a coin is still
+					// its owner's.
 					sanitizedRecipient := strings.TrimSpace(record.Recipient)
-					StateBalanceCache[sanitizedRecipient] += record.Amount.Units()
+					StateBalanceCache[sanitizedRecipient] += record.SpendUnits()
+					setAsideTotalUnits += record.HeldUnits
 				}
 			}
 		}

@@ -102,6 +102,15 @@ func localnetParams() (ChainParams, error) {
 	if given, err := strconv.ParseInt(os.Getenv("CVN_LOCALNET_REORG_LIMIT"), 10, 64); err == nil && given > 0 {
 		economics.ReorgLimitBlocks = given
 	}
+	// A coin's date is seven years after it was made, and the vault pays
+	// out over fourteen. A test of the sweep with real nodes cannot wait
+	// that long; here, and only here, both can be set to a few blocks.
+	if given, err := strconv.ParseInt(os.Getenv("CVN_LOCALNET_SWEEP_BLOCKS"), 10, 64); err == nil && given > 0 {
+		economics.SweepIntervalBlocks = given
+	}
+	if given, err := strconv.ParseInt(os.Getenv("CVN_LOCALNET_VAULT_BLOCKS"), 10, 64); err == nil && given > 0 {
+		economics.VaultPayoutBlocks = given
+	}
 	// Left empty, as before, unless RandomX was asked for; then as on devnet.
 	var schedule []PowEra
 	var keyEpoch, keyLag int64

@@ -41,7 +41,7 @@
 
     <div class="grid">
         <div class="card"><h3>Block height</h3><div id="height" class="val">...</div><div id="tip-age" class="note"></div></div>
-        <div class="card"><h3>Coins held by addresses</h3><div id="held" class="val">...</div><div id="address-count" class="note"></div></div>
+        <div class="card"><h3>Coins held by addresses</h3><div id="held" class="val">...</div><div id="address-count" class="note"></div><div id="set-aside" class="note"></div></div>
         <div class="card"><h3>Held by the vault</h3><div id="vault" class="val">...</div><div class="note">Paid out to miners a little with every block. Zero on a network without a vault.</div></div>
     </div>
 
@@ -117,6 +117,10 @@
                 byId("tip-age").textContent = "Newest block is " + age + " seconds old.";
             }
             byId("vault").textContent = formatCVN((tip.vault_units || 0) / UNITS_PER_CVN);
+            // What sweeps have set aside on coins is still their owners'
+            // and is part of the balances above. It is shown apart.
+            var setAside = (tip.held_units || 0) / UNITS_PER_CVN;
+            byId("set-aside").textContent = setAside > 0 ? "Of this, " + formatCVN(setAside) + " is set aside on coins that passed a seven-year date. It is their owners' for seven more years." : "";
             // One more block than is shown, so the first row has a previous
             // block to measure its interval from.
             return getJSON("/blocks/batch?start=" + Math.max(0, height - BLOCKS_SHOWN));
@@ -150,6 +154,18 @@
                 "Balance: " + formatCVN(audit.balance || 0),
                 "Held as " + coins.length + " separate coin" + (coins.length === 1 ? "" : "s") + " that can be spent now."
             ];
+            // A fifth set aside on a coin at its seven-year date is part of
+            // the balance, and its owner's until the coin's next date.
+            var setAsideUnits = 0, takeBackBy = 0;
+            coins.forEach(function (coin) {
+                if (coin.held_units > 0) {
+                    setAsideUnits += coin.held_units;
+                    if (coin.sweep_at > 0 && (takeBackBy === 0 || coin.sweep_at < takeBackBy)) { takeBackBy = coin.sweep_at; }
+                }
+            });
+            if (setAsideUnits > 0) {
+                lines.push("Of this, " + formatCVN(setAsideUnits / UNITS_PER_CVN) + " was set aside at a seven-year date. It is still the owner's: spending those coins before the end of block #" + takeBackBy + " takes it back; after that it goes to the vault.");
+            }
             if (!audit.exists) { lines.push("This node has no record of that address ever holding coins."); }
             lines.forEach(function (line) {
                 var div = document.createElement("div");

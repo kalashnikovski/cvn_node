@@ -49,11 +49,15 @@ const (
 
 // chainFileReport is what checkChainFile found in a file that passed.
 type chainFileReport struct {
-	Height     int64
-	TipHash    string
-	TipTime    int64
-	CoinsUnits int64
-	VaultUnits int64
+	Height  int64
+	TipHash string
+	TipTime int64
+	// CoinsUnits is what every coin gives when spent: its amount and
+	// whatever a sweep has set aside on it. SetAsideUnits is the part of it
+	// that is set aside.
+	CoinsUnits    int64
+	SetAsideUnits int64
+	VaultUnits    int64
 }
 
 // checkChainFile opens a chain file without changing it and checks that it
@@ -63,7 +67,8 @@ type chainFileReport struct {
 //   - its first block is this network's (when wantGenesis is given);
 //   - every block from the first to the newest is present, is what its
 //     identifier says, and names the block before it as its parent;
-//   - the coins it holds, with the vault, are exactly what has been issued.
+//   - the coins it holds (with what sweeps have set aside on them for their
+//     owners), with the vault, are exactly what has been issued.
 //
 // It does not repeat the proof-of-work of every block: that takes hours on a
 // long chain, and this is a check that a copy is whole, not that a stranger's
@@ -129,10 +134,17 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 
 		if err := bUTXO.ForEach(func(_, raw []byte) error {
 			var coin UTXORecord
-			if err := json.Unmarshal(raw, &coin); err != nil {
+			if err := json.Unmarshal(raw, &coin); err != nil || coin.HeldUnits < 0 || coin.HeldUnits > MaxAmountUnits ||
+				coin.Amount.Units() < 0 || coin.Amount.Units() > MaxAmountUnits {
 				return fmt.Errorf("a coin record cannot be read")
 			}
-			report.CoinsUnits += coin.Amount.Units()
+			// Added up with a check at every step: a plain sum of figures
+			// too large to be real could come round to the right total.
+			var sumErr error
+			if report.CoinsUnits, sumErr = addUnits(report.CoinsUnits, coin.SpendUnits()); sumErr != nil {
+				return fmt.Errorf("the coins add up to more than can exist")
+			}
+			report.SetAsideUnits += coin.HeldUnits
 			return nil
 		}); err != nil {
 			return err
@@ -153,8 +165,12 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 }
 
 func (r chainFileReport) String() string {
-	return fmt.Sprintf("block #%d (%s), %s CVN held by addresses, %s CVN in the vault",
-		r.Height, time.Unix(r.TipTime, 0).Format("2 January 2006 15:04"), FormatUnits(r.CoinsUnits), FormatUnits(r.VaultUnits))
+	setAside := ""
+	if r.SetAsideUnits > 0 {
+		setAside = fmt.Sprintf(" (of which %s CVN set aside at a seven-year date)", FormatUnits(r.SetAsideUnits))
+	}
+	return fmt.Sprintf("block #%d (%s), %s CVN held by addresses%s, %s CVN in the vault",
+		r.Height, time.Unix(r.TipTime, 0).Format("2 January 2006 15:04"), FormatUnits(r.CoinsUnits), setAside, FormatUnits(r.VaultUnits))
 }
 
 // backupNamePrefix is what every backup of this network's chain is called,

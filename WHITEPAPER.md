@@ -53,16 +53,22 @@ A block may pay its miner less than it is allowed to. Whatever it does not pay i
 
 Every chain loses coins: keys are lost, owners die, small amounts are forgotten. On most chains those coins are gone for good, and the people securing the network are paid less and less as issuance falls.
 
-Covenant Standard returns part of them.
+Covenant Standard returns part of them, and gives an owner who is only late every chance to come back for what is theirs first.
 
 - Every coin records the block at which it was created.
-- A coin that has not been spent for 4,905,600 blocks (seven years) has **one fifth** of its value moved to the vault. It keeps the rest and starts a new seven-year count.
-- A coin so small that what remained would be below the minimum coin size is left alone: nothing is taken from it. The rule takes a fifth from a coin or nothing; it never takes a coin whole.
+- A coin that has not been spent for 4,905,600 blocks (seven years) has **one fifth** of its value set aside. The fifth stays on the coin and is still its owner's, for seven more years. The coin starts a new seven-year count.
+- **Spending the coin in those seven years gives its owner everything**: the coin's amount and the fifth set aside. Sending it to your own address is enough.
+- If the coin is still unspent at its next date, seven years on, the fifth that was set aside goes to the vault, and a new fifth of what the coin still holds is set aside in its turn.
+- A coin so small that what remained would be below the minimum coin size has no fifth taken from it. The rule sets aside a fifth of a coin or nothing; it never takes a coin whole.
 - This repeats every seven years for as long as the coin stays unspent.
 
-An owner who still holds their key loses nothing. Spending a coin, including sending it to your own address, creates a new coin with a new count. One transfer every seven years is enough. The wallet shows when a coin's date is approaching, and its "Renew my coins" action makes that transfer in one step for every coin within a year of its date.
+An owner who still holds their key loses nothing. Spending a coin, including sending it to your own address, creates a new coin with a new count and nothing set aside. One transfer every seven years is enough, and an owner who misses a date has seven more years to put it right. The wallet shows when a coin's date is approaching and how much, if anything, has been set aside, and its "Renew my coins" action makes that transfer in one step, with no fee, for every coin within a year of its date and every coin with a fifth set aside.
 
-A coin that is truly lost keeps 80% after 7 years, 64% after 14, about a third after 35 and about a tenth after 70.
+A transfer states what each coin it spends is worth, the amount and anything set aside together, and the rules require that figure to be exact. A wallet therefore always signs for what it will really receive, and nobody can be made to give up a fifth they did not sign away.
+
+A coin that is truly lost holds 80% after 7 years, 64% after 14, about a third after 35 and about a tenth after 70. Each fifth reaches the vault seven years after it was set aside, so the first arrives after 14 years.
+
+An example. A coin of 50 CVN that is never touched holds 40, with 10 set aside, after 7 years. After 14 it holds 32 with 8 set aside, and the first 10 goes to the vault. After 21 it holds 25.6 with 6.4 set aside, and the 8 goes to the vault. The same coin renewed in year 10 becomes one new coin of 50, and the vault never receives anything from it.
 
 The sweep is a rule every node applies at the same block. No one can skip it and no one decides whom it applies to.
 
@@ -70,7 +76,7 @@ The sweep is a rule every node applies at the same block. No one can skip it and
 
 The vault is a number kept by the rules. It has no address and no key. Nobody can spend from it.
 
-**What goes in:** swept coins, a share of transaction fees (section 7), and anything a block could have paid its miner but did not.
+**What goes in:** fifths set aside by the sweep that their owners did not take back in seven years (section 5), a share of transaction fees (section 7), and anything a block could have paid its miner but did not.
 
 **What comes out:** with every block, the vault pays out its balance divided by 9,811,200 (fourteen years of blocks), rounded down to whole units. That amount is added to the block's reward.
 

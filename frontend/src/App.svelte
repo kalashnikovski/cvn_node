@@ -13,6 +13,10 @@
 	let txFee = $state("0");
 	let txPrivateKey = $state("");
 	let txStatusMessage = $state("");
+	// Combining and renewing send coins back to their own wallet. They are
+	// sent with no fee unless this is ticked: a fifth of every block is kept
+	// for transfers that pay none.
+	let payFeeOnOwnCoins = $state(false);
 
 	let syncPercentage = $derived(
 		globalTip > 0 ? Math.min(100, Math.floor((localHeight / globalTip) * 100)) : 0
@@ -91,21 +95,32 @@
 		}
 	}
 
+	// The fee for combining and renewing: none, unless the box is ticked,
+	// and then the fee typed in the form.
+	function feeOnOwnCoins() {
+		return payFeeOnOwnCoins ? String(txFee ?? "") : "";
+	}
+	function feeOnOwnCoinsInWords(times) {
+		return payFeeOnOwnCoins
+			? `The fee above (${String(txFee || "0")} CVN) is paid for EACH transfer, ${times}.`
+			: "They are sent with no fee.";
+	}
+
 	// Merges the wallet's many coins into a few large ones. It uses the
-	// private key and fee typed in the form; the recipient and amount are
-	// not needed, because the coins go back to their own address.
+	// private key typed in the form; the recipient and amount are not
+	// needed, because the coins go back to their own address.
 	async function handleCombineCoins() {
 		if (!txPrivateKey) {
 			txStatusMessage = "❌ ERROR: Enter the private key of the wallet whose coins you want to combine.";
 			return;
 		}
-		if (!window.confirm(`Combine the coins of this wallet into a few large ones?\n\nThey are sent back to the wallet's own address in up to 25 transfers. The fee above (${String(txFee || "0")} CVN) is paid for EACH transfer, so up to 25 times.`)) {
+		if (!window.confirm(`Combine the coins of this wallet into a few large ones?\n\nThey are sent back to the wallet's own address in up to 25 transfers. ${feeOnOwnCoinsInWords("so up to 25 times")}`)) {
 			txStatusMessage = "Nothing was sent.";
 			return;
 		}
 		txStatusMessage = "⏳ Combining coins...";
 		try {
-			const resultMessage = await CombineCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim());
+			const resultMessage = await CombineCoinsSubmit(feeOnOwnCoins(), String(txPrivateKey).trim());
 			if (resultMessage.includes("SUCCESS")) {
 				txStatusMessage = `✅ ${resultMessage}`;
 				txPrivateKey = "";
@@ -119,28 +134,29 @@
 	}
 
 	// Gives the coins that are within a year of their seven-year date a new
-	// seven-year count, by sending them back to their own address. It uses
-	// the private key and fee typed in the form. If no coin is that near its
-	// date, it says when the earliest is and offers to renew everything.
+	// seven-year count, and takes back anything set aside on a coin at such
+	// a date, by sending them back to their own address. It uses the private
+	// key typed in the form. If no coin needs it, it says when the earliest
+	// date is and offers to renew everything.
 	async function handleRenewCoins() {
 		if (!txPrivateKey) {
 			txStatusMessage = "❌ ERROR: Enter the private key of the wallet whose coins you want to renew.";
 			return;
 		}
-		if (!window.confirm(`Renew the coins of this wallet that are within a year of their seven-year date?\n\nThey are sent back to the wallet's own address, which gives each a new seven-year count. The fee above (${String(txFee || "0")} CVN) is paid for EACH transfer, up to 25.`)) {
+		if (!window.confirm(`Renew the coins of this wallet that are within a year of their seven-year date, or have a fifth set aside?\n\nThey are sent back to the wallet's own address, which gives each a new seven-year count and takes back anything set aside. ${feeOnOwnCoinsInWords("up to 25")}`)) {
 			txStatusMessage = "Nothing was sent.";
 			return;
 		}
 		txStatusMessage = "⏳ Renewing coins...";
 		try {
-			let resultMessage = await RenewCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim(), "");
+			let resultMessage = await RenewCoinsSubmit(feeOnOwnCoins(), String(txPrivateKey).trim(), "");
 			if (resultMessage.startsWith("NOTHING DUE")) {
 				const explanation = resultMessage.replace("NOTHING DUE: ", "");
 				if (!window.confirm(`${explanation}.\n\nRenew every coin anyway?`)) {
 					txStatusMessage = `ℹ️ ${explanation}. Nothing was sent.`;
 					return;
 				}
-				resultMessage = await RenewCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim(), "all");
+				resultMessage = await RenewCoinsSubmit(feeOnOwnCoins(), String(txPrivateKey).trim(), "all");
 			}
 			if (resultMessage.includes("SUCCESS")) {
 				txStatusMessage = `✅ ${resultMessage}`;
@@ -248,18 +264,22 @@
 						🚀 Sign and Broadcast Transaction
 					</button>
 
-					<button type="button" onclick={handleCombineCoins} title="A miner receives one coin per block won, and one transfer can spend at most 200 coins. This sends your coins back to your own address as a few large coins. It needs only your private key and, if you wish, a fee." style="background: #161624; color: #00ff66; border: 1px solid #00ff66; padding: 0.6rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; text-transform: uppercase; letter-spacing: 1px;">
+					<button type="button" onclick={handleCombineCoins} title="A miner receives one coin per block won, and one transfer can spend at most 200 coins. This sends your coins back to your own address as a few large coins. It needs only your private key. No fee is needed." style="background: #161624; color: #00ff66; border: 1px solid #00ff66; padding: 0.6rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; text-transform: uppercase; letter-spacing: 1px;">
 						🧩 Combine My Coins
 					</button>
 					<div style="color: #8a8a9e; font-size: 0.72rem; line-height: 1.3;">
-						Combine merges many small coins (one per block mined) into a few large ones in your own wallet. It uses the private key and fee above; your balance stays the same apart from the fee.
+						Combine merges many small coins (one per block mined) into a few large ones in your own wallet. It uses the private key above and is sent with no fee; your balance stays the same.
 					</div>
-					<button type="button" onclick={handleRenewCoins} title="A coin that has not been spent for seven years has a fifth of its value moved to the vault. This sends the coins that are within a year of that date back to your own address, which gives each a new seven-year count. It needs only your private key and, if you wish, a fee." style="background: #161624; color: #00ff66; border: 1px solid #00ff66; padding: 0.6rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; text-transform: uppercase; letter-spacing: 1px;">
+					<button type="button" onclick={handleRenewCoins} title="A coin that has not been spent for seven years has a fifth of its value set aside. It stays yours for seven more years and then goes to the vault. This sends the coins that are within a year of their date, and those with a fifth set aside, back to your own address: each gets a new seven-year count and anything set aside is taken back. It needs only your private key. No fee is needed." style="background: #161624; color: #00ff66; border: 1px solid #00ff66; padding: 0.6rem; font-weight: bold; font-family: monospace; cursor: pointer; border-radius: 3px; text-transform: uppercase; letter-spacing: 1px;">
 						♻️ Renew My Coins
 					</button>
 					<div style="color: #8a8a9e; font-size: 0.72rem; line-height: 1.3;">
-						Renew gives coins that are within a year of their seven-year date a new seven-year count, by sending them back to your own wallet. It uses the private key and fee above; your balance stays the same apart from the fee.
+						Renew gives coins that are within a year of their seven-year date a new seven-year count, and takes back a fifth that was set aside on a coin at such a date, by sending them back to your own wallet. It uses the private key above and is sent with no fee; your balance stays the same.
 					</div>
+					<label style="color: #8a8a9e; font-size: 0.72rem; line-height: 1.3; display: flex; gap: 0.4rem; align-items: flex-start;">
+						<input type="checkbox" bind:checked={payFeeOnOwnCoins} />
+						<span>Pay the fee above on each Combine and Renew transfer too. Leave this unticked to send them with no fee: a fifth of every block is kept for transfers that pay none.</span>
+					</label>
 
 					{#if txStatusMessage}
 						<div style="background: #06060a; padding: 0.8rem; border-radius: 3px; font-size: 0.85rem; text-align: center; border: 1px dashed #333; color: #00ffff; margin-top: 0.5rem;">

@@ -119,9 +119,15 @@ func TestRenewingACoinSavesItFromTheSweep(t *testing.T) {
 	}
 	everythingIssuedIsAccountedFor(t, "after renewing", owner, testAddress("other"))
 
-	// A coin the same age that was not renewed lost its fifth.
-	if balanceOf(testAddress("other")) >= 6*cvn("50") {
-		t.Error("the coins that were not renewed were expected to be swept; this test no longer shows the difference")
+	// The renewed coin has nothing set aside. A coin of the same age that
+	// was not renewed (the one "other" mined in block 2, swept at block 7)
+	// has had a fifth set aside.
+	if _, renewed := theCoinOf(t, owner); renewed.Held != 0 || renewed.Amount != cvn("50") {
+		t.Errorf("the renewed coin holds %s with %s set aside; want 50 and nothing", FormatUnits(renewed.Amount), FormatUnits(renewed.Held))
+	}
+	notRenewed := everyStoredCoin(t)[utxoKey(GetBlockByHeightFromDB(2).Transactions[0].ID, 0)]
+	if notRenewed.Amount != cvn("40") || notRenewed.Held != cvn("10") {
+		t.Errorf("the coin that was not renewed holds %s with %s set aside; want 40 with 10 set aside, or this test no longer shows the difference", FormatUnits(notRenewed.Amount), FormatUnits(notRenewed.Held))
 	}
 }
 
