@@ -86,8 +86,15 @@ After year 49 the block reward is zero, and miners are paid by fees and the vaul
 - There is no percentage fee. The chain cannot tell a payment from a person moving their own coins, so a percentage would tax people for rearranging what they own.
 - **Every fee in a block goes to that block's miner**, at every height. Nothing is taken from a fee for the vault or for anyone else.
 - No fee is ever destroyed.
+- **Transfers that pay a fee may fill at most four fifths of a block**: at most 400 of the 499 transfers a block can hold, and at most 240,000 of its 300,000 bytes. A block that holds more is not valid. The last fifth can hold only transfers that pay nothing, or stay empty.
 
 An earlier form of the rules sent a fifth of every fee to the vault while new coins were being issued. It was removed before any public network started. A fee is what a sender chooses to pay a miner, and the rules take no part of it. A miner who wishes to give to the vault can do so freely: a block may pay its miner less than it is allowed to, and what it does not pay goes to the vault (section 4).
+
+Why the last rule. A person moving their own coins, or renewing them before their seven-year date (section 5), should not have to buy a place in a block. But no rule can make a miner include a transfer: nothing in a block shows what was left out. What a rule can do is take away the reason to leave free transfers out. A miner who fills a whole block with paying transfers earns more than one who keeps room for free ones; with this rule there is nothing to earn there, because the last fifth of a block cannot be sold.
+
+What the rule cannot do should be said as plainly. It counts a transfer as paying by the fee it states. A sender and a miner who know each other can settle outside the fee, with an ordinary payment to the miner's address or by any other road, and such a transfer counts as free. A stranger cannot do this in general, not knowing which miner will find the next block. And when many paying transfers are waiting and no free ones, the last fifth of a block stays empty: under heavy demand, those who pay share four fifths of each block.
+
+How the published miner fills a block is its own behaviour within that rule, and another miner may choose differently: paying transfers first, highest fee first, into four fifths of the room; then free transfers of coins at least a day old, longest waiting first; then free transfers of younger coins into whatever is left. The day's age keeps the free part from being used to flood the chain by passing the same coins back and forth.
 
 ## 8. Transfers and blocks
 
@@ -97,7 +104,7 @@ An earlier form of the rules sent a fifth of every fee to the vault while new co
 
 **Minimum coin size.** No coin smaller than 0.0001 CVN can be created, by a transfer or as a mining reward. This keeps the set of unspent coins from filling with dust.
 
-**A block** holds at most 500 transactions, one of which is its miner's reward, so at most 499 transfers; and at most 300,000 bytes.
+**A block** holds at most 500 transactions, one of which is its miner's reward, so at most 499 transfers; and at most 300,000 bytes. Of the transfers, at most 400 may pay a fee, and those that pay may measure at most 240,000 bytes together (section 7).
 
 **A block's reward** may be paid to as many as 50 addresses, each of them once, and together no more than the block may pay. A miner working alone pays one address, its own. A pool pays the miners who did the work in the block itself, and so never has to hold their coins.
 

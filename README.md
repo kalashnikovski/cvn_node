@@ -110,7 +110,7 @@ What reviewers found when they tested these claims against the code, and what wa
 | Mining algorithm | RandomX, tuned for home processors |
 | Block reward | 50 CVN, halving every 7 years for 49 years |
 | Total supply | 486,727,500 CVN |
-| Fees | Voluntary; zero is allowed |
+| Fees | Voluntary; zero is allowed. A fifth of every block is closed to transfers that pay a fee |
 | Lost coins | 20% of any coin unmoved for 7 years returns to miners over time |
 | Pre-mine | None |
 

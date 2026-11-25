@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 // TEXT WALLET
@@ -119,6 +120,12 @@ func textWalletShowBalance(ask func(string) string, ownAddress string) {
 			fmt.Printf("   Oldest coin: a fifth of it moves to the vault at the end of block #%d%s unless it is spent before then.\n", earliestSweep, when)
 			fmt.Println("   \"Renew my coins\" in the menu gives such coins a new seven-year count in one step.")
 		}
+		// A renewal this wallet sent with no fee some days ago, whose
+		// coins are still as they were (renew_record.go).
+		if waiting := renewalsNotGoneThrough(address, coins, time.Now()); waiting.any() {
+			fmt.Printf("   ⚠️  %s.\n", waiting.describe(time.Now()))
+			fmt.Println("   \"Renew my coins\" in the menu offers to do that.")
+		}
 	}
 }
 
@@ -205,6 +212,11 @@ func textWalletRenew(ask func(string) string, reader *bufio.Reader) {
 		fmt.Printf("❌ %v\n", err)
 		return
 	}
+	// First, a renewal sent some days ago that has not gone through: the
+	// wallet offers to send it again with a small fee.
+	if textWalletRenewAgain(ask, privateKeyHex, publicKeyHex, address, coins, time.Now()) {
+		return
+	}
 	earliest := earliestSweepBlock(coins)
 	if earliest == 0 {
 		fmt.Printf("\n %s holds no coin with a seven-year date. There is nothing to renew.\n", address)
@@ -256,6 +268,57 @@ func textWalletRenew(ask func(string) string, reader *bufio.Reader) {
 	if err != nil {
 		fmt.Printf("❌ %v\n", err)
 	}
+}
+
+// textWalletRenewAgain deals with a renewal this wallet sent some days ago
+// whose coins are still as they were (renew_record.go). It says so, asks
+// what fee a second try should pay, shows what would be sent and what it
+// would cost in all, and sends it only on a plain yes. It reports whether
+// the matter was dealt with here; when there was no such renewal, or the
+// owner chose to leave it, it reports false and renewing goes on as usual.
+func textWalletRenewAgain(ask func(string) string, privateKeyHex, publicKeyHex, address string, coins []SpendableCoin, now time.Time) bool {
+	waiting := renewalsNotGoneThrough(address, coins, now)
+	if !waiting.any() {
+		return false
+	}
+	fmt.Printf("\n ⚠️  %s.\n", waiting.describe(now))
+	answer := ask(fmt.Sprintf(" Send it again? Press Enter for a fee of %s CVN for each transfer, type another fee, or type n to leave it: ", FormatUnits(waiting.proposedFeeUnits())))
+	if lowered := strings.ToLower(answer); lowered == "n" || lowered == "no" {
+		fmt.Println(" Left as it is.")
+		return false
+	}
+	feeUnits := waiting.proposedFeeUnits()
+	if answer != "" {
+		typed, err := ParseCVN(answer)
+		if err != nil {
+			fmt.Println("❌ The fee must be a positive number, with at most 8 decimal places. Nothing was sent.")
+			return true
+		}
+		if typed == 0 {
+			fmt.Println(" A second try with no fee is the same as renewing again. Nothing was sent: choose \"Renew my coins\" once more, type n here, and renew as usual.")
+			return true
+		}
+		feeUnits = typed
+	}
+	fmt.Println("\n--------------------------------------------------------------------")
+	fmt.Printf(" Wallet:              %s\n", address)
+	fmt.Printf(" Coins to send again: %d\n", len(waiting.Coins))
+	fmt.Printf(" Transfers:           %d, each back to this same address as one new coin\n", waiting.transfers())
+	fmt.Printf(" Fee for each:        %s CVN\n", FormatUnits(feeUnits))
+	fmt.Printf(" Total fee:           %s CVN\n", FormatUnits(feeUnits*int64(waiting.transfers())))
+	fmt.Println("--------------------------------------------------------------------")
+	if confirm := strings.ToLower(ask("Send this renewal again? (y/n): ")); confirm != "y" && confirm != "yes" {
+		fmt.Println("Nothing was sent.")
+		return true
+	}
+	result, err := RenewAgainFromWallet(privateKeyHex, publicKeyHex, feeUnits, now)
+	if len(result.Transfers) > 0 {
+		fmt.Printf("✅ %s\n", result.Summary())
+	}
+	if err != nil {
+		fmt.Printf("❌ %v\n", err)
+	}
+	return true
 }
 
 // textWalletCombine merges a wallet's many coins into a few large ones.

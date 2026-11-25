@@ -45,6 +45,39 @@ const (
 
 var undoBucket = []byte("undo") // height -> coins that block spent, for rollbacks
 
+// THE PART OF A BLOCK THAT MAY PAY
+//
+// A transfer pays when its fee is more than nought. In any block, the
+// transfers that pay may take at most four fifths of the transaction slots
+// and at most four fifths of the bytes a block may hold. The last fifth can
+// hold only transfers that pay nothing, or stay empty.
+//
+// No rule can make a miner include anyone's free transfer: nothing in a
+// block shows what was left out. What this rule does is take away the gain
+// from leaving them out, since the room they would have had cannot be sold.
+// It counts a transfer as paying by the fee it states. A sender and a miner
+// who know each other can still settle outside the fee, and such a transfer
+// counts as free.
+//
+// freeShareOfBlock is that last part: one in this many.
+const freeShareOfBlock = 5
+
+// paidTransferLimits is the most transfers in one block that may pay a fee,
+// and the most bytes they may measure together (see transactionSizeBytes).
+// A network with no limit on the size of a block has no limit in bytes
+// here, shown as nought; only tests run such a network.
+//
+// The rule (ValidateBlockTransactions) and this program's own filling of
+// blocks (fillBlockFromCandidates) both read these, so the program can never
+// build a block that the rule refuses.
+func paidTransferLimits() (count, sizeBytes int) {
+	count = TxMaxPerBlock - TxMaxPerBlock/freeShareOfBlock
+	if Params.MaxBlockBytes > 0 {
+		sizeBytes = Params.MaxBlockBytes - Params.MaxBlockBytes/freeShareOfBlock
+	}
+	return count, sizeBytes
+}
+
 // IsTxForkHeight reports whether a block at this height follows the
 // transaction rules: every block except the genesis block, which carries
 // nothing but its own empty reward transaction.
@@ -338,6 +371,11 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int6
 	spentInBlock := make(map[string]bool)
 	var totalFeeUnits int64
 	var consumed []SpentRecord
+	// The transfers that pay a fee are counted and measured as they are
+	// checked (see paidTransferLimits). The reward transaction is not a
+	// transfer and is in neither figure.
+	paidLimit, paidBytesLimit := paidTransferLimits()
+	paidCount, paidBytes := 0, 0
 	for _, tx := range b.Transactions[1:] {
 		if seenIDs[tx.ID] {
 			return none, nil, fmt.Errorf("transaction %s appears twice", tx.ID)
@@ -346,6 +384,19 @@ func ValidateBlockTransactions(b Block, lookup utxoLookup, vaultBeforeUnits int6
 		feeUnits, spent, err := checkTransferAgainstCoins(tx, lookup, spentInBlock)
 		if err != nil {
 			return none, nil, fmt.Errorf("transfer %.20s rejected: %w", tx.ID, err)
+		}
+		if feeUnits > 0 {
+			// The sum cannot run away: every transfer's size is part of
+			// the block's, which is within the size limit where there is
+			// one, and a block holds at most TxMaxPerBlock transactions.
+			paidCount++
+			paidBytes += transactionSizeBytes(tx)
+			if paidCount > paidLimit {
+				return none, nil, fmt.Errorf("block has more than %d transfers that pay a fee; the rest of a block is for transfers that pay nothing", paidLimit)
+			}
+			if paidBytesLimit > 0 && paidBytes > paidBytesLimit {
+				return none, nil, fmt.Errorf("the transfers in the block that pay a fee measure more than %d bytes; the rest of a block is for transfers that pay nothing", paidBytesLimit)
+			}
 		}
 		for _, record := range spent {
 			spentInBlock[record.Key] = true
@@ -685,29 +736,38 @@ func MempoolPendingSpends() map[string]bool {
 
 // HOW A MINER FILLS A BLOCK
 //
-// This is the behaviour of this program's miner, not a rule of the network:
-// which transfers go into a block is the miner's choice and cannot be
-// checked from the block.
+// One thing here is a rule of the network: the transfers that pay a fee may
+// take at most four fifths of a block (see paidTransferLimits). Everything
+// else is the behaviour of this program's miner. Which transfers go into a
+// block is the miner's choice, and what it left out cannot be seen from the
+// block.
 //
 // A block's transfer slots, and its bytes, are split into two lanes.
 //
-//   - The paid lane, four fifths of the block: transfers that pay a fee,
-//     highest fee first.
+//   - The paid lane, four fifths of the room a miner has for transfers:
+//     transfers that pay a fee, highest fee first.
 //   - The free lane, one fifth: transfers that pay no fee, longest-waiting
 //     first, and only if every coin they spend is at least a day old
 //     (freeLaneMinAgeBlocks). The age condition stops the free lane being
 //     used to flood the chain by passing the same coins back and forth.
 //
-// Space one lane does not use goes to the other. Whatever is still free after
-// that takes fee-less transfers of younger coins, so that on a quiet network
-// every transfer confirms in the next block, as it always has.
+// Room the paid lane does not use goes to free transfers. Room the free lane
+// does not use goes to paying transfers only as far as the rule allows:
+// never more than 400 of them in a block, nor more than four fifths of its
+// bytes. Whatever is still free after that takes fee-less transfers of
+// younger coins, so that on a quiet network every transfer confirms in the
+// next block, as it always has. With many paying transfers waiting and no
+// free ones, the last fifth of the block stays empty.
 //
 // The free lane needs coin ages, which only networks with the Sabbatical
-// sweep record. On other networks blocks are filled highest fee first.
+// sweep record. On other networks blocks are filled highest fee first,
+// within the same rule.
 
-// freeLaneShare is the part of a block kept for fee-less transfers: one in
-// this many slots and bytes.
-const freeLaneShare = 5
+// freeLaneShare is the part of the room for transfers that this program's
+// miner keeps for fee-less transfers of settled coins: one in this many
+// slots and bytes. It is the same share the rule keeps from paying
+// transfers.
+const freeLaneShare = freeShareOfBlock
 
 // freeLaneMinAgeBlocks is how old every coin a fee-less transfer spends must
 // be for the free lane: one day of blocks. A variable so tests can shorten it.
@@ -807,7 +867,9 @@ func selectionForTip(tipHash string, limit int) ([]Transaction, int64) {
 
 // fillBlockFromCandidates chooses which of the valid waiting transfers go
 // into a block of at most `limit` transfers and `budgetBytes` bytes (zero
-// meaning no byte limit). With `lanes` off it is highest fee first.
+// meaning no byte limit). With `lanes` off it is highest fee first. However
+// it is called, it never chooses more paying transfers, or more bytes of
+// them, than a block may hold by rule.
 func fillBlockFromCandidates(candidates []mempoolCandidate, limit, budgetBytes int, nextHeight int64, lanes bool) ([]Transaction, int64) {
 	var paid, freeSettled, freeYoung []mempoolCandidate
 	for _, entry := range candidates {
@@ -842,15 +904,26 @@ func fillBlockFromCandidates(candidates []mempoolCandidate, limit, budgetBytes i
 	usedBytes := 0
 	chosen := make(map[string]bool)
 	taken := make(map[string]bool)
+	// What the rule allows of transfers that pay, and how much of it the
+	// block holds so far.
+	paidLimit, paidBytesLimit := paidTransferLimits()
+	paidCount, paidBytes := 0, 0
 	// fill adds transfers from a list until the block holds countLimit
 	// transfers; one that would take it past byteLimit is passed over, since
-	// a smaller one further down may still fit.
+	// a smaller one further down may still fit. A transfer that pays, and
+	// would take the paying part of the block past what the rule allows, is
+	// passed over in the same way: the list goes on, because a free
+	// transfer behind it may still go in. Whether a transfer pays is told
+	// by its own fee, never by which list it stands in.
 	fill := func(list []mempoolCandidate, countLimit, byteLimit int) {
 		for _, entry := range list {
 			if len(selected) >= countLimit {
 				return
 			}
 			if chosen[entry.tx.ID] || (byteLimit > 0 && usedBytes+entry.size > byteLimit) {
+				continue
+			}
+			if entry.fee > 0 && (paidCount >= paidLimit || (paidBytesLimit > 0 && paidBytes+entry.size > paidBytesLimit)) {
 				continue
 			}
 			conflict := false
@@ -870,6 +943,10 @@ func fillBlockFromCandidates(candidates []mempoolCandidate, limit, budgetBytes i
 			selected = append(selected, entry.tx)
 			totalFeeUnits += entry.fee
 			usedBytes += entry.size
+			if entry.fee > 0 {
+				paidCount++
+				paidBytes += entry.size
+			}
 		}
 	}
 	if !lanes {
@@ -878,7 +955,7 @@ func fillBlockFromCandidates(candidates []mempoolCandidate, limit, budgetBytes i
 	}
 	fill(paid, limit-limit/freeLaneShare, budgetBytes-budgetBytes/freeLaneShare) // the paid lane
 	fill(freeSettled, limit, budgetBytes)                                        // the free lane, plus what the paid lane left
-	fill(paid, limit, budgetBytes)                                               // paid transfers into what the free lane left
+	fill(paid, limit, budgetBytes)                                               // paid transfers into what the free lane left, as far as the rule allows
 	fill(freeYoung, limit, budgetBytes)                                          // anything still free
 	return selected, totalFeeUnits
 }

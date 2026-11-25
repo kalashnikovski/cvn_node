@@ -873,6 +873,8 @@ func (c *localCluster) restAndCheckAccounts(limit time.Duration, nodes ...*local
 // Blocks filled to the size limit: mined, passed between real nodes, checked
 // by each, and counted the same by all. The same code that fills them here
 // is the tool for doing it on a real test network (fill_blocks_devtool.go).
+// The transfers pay no fee: by rule the ones that pay may fill only four
+// fifths of a block, so only free ones fill a block to its limit.
 func TestMultiNodeFullBlocks(t *testing.T) { fullBlocksBetweenRealNodes(t, false) }
 
 // The same, on a network where some nodes run the earlier release: a seed
@@ -987,6 +989,10 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 		rewards = miner.coins(address)
 		return len(rewards) >= 6
 	})
+	// These six pay a fee (unless the earlier version is in the mix), so
+	// that blocks holding transfers that pay also cross real nodes and are
+	// counted the same by all. The transfers that fill the blocks, further
+	// down, pay none: only free transfers can fill a block to its limit.
 	cuts, _, _ := fillTransfers(key, pub, address, rewards[:6], 1<<30, feeUnits)
 	if len(cuts) != 6 {
 		t.Fatalf("built %d transfers from six coins", len(cuts))
@@ -1011,7 +1017,7 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 	// block after them may be mined while they are still being handed over
 	// and hold only some; the blocks after it are full.
 	budget := blockTransferBudgetBytes()
-	transfers, bytes, _ := fillTransfers(key, pub, address, pieces, budget*15/4, feeUnits)
+	transfers, bytes, _ := fillTransfers(key, pub, address, pieces, budget*15/4, 0)
 	if bytes < budget*3 {
 		t.Fatalf("built only %d bytes of transfers; a block holds %d", bytes, budget)
 	}
@@ -1063,7 +1069,7 @@ func fullBlocksBetweenRealNodes(t *testing.T, withEarlierVersion bool) {
 		made = miner.coins(address)
 		return len(made) >= len(transfers)*TxMaxOutputs
 	})
-	combines, combineBytes := combineBack(key, pub, transfers, made, feeUnits)
+	combines, combineBytes := combineBack(key, pub, transfers, made, 0)
 	if len(combines) < len(transfers)*TxMaxOutputs/TxMaxInputs {
 		t.Fatalf("built %d combining transfers for %d pieces", len(combines), len(transfers)*TxMaxOutputs)
 	}

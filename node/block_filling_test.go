@@ -68,18 +68,20 @@ func TestBlockFillingLanes(t *testing.T) {
 	if counts = countByPrefix(chosen); counts["P"] != 10 || counts["F"] != 489 {
 		t.Errorf("with few paid transfers the block holds %d paid and %d free; want 10 and 489", counts["P"], counts["F"])
 	}
-	// ...and space the free lane does not use goes to paid ones.
+	// ...but space the free lane does not use cannot go to paid ones: by
+	// rule at most 400 transfers in a block may pay (see paidTransferLimits),
+	// so with no free transfers waiting the last fifth stays empty.
 	chosen, _ = fillBlockFromCandidates(waiting("P", 600, rising, young, 400), limit, 0, height, true)
-	if len(chosen) != limit {
-		t.Errorf("with no free transfers waiting the block holds %d paid; want all %d slots used", len(chosen), limit)
+	if len(chosen) != 400 {
+		t.Errorf("with no free transfers waiting the block holds %d paid; want the 400 that may pay and no more", len(chosen))
 	}
 
 	// Fee-less transfers of young coins have no claim on the free lane: they
 	// go in only after everything else, into whatever is left.
 	mixed := append(waiting("P", 450, rising, young, 400), waiting("Y", 100, noFee, young, 400)...)
 	chosen, _ = fillBlockFromCandidates(mixed, limit, 0, height, true)
-	if counts = countByPrefix(chosen); counts["P"] != 450 || counts["Y"] != 49 {
-		t.Errorf("young free transfers: the block holds %d paid and %d young free; want 450 and 49", counts["P"], counts["Y"])
+	if counts = countByPrefix(chosen); counts["P"] != 400 || counts["Y"] != 99 {
+		t.Errorf("young free transfers: the block holds %d paid and %d young free; want 400 (all that may pay) and 99", counts["P"], counts["Y"])
 	}
 	flood := append(waiting("Y", 600, noFee, young, 400), waiting("F", 50, noFee, settled, 400)...)
 	chosen, _ = fillBlockFromCandidates(flood, limit, 0, height, true)

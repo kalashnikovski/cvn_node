@@ -14,6 +14,9 @@ backups/
 miner_config.json
 # A private key locked with a password (never publish it)
 wallet_key.json
+# A wallet's own note of the free renewals it has sent (local to this machine)
+wallet_renewals.json
+wallet_renewals.json.writing
 
 # Local Compiled Binaries
 cvn_node.exe

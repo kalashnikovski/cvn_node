@@ -134,6 +134,17 @@
 		txStatusMessage = "⏳ Renewing coins...";
 		try {
 			let resultMessage = await RenewCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim(), "");
+			// A renewal sent with no fee some days ago that has not gone
+			// through: the wallet says so and asks whether to send it again
+			// with a small fee. If not, it goes on to renew as usual.
+			if (resultMessage.startsWith("NOT THROUGH")) {
+				const question = resultMessage.replace("NOT THROUGH: ", "");
+				if (window.confirm(question)) {
+					resultMessage = await RenewCoinsSubmit("", String(txPrivateKey).trim(), "again");
+				} else {
+					resultMessage = await RenewCoinsSubmit(String(txFee ?? ""), String(txPrivateKey).trim(), "skip");
+				}
+			}
 			if (resultMessage.startsWith("NOTHING DUE")) {
 				const explanation = resultMessage.replace("NOTHING DUE: ", "");
 				if (!window.confirm(`${explanation}.\n\nRenew every coin anyway?`)) {
