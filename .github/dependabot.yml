@@ -1,0 +1,13 @@
+# Dependabot opens one pull request a month when a pinned GitHub Action has
+# a newer release, so the commit pins in .github/workflows do not go stale.
+# It only proposes; nothing is merged without a person.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -22,8 +22,8 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       # The node itself is vetted; internal/randomx is third-party code kept as published.
@@ -35,7 +35,7 @@ jobs:
       # The built wallet screens kept in the repository are compiled into the
       # program. They must be exactly what their source builds to, so that
       # nothing in the program is taken on trust.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 26
       - name: Check the wallet screens against their source
@@ -55,8 +55,8 @@ jobs:
       # off, so that the programs are built from the same bytes everywhere
       # and anyone can rebuild them and get the same result.
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
@@ -87,7 +87,7 @@ jobs:
       # A tag with "-rc" in it is a release candidate and is published as a
       # pre-release, so that it is never shown as the latest version. The
       # release's text is RELEASE_NOTES.md as it stands at the tag.
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           prerelease: ${{ contains(github.ref_name, '-rc') }}
           body_path: RELEASE_NOTES.md
@@ -98,7 +98,7 @@ jobs:
       # After publishing, so that a fault in signing never holds a release
       # back: the files are out, and this job shows the fault.
       - name: Sign what was built
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: |
             cvn_node_windows.zip
@@ -110,8 +110,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
 
@@ -134,7 +134,7 @@ jobs:
           sha256sum cvn_node_linux_amd64.tar.gz cvn_node_linux_arm64.tar.gz > SHA256SUMS_linux.txt
           (cd package && sha256sum cvn_node_linux_amd64/cvn_node cvn_node_linux_arm64/cvn_node) >> SHA256SUMS_linux.txt
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           prerelease: ${{ contains(github.ref_name, '-rc') }}
           body_path: RELEASE_NOTES.md
@@ -144,7 +144,7 @@ jobs:
             SHA256SUMS_linux.txt
 
       - name: Sign what was built
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: |
             cvn_node_linux_amd64.tar.gz
