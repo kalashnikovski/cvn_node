@@ -211,9 +211,21 @@ func runRelayUplink(address string, announcedID string) {
 	rateLimiter := GetIPRateLimiter(farHost)
 	transferLimiter := GetIPRateLimiter("transfers|" + farHost)
 
+	// And to the same room for large messages (see frameRoom).
+	room := frameRoomFor(farHost)
+	var held int64
+	defer func() { room.give(held) }()
+
 	for {
+		room.give(held)
+		held = 0
 		_ = conn.SetReadDeadline(time.Now().Add(relayReadTimeout))
-		payload, signature, err := readFrame(conn)
+		payload, signature, taken, err := readFrameWithin(conn, room)
+		held = taken
+		if err == errNoRoomForFrame {
+			noteFrameWithoutRoom(farHost)
+			continue
+		}
 		if err != nil || !VerifyPayloadHMAC(payload, signature) {
 			return
 		}

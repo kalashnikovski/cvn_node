@@ -24,6 +24,10 @@
 #
 #   CVN_VERSION=v5.0.0 bash install_seed.sh cvn_testnet
 #
+# The seed runs as a user of its own, cvn-seed, and keeps its chain in
+# /var/lib/cvn_seed/NETWORK. A seed set up by an older version of this script
+# kept its files in /opt/cvn_node; running this again moves them across.
+#
 # Running it again for the same network is safe: it updates and restarts.
 # On the development network, giving a different Bitcoin height from last
 # time (or none, after a rehearsal) starts that network's chain afresh, since
@@ -33,12 +37,14 @@ set -euo pipefail
 NETWORK="${1:-cvn_testnet}"
 SEEDS="${2:-}"
 HEIGHT="${3:-}"
-DIR=/opt/cvn_node
+DIR=/opt/cvn_node                  # the program and its source: root's
+SEED_USER=cvn-seed                 # the user the seed's node runs as
+DATA="/var/lib/cvn_seed/$NETWORK"  # the chain and the other files the node writes
 REPO=https://github.com/kalashnikovski/cvn_node
 
 case "$NETWORK" in
-  cvn_testnet) PORTS=18080:18081 ;;
-  devnet)      PORTS=28080:28081 ;;
+  cvn_testnet) PORTS=18080:18081; DBFILE=cvn_testnet.db; PEERFILE=peers_testnet.json ;;
+  devnet)      PORTS=28080:28081; DBFILE=cvn_devnet.db;   PEERFILE=peers_devnet.json ;;
   *) echo "Unknown network: $NETWORK (use cvn_testnet or devnet)"; exit 1 ;;
 esac
 # The seeds end up in a service file written by root: nothing but
@@ -89,8 +95,31 @@ fi
 
 echo "== Building"
 # The project names the exact Go version it needs; this lets the installed
-# Go fetch that version if it is older.
-(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node .)
+# Go fetch that version if it is older. The program is built beside the old
+# one and moved into place, so a seed that is running keeps its own file until
+# it is restarted. The source and the program stay root's: the seed's user can
+# run them but never change them.
+(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node.new . && mv -f cvn_node.new cvn_node)
+chmod 755 "$DIR" "$DIR/cvn_node"
+
+echo "== Making the seed's user and folder"
+# The node listens to strangers, so it runs as a user of its own, with a
+# folder of its own to write in. It cannot change the program.
+if ! id -u "$SEED_USER" >/dev/null 2>&1; then
+  useradd --system --user-group --home-dir /var/lib/cvn_seed --shell /usr/sbin/nologin "$SEED_USER"
+fi
+# The folder that holds every network's folder is root's, so that the seed of
+# one network can never make or replace the folder of another. A folder that
+# turns out to be a link to somewhere else is not what this script leaves,
+# and nothing is done through it.
+install -d -o root -g root -m 755 /var/lib/cvn_seed
+refuse_links() {
+  if [ -L "$DATA" ] || [ -L "$DATA/backups" ]; then
+    echo "$DATA, or the backups folder in it, is a link to somewhere else. This script does not make it so. Look at it before running this again."; exit 1
+  fi
+}
+refuse_links
+install -d -o "$SEED_USER" -g "$SEED_USER" -m 750 "$DATA"
 
 echo "== Opening the network's ports ($PORTS)"
 # Remote login is allowed first, so that turning the firewall on can never
@@ -110,20 +139,76 @@ REHEARSAL=""
 if [ -n "$HEIGHT" ]; then
   REHEARSAL="Environment=CVN_DEVNET_ANCHOR_HEIGHT=$HEIGHT"
 fi
+systemctl stop "$UNIT" 2>/dev/null || true
+# Looked at again now that the seed is stopped and can change nothing.
+refuse_links
+FRESH=""
 if [ "$NETWORK" = devnet ]; then
   # The Bitcoin height decides the first block. If it is not the one this
   # server used last time, the chain it holds belongs to another first block
-  # and so does the saved Bitcoin header: both go.
+  # and so does the saved Bitcoin header: both go, from the seed's folder and
+  # from the old place in $DIR, and nothing is moved across first.
   PREVIOUS=""
   if [ -f "$UNIT_FILE" ]; then
     PREVIOUS=$(sed -n 's/^Environment=CVN_DEVNET_ANCHOR_HEIGHT=//p' "$UNIT_FILE")
   fi
   if [ "$PREVIOUS" != "$HEIGHT" ]; then
     echo "== The first block has changed (Bitcoin height: was '${PREVIOUS:-none}', now '${HEIGHT:-none}'): starting the devnet chain afresh"
-    systemctl stop "$UNIT" 2>/dev/null || true
-    rm -f "$DIR/cvn_devnet.db" "$DIR/genesis_anchor_devnet.txt"
+    rm -f "$DATA/$DBFILE" "$DATA/genesis_anchor_devnet.txt" "$DIR/$DBFILE" "$DIR/genesis_anchor_devnet.txt"
+    # The copies of the old chain belong to the old first block. They are
+    # moved aside, not deleted, so that they are never taken for copies of
+    # the new chain.
+    STAMP=$(date +%Y%m%d-%H%M%S)
+    if [ -d "$DATA/backups" ]; then
+      mv "$DATA/backups" "$DATA/backups.before-$STAMP"
+    fi
+    for copy in "$DIR/backups/${DBFILE%.db}_block"*.db; do
+      if [ -f "$copy" ]; then
+        install -d -m 700 "$DIR/backups.before-$STAMP"
+        mv "$copy" "$DIR/backups.before-$STAMP/"
+      fi
+    done
+    FRESH=yes
   fi
 fi
+# A seed set up by the older script kept its files in $DIR and ran as root.
+# This network's files are moved to the seed's folder, once. A file already
+# there is never overwritten, and another network's files are left alone.
+MOVED=""
+if [ -z "$FRESH" ]; then
+  for name in "$DBFILE" "genesis_anchor_$NETWORK.txt" "$PEERFILE"; do
+    if [ -f "$DIR/$name" ] && [ ! -e "$DATA/$name" ]; then
+      # Moved under another name first, so that a move cut off half-way
+      # (a full disk) never leaves half a file under the real name.
+      rm -f "$DATA/$name.moving"
+      mv "$DIR/$name" "$DATA/$name.moving"
+      mv "$DATA/$name.moving" "$DATA/$name"
+      MOVED="$MOVED $name"
+    fi
+  done
+  # The folder of chain copies is shared by networks; only this network's
+  # copies are named after its database.
+  if [ -d "$DIR/backups" ]; then
+    install -d -o "$SEED_USER" -g "$SEED_USER" -m 700 "$DATA/backups"
+    for copy in "$DIR/backups/${DBFILE%.db}_block"*.db; do
+      if [ -f "$copy" ] && [ ! -e "$DATA/backups/$(basename "$copy")" ]; then
+        mv "$copy" "$DATA/backups/"
+        MOVED="$MOVED backups/$(basename "$copy")"
+      fi
+    done
+  fi
+fi
+# A settings file written by hand (miner_config.json, which can name other
+# nodes to call) is read from the folder the node runs in. It is shared by
+# the networks, so it is copied and the first one is left where it was.
+if [ -f "$DIR/miner_config.json" ] && [ ! -e "$DATA/miner_config.json" ]; then
+  cp -p "$DIR/miner_config.json" "$DATA/miner_config.json"
+  echo "== Copied miner_config.json from $DIR to $DATA"
+fi
+if [ -n "$MOVED" ]; then
+  echo "== Moved from $DIR to $DATA, where the seed now keeps them:$MOVED"
+fi
+chown -h -R "$SEED_USER:$SEED_USER" "$DATA"
 cat > "$UNIT_FILE" <<EOF
 [Unit]
 Description=Covenant Standard (CVN) seed node, $NETWORK
@@ -131,14 +216,26 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=$DIR
+User=$SEED_USER
+Group=$SEED_USER
+WorkingDirectory=$DATA
 ExecStart=$DIR/cvn_node $ARGS
 $REHEARSAL
 Restart=always
 RestartSec=10
 # A seed needs little; this stops a fault from taking the whole server down.
 MemoryMax=800M
+# The program is told a lower figure, so that it tidies its memory harder as
+# it nears the limit and is not stopped by it.
+Environment=GOMEMLIMIT=600MiB
 LimitNOFILE=65536
+# The node listens to strangers. It may write in its own folder and nowhere
+# else, and can never become another user.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=$DATA
+ProtectHome=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
@@ -157,5 +254,6 @@ if [ -n "$HEIGHT" ]; then
   echo "  Every other machine must be given the same height."
 fi
 echo "  See what it is doing:   journalctl -u $UNIT -f"
+echo "  Its chain and files:    $DATA (it runs as the user $SEED_USER, not as root)"
 echo "  Stop it:                systemctl stop $UNIT"
 echo "  Update it later:        bash $DIR/deploy/update_seed.sh"

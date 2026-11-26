@@ -55,6 +55,22 @@ Where: `UTXORecord` in `node/blockchain_core.go`; `applySweep`, `undoSweep`, `sw
 - When sending, a wallet user may give something to a second address in the same transfer: one more output, typed by the sender each time (`node/giving.go`).
 - A pool pays an address owed less than 1 CVN whatever it is owed, from 0.002 CVN up, once it has gone twelve hours without a payment (`node/pool_payments.go`, `node/pool_pay.go`).
 
+## After the first outside review of these changes (round 10)
+
+- A damaged record of a sweep, or of the coins a block spent, now stops the rollback or the block that needs it. It used to be passed over (`node/sweep.go`, `node/tx_rules.go`).
+- The quick check of a chain file (`checkChainFile` in `node/backup.go`) holds the vault after every block to that block and the vault before it.
+- **Putting a backup back now works the chain out again.** `replayChainFile` in `node/backup_replay.go` starts an empty chain in a scratch file, gives it the backup's blocks one by one through the same two functions that take a block from another node (`ValidateBlockSignatures`, then `SaveBlockToStorageInternal`), and compares the result with the backup: every coin, the vault after every block, the total work through every block, and the records of what each block spent and swept. A record of spending or of a sweep that no block makes is refused. `--restore-backup` does this before anything is changed and holds the file it copies to the SHA-256 of the file it checked; `--check-backup-fully` does it by hand. The copy a node makes each day still gets the quick check only. There is no second copy of the rules: the replay borrows the node's one database handle (`GlobalBoltEngine`, `BlockchainFile`) for as long as it runs, which is why it can only run in a command and never inside a running node. That borrowing is the part most worth a reviewer's eye.
+
+## After a security audit of the whole program (November 2026)
+
+Five findings, none in a rule (`audit/out/fingings_securityaudit_codex.md`, not published). All five were real.
+
+1. **Peer messages could exhaust a seed's memory.** Large messages (over 16 KiB) held at one time now share a fixed room, 16 MiB for strangers and 16 MiB for seeds, taken as the bytes arrive and given back when the message has been dealt with (`frameRoom`, `readFrameWithin`, `readLargePayload` in `node/gossip_mesh.go`; used in `serveInboundConnection` and in `node/relay_uplink.go`). A message that finds no room is taken off the connection and not kept; a connection with eight of those is closed. Answers that are always short are read to 64 KiB (`readSmallFrame`). Known limits: the room counts bytes as sent and the node holds several times that while decoding; a decoded block handed on for placing is not counted; whoever keeps the strangers' room full stops large blocks arriving from strangers, though not from seeds.
+2. **A wallet read a node's answer without limit.** Every answer is read to a byte limit and a limit on list items (`decodeAnswerWithin` in `node/decode_limits.go`).
+3. **The mining work port had no limits when no pool runs.** The pool's limits on connections and on answers without the work now hold for every miner that is not on the node's own machine, and an IPv6 address is counted by its first 64 bits (`handleStratumClient`, `minerAddressKey` in `node/stratum.go`).
+4. **The seed's service ran as root.** `deploy/install_seed.sh` now runs it as a user of its own in a folder of its own, with the same limits as the pool's service, and moves an older seed's files across. Not run on a server yet.
+5. **The update script could be made to delete a file outside its folder.** `deploy/update_seed.sh` accepts a plain file name only.
+
 ## What the authors tested
 
 For each rule, tests were written before the code and shown to fail without it. `TestCoinsAreNeverCreatedOrLost` runs a small economy through transfers, fees, sweeps, fifths set aside, taken back and expired, vault payouts, under-claimed blocks, the end of emission and rollbacks, and after every block checks that nothing was created or lost, that the sweep touched exactly the coins that were due, and that every other coin is unchanged. Faults were planted in the rules one at a time and the tests caught each. Real nodes on one machine were run through full blocks under rule 2 and through both sweep dates under rule 3.

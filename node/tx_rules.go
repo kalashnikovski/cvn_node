@@ -1178,19 +1178,30 @@ func walletNodeGateways() []string {
 // returns them with the node that answered.
 func FetchSpendableCoinsOverHTTP(address string) ([]SpendableCoin, string, error) {
 	client := &http.Client{Timeout: 6 * time.Second}
+	tooLong := false
 	for _, gateway := range walletNodeGateways() {
 		resp, err := client.Get(gateway + "/utxos?address=" + strings.TrimSpace(address))
 		if err != nil {
 			continue
 		}
-		var coins []SpendableCoin
-		decodeErr := json.NewDecoder(resp.Body).Decode(&coins)
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK || decodeErr != nil {
+		if resp.StatusCode != http.StatusOK {
 			// A node that has not updated yet does not offer this lookup.
+			resp.Body.Close()
+			continue
+		}
+		var coins []SpendableCoin
+		decodeErr := decodeAnswerWithin(resp.Body, coinListLimitBytes, &coins)
+		resp.Body.Close()
+		if decodeErr == errAnswerTooLarge {
+			tooLong = true
+		}
+		if decodeErr != nil {
 			continue
 		}
 		return coins, gateway, nil
+	}
+	if tooLong {
+		return nil, "", fmt.Errorf("a node's list of this address's coins was longer than the wallet reads (%d MB, or %d coins), and no other node answered. Nothing was sent", coinListLimitBytes>>20, answerListItemsAtMost)
 	}
 	return nil, "", fmt.Errorf("no updated node answered; start your node or check your connection")
 }

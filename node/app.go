@@ -45,7 +45,7 @@ func walletAddressFromConfig() string {
 	client := &http.Client{Timeout: 2 * time.Second}
 	if resp, err := client.Get(localStatusURL()); err == nil {
 		var status map[string]interface{}
-		decodeErr := json.NewDecoder(resp.Body).Decode(&status)
+		decodeErr := decodeAnswerWithin(resp.Body, nodeAnswerLimitBytes, &status)
 		resp.Body.Close()
 		if decodeErr == nil {
 			if address, _ := status["miner_address"].(string); strings.HasPrefix(address, "CVN_") {
@@ -78,7 +78,7 @@ func walletGetJSON(path string) (map[string]interface{}, bool) {
 			continue
 		}
 		var data map[string]interface{}
-		decodeErr := json.NewDecoder(resp.Body).Decode(&data)
+		decodeErr := decodeAnswerWithin(resp.Body, nodeAnswerLimitBytes, &data)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK || decodeErr != nil {
 			continue

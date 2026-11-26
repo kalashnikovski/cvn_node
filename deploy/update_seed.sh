@@ -9,6 +9,9 @@
 #
 #   bash /opt/cvn_node/deploy/update_seed.sh cvn_devnet.db
 #
+# Only a plain file name is accepted. The file is looked for in /opt/cvn_node
+# and in each seed's folder under /var/lib/cvn_seed.
+#
 # To move to one particular release and not the newest source, name its tag:
 #
 #   CVN_VERSION=v5.0.0 bash /opt/cvn_node/deploy/update_seed.sh
@@ -18,6 +21,20 @@ DIR=/opt/cvn_node
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this as root (or with sudo)."; exit 1
 fi
+
+# Every name is checked before anything is stopped or built. It must be a
+# plain file name ending in .db: letters, digits, _ - and . only, no folder,
+# no "..", and not starting with a dot or a dash.
+for database in "$@"; do
+  case "$database" in
+    ''|*[!A-Za-z0-9_.-]*|.*|-*|*..*) bad=yes ;;
+    *.db) bad="" ;;
+    *) bad=yes ;;
+  esac
+  if [ -n "$bad" ]; then
+    echo "Not changing anything: '$database' is not a database file name. Give a plain name such as cvn_devnet.db: letters, digits, _ - and . only, ending in .db, with no folder in front."; exit 1
+  fi
+done
 
 echo "== Stopping the seed services"
 # Only the services that are switched on. One that was switched off, such
@@ -33,13 +50,23 @@ else
   git -C "$DIR" checkout --quiet main
   git -C "$DIR" pull --ff-only
 fi
-(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node .)
+(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node.new . && mv -f cvn_node.new cvn_node)
 
+# A seed made by install_seed.sh keeps its database in /var/lib/cvn_seed/NETWORK.
+# An older one kept it in $DIR. The name is looked for in both places.
 for database in "$@"; do
-  case "$database" in
-    *.db) echo "== Removing $database"; rm -f "$DIR/$database" ;;
-    *)    echo "Not removing $database: only a .db file in $DIR can be named"; exit 1 ;;
-  esac
+  echo "== Removing $database"
+  removed=""
+  for place in "$DIR" /var/lib/cvn_seed/*; do
+    if [ -f "$place/$database" ]; then
+      rm -f "$place/$database"
+      echo "   Removed $place/$database"
+      removed=yes
+    fi
+  done
+  if [ -z "$removed" ]; then
+    echo "   No file called $database was found, so nothing was removed."
+  fi
 done
 
 echo "== Starting the seed services"

@@ -3,6 +3,7 @@ package node
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 )
@@ -159,6 +160,47 @@ const peerListItemsAtMost = 2 * MaxPeerMapCapacity
 // with thousands of addresses would otherwise have this one dial them all,
 // every fifteen seconds, at whoever those addresses belong to.
 const peerListDialsAtMost = 16
+
+// ANSWERS FROM A NODE
+//
+// A wallet asks nodes over plain HTTP: the node on this machine first, then
+// the public seeds. An answer was decoded however long it was, so a seed
+// that had been taken over, or anyone able to stand between the wallet and
+// a seed, could answer without end and have the wallet read until the
+// computer had no memory left (security audit, November 2026, finding 2).
+// No key is at risk in that, since none is ever sent; the wallet stops.
+//
+// Every answer is now read up to a limit and no further, and an answer
+// with more list items than any real one has is refused before it is
+// decoded: a length limit alone is not a memory limit, for the reason given
+// at the top of this file.
+const (
+	// nodeAnswerLimitBytes is the most read of an ordinary answer: the
+	// newest block, a balance, a status. The largest of these is a full
+	// block, well under a megabyte.
+	nodeAnswerLimitBytes = 4 << 20
+	// coinListLimitBytes is the most read of a list of one address's coins,
+	// which has no fixed length. It is room for some 200,000 coins.
+	coinListLimitBytes = 32 << 20
+	// answerListItemsAtMost is the most list items an answer may hold.
+	answerListItemsAtMost = 250000
+)
+
+// errAnswerTooLarge is returned for an answer longer than its limit.
+var errAnswerTooLarge = errors.New("the answer is longer than a node's answer can be")
+
+// decodeAnswerWithin decodes the JSON a node answered with, reading no more
+// than `limit` bytes of it.
+func decodeAnswerWithin(body io.Reader, limit int64, into interface{}) error {
+	raw, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(raw)) > limit || jsonListItems(raw) > answerListItemsAtMost {
+		return errAnswerTooLarge
+	}
+	return json.Unmarshal(raw, into)
+}
 
 // decodePeerList decodes a peer list another node sent, refusing a list
 // longer than any node sends.

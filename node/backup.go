@@ -1,6 +1,8 @@
 package node
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,9 +37,12 @@ import (
 //     snapshot that fails is thrown away and the fault is reported.
 //   - One is made a day, and the newest seven are kept.
 //
-// `--check-backup FILE` runs the same check by hand on any chain file, and
-// `--restore-backup FILE` puts a checked backup in place of the chain, with
-// the node stopped, keeping the file it replaces.
+// `--check-backup FILE` runs the same check by hand on any chain file.
+// `--check-backup-fully FILE` works the whole chain out again from the
+// file's blocks and compares (replayChainFile, in backup_replay.go); it
+// takes as long as the chain is long. `--restore-backup FILE` puts a backup
+// in place of the chain, with the node stopped, keeping the file it
+// replaces, and gives the backup that full check first.
 //
 // A backup is a copy of public data. It holds no private key.
 
@@ -386,21 +391,45 @@ func runBackupSchedule(every time.Duration, keep int) {
 	}
 }
 
+// chainFileIsHeld reports whether a node has this network's chain file open.
+// Opening it for writing fails while one does.
+func chainFileIsHeld() bool {
+	if _, err := os.Stat(BlockchainFile); err != nil {
+		return false
+	}
+	db, err := bbolt.Open(BlockchainFile, 0600, &bbolt.Options{Timeout: 2 * time.Second})
+	if err != nil {
+		return strings.Contains(err.Error(), "timeout")
+	}
+	_ = db.Close()
+	return false
+}
+
 // restoreBackup puts a backup in place of this network's chain file. The
-// node must be stopped. The backup is checked first; the file it replaces is
-// kept beside it under another name and its name is returned.
+// node must be stopped. The backup is first checked in full: the chain is
+// worked out again from its blocks and the file is held to the result
+// (replayChainFile). A node started from a chain file trusts it, so this is
+// the one moment a file that was altered could do harm. The file the backup
+// replaces is kept beside it under another name and its name is returned.
 func restoreBackup(backupPath, wantGenesis string) (report chainFileReport, kept string, err error) {
-	if report, err = checkChainFile(backupPath, wantGenesis); err != nil {
+	// Asked before the full check, which can take a long time, and again
+	// after it.
+	if chainFileIsHeld() {
+		return report, "", fmt.Errorf("a node is running on %s. Stop it first; nothing was changed", BlockchainFile)
+	}
+	// The full check can take hours, and the file is read again afterwards
+	// to copy it. Its fingerprint is taken now and the copy is held to it,
+	// so that what goes in is the very file that was checked.
+	checked, sumErr := fileSHA256(backupPath)
+	if sumErr != nil {
+		return report, "", fmt.Errorf("the backup could not be read, so nothing was changed. %v", sumErr)
+	}
+	if report, err = replayChainFile(backupPath, wantGenesis); err != nil {
 		return report, "", fmt.Errorf("the backup did not pass its check, so nothing was changed. %v", err)
 	}
 	if _, statErr := os.Stat(BlockchainFile); statErr == nil {
-		// Opening it for writing fails while a node holds it.
-		db, openErr := bbolt.Open(BlockchainFile, 0600, &bbolt.Options{Timeout: 2 * time.Second})
-		if openErr != nil && strings.Contains(openErr.Error(), "timeout") {
+		if chainFileIsHeld() {
 			return report, "", fmt.Errorf("a node is running on %s. Stop it first; nothing was changed", BlockchainFile)
-		}
-		if openErr == nil {
-			_ = db.Close()
 		}
 		kept = BlockchainFile + ".replaced-" + time.Now().UTC().Format("20060102-150405")
 		if err := os.Rename(BlockchainFile, kept); err != nil {
@@ -409,16 +438,38 @@ func restoreBackup(backupPath, wantGenesis string) (report chainFileReport, kept
 	}
 	partial := BlockchainFile + ".restoring"
 	if err = copyFile(backupPath, partial); err == nil {
+		var copied string
+		if copied, err = fileSHA256(partial); err == nil && copied != checked {
+			err = fmt.Errorf("the backup file changed while it was being checked")
+		}
+	}
+	if err == nil {
 		err = os.Rename(partial, BlockchainFile)
 	}
 	if err != nil {
 		_ = os.Remove(partial)
 		if kept != "" {
-			_ = os.Rename(kept, BlockchainFile)
+			if backErr := os.Rename(kept, BlockchainFile); backErr != nil {
+				return report, "", fmt.Errorf("the backup could not be copied into place (%v), and the chain file could not be put back under its own name (%v). It is whole, and is now called %s: rename it to %s before starting the node", err, backErr, kept, BlockchainFile)
+			}
 		}
 		return report, "", fmt.Errorf("the backup could not be copied into place; the chain file is as it was: %v", err)
 	}
 	return report, kept, nil
+}
+
+// fileSHA256 is the SHA-256 of a file's contents, in hex.
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 func copyFile(from, to string) error {
@@ -440,8 +491,9 @@ func copyFile(from, to string) error {
 	return err
 }
 
-// runBackupCommand handles `--check-backup FILE` and `--restore-backup FILE`.
-// It reports whether one of them was given, in which case the program is done.
+// runBackupCommand handles `--check-backup FILE`, `--check-backup-fully FILE`
+// and `--restore-backup FILE`. It reports whether one of them was given, in
+// which case the program is done.
 func runBackupCommand(args []string, genesisKnown bool) bool {
 	wantGenesis := ""
 	if genesisKnown {
@@ -459,7 +511,18 @@ func runBackupCommand(args []string, genesisKnown bool) bool {
 		}
 		return true
 	}
+	if path := argumentValue(args, "--check-backup-fully"); path != "" {
+		fmt.Println("Working the chain out again from the file's blocks. Every block's proof of work is repeated, so this takes a while on a long chain.")
+		report, err := replayChainFile(path, wantGenesis)
+		if err != nil {
+			fmt.Println("🚨 NOT USABLE. " + err.Error())
+			os.Exit(1)
+		}
+		fmt.Println("✅ This file is a whole chain of the " + Params.Name + " network, and its coins and records are what its blocks make them: " + report.String() + ".")
+		return true
+	}
 	if path := argumentValue(args, "--restore-backup"); path != "" {
+		fmt.Println("Checking the backup in full before anything is changed: the chain is worked out again from its blocks. This takes a while on a long chain.")
 		report, kept, err := restoreBackup(path, wantGenesis)
 		if err != nil {
 			fmt.Println("🚨 " + err.Error())

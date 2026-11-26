@@ -156,7 +156,7 @@ On a server you will want it to start by itself when the server boots and to res
 curl -fsSL https://raw.githubusercontent.com/kalashnikovski/cvn_node/main/deploy/install_seed.sh | bash
 ```
 
-It installs what is needed, builds the program in `/opt/cvn_node`, opens the network's two ports and installs a service. To update the server later: `bash /opt/cvn_node/deploy/update_seed.sh`.
+It installs what is needed, builds the program in `/opt/cvn_node`, opens the network's two ports and installs a service. The seed does not run as root: it runs as a user of its own, `cvn-seed`, and keeps its chain in `/var/lib/cvn_seed/NETWORK`. A seed set up by an older version of the script ran as root from `/opt/cvn_node`; running the script again moves its files across. To update the server later: `bash /opt/cvn_node/deploy/update_seed.sh`.
 
 This is the right way to run a small rented server. On one shared processor, mining would earn next to nothing and get in the way of the server's real use to the network, which is being online and reachable. Open the network's two ports in the server's firewall so that other nodes can reach it (18080 and 18081 on the CVN Testnet, 28080 and 28081 on `devnet`).
 
@@ -372,13 +372,23 @@ cvn_miner.exe --network devnet --check-backup backups\cvn_devnet_block00001468_2
 
 On Linux the program is `./cvn_node`. On a development network started from a Bitcoin block, set `CVN_DEVNET_ANCHOR_HEIGHT` as you do for the node, so that the backup's first block is compared with the network's.
 
+**Checking a backup in full.** The check above reads the file and adds it up. It does not work the coins out again from the blocks. This one does:
+
+```
+cvn_miner.exe --network devnet --check-backup-fully backups\cvn_devnet_block00001468_20261119-031200.db
+```
+
+It starts from the first block and gives every block in the file the same checks a block from another node gets: every rule, every signature, every proof of work. Then it compares what those blocks make with what the file holds, coin by coin. A file in which a coin was altered, added or removed fails, even if the totals still add up.
+
+It takes as long as the chain is long: minutes on a short chain, hours on a long one. It can run while the node does, and it uses the processor while it runs. It writes a scratch file beside the chain file and removes it at the end, so it needs free disk space about the size of the chain.
+
 **Restoring a backup.** Stop the node first. Then:
 
 ```
 cvn_miner.exe --network devnet --restore-backup backups\cvn_devnet_block00001468_20261119-031200.db
 ```
 
-The backup is checked, and only if it passes is it put in place of the chain file. The file it replaces is not deleted: it is kept beside it with `.replaced-` and the time in its name. Start the node as usual afterwards; it fetches any later blocks from the network.
+The backup is first checked in full, as `--check-backup-fully` does, so on a long chain this takes a while. Only if it passes is it put in place of the chain file. The file it replaces is not deleted: it is kept beside it with `.replaced-` and the time in its name. Start the node as usual afterwards; it fetches any later blocks from the network.
 
 **What a backup is and is not.** It is a copy of public data, the same chain every node holds. It contains no private key and is no substitute for writing your recovery words down. Restoring an old backup onto the only machine of a network takes that network back to the backup's block: everything mined after it is gone.
 

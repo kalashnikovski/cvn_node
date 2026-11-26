@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -44,6 +45,107 @@ var (
 	BlacklistMutex       sync.Mutex
 	IPMalformedTrack     = make(map[string]int)
 )
+
+// ROOM FOR LARGE MESSAGES
+//
+// A message is read whole before anything is done with it, and may be 2 MB.
+// Hundreds of connections may be open at once, and a large block waits its
+// turn to be decoded (largeBlockDecodes) with its message still held. 600
+// connections each sending a 2 MB message together came to more than a
+// gigabyte, on seeds that run with a memory cap of 800 MB, and the signature
+// on a message does not keep strangers out while the network's key is the
+// one written in the program (security audit, November 2026, finding 1).
+//
+// So the large messages held at one time share a fixed amount of room. A
+// message of frameCountedOverBytes or less is not counted: nearly every
+// message is that small, and all the connections there can be, each holding
+// one, come to a few megabytes. A larger one takes room as its bytes arrive,
+// so that room is held only by what has really been sent. If the room runs
+// out, the message is taken off the connection without being kept, the
+// connection stays open, and the block it carried reaches this node another
+// way: from another node, or when the node next compares chains.
+//
+// The room counts a message's bytes as they were sent. While a message is
+// being decoded the node holds several times that (the message, a copy or
+// two of it, and what it decodes to), so the rooms are small beside the
+// memory a seed is allowed.
+//
+// The seeds have room of their own. Whoever keeps the strangers' room full
+// (it takes eight connections sending 2 MB each, over and over) stops this
+// node taking large blocks from strangers for as long as they keep it up,
+// and no more than that: small blocks pass, and the seeds still deliver.
+type frameRoom struct {
+	sync.Mutex
+	most int64 // bytes
+	held int64
+}
+
+// take sets aside room for a message of so many bytes, or reports that
+// there is none.
+func (r *frameRoom) take(bytes int64) bool {
+	r.Lock()
+	defer r.Unlock()
+	if bytes < 0 || r.held+bytes > r.most {
+		return false
+	}
+	r.held += bytes
+	return true
+}
+
+// give returns room that take set aside.
+func (r *frameRoom) give(bytes int64) {
+	if bytes <= 0 {
+		return
+	}
+	r.Lock()
+	defer r.Unlock()
+	if r.held -= bytes; r.held < 0 {
+		r.held = 0
+	}
+}
+
+// frameCountedOverBytes is the size above which a message needs room.
+const frameCountedOverBytes = 16 << 10
+
+var (
+	strangersFrameRoom = &frameRoom{most: 16 << 20}
+	seedsFrameRoom     = &frameRoom{most: 16 << 20}
+)
+
+const (
+	// frameReadPieceBytes is how much of a large message is read at a time.
+	frameReadPieceBytes = 32 << 10
+	// framesWithoutRoomAtMost is how many large messages one connection may
+	// send that find no room before it is closed. It may call again.
+	framesWithoutRoomAtMost = 8
+	// smallAnswerBytes is the most read of an answer that is always short:
+	// a list of peers, or a word about what the other node understands.
+	smallAnswerBytes = 64 << 10
+)
+
+// frameRoomFor is the room a connection with this address draws on.
+func frameRoomFor(host string) *frameRoom {
+	if isSeedHost(host) {
+		return seedsFrameRoom
+	}
+	return strangersFrameRoom
+}
+
+// errNoRoomForFrame is returned by readFrameWithin for a large message that
+// was taken off the connection and not kept. The connection is still good.
+var errNoRoomForFrame = errors.New("no room for a message this large just now")
+
+// framesWithoutRoom counts the messages not kept, and lastSaidNoRoom is when
+// the log last said so (it says so at most once a minute).
+var framesWithoutRoom, lastSaidNoRoom int64
+
+func noteFrameWithoutRoom(host string) {
+	dropped := atomic.AddInt64(&framesWithoutRoom, 1)
+	now := time.Now().Unix()
+	if last := atomic.LoadInt64(&lastSaidNoRoom); now-last >= 60 && atomic.CompareAndSwapInt64(&lastSaidNoRoom, last, now) {
+		log.Printf("⚠️ [NETWORK] A large message from %s was not kept: too many large messages are being held at once (%d not kept since this node started). The block it carried will come another way.\n", host, dropped)
+	}
+}
 
 // TokenBucket is an allowance of messages for one address: so many at once,
 // refilled at a steady rate. A message beyond the allowance is dropped.
@@ -226,7 +328,13 @@ func serveInboundConnection(conn net.Conn, pooled bool) {
 	// its next block ignored by the receiver.
 	transferLimiter := GetIPRateLimiter("transfers|" + remoteIP)
 
+	// The room this connection's present message takes (see frameRoom).
+	room := frameRoomFor(remoteIP)
+	var held int64
+	withoutRoom := 0
+
 	defer func() {
+		room.give(held)
 		unregisterRelaySubscriber(conn)
 		forgetRelayConnection(conn)
 		conn.Close()
@@ -237,8 +345,20 @@ func serveInboundConnection(conn net.Conn, pooled bool) {
 	}()
 
 	for {
+		// The last message has been dealt with: whatever was made from it
+		// is its own copy, and its room is given back.
+		room.give(held)
+		held = 0
 		_ = conn.SetReadDeadline(time.Now().Add(DefaultReadTimeout))
-		payloadBuffer, signature, err := readFrame(conn)
+		payloadBuffer, signature, taken, err := readFrameWithin(conn, room)
+		held = taken
+		if err == errNoRoomForFrame {
+			noteFrameWithoutRoom(remoteIP)
+			if withoutRoom++; withoutRoom >= framesWithoutRoomAtMost {
+				return
+			}
+			continue
+		}
 		if err != nil {
 			var tooLarge frameTooLarge
 			if errors.As(err, &tooLarge) {
@@ -412,29 +532,91 @@ func (e frameTooLarge) looksLike() string {
 // the limit and nothing else: whether the signature is good is for the
 // caller to decide, with VerifyPayloadHMAC.
 func readFrame(conn net.Conn) (payload, signature []byte, err error) {
+	payload, signature, _, err = readFrameWithin(conn, nil)
+	return payload, signature, err
+}
+
+// readSmallFrame is readFrame where the answer expected is always short. A
+// longer one is taken off the connection without being kept, and is an
+// error.
+func readSmallFrame(conn net.Conn) (payload, signature []byte, err error) {
+	payload, signature, _, err = readFrameWithin(conn, &frameRoom{most: smallAnswerBytes})
+	return payload, signature, err
+}
+
+// readFrameWithin is readFrame for a connection that stays open and may be
+// sent large messages by a stranger. A message over frameCountedOverBytes
+// takes room from `room` as its bytes arrive; `held` is the room it took,
+// which the caller gives back when it has done with the message. If the
+// room runs out the message is taken off the connection without being kept
+// and errNoRoomForFrame is returned: the next message can be read as usual.
+// With no room given, every message is read.
+func readFrameWithin(conn net.Conn, room *frameRoom) (payload, signature []byte, held int64, err error) {
 	var header [4]byte
 	if _, err = io.ReadFull(conn, header[:]); err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	length := binary.BigEndian.Uint32(header[:])
 	if length > MaxPayloadFrameSize {
-		return nil, nil, frameTooLarge{header: header, length: length}
+		return nil, nil, 0, frameTooLarge{header: header, length: length}
 	}
 	signature = make([]byte, 32)
 	if _, err = io.ReadFull(conn, signature); err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
+	}
+	if room != nil && length > frameCountedOverBytes {
+		payload, held, err = readLargePayload(conn, room, int(length))
+		if err != nil {
+			return nil, nil, 0, err
+		}
+		return payload, signature, held, nil
 	}
 	// The space for the payload grows with what arrives, instead of being
 	// set aside in full on the word of the first four bytes: a stranger who
 	// states the largest size and then sends nothing holds almost nothing.
 	payload, err = io.ReadAll(io.LimitReader(conn, int64(length)))
+	if err == nil && len(payload) != int(length) {
+		err = io.ErrUnexpectedEOF
+	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	if len(payload) != int(length) {
-		return nil, nil, io.ErrUnexpectedEOF
+	return payload, signature, 0, nil
+}
+
+// readLargePayload reads a large message's payload a piece at a time, taking
+// room for each piece once it has arrived. Room is never held on the word of
+// the first four bytes: a stranger who states the largest size and then
+// sends nothing, or sends slowly, holds only what it has sent. On any error
+// the room taken is given back.
+func readLargePayload(conn net.Conn, room *frameRoom, length int) (payload []byte, held int64, err error) {
+	piece := make([]byte, frameReadPieceBytes)
+	for len(payload) < length {
+		want := length - len(payload)
+		if want > len(piece) {
+			want = len(piece)
+		}
+		n, readErr := conn.Read(piece[:want])
+		if n > 0 {
+			if !room.take(int64(n)) {
+				room.give(held)
+				if _, err = io.CopyN(io.Discard, conn, int64(length-len(payload)-n)); err != nil {
+					return nil, 0, err
+				}
+				return nil, 0, errNoRoomForFrame
+			}
+			held += int64(n)
+			payload = append(payload, piece[:n]...)
+		}
+		if readErr != nil && len(payload) < length {
+			room.give(held)
+			if readErr == io.EOF {
+				readErr = io.ErrUnexpectedEOF
+			}
+			return nil, 0, readErr
+		}
 	}
-	return payload, signature, nil
+	return payload, held, nil
 }
 
 // writeFrame sends one frame.
@@ -539,7 +721,9 @@ func sendToNetwork(payload, announcement string) {
 		if called++; called > freshCallsPerMessage {
 			break
 		}
-		go callAndSend(address, payload, announcement)
+		// Counted with the other sends left to finish by themselves, so
+		// that a test can wait for it before it puts the settings back.
+		inBackground(func() { callAndSend(address, payload, announcement) })
 	}
 }
 
@@ -568,7 +752,7 @@ func callAndSend(address, payload, announcement string) {
 	}
 	writeFrame(conn, "RELAY_FEATURES:"+relayFeatureAnnounce)
 	_ = conn.SetReadDeadline(time.Now().Add(freshCallFeatureWait))
-	answer, signature, err := readFrame(conn)
+	answer, signature, err := readSmallFrame(conn)
 	if err != nil || !VerifyPayloadHMAC(answer, signature) ||
 		!strings.HasPrefix(string(answer), "RELAY_FEATURES:") || !strings.Contains(string(answer), relayFeatureAnnounce) {
 		writeFrame(conn, payload)
@@ -579,7 +763,7 @@ func callAndSend(address, payload, announcement string) {
 	// asked first. The call is kept for as long as that can take.
 	_ = conn.SetReadDeadline(time.Now().Add(3 * blockFetchPatience))
 	for {
-		request, signature, err := readFrame(conn)
+		request, signature, err := readSmallFrame(conn)
 		if err != nil || !VerifyPayloadHMAC(request, signature) {
 			return
 		}
@@ -646,7 +830,7 @@ func askForPeers(address string) {
 	defer conn.Close()
 	writeFrame(conn, "PEER_PING:DISCOVERY_REQUEST")
 	_ = conn.SetReadDeadline(time.Now().Add(4 * time.Second))
-	payload, signature, err := readFrame(conn)
+	payload, signature, err := readSmallFrame(conn)
 	if err != nil {
 		return
 	}

@@ -566,7 +566,13 @@ func poolPayCall(path string, request, reply interface{}) (int, error) {
 		return 0, err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode, json.NewDecoder(resp.Body).Decode(reply)
+	// The pool answers on this machine only. Its answer is read to a limit
+	// all the same, as every answer from a node is.
+	err = decodeAnswerWithin(resp.Body, coinListLimitBytes, reply)
+	if err == errAnswerTooLarge {
+		err = fmt.Errorf("the pool's answer was longer than any it gives")
+	}
+	return resp.StatusCode, err
 }
 
 // poolPaymentLooksRight is the paying command's own look at a payment before

@@ -334,12 +334,46 @@ func (c *stratumClient) findJob(id string) *stratumJob {
 	return nil
 }
 
+// isThisMachine reports whether a connection's address is this machine's
+// own loopback address.
+func isThisMachine(host string) bool {
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// minerAddressKey is the name the limits on miners keep for an address. An
+// IPv4 address is itself, however it is written. An IPv6 address is its
+// first 64 bits: whoever has one such address has all the others that share
+// those bits, and would otherwise be a new miner at every connection.
+func minerAddressKey(host string) string {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String()
+	}
+	return ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
+}
+
 func handleStratumClient(conn net.Conn) {
 	client := &stratumClient{conn: conn, address: strings.TrimSpace(CustomMinerAddress)}
 	defer conn.Close()
 	onPool := poolRunning()
-	if onPool {
-		client.host = hostOf(conn)
+	from := hostOf(conn)
+	client.host = minerAddressKey(from)
+	// A pool limits how many connections there may be, how many from one
+	// address, and how many answers without the work one address may send
+	// before it is refused for a while. A node that mines for itself is
+	// held to the same limits for every miner that is not on this machine:
+	// its owner may have opened the work port to others (`--mining-listen`),
+	// and until this was added anyone who could reach it could open
+	// connections without end, and come back as often as they liked after
+	// being disconnected for sending answers that each cost this node a
+	// proof check (security audit, November 2026, finding 3). The owner's
+	// miner on this machine itself is not counted.
+	limited := onPool || !isThisMachine(from)
+	if limited {
 		if !poolAdmit(client.host) {
 			return
 		}
@@ -479,8 +513,12 @@ func handleStratumClient(conn net.Conn) {
 					// counted for the address they come from, across its
 					// connections: reconnecting does not start the count
 					// again (review of the pool, round 2, finding 2).
-					if onPool && poolNoteBadWork(client.host, time.Now()) {
-						noteNetworkEvent("⛏️ [POOL] Refusing " + client.host + " for a while: too many answers without the work.")
+					if limited && poolNoteBadWork(client.host, time.Now()) {
+						if onPool {
+							noteNetworkEvent("⛏️ [POOL] Refusing " + client.host + " for a while: too many answers without the work.")
+						} else {
+							noteNetworkEvent("⛏️ [WORK SERVER] Refusing " + client.host + " for a while: too many answers without the work.")
+						}
 						return
 					}
 					if client.badWork++; client.badWork >= stratumBadWorkLimit {
