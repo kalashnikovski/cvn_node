@@ -99,7 +99,7 @@ echo "== Building"
 # one and moved into place, so a seed that is running keeps its own file until
 # it is restarted. The source and the program stay root's: the seed's user can
 # run them but never change them.
-(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node.new . && mv -f cvn_node.new cvn_node)
+(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node.new . && chmod 755 cvn_node.new && mv -f cvn_node.new cvn_node)
 chmod 755 "$DIR" "$DIR/cvn_node"
 
 echo "== Making the seed's user and folder"
@@ -221,8 +221,8 @@ if [ -z "$FRESH" ]; then
   if [ -d "$DIR/backups" ]; then
     install -d -o "$SEED_USER" -g "$SEED_USER" -m 700 "$DATA/backups"
     for copy in "$DIR/backups/${DBFILE%.db}_block"*.db; do
-      if [ -f "$copy" ] && [ ! -e "$DATA/backups/$(basename "$copy")" ]; then
-        mv "$copy" "$DATA/backups/"
+      if [ -f "$copy" ] && [ ! -e "$DATA/backups/$(basename "$copy")" ] && [ ! -L "$DATA/backups/$(basename "$copy")" ]; then
+        mv -T "$copy" "$DATA/backups/$(basename "$copy")"
         MOVED="$MOVED backups/$(basename "$copy")"
       fi
     done

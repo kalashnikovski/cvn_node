@@ -1224,3 +1224,291 @@ func TestASoundBlockThatSpendsACoinThatCannotBeReadIsRefusedAndTheTipDoesNotMove
 		return nil
 	})
 }
+
+// The node's own record of total work is there for its tip but not for the
+// block it shares with the peer, and a block below that one cannot be read.
+// So the sync pass gets past its first look at its own work and stops where
+// it works out the work of its own branch. It keeps its chain, and it does
+// not blame the peer, which has done nothing wrong.
+func TestASyncPassThatCannotWorkOutTheWorkAtTheSharedBlockKeepsTheNodeOnItsChainAndBlamesNoOne(t *testing.T) {
+	startTestChain(t, "devnet")
+	b := buildCompetingBranches(t)
+	putBranchInPlace(b.light, b.ancestor)
+
+	var heavyChain []Block
+	for h := int64(0); h <= b.ancestor.Index; h++ {
+		heavyChain = append(heavyChain, GetBlockByHeightFromDB(h))
+	}
+	heavyChain = append(heavyChain, b.heavy...)
+	lightTip := GetLatestBlockInternal()
+
+	// Keep chainWorkBucket[lightTip] intact so startWork succeeds and
+	// chooseSyncSource selects heavyChain, then delete chainWorkBucket[ancestor]
+	// and corrupt block #1 so chainWorkThroughChecked(ancestor) runs at line 950.
+	updateDB(t, func(dbTx *bbolt.Tx) error {
+		if err := dbTx.Bucket(blocksBucket).Put(chainWorkKey(1), []byte("{corrupt")); err != nil {
+			return err
+		}
+		return dbTx.Bucket(chainWorkBucket).Delete(chainWorkKey(b.ancestor.Index))
+	})
+
+	srv := serveMockSyncPeer(t, heavyChain)
+	savedExtras := Params.ExtraSyncURLs
+	Params.ExtraSyncURLs = []string{srv.URL}
+	t.Cleanup(func() {
+		Params.ExtraSyncURLs = savedExtras
+		syncSetAside.Lock()
+		delete(syncSetAside.until, srv.URL)
+		syncSetAside.Unlock()
+		syncExcused.Lock()
+		delete(syncExcused.at, srv.URL)
+		syncExcused.Unlock()
+		syncDelivered.Lock()
+		delete(syncDelivered.at, srv.URL)
+		syncDelivered.Unlock()
+	})
+
+	TriggerActiveReSyncPass()
+	if got := GetLatestBlockInternal(); got.Hash != lightTip.Hash {
+		t.Fatalf("switched away from light tip #%d %.12s to #%d %.12s", lightTip.Index, lightTip.Hash, got.Index, got.Hash)
+	}
+	syncSetAside.Lock()
+	_, blamed := syncSetAside.until[srv.URL]
+	syncSetAside.Unlock()
+	if blamed {
+		t.Fatal("sync source was set aside despite local chain-work failure being blameless")
+	}
+}
+
+// A node writes its file only by storing valid blocks, taking them off again,
+// sweeping and the like. A file written so is never refused at start, with
+// the records of total work there or wiped.
+func TestAChainBuiltOnlyByValidSequencesIsNeverRefusedAtStartOrWhenItsTotalsOfWorkAreRebuilt(t *testing.T) {
+	startTestChain(t, "devnet", func() {
+		econ := NewGenesisEconomics
+		econ.EpochBlocks = 5
+		econ.EmissionEpochs = 2 // emission stops after block #10
+		econ.SweepIntervalBlocks = 4
+		econ.VaultPayoutBlocks = 5
+		Params.Economics = &econ
+	})
+	t.Cleanup(func() { atomic.StoreInt64(&localHeightState, 0) })
+
+	privA, pubA, alice, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, bob, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := Params.GenesisTimestamp + 100
+
+	reopenAndCheck := func(label string, deleteWorkIndex bool) {
+		t.Helper()
+		dbPath := BlockchainFile
+		beforeTip := GetLatestBlockInternal()
+		beforeWork := TotalChainWork()
+		beforeVault := VaultBalanceUnits()
+		if deleteWorkIndex {
+			updateDB(t, func(tx *bbolt.Tx) error {
+				if tx.Bucket(chainWorkBucket) != nil {
+					return tx.DeleteBucket(chainWorkBucket)
+				}
+				return nil
+			})
+		}
+		closeAfterWork(t)
+
+		atomic.StoreInt64(&localHeightState, 0)
+		BlockchainFile = dbPath
+		if msg, panicked := openingTheEngine(); panicked {
+			t.Fatalf("%s (deleteWork=%v): InitBoltEngine falsely refused valid chain: %s", label, deleteWorkIndex, msg)
+		}
+		if err := checkStoredGenesis(); err != nil {
+			t.Fatalf("%s (deleteWork=%v): checkStoredGenesis failed: %v", label, deleteWorkIndex, err)
+		}
+		afterTip := GetLatestBlockInternal()
+		afterWork := TotalChainWork()
+		if afterTip.Hash != beforeTip.Hash || afterTip.Index != beforeTip.Index {
+			t.Fatalf("%s: tip mismatch after reopen: got #%d %.12s, want #%d %.12s", label, afterTip.Index, afterTip.Hash, beforeTip.Index, beforeTip.Hash)
+		}
+		if afterWork.Cmp(beforeWork) != 0 {
+			t.Fatalf("%s: work mismatch after reopen: got %s, want %s", label, afterWork, beforeWork)
+		}
+		if VaultBalanceUnits() != beforeVault {
+			t.Fatalf("%s: vault mismatch after reopen", label)
+		}
+	}
+
+	// Block #1: alice gets 50 CVN.
+	extendTestChain(t, ts, alice, nil)
+
+	// Block #2: miner claims only 10 CVN (leaving 40 CVN in the vault) and alice creates
+	// both a minimum-dust coin (10000) and a boundary coin (12500 -> 10000+2500 at sweep 1,
+	// then 10000+0 at sweep 2) sent to bob while keeping her remaining coin.
+	ts += 45
+	txSplit, err := BuildSignedTransfer(privA, pubA, bob, 12500, 10000, ListSpendableCoins(alice))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts2 := ts
+	// Replace outputs to hold 10000 dust, 12500 boundary, and change to alice with 10000 fee.
+	coinsA := ListSpendableCoins(alice)
+	_ = txSplit
+	signedSplit, err := signTransfer(privA, pubA, alice, []UTXOInput{walletInput(coinsA[0])}, []UTXOOutput{
+		{Recipient: bob, Amount: UnitsAmount(10000)},
+		{Recipient: bob, Amount: UnitsAmount(12500)},
+		{Recipient: alice, Amount: UnitsAmount(coinsA[0].Amount.Units() - 32500)},
+	}, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b2 := mineTestBlock(t, ts2, testAddress("underclaim"), []Transaction{signedSplit}, cvn("10"))
+	if !ValidateBlockSignatures(b2) || !SaveBlockToStorageInternal(b2) {
+		t.Fatal("failed storing underclaimed block #2")
+	}
+
+	// Blocks #3..#6: triggers sweep 1 at #5 (for #1) and #6 (for #2, touching 12500 + alice change, leaving 10000 dust alone).
+	for h := int64(3); h <= 6; h++ {
+		ts += 45
+		extendTestChain(t, ts, testAddress(fmt.Sprintf("m%d", h)), nil)
+	}
+	reopenAndCheck("after sweep 1 at #6", false)
+	reopenAndCheck("after sweep 1 at #6 with chainwork deleted", true)
+
+	// Spend alice's swept coin (with HeldUnits > 0) in block #7 to reclaim her held fifth.
+	var aliceHeld int64
+	for _, c := range ListSpendableCoins(alice) {
+		aliceHeld += c.HeldUnits
+	}
+	if aliceHeld <= 0 {
+		t.Fatal("set-up: expected alice to hold swept fifth after block #6")
+	}
+	ts += 45
+	reclaimTx, err := BuildSignedRenewal(privA, pubA, cvn("0.01"), ListSpendableCoins(alice))
+	if err != nil {
+		t.Fatal(err)
+	}
+	extendTestChain(t, ts, testAddress("m7"), []Transaction{reclaimTx})
+
+	// Blocks #8..#12: crosses sweep 2 for block #2 (#10) and emission end (#10 -> #11/#12 have 0 new emission).
+	for h := int64(8); h <= 12; h++ {
+		ts += 45
+		extendTestChain(t, ts, testAddress(fmt.Sprintf("m%d", h)), nil)
+	}
+	// Sibling tip replacement at #12: build two blocks at height 12 on parent #11,
+	// ensure the second beats the first (lower hash at same work), store loser then winner.
+	StateMutex.Lock()
+	rollbackChainToHeightLocked(11)
+	StateMutex.Unlock()
+	reopenAndCheck("immediately after rollback to #11 across post-emission", false)
+
+	cand1 := mineTestBlock(t, ts, testAddress("sib1"), nil, 0)
+	var cand2 Block
+	for nonceTry := 0; ; nonceTry++ {
+		c := mineTestBlock(t, ts, testAddress(fmt.Sprintf("sib2-%d", nonceTry)), nil, 0)
+		if siblingWins(c, cand1) {
+			cand2 = c
+			break
+		}
+	}
+	if !ValidateBlockSignatures(cand1) || !SaveBlockToStorageInternal(cand1) {
+		t.Fatal("failed storing sibling candidate 1")
+	}
+	if !ValidateBlockSignatures(cand2) || !SaveBlockToStorageInternal(cand2) {
+		t.Fatal("failed storing winning sibling candidate 2")
+	}
+	reopenAndCheck("after sibling tip replacement at #12", true)
+
+	// Advance until vault shrinks below VaultPayoutBlocks so allowance == 0 (empty coinbase outputs).
+	for h := int64(13); h <= 25; h++ {
+		ts += 45
+		b := mineTestBlock(t, ts, testAddress("late"), nil, 0)
+		if !ValidateBlockSignatures(b) || !SaveBlockToStorageInternal(b) {
+			t.Fatalf("failed post-emission block #%d", h)
+		}
+		if len(b.Transactions[0].Outputs) == 0 {
+			break
+		}
+	}
+	reopenAndCheck("post-emission", false)
+	reopenAndCheck("post-emission with chainwork wiped", true)
+
+	// Full backup check + quick check must also pass on this chain.
+	backupDir := filepath.Join(t.TempDir(), "backups")
+	backupPath, _, err := writeBackup(backupDir, 0)
+	if err != nil {
+		t.Fatalf("writeBackup failed on healthy complex chain: %v", err)
+	}
+	genesis := buildGenesisBlock().Hash
+	closeAfterWork(t)
+	if _, err := checkChainFile(backupPath, genesis); err != nil {
+		t.Fatalf("checkChainFile failed on healthy complex chain: %v", err)
+	}
+	if _, err := replayChainFile(backupPath, genesis); err != nil {
+		t.Fatalf("replayChainFile failed on healthy complex chain: %v", err)
+	}
+}
+
+// At start the coins and the vault must add up to what has been issued, and a
+// coin must be readable.
+func TestANodeThatStartsOnAFileWhoseVaultOrSetAsideFigureOrCoinIsWrongStopsAndLetsTheFileGo(t *testing.T) {
+	setupChainWithSweepAndVault := func(t *testing.T) string {
+		t.Helper()
+		ts := startSweepChain(t)
+		tsVal := *ts
+		tsVal += 45
+		b1 := mineTestBlock(t, tsVal, testAddress("m1"), nil, cvn("40")) // 10 CVN to vault
+		if !ValidateBlockSignatures(b1) || !SaveBlockToStorageInternal(b1) {
+			t.Fatal("failed storing b1")
+		}
+		for h := int64(2); h <= 6; h++ {
+			tsVal += 45
+			extendTestChain(t, tsVal, testAddress("m"), nil)
+		}
+		return BlockchainFile
+	}
+
+	t.Run("deleted vault entry at tip", func(t *testing.T) {
+		path := setupChainWithSweepAndVault(t)
+		tip := GetLatestBlockInternal()
+		updateDB(t, func(tx *bbolt.Tx) error {
+			return tx.Bucket(vaultBucket).Delete(chainWorkKey(tip.Index))
+		})
+		closeAfterWork(t)
+		mustRefuseToStartOn(t, path)
+	})
+
+	t.Run("altered vault balance at tip", func(t *testing.T) {
+		path := setupChainWithSweepAndVault(t)
+		tip := GetLatestBlockInternal()
+		updateDB(t, func(tx *bbolt.Tx) error {
+			return storeVaultUnits(tx, tip, VaultBalanceUnits()+1)
+		})
+		closeAfterWork(t)
+		mustRefuseToStartOn(t, path)
+	})
+
+	t.Run("held_units raised by one unit", func(t *testing.T) {
+		path := setupChainWithSweepAndVault(t)
+		updateDB(t, func(tx *bbolt.Tx) error {
+			key := coinsWorthSomething(tx)[0]
+			coin := readCoinRecord(t, tx, key)
+			coin.HeldUnits++
+			return writeCoinRecord(tx, key, coin)
+		})
+		closeAfterWork(t)
+		mustRefuseToStartOn(t, path)
+	})
+
+	t.Run("corrupt utxo JSON record", func(t *testing.T) {
+		path := setupChainWithSweepAndVault(t)
+		updateDB(t, func(tx *bbolt.Tx) error {
+			key := coinsWorthSomething(tx)[0]
+			return tx.Bucket(utxoBucket).Put([]byte(key), []byte("{corrupt"))
+		})
+		closeAfterWork(t)
+		mustRefuseToStartOn(t, path)
+	})
+}

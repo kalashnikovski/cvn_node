@@ -47,11 +47,18 @@ import (
 // The first block is not replayed, since the scratch chain starts from this
 // network's own: the file's first block must be that block in every part.
 //
-// What it does not compare, because a node does not rely on it: a vault
-// figure or a total of work recorded for a block that is not on the chain
-// (a node reads those only for the block they name), the note of which
-// one-time repairs a node has done, and the exact bytes of a record where
-// the record means the same.
+// What it does not compare: a vault figure or a total of work recorded for
+// a block that is not on the chain, the note of which one-time repairs a
+// node has done, and the exact bytes of a record where the record means the
+// same. A node reads a vault figure and a total of work only for the block
+// they name. One reader goes by less: latestTipID takes the identifier of
+// the newest block from the record of total work at that height, and does
+// not ask which block the record names. In a file a node wrote, the record
+// at a height on the chain always names the block there. In an altered file
+// it can name another, and after a rollback to exactly that height the
+// miner and the relay would be given a wrong identifier until the next
+// block is stored. Nothing is stored or refused on the strength of it
+// (outside review, round 10, fifth look: an observation, not a finding).
 //
 // One thing it does not compare although a node does rely on it: the note
 // that the node's download has not yet been vouched for by a node that is

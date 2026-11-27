@@ -568,3 +568,55 @@ func TestAnAnswerThatMustBeShortIsNotReadWhenItIsLong(t *testing.T) {
 		t.Fatalf("the message after the long answer gave %q and %v; want it read from its start", payload, err)
 	}
 }
+
+// A seed's large message has room of its own, so it is read even while the
+// room for strangers is full, and a stranger's is turned away.
+func TestASeedsLargeMessageHasRoomOfItsOwnWhileTheRoomForStrangersIsFull(t *testing.T) {
+	savedParams := Params
+	savedStrangers := strangersFrameRoom
+	savedSeeds := seedsFrameRoom
+	t.Cleanup(func() {
+		Params = savedParams
+		strangersFrameRoom = savedStrangers
+		seedsFrameRoom = savedSeeds
+	})
+
+	Params.SeedHosts = []string{"198.51.100.10"}
+	strangersFrameRoom = &frameRoom{most: 64 << 10}
+	seedsFrameRoom = &frameRoom{most: 64 << 10}
+
+	// Fill the strangers' room completely.
+	if !frameRoomFor("203.0.113.5").take(64 << 10) {
+		t.Fatal("failed filling strangers room")
+	}
+
+	buildFrameConn := func(payload string) net.Conn {
+		var buf bytes.Buffer
+		writeFrame(&buf, payload)
+		c1, c2 := net.Pipe()
+		go func() {
+			_, _ = c1.Write(buf.Bytes())
+			_ = c1.Close()
+		}()
+		return c2
+	}
+
+	largePayload := strings.Repeat("x", frameCountedOverBytes+1024)
+
+	// A stranger's large frame finds no room and is discarded.
+	strangerConn := buildFrameConn(largePayload)
+	defer strangerConn.Close()
+	if _, _, held, err := readFrameWithin(strangerConn, frameRoomFor("203.0.113.5")); err != errNoRoomForFrame || held != 0 {
+		t.Fatalf("stranger large frame when strangers room full: got held=%d err=%v, want errNoRoomForFrame", held, err)
+	}
+
+	// A seed's large frame draws on seedsFrameRoom and succeeds even while strangersFrameRoom is full.
+	seedConn := buildFrameConn(largePayload)
+	defer seedConn.Close()
+	seedRoom := frameRoomFor("198.51.100.10")
+	gotPayload, _, held, err := readFrameWithin(seedConn, seedRoom)
+	if err != nil || len(gotPayload) != len(largePayload) || held != int64(len(largePayload)) {
+		t.Fatalf("seed large frame failed while strangers room was full: len=%d held=%d err=%v", len(gotPayload), held, err)
+	}
+	seedRoom.give(held)
+}
