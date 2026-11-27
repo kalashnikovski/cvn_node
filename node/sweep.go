@@ -83,20 +83,26 @@ func sweepAmounts(units int64) (swept, kept int64) {
 	return swept, kept
 }
 
-// loadSweepRecords returns what the sweep of the block at `height` recorded:
-// nothing if it touched no coin. A record that is there and cannot be read
-// is an error and never "nothing": the record is what finds a swept coin
-// again at its next date and what puts a sweep back when its block is
-// removed, so a node that passed over a damaged one would go on with coins
-// that no other node has (outside review, round 10, finding 2).
+// loadSweepRecords returns what the sweep of the block at `height` recorded.
+// `height` must be a block of the chain above the first.
+//
+// On a network that sweeps, every block has a record, and a block whose
+// sweep touched no coin has an empty one. So a record that is missing is
+// damage, like one that cannot be read, and is never taken for "nothing".
+// The record is what finds a swept coin again at its next date and what puts
+// a sweep back when its block is removed, so a node that passed over a
+// missing or damaged one would go on with coins that no other node has
+// (outside review, round 10, finding 2, and its second look, finding 1).
 func loadSweepRecords(dbTx *bbolt.Tx, height int64) ([]SweptCoin, error) {
-	bucket := dbTx.Bucket(sweepBucket)
-	if bucket == nil {
+	if !sweepEnabled() {
 		return nil, nil
 	}
-	raw := bucket.Get(chainWorkKey(height))
+	var raw []byte
+	if bucket := dbTx.Bucket(sweepBucket); bucket != nil {
+		raw = bucket.Get(chainWorkKey(height))
+	}
 	if raw == nil {
-		return nil, nil
+		return nil, fmt.Errorf("the record of the sweep of block #%d is missing: this node's database is damaged, or was written by an older version of the program", height)
 	}
 	var records []SweptCoin
 	if err := json.Unmarshal(raw, &records); err != nil {
@@ -110,8 +116,10 @@ func storeSweepRecords(dbTx *bbolt.Tx, height int64, records []SweptCoin) error 
 	if err != nil {
 		return err
 	}
-	if len(records) == 0 {
-		return bucket.Delete(chainWorkKey(height))
+	// A sweep that touched no coin is recorded too, as an empty list, so
+	// that a record which has gone missing can be told from it.
+	if records == nil {
+		records = []SweptCoin{}
 	}
 	raw, err := json.Marshal(records)
 	if err != nil {
@@ -137,17 +145,19 @@ func applySweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) (toVaultUnits 
 	// Candidates: coins created by the block at bornAt, then coins re-aged by
 	// that block's sweep. The order is fixed, so every node does the same.
 	var candidates []string
+	var bornData []byte
 	if bBlocks := dbTx.Bucket(blocksBucket); bBlocks != nil {
-		if data := bBlocks.Get(chainWorkKey(bornAt)); data != nil {
-			var born Block
-			if err := json.Unmarshal(data, &born); err != nil {
-				return 0, false, fmt.Errorf("block #%d unreadable during the sweep", bornAt)
-			}
-			for _, tx := range born.Transactions {
-				for outIdx := range tx.Outputs {
-					candidates = append(candidates, utxoKey(tx.ID, outIdx))
-				}
-			}
+		bornData = bBlocks.Get(chainWorkKey(bornAt))
+	}
+	var born Block
+	if bornData == nil || json.Unmarshal(bornData, &born) != nil {
+		// A block of the chain that is gone or cannot be read is never
+		// taken for a block that made no coins.
+		return 0, false, fmt.Errorf("block #%d is missing or cannot be read during the sweep: this node's database is damaged", bornAt)
+	}
+	for _, tx := range born.Transactions {
+		for outIdx := range tx.Outputs {
+			candidates = append(candidates, utxoKey(tx.ID, outIdx))
 		}
 	}
 	earlierSweep, err := loadSweepRecords(dbTx, bornAt)
@@ -172,8 +182,13 @@ func applySweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) (toVaultUnits 
 			continue // already spent, and anything set aside on it with it
 		}
 		var coin UTXORecord
-		if json.Unmarshal(raw, &coin) != nil || coin.Age != bornAt {
-			continue
+		if json.Unmarshal(raw, &coin) != nil {
+			// A coin that is due and cannot be read is never passed over:
+			// every other node sweeps it at this block.
+			return 0, false, fmt.Errorf("coin %s cannot be read during the sweep: this node's database is damaged", key)
+		}
+		if coin.Age != bornAt {
+			continue // moved or swept since: its date is another block's
 		}
 		if coin.HeldUnits < 0 {
 			// Cannot arise: only this function writes the figure.

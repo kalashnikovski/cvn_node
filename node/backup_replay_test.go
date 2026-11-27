@@ -226,26 +226,8 @@ func TestAChainFileWithRecordsAlteredButTheTotalsKeptFailsTheFullCheck(t *testin
 	// A middle block, and the newest one, for the total work recorded.
 	middle, newest := chain.tip.Index/2, chain.tip.Index
 	// A height with a record of spent coins and a height with a record of a
-	// sweep, and the same records copied to heights no block has.
+	// sweep, and the same records copied to a height no block has.
 	beyond := chain.tip.Index + 5
-	var spentOnNothing int64
-	if db, err := bbolt.Open(chain.path, 0400, &bbolt.Options{ReadOnly: true}); err != nil {
-		t.Fatal(err)
-	} else {
-		_ = db.View(func(tx *bbolt.Tx) error {
-			for h := int64(1); h <= chain.tip.Index; h++ {
-				if records, _ := loadUndoRecords(tx, h); len(records) == 0 {
-					spentOnNothing = h
-					break
-				}
-			}
-			return nil
-		})
-		db.Close()
-	}
-	if spentOnNothing == 0 {
-		t.Fatal("set-up: every block spent something")
-	}
 	// raiseWork keeps the entry's block and makes its total work far larger.
 	raiseWork := func(tx *bbolt.Tx, height int64) error {
 		bucket := tx.Bucket(chainWorkBucket)
@@ -287,14 +269,6 @@ func TestAChainFileWithRecordsAlteredButTheTotalsKeptFailsTheFullCheck(t *testin
 				t.Fatalf("set-up: no sweep record at block %d", chain.sweepHeight)
 			}
 			return bucket.Put(chainWorkKey(beyond), append([]byte(nil), raw...))
-		}},
-		{"a record of spent coins put under a block that spent nothing", "altered or damaged", func(t *testing.T, tx *bbolt.Tx) error {
-			bucket := tx.Bucket(undoBucket)
-			raw := bucket.Get(undoKey(chain.transferHeight))
-			if raw == nil {
-				t.Fatalf("set-up: no record of the coins block %d spent", chain.transferHeight)
-			}
-			return bucket.Put(undoKey(spentOnNothing), append([]byte(nil), raw...))
 		}},
 		{"one coin lowered and another raised by the same amount", "is not recorded as its blocks make it", func(t *testing.T, tx *bbolt.Tx) error {
 			keys := coinsWorthSomething(tx)
@@ -350,9 +324,6 @@ func TestAChainFileWithRecordsAlteredButTheTotalsKeptFailsTheFullCheck(t *testin
 				return err
 			}
 			return tx.Bucket(sweepBucket).Put(chainWorkKey(chain.sweepHeight), raw)
-		}},
-		{"the record of the coins a block spent deleted", "the record of the coins block #2 spent", func(t *testing.T, tx *bbolt.Tx) error {
-			return tx.Bucket(undoBucket).Delete(undoKey(chain.transferHeight))
 		}},
 	}
 	for _, c := range cases {
@@ -565,5 +536,136 @@ func TestTheFingerprintOfAFileIsItsSHA256(t *testing.T) {
 	}
 	if got, err := fileSHA256(filepath.Join(t.TempDir(), "missing.bin")); err == nil {
 		t.Errorf("the fingerprint of a missing file is %q, want an error", got)
+	}
+}
+
+// A chain file with a record of a sweep missing is refused by the quick check
+// and so by the full one. On a network that sweeps every block has a record,
+// an empty list where its sweep touched nothing, so a missing one is never
+// "nothing". (Round 10, second look, finding 1.)
+func TestAChainFileWithASweepRecordMissingFailsItsChecks(t *testing.T) {
+	chain := buildChainForFullCheck(t)
+	closeTheEngine(t)
+	theFileAsTheNodeWroteItPasses(t, chain)
+	for _, c := range []struct {
+		name   string
+		height int64
+	}{
+		{"the record of a sweep that touched coins", chain.sweepHeight},
+		{"the record of a sweep that touched nothing", 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			path := alteredCopyOf(t, chain.path, "missing.db", func(tx *bbolt.Tx) error {
+				if tx.Bucket(sweepBucket).Get(chainWorkKey(c.height)) == nil {
+					t.Fatalf("set-up: no sweep record at block %d", c.height)
+				}
+				return tx.Bucket(sweepBucket).Delete(chainWorkKey(c.height))
+			})
+			if _, err := checkChainFile(path, chain.genesis); err == nil {
+				t.Error("the quick check passed a file with a sweep record missing")
+			}
+			if _, err := replayChainFile(path, chain.genesis); err == nil {
+				t.Error("the full check passed a file with a sweep record missing")
+			}
+		})
+	}
+}
+
+// A block names the coins it spends, so a record of spent coins that is
+// missing, or is there for a block that spent nothing, is seen without
+// working the chain out again: the quick check refuses it, and so does the
+// full one. (Round 10, second look, finding 1.)
+func TestAChainFileWhoseRecordOfSpentCoinsDoesNotFitItsBlockFailsItsChecks(t *testing.T) {
+	chain := buildChainForFullCheck(t)
+	closeTheEngine(t)
+	theFileAsTheNodeWroteItPasses(t, chain)
+	// A block that spent nothing.
+	var spentOnNothing int64
+	if db, err := bbolt.Open(chain.path, 0400, &bbolt.Options{ReadOnly: true}); err != nil {
+		t.Fatal(err)
+	} else {
+		_ = db.View(func(tx *bbolt.Tx) error {
+			for h := int64(1); h <= chain.tip.Index; h++ {
+				if records, _ := loadUndoRecords(tx, h); len(records) == 0 {
+					spentOnNothing = h
+					break
+				}
+			}
+			return nil
+		})
+		db.Close()
+	}
+	if spentOnNothing == 0 {
+		t.Fatal("set-up: every block spent something")
+	}
+	for _, c := range []struct {
+		name   string
+		change func(tx *bbolt.Tx) error
+	}{
+		{"the record of the coins a block spent deleted", func(tx *bbolt.Tx) error {
+			return tx.Bucket(undoBucket).Delete(undoKey(chain.transferHeight))
+		}},
+		{"a record of spent coins put under a block that spent nothing", func(tx *bbolt.Tx) error {
+			bucket := tx.Bucket(undoBucket)
+			raw := bucket.Get(undoKey(chain.transferHeight))
+			if raw == nil {
+				t.Fatalf("set-up: no record of the coins block %d spent", chain.transferHeight)
+			}
+			return bucket.Put(undoKey(spentOnNothing), append([]byte(nil), raw...))
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			path := alteredCopyOf(t, chain.path, "spent.db", c.change)
+			if _, err := checkChainFile(path, chain.genesis); err == nil {
+				t.Error("the quick check passed the file")
+			}
+			if _, err := replayChainFile(path, chain.genesis); err == nil {
+				t.Error("the full check passed the file")
+			}
+		})
+	}
+}
+
+// The full check clears away the scratch files of an earlier check that was
+// cut off. A file that is itself named like one must not be cleared away
+// before it is read: the check refuses it and leaves it alone. (Round 10,
+// second look, finding 4.)
+func TestTheFullCheckRefusesAFileNamedLikeItsOwnScratchFileAndLeavesItAlone(t *testing.T) {
+	chain := buildChainForFullCheck(t)
+	closeTheEngine(t)
+	named := chain.path + ".fullcheck-old-backup"
+	if err := copyFile(chain.path, named); err != nil {
+		t.Fatal(err)
+	}
+	sizeBefore, sumBefore := fileDigest(t, named)
+	if _, err := replayChainFile(named, chain.genesis); err == nil || !strings.Contains(err.Error(), "Nothing was done to it") {
+		t.Fatalf("the full check of a file named like its scratch file gave: %v; want it refused, saying nothing was done", err)
+	}
+	if _, err := os.Stat(named); err != nil {
+		t.Fatalf("the file was cleared away: %v", err)
+	}
+	if size, sum := fileDigest(t, named); size != sizeBefore || sum != sumBefore {
+		t.Error("the file's bytes changed")
+	}
+}
+
+// A real leftover scratch file, with another name than the file checked, is
+// still cleared away.
+func TestALeftoverScratchFileIsClearedAwayWhenAnotherFileIsChecked(t *testing.T) {
+	chain := buildChainForFullCheck(t)
+	closeTheEngine(t)
+	leftover := chain.path + ".fullcheck-99999"
+	if err := os.WriteFile(leftover, []byte("left by a check that was cut off"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	copyOfFile := filepath.Join(t.TempDir(), "backup.db")
+	if err := copyFile(chain.path, copyOfFile); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := replayChainFile(copyOfFile, chain.genesis); err != nil {
+		t.Fatalf("the full check of a normally named file gave: %v", err)
+	}
+	if _, err := os.Stat(leftover); !os.IsNotExist(err) {
+		t.Errorf("the leftover scratch file is still there (%v)", err)
 	}
 }

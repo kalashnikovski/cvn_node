@@ -453,7 +453,7 @@ func lookupWithBlockUndone(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, applied Block) (
 		}
 	}
 	restored := make(map[string]UTXORecord)
-	spent, err := loadUndoRecords(dbTx, applied.Index)
+	spent, err := spentRecordsOf(dbTx, applied)
 	if err != nil {
 		return nil, err
 	}
@@ -504,6 +504,42 @@ func loadUndoRecords(dbTx *bbolt.Tx, height int64) ([]SpentRecord, error) {
 	return records, nil
 }
 
+// spentRecordsOf returns the coins `block` spent, as they were, and holds
+// the record to the block: it must list the coins the block's transfers
+// name, every one of them, in the same order, and no other. A block names
+// the coins it spends, and its identifier covers that, so a record that has
+// gone missing, lost a coin or gained one is found out here and is never
+// taken for the truth. Without this a block whose record was gone would be
+// removed and the coins it spent never put back (outside review, round 10,
+// second look, finding 1).
+//
+// What it cannot tell is whether a coin in the record is written as it was
+// (its owner, its amount): no identifier covers that. Working a chain file
+// out again from its blocks does (replayChainFile).
+func spentRecordsOf(dbTx *bbolt.Tx, block Block) ([]SpentRecord, error) {
+	spent, err := loadUndoRecords(dbTx, block.Index)
+	if err != nil {
+		return nil, err
+	}
+	damaged := fmt.Errorf("the record of the coins block #%d spent is missing or is not the coins the block names: this node's database is damaged", block.Index)
+	at := 0
+	for txIdx, transfer := range block.Transactions {
+		if txIdx == 0 {
+			continue // the reward spends nothing
+		}
+		for _, input := range transfer.Inputs {
+			if at >= len(spent) || spent[at].Key != utxoKey(input.SourceTxID, input.Index) {
+				return nil, damaged
+			}
+			at++
+		}
+	}
+	if at != len(spent) {
+		return nil, damaged
+	}
+	return spent, nil
+}
+
 func storeUndoRecords(dbTx *bbolt.Tx, height int64, records []SpentRecord) error {
 	bUndo, err := dbTx.CreateBucketIfNotExists(undoBucket)
 	if err != nil {
@@ -524,13 +560,13 @@ func storeUndoRecords(dbTx *bbolt.Tx, height int64, records []SpentRecord) error
 // the coins it spent are put back.
 // Must run inside the write transaction that removes or replaces the block.
 //
-// It returns an error if a record it needs cannot be read or a coin cannot
-// be written. The caller must then give up the whole write: a block half
-// undone leaves coins that belong to no chain (outside review, round 10,
-// finding 2).
+// It returns an error if a record it needs is missing, cannot be read or
+// does not fit the block, or a coin cannot be written. The caller must then
+// give up the whole write: a block half undone leaves coins that belong to
+// no chain (outside review, round 10, finding 2).
 func undoBlockCoinChanges(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) error {
 	// Read first, so that nothing has been changed if the record is damaged.
-	spent, err := loadUndoRecords(dbTx, block.Index)
+	spent, err := spentRecordsOf(dbTx, block)
 	if err != nil {
 		return err
 	}

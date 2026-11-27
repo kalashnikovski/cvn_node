@@ -357,6 +357,11 @@ func measureCandidateBranch(fetchBatch func(start int64) []Block, ancestorHeight
 // the coins they spent and taking back the ones they created. The caller must
 // hold StateMutex. It returns the removed blocks, oldest first, so they can be
 // put back if the replacement turns out to be worse.
+//
+// It removes all of them or none. A block that is missing or cannot be read
+// cannot be undone, since nothing says which coins it made, so it stops the
+// whole rollback and the chain stays as it was (outside review, round 10,
+// second look, finding 2).
 func rollbackChainToHeightLocked(target int64) []Block {
 	var removed []Block
 	chainWriteMutex.Lock()
@@ -376,18 +381,19 @@ func rollbackChainToHeightLocked(target int64) []Block {
 		}
 		for h := tip.Index; h > target; h-- {
 			paddedKey := chainWorkKey(h)
-			if data := bBlocks.Get(paddedKey); data != nil {
-				var block Block
-				if json.Unmarshal(data, &block) == nil {
-					// Newest block first, so coins spent and re-created across the
-					// removed blocks unwind in the right order.
-					if err := undoBlockCoinChanges(tx, bUTXO, block); err != nil {
-						return err
-					}
-					removed = append(removed, block)
-				}
+			var block Block
+			if data := bBlocks.Get(paddedKey); data == nil || json.Unmarshal(data, &block) != nil {
+				return fmt.Errorf("block #%d is missing or cannot be read: this node's database is damaged", h)
 			}
-			_ = bBlocks.Delete(paddedKey)
+			// Newest block first, so coins spent and re-created across the
+			// removed blocks unwind in the right order.
+			if err := undoBlockCoinChanges(tx, bUTXO, block); err != nil {
+				return err
+			}
+			removed = append(removed, block)
+			if err := bBlocks.Delete(paddedKey); err != nil {
+				return err
+			}
 		}
 		return bMeta.Put([]byte("height"), chainWorkKey(target))
 	})

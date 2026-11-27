@@ -1089,7 +1089,20 @@ func sweepByHand(t testing.TB, db *bbolt.DB, coin UTXORecord) (after UTXORecord,
 			return err
 		}
 		// The sweep finds a coin through the block that made it or the
-		// sweep that last touched it. Here it is a sweep at block 1.
+		// sweep that last touched it. Here it is a sweep at block 1, a
+		// block that made no coins of its own. The block must be there:
+		// the sweep does not take a missing block for an empty one.
+		bBlocks, err := dbTx.CreateBucketIfNotExists(blocksBucket)
+		if err != nil {
+			return err
+		}
+		blockOne, err := json.Marshal(Block{Index: 1})
+		if err != nil {
+			return err
+		}
+		if err := bBlocks.Put(chainWorkKey(1), blockOne); err != nil {
+			return err
+		}
 		if err := storeSweepRecords(dbTx, 1, []SweptCoin{{Key: key, Before: coin, Kept: true}}); err != nil {
 			return err
 		}

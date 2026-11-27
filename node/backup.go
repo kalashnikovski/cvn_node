@@ -139,6 +139,9 @@ func vaultAfterBlockInFile(tx *bbolt.Tx, block Block, vaultBefore int64) (int64,
 //     owners), with the vault, are exactly what has been issued.
 //   - the vault recorded after every block is what that block and the vault
 //     before it make it (vaultAfterBlockInFile).
+//   - every block has the record of its sweep, and its record of the coins
+//     it spent names the coins the block names (spentRecordsOf). Whether a
+//     coin in those records is written as it was is not checked here.
 //
 // It does not repeat the proof-of-work of every block: that takes hours on a
 // long chain, and this is a check that a copy is whole, not that a stranger's
@@ -204,6 +207,12 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 				// let a node pay out coins that were never issued (outside
 				// review, round 10, finding 1).
 				if vaultBefore, err = vaultAfterBlockInFile(tx, block, vaultBefore); err != nil {
+					return err
+				}
+				// The record of the coins the block spent must be there and
+				// must name the coins the block names. A node with a copy
+				// that lacks it could never take the block off again.
+				if _, err := spentRecordsOf(tx, block); err != nil {
 					return err
 				}
 			}

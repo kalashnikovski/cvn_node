@@ -339,7 +339,15 @@ func SaveBlockToStorageInternal(block Block) bool {
 
 		if existingBlockData := bBlocks.Get([]byte(paddedKey)); existingBlockData != nil {
 			var historicalOldBlock Block
-			if json.Unmarshal(existingBlockData, &historicalOldBlock) == nil && historicalOldBlock.Hash != block.Hash {
+			if json.Unmarshal(existingBlockData, &historicalOldBlock) != nil {
+				// Not "the same block again": nothing says what the block in
+				// this place is, so it can neither be kept nor taken off. The
+				// save was refused before too, but in silence, as a block
+				// already held; now the node says what is wrong.
+				fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: the block already stored at that height cannot be read: this node's database is damaged.\n", block.Index)
+				return fmt.Errorf("the block stored at #%d cannot be read", block.Index)
+			}
+			if historicalOldBlock.Hash != block.Hash {
 				// Same parent, and the block already stored has the lower hash: it
 				// wins the tie-break, so keep it and report ours as the loser.
 				if historicalOldBlock.PrevHash == block.PrevHash && siblingWins(historicalOldBlock, block) {

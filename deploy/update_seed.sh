@@ -36,13 +36,10 @@ for database in "$@"; do
   fi
 done
 
-echo "== Stopping the seed services"
-# Only the services that are switched on. One that was switched off, such
-# as the service of a network that has been retired, is left alone.
-UNITS=$(systemctl list-unit-files 'cvn-seed-*.service' --state=enabled --no-legend | awk '{print $1}')
-for unit in $UNITS; do systemctl stop "$unit"; done
-
 echo "== Fetching and building"
+# The new program is built beside the old one while the seeds go on running.
+# If the source cannot be fetched or does not build, this stops here and the
+# seeds are left running the program they had.
 git -C "$DIR" fetch --tags --quiet origin
 if [ -n "${CVN_VERSION:-}" ]; then
   git -C "$DIR" checkout --quiet "refs/tags/$CVN_VERSION"
@@ -50,7 +47,14 @@ else
   git -C "$DIR" checkout --quiet main
   git -C "$DIR" pull --ff-only
 fi
-(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node.new . && mv -f cvn_node.new cvn_node)
+(cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node.new .)
+
+echo "== Stopping the seed services"
+# Only the services that are switched on. One that was switched off, such
+# as the service of a network that has been retired, is left alone.
+UNITS=$(systemctl list-unit-files 'cvn-seed-*.service' --state=enabled --no-legend | awk '{print $1}')
+for unit in $UNITS; do systemctl stop "$unit"; done
+mv -f "$DIR/cvn_node.new" "$DIR/cvn_node"
 
 # A seed made by install_seed.sh keeps its database in /var/lib/cvn_seed/NETWORK.
 # An older one kept it in $DIR. The name is looked for in both places.
@@ -63,6 +67,9 @@ for database in "$@"; do
       echo "   Removed $place/$database"
       removed=yes
     fi
+    # A copy of it that install_seed.sh was cut off while moving goes too,
+    # so that it is never finished into place later.
+    rm -f "$place/$database.moving"
   done
   if [ -z "$removed" ]; then
     echo "   No file called $database was found, so nothing was removed."

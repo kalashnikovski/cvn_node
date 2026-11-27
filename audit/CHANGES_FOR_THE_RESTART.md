@@ -71,6 +71,24 @@ Five findings, none in a rule (`audit/out/fingings_securityaudit_codex.md`, not 
 4. **The seed's service ran as root.** `deploy/install_seed.sh` now runs it as a user of its own in a folder of its own, with the same limits as the pool's service, and moves an older seed's files across. Not run on a server yet.
 5. **The update script could be made to delete a file outside its folder.** `deploy/update_seed.sh` accepts a plain file name only.
 
+## After the second outside look at these changes (round 10 again, on `ce17a9a`)
+
+The reviewer found no way to make or lose a coin with valid blocks, and no altered file that passes the full replay. It found four gaps in what a node does when its own chain file is damaged, and two in the seed scripts. None can be reached from the network.
+
+1. **A record that is missing is damage, like one that cannot be read.** A node used to delete a record that was empty, so it could not tell "this block spent nothing" from "the record is gone".
+   - The coins a block spent: the record is now held to the block every time it is used. It must list the coins the block's transfers name, all of them, in order, and no other (`spentRecordsOf` in `node/tx_rules.go`, used by `undoBlockCoinChanges` and `lookupWithBlockUndone`, and by the quick check of a chain file, `checkChainFile`, so the copy a node makes each day is held to it too). Nothing new is stored.
+   - A block's sweep: every block now has a record, an empty list when its sweep touched no coin, and a missing one is an error (`storeSweepRecords`, `loadSweepRecords` in `node/sweep.go`). **This changes what a chain file holds.** A file written before it has no empty records and is refused; the restart already forbids carrying a chain file across.
+   - The sweep also refuses to go on when the block one interval back is missing or cannot be read, or when a coin that is due cannot be read (`applySweep`). Both used to be passed over.
+2. **A block that is missing or cannot be read stops a rollback.** It used to be deleted with its coins left in place. Now nothing is removed (`rollbackChainToHeightLocked` in `node/chain_work.go`). A block offered for a height whose stored block cannot be read was refused before too, but in silence, as a block already held; the node now says what is wrong (`SaveBlockToStorageInternal`).
+3. **The full check never deletes the file it was given.** A file named like the check's own working file (`<chain file>.fullcheck-...`) is refused and left where it is (`replayChainFile`).
+4. **The seed scripts.** `deploy/update_seed.sh` builds the new program before it stops the seeds, so a build that fails leaves them running. `deploy/install_seed.sh` finishes a move of an older seed's file that was cut off between its two steps. Neither has run on a server.
+
+Known and left as they are, all of them a node standing still on its own damaged file and none a node going on with wrong coins: a coin that cannot be read is taken for no coin when a transfer is checked, so a sound block that spends it is refused as if the block were at fault (`bucketLookup`); a newest block that cannot be read is reported as the first block (`GetLatestBlockInternal`); a node whose rollback is refused tries the same switch again at every pass, with a line in the log each time; the total work is summed over the blocks that can be read (`sumChainWorkFromBlocks`).
+
+Not changed: whoever keeps the strangers' room for large messages full stops large blocks arriving from strangers. It is the limit named above, and the reviewer's test of it shows the room refusing when it is full, which is what it is for.
+
+What these do not do: a record that is present, fits its block and is wrong in what it says of a coin (its owner, its amount) is still believed by a running node. Only working the file out again from its blocks finds that, which is what putting a backup back does.
+
 ## What the authors tested
 
 For each rule, tests were written before the code and shown to fail without it. `TestCoinsAreNeverCreatedOrLost` runs a small economy through transfers, fees, sweeps, fifths set aside, taken back and expired, vault payouts, under-claimed blocks, the end of emission and rollbacks, and after every block checks that nothing was created or lost, that the sweep touched exactly the coins that were due, and that every other coin is unchanged. Faults were planted in the rules one at a time and the tests caught each. Real nodes on one machine were run through full blocks under rule 2 and through both sweep dates under rule 3.

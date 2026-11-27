@@ -71,10 +71,22 @@ func replayChainFile(path, wantGenesis string) (report chainFileReport, err erro
 	// make a good file look bad.
 	chainFile, heightBefore := BlockchainFile, atomic.LoadInt64(&localHeightState)
 	scratch := fmt.Sprintf("%s.fullcheck-%d", chainFile, os.Getpid())
-	if stale, _ := filepath.Glob(chainFile + ".fullcheck-*"); len(stale) > 0 {
-		for _, old := range stale {
-			_ = os.Remove(old)
+	stale, _ := filepath.Glob(chainFile + ".fullcheck-*")
+	// The file to be checked must not be one of them: it would be cleared
+	// away before it was read (outside review, round 10, second look,
+	// finding 4). Told by the file itself and not by how its name is
+	// written.
+	given, givenErr := os.Stat(path)
+	if givenErr != nil {
+		return report, fmt.Errorf("%s cannot be read: %v", path, givenErr)
+	}
+	for _, old := range stale {
+		if info, statErr := os.Stat(old); statErr == nil && os.SameFile(info, given) {
+			return report, fmt.Errorf("%s has the kind of name the full check gives its own working file and clears away when it starts. Nothing was done to it. Give it another name and try again", path)
 		}
+	}
+	for _, old := range stale {
+		_ = os.Remove(old)
 	}
 	if _, statErr := os.Stat(scratch); statErr == nil {
 		return report, fmt.Errorf("%s: the full check could not be run: %s is in the way and cannot be removed", path, scratch)

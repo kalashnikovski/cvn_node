@@ -155,6 +155,9 @@ if [ "$NETWORK" = devnet ]; then
   if [ "$PREVIOUS" != "$HEIGHT" ]; then
     echo "== The first block has changed (Bitcoin height: was '${PREVIOUS:-none}', now '${HEIGHT:-none}'): starting the devnet chain afresh"
     rm -f "$DATA/$DBFILE" "$DATA/genesis_anchor_devnet.txt" "$DIR/$DBFILE" "$DIR/genesis_anchor_devnet.txt"
+    # So does a copy of either that an earlier run was cut off while moving,
+    # and a half-moved list of the old chain's peers.
+    rm -f "$DATA/$DBFILE.moving" "$DATA/genesis_anchor_devnet.txt.moving" "$DATA/$PEERFILE.moving"
     # The copies of the old chain belong to the old first block. They are
     # moved aside, not deleted, so that they are never taken for copies of
     # the new chain.
@@ -177,6 +180,13 @@ fi
 MOVED=""
 if [ -z "$FRESH" ]; then
   for name in "$DBFILE" "genesis_anchor_$NETWORK.txt" "$PEERFILE"; do
+    # A move that was cut off after the file had left $DIR and before it had
+    # its real name is finished now. The file is whole: it only leaves $DIR
+    # once all of it has arrived.
+    if [ -f "$DATA/$name.moving" ] && [ ! -L "$DATA/$name.moving" ] && [ ! -e "$DIR/$name" ] && [ ! -e "$DATA/$name" ]; then
+      mv "$DATA/$name.moving" "$DATA/$name"
+      MOVED="$MOVED $name"
+    fi
     if [ -f "$DIR/$name" ] && [ ! -e "$DATA/$name" ]; then
       # Moved under another name first, so that a move cut off half-way
       # (a full disk) never leaves half a file under the real name.
