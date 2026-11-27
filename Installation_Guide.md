@@ -433,14 +433,17 @@ Then build, on Linux, macOS or Windows alike. These lines are for a Linux or mac
 
 ```bash
 export CGO_ENABLED=0
-GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o cvn_node_amd64 .
-GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o cvn_node_arm64 .
-GOOS=windows GOARCH=amd64 go build -trimpath -tags server -ldflags="-s -w" -o cvn_miner.exe .
-GOOS=windows GOARCH=amd64 go build -trimpath -tags "desktop,production" -ldflags="-s -w -H windowsgui" -o cvn_node.exe .
-sha256sum cvn_node_amd64 cvn_node_arm64 cvn_miner.exe cvn_node.exe
+mkdir ../cvn_check
+GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../cvn_check/cvn_node_amd64 .
+GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o ../cvn_check/cvn_node_arm64 .
+GOOS=windows GOARCH=amd64 go build -trimpath -tags server -ldflags="-s -w" -o ../cvn_check/cvn_miner.exe .
+GOOS=windows GOARCH=amd64 go build -trimpath -tags "desktop,production" -ldflags="-s -w -H windowsgui" -o ../cvn_check/cvn_node.exe .
+(cd ../cvn_check && sha256sum cvn_node_amd64 cvn_node_arm64 cvn_miner.exe cvn_node.exe)
 ```
 
-Each fingerprint should equal the one published for that program. All four programs of `v5.0.0-rc3` have been rebuilt this way on a separate machine and matched exactly. Of the two trial releases before it, the Linux programs match and the Windows programs do not: `rc1` was built with a setting that tied the result to the build machine, and `rc2` from files whose line endings git had rewritten (its Windows programs do match if you clone with `core.autocrlf=true` instead).
+The programs are written to a folder beside the source and not into it, and that matters. Go records in every program whether the folder it was built from held anything that is not part of the source. A program left in that folder is such a thing, so the next program built there says so, and differs. The copy of this guide packed with releases up to `v5.0.0-rc13` wrote the programs into the source folder: with those lines the first program matches and the other three do not. Use the lines above for those releases too.
+
+Each fingerprint should equal the one published for that program. All four programs of `v5.0.0-rc3` have been rebuilt this way on a separate machine and matched exactly, and all four of `v5.0.0-rc13` by the project itself, from a fresh copy of the published tag (27 November 2026; not on a separate machine). Of the two trial releases before it, the Linux programs match and the Windows programs do not: `rc1` was built with a setting that tied the result to the build machine, and `rc2` from files whose line endings git had rewritten (its Windows programs do match if you clone with `core.autocrlf=true` instead).
 
 **The wallet screens.** The screens of the desktop wallet are kept in the repository already built (`frontend/dist`), so that building the program does not need Node.js. They are compiled into the program, so they matter. Every change to the repository and every release is checked automatically: the screens are built again from their source (`frontend/src`) with the versions fixed in `frontend/package-lock.json`, and the check fails unless the result is byte for byte what the repository holds. To do the same yourself, with Node.js 26:
 
