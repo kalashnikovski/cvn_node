@@ -6,7 +6,7 @@ How to run a Covenant Standard (CVN) node, mine, and use the wallet, on Windows 
 
 One program does everything: it is the node, the miner and the text wallet. On Windows there is also a desktop wallet with a window.
 
-**Which download to use.** Trial packages of the current program are on the GitHub Releases page, with names ending in `-rc` (for example `v5.0.0-rc12`). Use the newest of those. The packages there from October 2026 (names beginning `v4`) are too old to follow the current chain. The packages meant for general use will be published with the public test network. Section 11 shows how to check any package you download.
+**Which download to use.** Trial packages of the current program are on the GitHub Releases page, with names ending in `-rc` (for example `v5.0.0-rc13`). Use the newest of those. The packages there from October 2026 (names beginning `v4`) are too old to follow the current chain. The packages meant for general use will be published with the public test network. Section 11 shows how to check any package you download.
 
 **New to this?** On Windows you need three parts of this guide and nothing else: section 1, then "Install" and "Mine" in section 2. If you were invited to the development network, section 7 has the one command to use in place of a double-click.
 
@@ -29,7 +29,7 @@ There are two ways to get the program, A and B. **You do only one of them.** Alm
 
 #### Way A (recommended): download the ready-made package
 
-1. Go to https://github.com/kalashnikovski/cvn_node/releases. The page lists the releases one under another, newest at the top. The newest is the first one you see; its name looks like `v5.0.0-rc12`. You do not need to click its name or any link in its text. Those links lead to other things, such as the fast miner, which is optional and comes later.
+1. Go to https://github.com/kalashnikovski/cvn_node/releases. The page lists the releases one under another, newest at the top. The newest is the first one you see; its name looks like `v5.0.0-rc13`. You do not need to click its name or any link in its text. Those links lead to other things, such as the fast miner, which is optional and comes later.
 2. Scroll down to the end of that first release, to the word **Assets**. If no list of files shows under it, click **Assets** to open the list. In the list, click **`cvn_node_windows.zip`**. Your browser downloads it. That one file is all you need; leave the others.
 3. Open your Downloads folder. Right-click `cvn_node_windows.zip`, choose **Extract All**, and pick a place of your own, for example `C:\`. You get a folder named `cvn_node`. This is your **CVN folder**; the rest of this guide refers to it by that name.
 
@@ -208,6 +208,8 @@ A third, smaller gain is there for those who want it: with the fast miner, a pro
 
 Stop the miner first.
 
+**A release that changes the rules cannot carry on an older chain.** Its notes say so in their first lines. `v5.0.0-rc13` is such a release. Before you start it, delete the chain database in your CVN folder (`cvn_devnet.db` on `devnet`), and do not put back a backup made by an older release. Your wallet is not in that file. A program that is given an older chain does not start, and says why.
+
 **Windows:** download the newest `cvn_node_windows.zip` and unpack it over your CVN folder, replacing the files it asks about. (If you build from the source: download the source ZIP again, unpack it over your folder, and run `build_clean.bat`.) The download does not contain a `miner_config.json` or a chain database, so yours are kept. If `LaunchMiner.bat` then shows you a mining address and asks whether it is yours, check it before answering: it asks whenever the saved address is not the one you confirmed.
 
 **Linux:**
@@ -340,6 +342,7 @@ That is the port on the CVN Testnet. On `devnet` it is 28081.
 | "The other machines are on a DIFFERENT CHAIN" | The seeds answered, and their first block is not this program's. On `devnet` the usual cause is that the Bitcoin block height was not set in this window (section 7, "Joining the development network"). Otherwise check the network name and that you have the release the network runs. |
 | Your height started at 1 while the network is in the thousands | The node began a chain of its own (releases up to `v5.0.0-rc10` did this silently when no seed could be reached). Stop it, delete `cvn_devnet.db` in your CVN folder, and start again with the command from section 7. Coins mined on that chain exist nowhere else. |
 | "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within two minutes if no other node can be reached, or if another node says it is ahead and then does not deliver. |
+| "DATABASE DAMAGED" | The node read its chain database and found something it cannot trust, and it will not start on that file. The line says what it found. Move the chain database out of your CVN folder (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`). Then either put back a backup (section 10) or start again and let the node download the chain. Your wallet is not in that file. A chain database written by a release before `v5.0.0-rc13` is refused in the same way: it is the old chain, so delete it. |
 | The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
 | "miner_config.json is not written correctly" | The file was edited by hand and has a mistake, most often a missing comma. The message names the line. Fix it, or delete the file and start `LaunchMiner.bat` with `--miner-address CVN_your_address`. |

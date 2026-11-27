@@ -29,7 +29,7 @@ Never post a private key.
 
 - System: <!-- Windows 11, Ubuntu 24.04, ... -->
 - Network: <!-- cvn_testnet (the default) or devnet -->
-- Version: <!-- the release name, such as v5.0.0-rc12; or, if you built it yourself, the date you last ran "git pull" -->
+- Version: <!-- the release name, such as v5.0.0-rc13; or, if you built it yourself, the date you last ran "git pull" -->
 - How it was started: <!-- LaunchMiner.bat, or the command line you used -->
 
 **What your node reports**
