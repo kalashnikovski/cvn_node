@@ -279,22 +279,65 @@ func checkStoredGenesis() error {
 	if GlobalBoltEngine == nil {
 		return nil
 	}
-	var stored Block
+	var raw []byte
 	_ = GlobalBoltEngine.View(func(tx *bbolt.Tx) error {
 		if bBlocks := tx.Bucket(blocksBucket); bBlocks != nil {
 			if data := bBlocks.Get(chainWorkKey(0)); data != nil {
-				_ = json.Unmarshal(data, &stored)
+				raw = append([]byte(nil), data...)
 			}
 		}
 		return nil
 	})
-	if expected := buildGenesisBlock(); stored.Hash != "" && stored.Hash != expected.Hash {
+	damaged := "   Move that file away, and put back a backup (--restore-backup) or start the node again to download the chain"
+	var stored Block
+	if raw == nil || json.Unmarshal(raw, &stored) != nil || stored.Hash == "" {
+		return fmt.Errorf("the first block in the database %s is missing or cannot be read: the database is damaged.\n%s", BlockchainFile, damaged)
+	}
+	expected := buildGenesisBlock()
+	if stored.Hash != expected.Hash {
 		return fmt.Errorf("the database %s was started from a different genesis block than this network and anchor give.\n"+
 			"   In the database:  %s\n"+
 			"   Expected here:    %s\n"+
 			"   Use the same --network and --genesis-anchor as before, or move that file away to start afresh", BlockchainFile, stored.Hash, expected.Hash)
 	}
+	// The identifier alone is not enough: it is only a field of the stored
+	// block, and the rest of the block is what the second block is judged
+	// against (its date, its difficulty). A first block that bears the right
+	// identifier and is otherwise changed would have this node refuse blocks
+	// every other node takes (outside review, round 10, third look,
+	// finding 2).
+	if !sameStoredBlock(stored, expected) {
+		return fmt.Errorf("the first block in the database %s bears this network's identifier but is not this network's first block in every part: the database has been altered or is damaged.\n%s", BlockchainFile, damaged)
+	}
 	return nil
+}
+
+// sameStoredBlock reports whether two blocks are the same in every part the
+// program keeps, by writing both as the database would. An amount that is
+// not written as an amount is read as nought and written as nought, so it
+// would not show in that; every amount is asked for by itself first.
+func sameStoredBlock(a, b Block) bool {
+	if !amountsOfBlockSound(a) || !amountsOfBlockSound(b) {
+		return false
+	}
+	rawA, errA := json.Marshal(a)
+	rawB, errB := json.Marshal(b)
+	return errA == nil && errB == nil && string(rawA) == string(rawB)
+}
+
+// amountsOfBlockSound reports whether every amount in a block is an amount.
+func amountsOfBlockSound(b Block) bool {
+	for _, tx := range b.Transactions {
+		if !tx.FreeWillOffering.ValidFee() {
+			return false
+		}
+		for _, output := range tx.Outputs {
+			if !output.Amount.ValidFee() {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // ShowGenesis prints what identifies this network's starting point, so that

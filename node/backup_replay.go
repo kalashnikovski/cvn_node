@@ -44,11 +44,25 @@ import (
 // balances and the waiting transfers held in memory are not, which is of no
 // account to a command that ends when the check does.
 //
+// The first block is not replayed, since the scratch chain starts from this
+// network's own: the file's first block must be that block in every part.
+//
 // What it does not compare, because a node does not rely on it: a vault
 // figure or a total of work recorded for a block that is not on the chain
-// (a node reads those only for the block they name), the node's own notes
-// in the file (what it was downloading, which one-time repairs it has
-// done), and the exact bytes of a record where the record means the same.
+// (a node reads those only for the block they name), the note of which
+// one-time repairs a node has done, and the exact bytes of a record where
+// the record means the same.
+//
+// One thing it does not compare although a node does rely on it: the note
+// that the node's download has not yet been vouched for by a node that is
+// not a seed (unsettled_download_from in sync_pass.go). While that note
+// stands, the limit on deep changes of chain does not hold for the blocks
+// above it. A backup made while a node was catching up rightly carries it,
+// and a file can be made to carry it when it should not (outside review,
+// round 10, third look, finding 3). It is left as it is on purpose. With
+// the note a node is as open as one that has just joined, which is the safe
+// side; taking it away from a file that rightly has it could hold a node
+// for ever to a chain that only a seed vouched for.
 
 // replayProgressEvery is how often a long replay says how far it has got.
 const replayProgressEvery = 30 * time.Second
@@ -172,6 +186,17 @@ func placeReplayedBlock(block Block) bool {
 func compareFileWithItsBlocks(source *bbolt.DB, hashes []string) error {
 	return source.View(func(theirs *bbolt.Tx) error {
 		return GlobalBoltEngine.View(func(ours *bbolt.Tx) error {
+			// The first block is not replayed. The file's must be this
+			// network's first block in every part, not in its identifier
+			// alone: the second block is judged against it.
+			theirBlocks, ourBlocks := theirs.Bucket(blocksBucket), ours.Bucket(blocksBucket)
+			var theirFirst, ourFirst Block
+			if theirBlocks == nil || ourBlocks == nil ||
+				json.Unmarshal(theirBlocks.Get(chainWorkKey(0)), &theirFirst) != nil ||
+				json.Unmarshal(ourBlocks.Get(chainWorkKey(0)), &ourFirst) != nil ||
+				!sameStoredBlock(theirFirst, ourFirst) {
+				return fmt.Errorf("the file's first block is not this network's first block in every part. The file has been altered or damaged")
+			}
 			theirCoins, ourCoins := theirs.Bucket(utxoBucket), ours.Bucket(utxoBucket)
 			if theirCoins == nil || ourCoins == nil {
 				return fmt.Errorf("the coins are missing")

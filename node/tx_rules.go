@@ -501,7 +501,22 @@ func loadUndoRecords(dbTx *bbolt.Tx, height int64) ([]SpentRecord, error) {
 	if err := json.Unmarshal(raw, &records); err != nil {
 		return nil, fmt.Errorf("the record of the coins block #%d spent cannot be read: this node's database is damaged", height)
 	}
+	for _, record := range records {
+		if !coinRecordSound(record.Record) {
+			return nil, fmt.Errorf("the record of the coins block #%d spent holds a coin whose amount cannot be read: this node's database is damaged", height)
+		}
+	}
 	return records, nil
+}
+
+// coinRecordSound reports whether a coin kept in a record can be put back
+// as it is: its amount is an amount, and what is set aside on it is no less
+// than nought and no more than can exist. An amount that is not written as
+// an amount is read without an error, as an amount that is not valid, and
+// would be written back as nought, so a record is asked this before any coin
+// in it is used.
+func coinRecordSound(coin UTXORecord) bool {
+	return coin.Amount.ValidFee() && coin.HeldUnits >= 0 && coin.HeldUnits <= MaxAmountUnits
 }
 
 // spentRecordsOf returns the coins `block` spent, as they were, and holds

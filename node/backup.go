@@ -192,6 +192,12 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 				if wantGenesis != "" && block.Hash != wantGenesis {
 					return fmt.Errorf("the file's first block is %.16s..., and this network's is %.16s...: it belongs to another network or another start", block.Hash, wantGenesis)
 				}
+				// The first block is held to its identifier like every other.
+				// Whether it is this network's first block in every part is for
+				// the full check, and for the node when it starts.
+				if CalculateHash(block) != block.Hash {
+					return fmt.Errorf("the file's first block is not what its identifier says: its contents have been altered or damaged")
+				}
 			} else {
 				if block.PrevHash != previous.Hash {
 					return fmt.Errorf("block #%d does not follow block #%d", h, h-1)
@@ -223,7 +229,7 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 		if err := bUTXO.ForEach(func(_, raw []byte) error {
 			var coin UTXORecord
 			if err := json.Unmarshal(raw, &coin); err != nil || coin.HeldUnits < 0 || coin.HeldUnits > MaxAmountUnits ||
-				coin.Amount.Units() < 0 || coin.Amount.Units() > MaxAmountUnits {
+				!coin.Amount.ValidFee() {
 				return fmt.Errorf("a coin record cannot be read")
 			}
 			// Added up with a check at every step: a plain sum of figures

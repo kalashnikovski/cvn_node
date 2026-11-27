@@ -114,9 +114,16 @@ fi
 # and nothing is done through it.
 install -d -o root -g root -m 755 /var/lib/cvn_seed
 refuse_links() {
-  if [ -L "$DATA" ] || [ -L "$DATA/backups" ]; then
-    echo "$DATA, or the backups folder in it, is a link to somewhere else. This script does not make it so. Look at it before running this again."; exit 1
-  fi
+  # The folder, and every name in it that this script moves, copies or
+  # writes. The seed's user owns the folder and could put a link under any
+  # of them; this script runs as root and must not follow one.
+  for path in "$DATA" "$DATA/backups" "$DATA/miner_config.json" \
+              "$DATA/$DBFILE" "$DATA/genesis_anchor_$NETWORK.txt" "$DATA/$PEERFILE" \
+              "$DATA/$DBFILE.moving" "$DATA/genesis_anchor_$NETWORK.txt.moving" "$DATA/$PEERFILE.moving"; do
+    if [ -L "$path" ]; then
+      echo "$path is a link to somewhere else. This script does not make it so. Look at it before running this again."; exit 1
+    fi
+  done
 }
 refuse_links
 install -d -o "$SEED_USER" -g "$SEED_USER" -m 750 "$DATA"
@@ -161,9 +168,11 @@ if [ "$NETWORK" = devnet ]; then
     # The copies of the old chain belong to the old first block. They are
     # moved aside, not deleted, so that they are never taken for copies of
     # the new chain.
-    STAMP=$(date +%Y%m%d-%H%M%S)
+    STAMP=$(date +%Y%m%d-%H%M%S)-$$
     if [ -d "$DATA/backups" ]; then
-      mv "$DATA/backups" "$DATA/backups.before-$STAMP"
+      # -T: the folder is renamed, never moved into something that was put
+      # under that name beforehand.
+      mv -T "$DATA/backups" "$DATA/backups.before-$STAMP"
     fi
     for copy in "$DIR/backups/${DBFILE%.db}_block"*.db; do
       if [ -f "$copy" ]; then
@@ -183,16 +192,27 @@ if [ -z "$FRESH" ]; then
     # A move that was cut off after the file had left $DIR and before it had
     # its real name is finished now. The file is whole: it only leaves $DIR
     # once all of it has arrived.
-    if [ -f "$DATA/$name.moving" ] && [ ! -L "$DATA/$name.moving" ] && [ ! -e "$DIR/$name" ] && [ ! -e "$DATA/$name" ]; then
-      mv "$DATA/$name.moving" "$DATA/$name"
+    if [ -f "$DATA/$name.moving" ] && [ ! -L "$DATA/$name.moving" ] && [ ! -e "$DIR/$name" ] && [ ! -e "$DATA/$name" ] && [ ! -L "$DATA/$name" ]; then
+      mv -T "$DATA/$name.moving" "$DATA/$name"
       MOVED="$MOVED $name"
     fi
-    if [ -f "$DIR/$name" ] && [ ! -e "$DATA/$name" ]; then
+    if [ -f "$DIR/$name" ] && [ ! -e "$DATA/$name" ] && [ ! -L "$DATA/$name" ]; then
+      # A copy left under the moving name by a run that was cut off is never
+      # deleted. It is usually half a file. But if the server started the
+      # old seed again in between, the file now in $DIR is a new one and the
+      # copy left behind is the whole chain. So it is set aside, and said.
+      if [ -e "$DATA/$name.moving" ] || [ -L "$DATA/$name.moving" ]; then
+        ASIDE="$DATA/$name.cut-off-$(date +%Y%m%d-%H%M%S)-$$"
+        mv -T "$DATA/$name.moving" "$ASIDE"
+        echo "== An earlier run of this script was cut off while moving $name."
+        echo "   What it left is kept as $ASIDE and the file in $DIR is moved in now."
+        echo "   If the seed then starts from the first block, stop it and put $ASIDE in the place of $DATA/$name."
+        echo "   Delete $ASIDE once the seed is running well."
+      fi
       # Moved under another name first, so that a move cut off half-way
       # (a full disk) never leaves half a file under the real name.
-      rm -f "$DATA/$name.moving"
-      mv "$DIR/$name" "$DATA/$name.moving"
-      mv "$DATA/$name.moving" "$DATA/$name"
+      mv -T "$DIR/$name" "$DATA/$name.moving"
+      mv -T "$DATA/$name.moving" "$DATA/$name"
       MOVED="$MOVED $name"
     fi
   done
@@ -211,7 +231,7 @@ fi
 # A settings file written by hand (miner_config.json, which can name other
 # nodes to call) is read from the folder the node runs in. It is shared by
 # the networks, so it is copied and the first one is left where it was.
-if [ -f "$DIR/miner_config.json" ] && [ ! -e "$DATA/miner_config.json" ]; then
+if [ -f "$DIR/miner_config.json" ] && [ ! -e "$DATA/miner_config.json" ] && [ ! -L "$DATA/miner_config.json" ]; then
   cp -p "$DIR/miner_config.json" "$DATA/miner_config.json"
   echo "== Copied miner_config.json from $DIR to $DATA"
 fi

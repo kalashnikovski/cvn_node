@@ -1,6 +1,7 @@
 package node
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -75,6 +76,13 @@ func InitBoltEngine() {
 		// An empty database is given this network's first block, which pays
 		// nothing to anyone (see genesis.go).
 		if bBlocks.Stats().KeyN == 0 {
+			// A file with no blocks is a new file only if it holds nothing
+			// else either. One that holds coins or a height and no blocks
+			// has lost its blocks, and giving it a first block would let
+			// those coins be spent on a chain that never made them.
+			if coin, _ := bUTXO.Cursor().First(); coin != nil || tx.Bucket(metaBucket).Get([]byte("height")) != nil {
+				return fmt.Errorf("the database holds coins or a height and no blocks: this node's database is damaged")
+			}
 			paddedZeroKey := fmt.Sprintf("%016d", int64(0))
 
 			genesisBlock := buildGenesisBlock()
@@ -96,27 +104,59 @@ func InitBoltEngine() {
 
 	_ = ctx // Context tracking satisfied natively inside transactional callbacks
 	if err != nil {
-		panic(fmt.Sprintf("🚨 DATABASE CORRUPTION: Failed to provision partition buckets: %v", err))
+		_ = db.Close()
+		GlobalBoltEngine = nil
+		panic(fmt.Sprintf("🚨 DATABASE DAMAGED: %s: %v. Stop the node, move that file away, and put back a backup (--restore-backup) or let the node download the chain again.", BlockchainFile, err))
 	}
 
-	_ = db.View(func(tx *bbolt.Tx) error {
-		bMeta := tx.Bucket(metaBucket)
-		if bMeta != nil {
-			heightBytes := bMeta.Get([]byte("height"))
-			if heightBytes != nil {
-				var parsedHeight int64
-				_, err := fmt.Sscanf(string(heightBytes), "%016d", &parsedHeight)
-				if err == nil {
-					atomic.StoreInt64(&localHeightState, parsedHeight)
-				}
-			}
-		}
-		return nil
-	})
+	// The height the file records is what the node takes for its newest
+	// block. A node that took a height it could not read for "no blocks
+	// yet" would start again from the first block with its old blocks and
+	// their coins still in the file, and go on with coins that no other
+	// node has (outside review, round 10, third look, finding 1). So a file
+	// whose height cannot be trusted is not opened at all.
+	var storedHeight int64
+	if err := db.View(func(tx *bbolt.Tx) (viewErr error) {
+		storedHeight, viewErr = storedTipHeight(tx)
+		return viewErr
+	}); err != nil {
+		_ = db.Close()
+		GlobalBoltEngine = nil
+		panic(fmt.Sprintf("🚨 DATABASE DAMAGED: %s: %v. Stop the node, move that file away, and put back a backup (--restore-backup) or let the node download the chain again.", BlockchainFile, err))
+	}
+	atomic.StoreInt64(&localHeightState, storedHeight)
 
 	reindexUTXOFromChainOnce()
 	RebuildStateBalanceCacheInternal()
 	EnsureChainWorkIndex()
+}
+
+// storedTipHeight reads the height a chain file records for its newest block
+// and holds it to the blocks themselves: it must be there, be a height, and
+// be the last block the file holds. Everything a node does starts from that
+// height, so one that is missing or wrong is damage and is never taken for
+// "no blocks yet".
+func storedTipHeight(tx *bbolt.Tx) (int64, error) {
+	bMeta, bBlocks := tx.Bucket(metaBucket), tx.Bucket(blocksBucket)
+	if bMeta == nil || bBlocks == nil {
+		return 0, fmt.Errorf("required buckets missing")
+	}
+	raw := bMeta.Get([]byte("height"))
+	height, err := strconv.ParseInt(string(raw), 10, 64)
+	if err != nil || height < 0 || !bytes.Equal(raw, chainWorkKey(height)) {
+		return 0, fmt.Errorf("the height of the newest block is missing from the database or cannot be read: this node's database is damaged")
+	}
+	if lastKey, _ := bBlocks.Cursor().Last(); !bytes.Equal(lastKey, raw) {
+		return 0, fmt.Errorf("the database says its newest block is #%d, and the last block it holds is stored under %q: this node's database is damaged", height, lastKey)
+	}
+	// The newest block itself must be readable and be the block of that
+	// height. One that cannot be read is otherwise taken for an empty
+	// block, and the node stands still without a word.
+	var tip Block
+	if json.Unmarshal(bBlocks.Get(raw), &tip) != nil || tip.Index != height {
+		return 0, fmt.Errorf("the newest block, #%d, cannot be read: this node's database is damaged", height)
+	}
+	return height, nil
 }
 
 // reindexUTXOFromChainOnce rebuilds the utxo bucket from the canonical blocks
@@ -328,13 +368,22 @@ func SaveBlockToStorageInternal(block Block) bool {
 			return fmt.Errorf("required buckets missing")
 		}
 
-		// Never move the chain tip backwards through a plain save. Rollbacks lower
-		// the stored height first, so a legitimate reorg is unaffected.
-		if heightBytes := bMeta.Get([]byte("height")); heightBytes != nil {
-			var storedHeight int64
-			if _, scanErr := fmt.Sscanf(string(heightBytes), "%016d", &storedHeight); scanErr == nil && block.Index < storedHeight {
-				return fmt.Errorf("block #%d is below stored tip #%d", block.Index, storedHeight)
-			}
+		// A block is stored on top of the newest block or in its place, and
+		// nowhere else. A plain save never moves the tip backwards; rollbacks
+		// lower the stored height first, so a legitimate reorg is unaffected.
+		// The stored height must itself be sound: with none, a block could
+		// take the place of an old one while the blocks above it, and their
+		// coins, stayed in the file.
+		storedHeight, heightErr := storedTipHeight(tx)
+		if heightErr != nil {
+			fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: %v\n", block.Index, heightErr)
+			return heightErr
+		}
+		if block.Index < storedHeight {
+			return fmt.Errorf("block #%d is below stored tip #%d", block.Index, storedHeight)
+		}
+		if block.Index > storedHeight+1 {
+			return fmt.Errorf("block #%d does not follow stored tip #%d", block.Index, storedHeight)
 		}
 
 		if existingBlockData := bBlocks.Get([]byte(paddedKey)); existingBlockData != nil {

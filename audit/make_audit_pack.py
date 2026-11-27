@@ -338,6 +338,7 @@ RESET = [
     "node/backup_replay.go",
     "node/backup_replay_test.go",
     "node/missing_records_test.go",
+    "node/damaged_file_test.go",
     "node/builtin_miner.go",
     "node/testchain_test.go",
     "node/fees_test.go",

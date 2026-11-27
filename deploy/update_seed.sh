@@ -48,6 +48,9 @@ else
   git -C "$DIR" pull --ff-only
 fi
 (cd "$DIR" && GOTOOLCHAIN=auto GOFLAGS=-buildvcs=false go build -o cvn_node.new .)
+# The seed runs as a user of its own and must be able to run the program,
+# whatever this server gives new files by default.
+chmod 755 "$DIR/cvn_node.new"
 
 echo "== Stopping the seed services"
 # Only the services that are switched on. One that was switched off, such

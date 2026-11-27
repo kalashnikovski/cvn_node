@@ -379,6 +379,13 @@ func rollbackChainToHeightLocked(target int64) []Block {
 		if bBlocks == nil || bMeta == nil || bUTXO == nil {
 			return fmt.Errorf("required buckets missing")
 		}
+		// The rollback starts from the newest block the file holds, which
+		// must be the block this node takes for its newest.
+		if stored, err := storedTipHeight(tx); err != nil {
+			return err
+		} else if stored != tip.Index {
+			return fmt.Errorf("the database's newest block is #%d and this node takes #%d for it: this node's database is damaged", stored, tip.Index)
+		}
 		for h := tip.Index; h > target; h-- {
 			paddedKey := chainWorkKey(h)
 			var block Block

@@ -108,6 +108,11 @@ func loadSweepRecords(dbTx *bbolt.Tx, height int64) ([]SweptCoin, error) {
 	if err := json.Unmarshal(raw, &records); err != nil {
 		return nil, fmt.Errorf("the record of the sweep of block #%d cannot be read: this node's database is damaged", height)
 	}
+	for _, record := range records {
+		if !coinRecordSound(record.Before) {
+			return nil, fmt.Errorf("the record of the sweep of block #%d holds a coin whose amount cannot be read: this node's database is damaged", height)
+		}
+	}
 	return records, nil
 }
 
@@ -182,9 +187,11 @@ func applySweep(dbTx *bbolt.Tx, bUTXO *bbolt.Bucket, block Block) (toVaultUnits 
 			continue // already spent, and anything set aside on it with it
 		}
 		var coin UTXORecord
-		if json.Unmarshal(raw, &coin) != nil {
+		if json.Unmarshal(raw, &coin) != nil || !coin.Amount.ValidFee() {
 			// A coin that is due and cannot be read is never passed over:
-			// every other node sweeps it at this block.
+			// every other node sweeps it at this block. An amount that is
+			// not written as an amount is read without an error, as an
+			// amount that is not valid, so that is asked too.
 			return 0, false, fmt.Errorf("coin %s cannot be read during the sweep: this node's database is damaged", key)
 		}
 		if coin.Age != bornAt {
