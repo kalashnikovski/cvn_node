@@ -4,7 +4,7 @@ Covenant Standard is a proof-of-work blockchain written from scratch in Go. It i
 
 Website: https://covenantstandard.online. The seed nodes, what each holds, and their block explorers: https://covenantstandard.online/explorer/.
 
-> **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`), which is joined by invitation ([Installation_Guide.md](Installation_Guide.md), section 7). The first test network (`testnet-1`) has been retired. Coins on all of these have no value. Mine to help test, not to accumulate.
+> **Status: before the public test.** The CVN Testnet, the public test of the launch rules, has not started yet. Its start will be announced as a Bitcoin block height, and everyone begins from zero at that block. Until then the rules are being rehearsed on a development network (`devnet`), which is joined by invitation ([Installation_Guide.md](Installation_Guide.md), section 7). The first test network (`testnet-1`) has been retired. The development network was started afresh on 27 November 2026, and the coins on it from before are gone. Coins on all of these have no value. Mine to help test, not to accumulate.
 
 ## What works today
 
@@ -15,7 +15,7 @@ Website: https://covenantstandard.online. The seed nodes, what each holds, and t
 - Blocks travel over the connections nodes already have open, and a large block is announced first and sent only to nodes that ask for it.
 - A new node joins the network that is there. If the seeds it was given do not answer it waits, and if they are on another chain it stops and says so; it does not start a chain of its own.
 - No port forwarding needed: a node behind a home router still receives blocks and can mine.
-- A node saves a checked copy of its chain once a day and keeps the newest seven.
+- A node saves a checked copy of its chain once a day and keeps the newest seven. The daily check is a quick one. Putting a copy back first works the whole chain out again from its blocks, coin by coin.
 - Downloads anyone can check: every release lists its SHA-256 sums, is signed by GitHub as built from its tag, and can be rebuilt to the same bytes.
 
 See [ROADMAP.md](ROADMAP.md) for what is finished and what is still being built. The rules planned for launch are set out in [WHITEPAPER.md](WHITEPAPER.md).
@@ -97,7 +97,7 @@ From the maintainer, who wrote this software and runs its seed nodes:
 - **Coins on the test networks carry over to nothing.** The CVN Testnet and `devnet` are for testing, as was the first test network (`testnet-1`, now retired). Their coins have no value and no claim on any later network, which will start from zero for everyone.
 - **I will mine from the first block, like anyone else,** with one home computer (a 16-core desktop processor) running the programs published here. Its mining address will be published before the start, so that anyone can see what it earned.
 - **The seed nodes do not mine.** They are rented servers that keep the chain and pass blocks on. The computer I mine with is not a seed and has no better place on the network than yours.
-- **I will run a mining pool that anyone may use. It takes no fee, and its blocks pay the miners themselves.** It is the published program with one option added, on a rented server that does nothing else. The reward of every block it finds is paid, in that block, to the machines that worked for it, by the work each did. Those coins never pass through the pool. Only parts too small for a block go to the pool's address, and are paid on from there; what it found, what its blocks paid and what it paid can be checked on its page and on the chain. Its address will be published before the start, like my own. Nobody has to use it: mining by yourself works as it always has, and anyone can run a pool of their own with the same program.
+- **I will run a mining pool that anyone may use. It takes no fee, and its blocks pay the miners themselves.** It is the published program with one option added, on a rented server that does nothing else. The reward of every block it finds is paid, in that block, to the machines that worked for it, by the work each did. Those coins never pass through the pool. Only parts too small for a block, or beyond the fifty a block has room for, go to the pool's address, and are paid on from there; what it found, what its blocks paid and what it paid can be checked on its page and on the chain. Its address will be published before the start, like my own. Nobody has to use it: mining by yourself works as it always has, and anyone can run a pool of their own with the same program.
 - **The start is announced in advance** as a Bitcoin block height fixed in a tagged release of this software, together with the packages, their SHA-256 sums and the source of the faster miner, so that everybody has the same programs and nobody can begin early. How that works, and how to check it afterwards, is in section 11 of the [design paper](WHITEPAPER.md).
 
 What reviewers found when they tested these claims against the code, and what was done about it, is recorded in [audit/FINDINGS_FAIR_LAUNCH.md](audit/FINDINGS_FAIR_LAUNCH.md).
@@ -110,7 +110,7 @@ What reviewers found when they tested these claims against the code, and what wa
 | Mining algorithm | RandomX, tuned for home processors |
 | Block reward | 50 CVN, halving every 7 years for 49 years |
 | Total supply | 486,727,500 CVN |
-| Fees | Voluntary; zero is allowed. A fifth of every block is closed to transfers that pay a fee |
+| Fees | Voluntary; zero is allowed. Every fee goes to the miner of the block. A fifth of every block is closed to transfers that pay a fee |
 | Lost coins | 20% of any coin unmoved for 7 years is set aside. Its owner has 7 more years to take it back; after that it returns to miners over time |
 | Pre-mine | None |
 
@@ -123,7 +123,7 @@ go test ./...
 go build -o cvn_node .
 ```
 
-`go test ./...` runs every rule inside one process and takes about ten minutes. A second set of tests starts several real nodes on this one machine and watches them work together: seeds, miners, a late joiner, a transfer, a node that loses power, a miner that returns from being cut off, two halves of a network that meet, and this version sharing a network with the release before it. It takes a few minutes and is run separately:
+`go test ./...` runs every rule inside one process and takes about six minutes on the author's machine, longer on a slower one. A second set of tests starts several real nodes on this one machine and watches them work together: seeds, miners, a late joiner, a transfer, a node that loses power, a miner that returns from being cut off, two halves of a network that meet, and this version sharing a network with the release before it. It takes a few minutes and is run separately:
 
 ```bash
 go test -tags multinode -run MultiNode -timeout 30m ./node/

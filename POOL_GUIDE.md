@@ -224,4 +224,6 @@ One more thing, for the network's sake. A pool that grows to hold a large part o
 - The connection between a miner and the pool is not encrypted.
 - One pool is one server. Several servers cannot share one record.
 - After an older copy of the record has been put back, the program cannot work out who earned the blocks found after that copy was made (section 6). That is left to the operator.
+- The rule that pays a small miner within a day (an address owed 0.002 CVN or more is paid once it has gone twelve hours without a payment) has not yet been run on a real server.
+- Giving to a second address through a pool is not built.
 - Only the fast miner (the CVN edition of XMRig) can mine at a pool. The miner built into the CVN program cannot.

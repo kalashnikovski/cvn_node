@@ -156,7 +156,7 @@ On a server you will want it to start by itself when the server boots and to res
 curl -fsSL https://raw.githubusercontent.com/kalashnikovski/cvn_node/main/deploy/install_seed.sh | bash
 ```
 
-It installs what is needed, builds the program in `/opt/cvn_node`, opens the network's two ports and installs a service. The seed does not run as root: it runs as a user of its own, `cvn-seed`, and keeps its chain in `/var/lib/cvn_seed/NETWORK`. A seed set up by an older version of the script ran as root from `/opt/cvn_node`; running the script again moves its files across. To update the server later: `bash /opt/cvn_node/deploy/update_seed.sh`.
+It installs what is needed, builds the program in `/opt/cvn_node`, opens the network's two ports and installs a service. The seed does not run as root: the script makes a user of its own, `cvn-seed`, and the service runs as that user with its chain in `/var/lib/cvn_seed/NETWORK`. The service may write nowhere else, and has a memory limit. A seed set up by an older version of the script ran as root from `/opt/cvn_node`. To move it across, fetch the script afresh with the command above and run it again: it makes the user and the folder and moves the seed's files across. For `devnet` the script is given the network's name, the seeds and the Bitcoin height, as in `curl -fsSL https://raw.githubusercontent.com/kalashnikovski/cvn_node/main/deploy/install_seed.sh | bash -s -- devnet SEEDS HEIGHT`. If the height is not the one given at the last run, the script starts that network's chain afresh: it removes the old chain and sets the old backups aside. A release that changes the rules needs this. To update the server later: `bash /opt/cvn_node/deploy/update_seed.sh`.
 
 This is the right way to run a small rented server. On one shared processor, mining would earn next to nothing and get in the way of the server's real use to the network, which is being online and reachable. Open the network's two ports in the server's firewall so that other nodes can reach it (18080 and 18081 on the CVN Testnet, 28080 and 28081 on `devnet`).
 
@@ -239,7 +239,7 @@ The same option works for the wallet, for example `./cvn_node --network devnet -
 
 The development network (`devnet`) is run by invitation. Whoever runs it gives you two things:
 
-- **the Bitcoin block it started from**, a number such as `976283`. Below it is written `HEIGHT`;
+- **the Bitcoin block it started from**, a number of six digits. Below it is written `HEIGHT`;
 - **the addresses of its seeds**, the machines a new node asks for the chain. Below they are written `SEEDS`. Type them as numbers and dots with commas between them and nothing else: no spaces, no port numbers, no `http://`. For example `203.0.113.5,203.0.113.9`.
 
 **Windows.** Open your CVN folder in File Explorer, right-click an empty part of it and choose **Open in Terminal**. A window opens, already in your CVN folder. Paste this one line, with your own two values in it, and press Enter:
@@ -263,7 +263,7 @@ CVN_DEVNET_ANCHOR_HEIGHT=HEIGHT ./cvn_node --network devnet --seeds SEEDS
 
 Use the same line every time you start the miner. The height is forgotten when the window is closed.
 
-**How to tell it worked.** After the wallet questions, the window shows `Comparing our chain with ...`, then a progress bar counting up to the network's height, then the dashboard with a network height in the thousands and `UP TO DATE`. If it shows `Starting at block #0` and a height that begins at 1, you are not on the network: stop it and see section 9.
+**How to tell it worked.** After the wallet questions, the window shows `Comparing our chain with ...`, then a progress bar counting up to the network's height, then the dashboard with the network's height and `UP TO DATE`. (Soon after the network has been started afresh that height is small.) If it shows `Starting at block #0` and a height that begins at 1 while the network is further on, you are not on the network: stop it and see section 9.
 
 The program does not start a chain of its own when it was given seeds. If none of them answers it waits and says so, and if they are on a different chain it stops and says so. Both messages are explained in section 9. (Whoever starts a network's very first blocks adds `--start-alone`.)
 
@@ -340,10 +340,10 @@ That is the port on the CVN Testnet. On `devnet` it is 28081.
 | "These addresses given with --seeds could not be read" | The list of seeds has something extra in it. Give the addresses alone with commas between them: no spaces, no port numbers (`:28081`), no `http://`. |
 | "NOT MINING YET: none of the other machines answered" | The program was given seeds and none replied, so it waits and does not start a chain of its own. Check the addresses are the ones you were given, that the computer is online, and that its firewall or antivirus allows the program to connect. It carries on by itself as soon as one answers. |
 | "The other machines are on a DIFFERENT CHAIN" | The seeds answered, and their first block is not this program's. On `devnet` the usual cause is that the Bitcoin block height was not set in this window (section 7, "Joining the development network"). Otherwise check the network name and that you have the release the network runs. |
-| Your height started at 1 while the network is in the thousands | The node began a chain of its own (releases up to `v5.0.0-rc10` did this silently when no seed could be reached). Stop it, delete `cvn_devnet.db` in your CVN folder, and start again with the command from section 7. Coins mined on that chain exist nowhere else. |
+| Your height started at 1 while the network is further on | The node began a chain of its own (releases up to `v5.0.0-rc10` did this silently when no seed could be reached). Stop it, delete `cvn_devnet.db` in your CVN folder, and start again with the command from section 7. Coins mined on that chain exist nowhere else. |
 | "Waiting before mining" | Normal. The node is checking that it is up to date, and starts by itself: within two minutes if no other node can be reached, or if another node says it is ahead and then does not deliver. |
 | "DATABASE DAMAGED" | The node read its chain database and found something it cannot trust, and it will not start on that file. The line says what it found. Move the chain database out of your CVN folder (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`). Then either put back a backup (section 10) or start again and let the node download the chain. Your wallet is not in that file. A chain database written by a release before `v5.0.0-rc13` is refused in the same way: it is the old chain, so delete it. |
-| The height stays far below other nodes | Stop the miner, delete the chain database (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
+| The height stays far below other nodes | First check that you run the release the network runs. This release does not agree with any release before `v5.0.0-rc13`: an older program refuses some of its blocks and stops following the chain. If you run the right release, stop the miner, delete the chain database (`cvn_testnet.db` on the CVN Testnet, `cvn_devnet.db` on `devnet`), and start again. It downloads the chain afresh. Your wallet is not in that file. |
 | Antivirus removes the program | Mining software is often flagged because malware abuses the same techniques. Build from this source yourself and allow the folder in your antivirus settings. |
 | "miner_config.json is not written correctly" | The file was edited by hand and has a mistake, most often a missing comma. The message names the line. Fix it, or delete the file and start `LaunchMiner.bat` with `--miner-address CVN_your_address`. |
 | "not enough coins are ready to spend" just after combining or sending | Wait for the next block and try again. See section 4. |
@@ -357,7 +357,7 @@ That is the port on the CVN Testnet. On `devnet` it is 28081.
 
 The chain is one file in the CVN folder (`cvn_testnet.db`, or `cvn_devnet.db` on the development network). A node that loses it downloads the chain again from the other nodes, so on a network with other nodes a backup only saves time. It matters when there are no others to ask: a network of one machine, or a fault that takes every node at once.
 
-**The node makes its own backups.** Two minutes after it starts, and then once a day, it saves a copy of the chain in the folder `backups`, and says so in its window or log. It keeps the newest seven and removes older ones. Each copy is checked before it is kept: every block is there and follows from the one before, each block is what its identifier says, and the coins add up to exactly what has been issued. A copy that fails is thrown away and the fault is reported.
+**The node makes its own backups.** Two minutes after it starts, and then once a day, it saves a copy of the chain in the folder `backups`, and says so in its window or log. It keeps the newest seven and removes older ones. Each copy is checked before it is kept: every block is there and follows from the one before, each block is what its identifier says, and the coins add up to exactly what has been issued. A copy that fails is thrown away and the fault is reported. This daily check is a quick one: it reads the file and adds it up, and does not work the coins out again from the blocks. Putting a backup back does (see "Restoring a backup" below).
 
 | Option | What it does |
 |---|---|
