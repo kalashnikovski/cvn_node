@@ -75,17 +75,32 @@ func TestWrongRecoveryWordsAreNoticed(t *testing.T) {
 	words, _ := recoveryWordsFromKey(privateKeyHex)
 	list := strings.Fields(words)
 
-	// A word swapped for another word of the list: caught by the check,
-	// 255 times in 256. Changing the last word alone always changes the check.
-	changed := append([]string{}, list...)
-	if changed[23] == "zoo" {
-		changed[23] = "abandon"
-	} else {
-		changed[23] = "zoo"
+	// A word swapped for another word of the list is caught by the check
+	// 255 times in 256. The last word holds three bits of the key and the
+	// eight bits of the check. So of the 2,048 words that could stand last,
+	// exactly eight are accepted: one for each value of those three bits,
+	// with the check that belongs to it. The right word is one of the
+	// eight, and each of the other seven gives another key.
+	//
+	// (This used to put "zoo" in the last place and expect a refusal. That
+	// was wrong for one key in 256, for which "zoo" is one of the eight, so
+	// the test failed by chance about once in 256 runs.)
+	acceptedLast, rightWordGivesTheKey := 0, false
+	for _, word := range recoveryWordList {
+		tried := append(append([]string{}, list[:23]...), word)
+		key, err := keyFromRecoveryWords(strings.Join(tried, " "))
+		if err != nil {
+			continue
+		}
+		acceptedLast++
+		if word == list[23] {
+			rightWordGivesTheKey = key == privateKeyHex
+		} else if key == privateKeyHex {
+			t.Error("another word in the last place gave the same key")
+		}
 	}
-	if _, err := keyFromRecoveryWords(strings.Join(changed, " ")); err == nil {
-		// zoo and the right word can share a check only if they are the same word.
-		t.Error("a changed last word was accepted")
+	if acceptedLast != 8 || !rightWordGivesTheKey {
+		t.Errorf("%d of the %d words were accepted in the last place, want 8; the right word gives the key: %v", acceptedLast, len(recoveryWordList), rightWordGivesTheKey)
 	}
 	// A word that is no word of the list is named.
 	misspelt := append([]string{}, list...)
@@ -96,6 +111,16 @@ func TestWrongRecoveryWordsAreNoticed(t *testing.T) {
 	// Too few, too many.
 	for _, count := range []int{0, 1, 12, 23, 25} {
 		text := strings.Join(append(append([]string{}, list...), list...)[:count], " ")
+		if count == 1 && looksLikeHex(text) {
+			// With no key saved, a text made only of the characters 0-9
+			// and a-f is taken for a private key written without its
+			// leading zeros (TestWithNoSavedKeyAPasswordIsNotAKey). A few
+			// words of the list are made of those letters alone, such as
+			// face and dead. When a key's first word is one of them, that
+			// one word is a key by that rule, and this test failed, about
+			// once in two hundred runs. It says nothing about the words.
+			continue
+		}
 		if _, _, err := signingKeyFrom(text); err == nil {
 			t.Errorf("%d words were accepted as a key", count)
 		}
