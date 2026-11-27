@@ -109,7 +109,10 @@ func storeChainWork(dbTx *bbolt.Tx, block Block) error {
 	if block.Index > 0 {
 		parentWork := readChainWork(dbTx, block.Index-1, block.PrevHash)
 		if parentWork == nil {
-			parentWork = sumChainWorkFromBlocks(dbTx, block.Index-1)
+			if parentWork, err = sumChainWorkFromBlocks(dbTx, block.Index-1); err != nil {
+				fmt.Printf("🚨 STORAGE REFUSAL: Block #%d: %v\n", block.Index, err)
+				return err
+			}
 		}
 		total.Add(total, parentWork)
 	}
@@ -118,35 +121,37 @@ func storeChainWork(dbTx *bbolt.Tx, block Block) error {
 }
 
 // sumChainWorkFromBlocks adds up the work of every stored block up to and
-// including `height` straight from the blocks themselves.
-func sumChainWorkFromBlocks(dbTx *bbolt.Tx, height int64) *big.Int {
+// including `height` straight from the blocks themselves. Every one of them
+// must be there and be readable. A total with a block left out is too low,
+// and a node that went by it would leave its own chain for one that proves
+// less work (outside review, round 10, fourth look, finding 2).
+func sumChainWorkFromBlocks(dbTx *bbolt.Tx, height int64) (*big.Int, error) {
 	total := new(big.Int)
 	bBlocks := dbTx.Bucket(blocksBucket)
 	if bBlocks == nil {
-		return total
+		return nil, fmt.Errorf("required buckets missing")
 	}
 	for h := int64(0); h <= height; h++ {
-		data := bBlocks.Get(chainWorkKey(h))
-		if data == nil {
-			continue
-		}
 		var block Block
-		if json.Unmarshal(data, &block) == nil {
-			total.Add(total, BlockWork(block))
+		if data := bBlocks.Get(chainWorkKey(h)); data == nil || json.Unmarshal(data, &block) != nil || block.Index != h {
+			return nil, fmt.Errorf("the total work cannot be worked out: block #%d is missing or cannot be read: this node's database is damaged", h)
 		}
+		total.Add(total, BlockWork(block))
 	}
-	return total
+	return total, nil
 }
 
 // EnsureChainWorkIndex rebuilds the total-work records from the stored blocks
 // when the record for the current tip is missing or belongs to another block.
-func EnsureChainWorkIndex() {
+// It returns an error, and writes nothing, if a block it needs is missing or
+// cannot be read: a total with a block left out is never recorded.
+func EnsureChainWorkIndex() error {
 	if GlobalBoltEngine == nil {
-		return
+		return nil
 	}
 	tipHeight := atomic.LoadInt64(&localHeightState)
 	rebuilt := false
-	_ = GlobalBoltEngine.Update(func(dbTx *bbolt.Tx) error {
+	err := GlobalBoltEngine.Update(func(dbTx *bbolt.Tx) error {
 		bBlocks := dbTx.Bucket(blocksBucket)
 		if bBlocks == nil {
 			return nil
@@ -164,13 +169,9 @@ func EnsureChainWorkIndex() {
 		}
 		total := new(big.Int)
 		for h := int64(0); h <= tipHeight; h++ {
-			data := bBlocks.Get(chainWorkKey(h))
-			if data == nil {
-				continue
-			}
 			var block Block
-			if json.Unmarshal(data, &block) != nil {
-				continue
+			if data := bBlocks.Get(chainWorkKey(h)); data == nil || json.Unmarshal(data, &block) != nil || block.Index != h {
+				return fmt.Errorf("the total work cannot be worked out: block #%d is missing or cannot be read: this node's database is damaged", h)
 			}
 			total.Add(total, BlockWork(block))
 			raw, _ := json.Marshal(chainWorkEntry{Hash: block.Hash, Work: total.String()})
@@ -181,19 +182,25 @@ func EnsureChainWorkIndex() {
 		rebuilt = true
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 	if rebuilt {
 		log.Printf("🧮 [CHAIN WORK] Total-work records rebuilt through block #%d.\n", tipHeight)
 	}
+	return nil
 }
 
-// chainWorkThrough returns the total work of this node's chain up to and
-// including `height`.
-func chainWorkThrough(height int64) *big.Int {
+// chainWorkThroughChecked returns the total work of this node's chain up to
+// and including `height`, and an error when it is not recorded and cannot be
+// worked out from the blocks. The place that decides whether to leave this
+// node's chain for another asks here, and keeps its chain on an error.
+func chainWorkThroughChecked(height int64) (*big.Int, error) {
 	total := new(big.Int)
 	if GlobalBoltEngine == nil || height < 0 {
-		return total
+		return total, nil
 	}
-	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+	err := GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		bBlocks := dbTx.Bucket(blocksBucket)
 		if bBlocks == nil {
 			return nil
@@ -205,9 +212,24 @@ func chainWorkThrough(height int64) *big.Int {
 				return nil
 			}
 		}
-		total = sumChainWorkFromBlocks(dbTx, height)
+		summed, sumErr := sumChainWorkFromBlocks(dbTx, height)
+		if sumErr != nil {
+			return sumErr
+		}
+		total = summed
 		return nil
 	})
+	if err != nil {
+		return new(big.Int), err
+	}
+	return total, nil
+}
+
+// chainWorkThrough is the same figure for the places that report it or
+// measure progress by it. Where it cannot be worked out it is nought, which
+// claims nothing for this node's chain.
+func chainWorkThrough(height int64) *big.Int {
+	total, _ := chainWorkThroughChecked(height)
 	return total
 }
 

@@ -167,8 +167,13 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 		if bBlocks == nil || bMeta == nil || bUTXO == nil {
 			return fmt.Errorf("parts of the chain are missing from the file (blocks, records or coins). It is not a usable copy")
 		}
-		height, err := strconv.ParseInt(string(bMeta.Get([]byte("height"))), 10, 64)
-		if err != nil || height < 0 {
+		rawHeight := bMeta.Get([]byte("height"))
+		height, err := strconv.ParseInt(string(rawHeight), 10, 64)
+		// It must be written exactly as a node writes it. A node does not
+		// start on a height written any other way (storedTipHeight), and a
+		// file that passes here must be one a node starts on (outside
+		// review, round 10, fourth look, finding 3).
+		if err != nil || height < 0 || string(rawHeight) != string(chainWorkKey(height)) {
 			return fmt.Errorf("the file does not say what its newest block is")
 		}
 		if lastKey, _ := bBlocks.Cursor().Last(); lastKey == nil {
@@ -226,36 +231,49 @@ func checkChainFile(path, wantGenesis string) (chainFileReport, error) {
 		}
 		report.Height, report.TipHash, report.TipTime = height, previous.Hash, previous.Timestamp
 
-		if err := bUTXO.ForEach(func(_, raw []byte) error {
-			var coin UTXORecord
-			if err := json.Unmarshal(raw, &coin); err != nil || coin.HeldUnits < 0 || coin.HeldUnits > MaxAmountUnits ||
-				!coin.Amount.ValidFee() {
-				return fmt.Errorf("a coin record cannot be read")
-			}
-			// Added up with a check at every step: a plain sum of figures
-			// too large to be real could come round to the right total.
-			var sumErr error
-			if report.CoinsUnits, sumErr = addUnits(report.CoinsUnits, coin.SpendUnits()); sumErr != nil {
-				return fmt.Errorf("the coins add up to more than can exist")
-			}
-			report.SetAsideUnits += coin.HeldUnits
-			return nil
-		}); err != nil {
-			return err
-		}
-		if report.VaultUnits, err = readVaultUnits(tx, height, previous.Hash); err != nil {
-			return fmt.Errorf("the vault's balance is missing for the newest block")
-		}
-		if report.CoinsUnits+report.VaultUnits != issued {
-			return fmt.Errorf("the coins do not add up: %s CVN held and %s in the vault, but %s issued by block #%d",
-				FormatUnits(report.CoinsUnits), FormatUnits(report.VaultUnits), FormatUnits(issued), height)
-		}
-		return nil
+		report.CoinsUnits, report.SetAsideUnits, report.VaultUnits, err = coinsHeldAgainstIssued(tx, height, previous.Hash, issued)
+		return err
 	})
 	if err != nil {
 		return report, fmt.Errorf("%s: %v", path, err)
 	}
 	return report, nil
+}
+
+// coinsHeldAgainstIssued adds up every coin a chain file holds, with what
+// sweeps have set aside on coins, reads the vault after the newest block, and
+// holds the two together to what has been issued through that block: nothing
+// created and nothing lost. The quick check of a copy asks it, and a node
+// asks it of its own file when it starts (storedCoinsAddUp).
+func coinsHeldAgainstIssued(tx *bbolt.Tx, height int64, tipHash string, issued int64) (coinsUnits, setAsideUnits, vaultUnits int64, err error) {
+	bUTXO := tx.Bucket(utxoBucket)
+	if bUTXO == nil {
+		return 0, 0, 0, fmt.Errorf("the coins are missing")
+	}
+	if err = bUTXO.ForEach(func(_, raw []byte) error {
+		var coin UTXORecord
+		if err := json.Unmarshal(raw, &coin); err != nil || !coinRecordSound(coin) {
+			return fmt.Errorf("a coin record cannot be read")
+		}
+		// Added up with a check at every step: a plain sum of figures
+		// too large to be real could come round to the right total.
+		var sumErr error
+		if coinsUnits, sumErr = addUnits(coinsUnits, coin.SpendUnits()); sumErr != nil {
+			return fmt.Errorf("the coins add up to more than can exist")
+		}
+		setAsideUnits += coin.HeldUnits
+		return nil
+	}); err != nil {
+		return 0, 0, 0, err
+	}
+	if vaultUnits, err = readVaultUnits(tx, height, tipHash); err != nil {
+		return 0, 0, 0, fmt.Errorf("the vault's balance is missing for the newest block")
+	}
+	if coinsUnits+vaultUnits != issued {
+		return 0, 0, 0, fmt.Errorf("the coins do not add up: %s CVN held and %s in the vault, but %s issued by block #%d",
+			FormatUnits(coinsUnits), FormatUnits(vaultUnits), FormatUnits(issued), height)
+	}
+	return coinsUnits, setAsideUnits, vaultUnits, nil
 }
 
 func (r chainFileReport) String() string {

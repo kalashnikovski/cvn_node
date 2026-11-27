@@ -840,7 +840,14 @@ func TriggerActiveReSyncPass() {
 	deadline := time.Now().Add(syncPassLimit)
 
 	startTip := GetLatestBlockInternal()
-	startWork := TotalChainWork()
+	startWork, startWorkErr := chainWorkThroughChecked(atomic.LoadInt64(&localHeightState))
+	if startWorkErr != nil {
+		// A node that cannot say how much work its own chain holds does not
+		// go looking for a better one. It would take any chain for better,
+		// and set aside the node that offered it when nothing came of it.
+		log.Printf("🚨 [CHAIN WORK] Not comparing our chain with any other: %v. Stop this node and put back a backup.\n", startWorkErr)
+		return
+	}
 	source, claimedHeight := chooseSyncSource(startTip.Index, startWork)
 	if source == "" {
 		return
@@ -939,7 +946,21 @@ func TriggerActiveReSyncPass() {
 		}
 		// Switching would discard our blocks above the shared one. Do it
 		// only if the other branch proves more work than those blocks hold.
-		ourBranchWork := new(big.Int).Sub(chainWorkThrough(tip.Index), chainWorkThrough(ancestor))
+		ourTipWork, workErr := chainWorkThroughChecked(tip.Index)
+		ourAncestorWork, ancestorErr := chainWorkThroughChecked(ancestor)
+		if workErr == nil {
+			workErr = ancestorErr
+		}
+		if workErr != nil {
+			// A node that cannot say how much work its own chain holds
+			// cannot say that another holds more. It keeps its chain. This
+			// is no fault of the source.
+			StateMutex.Unlock()
+			log.Printf("🚨 [CHAIN WORK] Keeping our chain and not comparing it with the branch from %s: %v. Stop this node and put back a backup.\n", source, workErr)
+			blameless = true
+			return
+		}
+		ourBranchWork := new(big.Int).Sub(ourTipWork, ourAncestorWork)
 		ancestorHash := GetBlockByHeightFromDB(ancestor).Hash
 		StateMutex.Unlock()
 		theirWork, theirsWins := measureCandidateBranch(func(start int64) []Block { return fetchBlockBatch(source, start) }, ancestor, ancestorHash, claimedHeight, ourBranchWork)

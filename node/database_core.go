@@ -117,8 +117,15 @@ func InitBoltEngine() {
 	// whose height cannot be trusted is not opened at all.
 	var storedHeight int64
 	if err := db.View(func(tx *bbolt.Tx) (viewErr error) {
-		storedHeight, viewErr = storedTipHeight(tx)
-		return viewErr
+		if storedHeight, viewErr = storedTipHeight(tx); viewErr != nil {
+			return viewErr
+		}
+		// The coins must be the coins of these blocks, as far as adding
+		// them up can tell. A file that holds a coin its blocks never made
+		// (blocks lost off the end and their coins left behind, a coin put
+		// in by hand) would let that coin be spent on a chain that never
+		// issued it (outside review, round 10, fourth look, finding 1).
+		return storedCoinsAddUp(tx, storedHeight)
 	}); err != nil {
 		_ = db.Close()
 		GlobalBoltEngine = nil
@@ -128,7 +135,11 @@ func InitBoltEngine() {
 
 	reindexUTXOFromChainOnce()
 	RebuildStateBalanceCacheInternal()
-	EnsureChainWorkIndex()
+	if err := EnsureChainWorkIndex(); err != nil {
+		_ = db.Close()
+		GlobalBoltEngine = nil
+		panic(fmt.Sprintf("🚨 DATABASE DAMAGED: %s: %v. Stop the node, move that file away, and put back a backup (--restore-backup) or let the node download the chain again.", BlockchainFile, err))
+	}
 }
 
 // storedTipHeight reads the height a chain file records for its newest block
@@ -157,6 +168,27 @@ func storedTipHeight(tx *bbolt.Tx) (int64, error) {
 		return 0, fmt.Errorf("the newest block, #%d, cannot be read: this node's database is damaged", height)
 	}
 	return height, nil
+}
+
+// storedCoinsAddUp holds the coins in a node's own file, with the vault, to
+// what has been issued through its newest block (coinsHeldAgainstIssued). It
+// finds coins that were added or went missing. It does not find a coin given
+// to another address with the totals left alone; only working the file out
+// again from its blocks does that (replayChainFile), and that takes too long
+// to do at every start.
+func storedCoinsAddUp(tx *bbolt.Tx, height int64) error {
+	var tip Block
+	if json.Unmarshal(tx.Bucket(blocksBucket).Get(chainWorkKey(height)), &tip) != nil {
+		return fmt.Errorf("the newest block, #%d, cannot be read: this node's database is damaged", height)
+	}
+	var issued int64
+	for h := int64(1); h <= height; h++ {
+		issued += BlockRewardUnits(h)
+	}
+	if _, _, _, err := coinsHeldAgainstIssued(tx, height, tip.Hash, issued); err != nil {
+		return fmt.Errorf("%v: this node's database is damaged", err)
+	}
+	return nil
 }
 
 // reindexUTXOFromChainOnce rebuilds the utxo bucket from the canonical blocks

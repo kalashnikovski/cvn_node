@@ -204,7 +204,22 @@ func Run(frontendAssets embed.FS) {
 		waitForGenesisAnchor(os.Args, 10*time.Second, time.Minute)
 	}
 
-	InitBoltEngine()
+	// A chain file that cannot be trusted stops the program inside
+	// InitBoltEngine. The operator is told what is wrong and what to do, and
+	// is not shown where in the program it was found.
+	func() {
+		defer func() {
+			if fault := recover(); fault != nil {
+				if said, ok := fault.(string); ok && strings.Contains(said, "DATABASE DAMAGED") {
+					fmt.Println(said)
+					fmt.Println("   If this file is from before the network was started afresh, it is only the old chain: move it away and start the node again.")
+					os.Exit(1)
+				}
+				panic(fault)
+			}
+		}()
+		InitBoltEngine()
+	}()
 	if err := checkStoredGenesis(); err != nil {
 		fmt.Println("🚨 " + err.Error())
 		os.Exit(1)

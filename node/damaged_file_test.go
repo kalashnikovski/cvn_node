@@ -3,6 +3,7 @@ package node
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -887,6 +888,338 @@ func TestARollbackIsRefusedWhenTheNodesMemoryAndTheFileDisagreeAboutTheNewestBlo
 	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
 		if dbTx.Bucket(blocksBucket).Get(chainWorkKey(3)) == nil {
 			t.Error("block 3 was taken off though the rollback was refused")
+		}
+		return nil
+	})
+}
+
+// Outside review, round 10, fourth look. The coins in a file must belong to
+// its blocks, a total of work must have every block behind it, and a backup's
+// height must be written the way a node writes it.
+
+// aChainOfThree starts a chain on devnet and mines blocks 1 to 3. The node's
+// height in memory is put back to nought when the test ends.
+func aChainOfThree(t *testing.T) {
+	t.Helper()
+	startTestChain(t, "devnet")
+	t.Cleanup(func() { atomic.StoreInt64(&localHeightState, 0) })
+	timestamp := Params.GenesisTimestamp + 100
+	for i := 0; i < 3; i++ {
+		timestamp += 45
+		extendTestChain(t, timestamp, testAddress(fmt.Sprintf("miner%d", i)), nil)
+	}
+}
+
+// M. Coins that do not belong to the blocks of the file.
+func TestANodeThatStartsOnAFileWhoseCoinsDoNotAddUpToTheBlocksStopsAndLetsTheFileGo(t *testing.T) {
+	t.Run("a coin of an old block 3 is left after a rollback to block 1", func(t *testing.T) {
+		aChainOfThree(t)
+		tip := GetLatestBlockInternal()
+		coinKey := []byte(utxoKey(tip.Transactions[0].ID, 0))
+		var coinRaw []byte
+		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+			coinRaw = append([]byte(nil), dbTx.Bucket(utxoBucket).Get(coinKey)...)
+			return nil
+		})
+		if len(coinRaw) == 0 {
+			t.Fatal("set-up: block 3's coin is not there")
+		}
+		StateMutex.Lock()
+		removed := rollbackChainToHeightLocked(1)
+		StateMutex.Unlock()
+		if len(removed) != 2 {
+			t.Fatalf("set-up: %d blocks were removed, want 2", len(removed))
+		}
+		// The coin of the block that is gone comes back.
+		updateDB(t, func(dbTx *bbolt.Tx) error { return dbTx.Bucket(utxoBucket).Put(coinKey, coinRaw) })
+		path := BlockchainFile
+		closeAfterWork(t)
+		mustRefuseToStartOn(t, path)
+	})
+
+	t.Run("a coin is deleted from a sound chain", func(t *testing.T) {
+		aChainOfThree(t)
+		updateDB(t, func(dbTx *bbolt.Tx) error {
+			return dbTx.Bucket(utxoBucket).Delete([]byte(coinsWorthSomething(dbTx)[0]))
+		})
+		path := BlockchainFile
+		closeAfterWork(t)
+		mustRefuseToStartOn(t, path)
+	})
+
+	t.Run("a coin's amount is raised by one unit", func(t *testing.T) {
+		aChainOfThree(t)
+		updateDB(t, func(dbTx *bbolt.Tx) error {
+			key := coinsWorthSomething(dbTx)[0]
+			coin := readCoinRecord(t, dbTx, key)
+			coin.Amount = UnitsAmount(coin.Amount.Units() + 1)
+			return writeCoinRecord(dbTx, key, coin)
+		})
+		path := BlockchainFile
+		closeAfterWork(t)
+		mustRefuseToStartOn(t, path)
+	})
+
+	// A KNOWN LIMIT, kept here so that it is not forgotten. The start only
+	// holds the coins to the sum of what has been issued. A coin given to
+	// another address leaves that sum as it was, so the node starts. Only the
+	// full check of a chain file (replayChainFile) finds it.
+	t.Run("a coin given to another address with the totals unchanged still starts (known limit)", func(t *testing.T) {
+		aChainOfThree(t)
+		updateDB(t, func(dbTx *bbolt.Tx) error {
+			key := coinsWorthSomething(dbTx)[0]
+			coin := readCoinRecord(t, dbTx, key)
+			coin.Recipient = testAddress("a thief")
+			return writeCoinRecord(dbTx, key, coin)
+		})
+		path := BlockchainFile
+		closeAfterWork(t)
+		atomic.StoreInt64(&localHeightState, 0)
+		BlockchainFile = path
+		if message, panicked := openingTheEngine(); panicked {
+			t.Fatalf("the node refused a file whose totals are right: %v", message)
+		}
+	})
+}
+
+// workStopAtMiddleBlock is the set-up of the outside reviewer's second proof.
+// The heavy branch is in place, a block below the shared ancestor cannot be
+// read, and the record of total work for the newest block is gone. It returns
+// the lighter chain, which a peer serves.
+func workStopAtMiddleBlock(t *testing.T) (lightChain []Block, heavyTip Block) {
+	t.Helper()
+	startTestChain(t, "devnet")
+	b := buildCompetingBranches(t)
+	putBranchInPlace(b.heavy, b.ancestor)
+	for h := int64(0); h <= b.ancestor.Index; h++ {
+		lightChain = append(lightChain, GetBlockByHeightFromDB(h))
+	}
+	lightChain = append(lightChain, b.light...)
+	heavyTip = GetLatestBlockInternal()
+	if sumBlockWork(b.light).Cmp(sumBlockWork(b.heavy)) >= 0 {
+		t.Fatal("set-up: the light branch must have less work than the heavy one")
+	}
+	updateDB(t, func(dbTx *bbolt.Tx) error {
+		if err := dbTx.Bucket(blocksBucket).Put(chainWorkKey(1), []byte("{corrupt")); err != nil {
+			return err
+		}
+		return dbTx.Bucket(chainWorkBucket).Delete(chainWorkKey(heavyTip.Index))
+	})
+	return lightChain, heavyTip
+}
+
+// N. A total of work that has a block it cannot read behind it.
+func TestASyncPassThatCannotWorkOutItsOwnTotalOfWorkKeepsTheNodeOnItsChain(t *testing.T) {
+	lightChain, heavyTip := workStopAtMiddleBlock(t)
+
+	srv := serveMockSyncPeer(t, lightChain)
+	savedExtras := Params.ExtraSyncURLs
+	Params.ExtraSyncURLs = []string{srv.URL}
+	t.Cleanup(func() {
+		Params.ExtraSyncURLs = savedExtras
+		syncSetAside.Lock()
+		delete(syncSetAside.until, srv.URL)
+		syncSetAside.Unlock()
+		syncExcused.Lock()
+		delete(syncExcused.at, srv.URL)
+		syncExcused.Unlock()
+		syncDelivered.Lock()
+		delete(syncDelivered.at, srv.URL)
+		syncDelivered.Unlock()
+	})
+
+	before := stateOfChain(t)
+	TriggerActiveReSyncPass()
+	wantNothingChanged(t, before, "the sync pass with a block below the shared one unreadable")
+	if tip := GetLatestBlockInternal(); tip.Hash != heavyTip.Hash {
+		t.Errorf("the node is at #%d %.12s; want it to stay on its own chain at #%d %.12s", tip.Index, tip.Hash, heavyTip.Index, heavyTip.Hash)
+	}
+}
+
+func TestATotalOfWorkIsWorkedOutFromEveryBlockOrNotAtAll(t *testing.T) {
+	aChainOfThree(t)
+	sum := func() (*big.Int, error) {
+		var total *big.Int
+		var err error
+		_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+			total, err = sumChainWorkFromBlocks(dbTx, 3)
+			return nil
+		})
+		return total, err
+	}
+
+	t.Run("a sound chain gives the work of every block added", func(t *testing.T) {
+		var blocks []Block
+		for h := int64(0); h <= 3; h++ {
+			blocks = append(blocks, GetBlockByHeightFromDB(h))
+		}
+		got, err := sum()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := sumBlockWork(blocks); got.Cmp(want) != 0 {
+			t.Errorf("the total is %s, want %s", got, want)
+		}
+	})
+	t.Run("a block in the middle that is gone is an error", func(t *testing.T) {
+		updateDB(t, func(dbTx *bbolt.Tx) error { return dbTx.Bucket(blocksBucket).Delete(chainWorkKey(2)) })
+		if _, err := sum(); err == nil {
+			t.Error("a total was given with block 2 missing")
+		}
+	})
+	t.Run("a block in the middle that cannot be decoded is an error", func(t *testing.T) {
+		updateDB(t, func(dbTx *bbolt.Tx) error { return dbTx.Bucket(blocksBucket).Put(chainWorkKey(2), []byte("{")) })
+		if _, err := sum(); err == nil {
+			t.Error("a total was given with block 2 unreadable")
+		}
+	})
+}
+
+func TestANodeWithNoRecordOfTotalWorkForItsTipAndAnUnreadableBlockStoresNothingAndDoesNotStart(t *testing.T) {
+	aChainOfThree(t)
+	timestamp := GetLatestBlockInternal().Timestamp + 45
+	next := mineTestBlock(t, timestamp, testAddress("m4"), nil, 0)
+	updateDB(t, func(dbTx *bbolt.Tx) error {
+		if err := dbTx.Bucket(blocksBucket).Put(chainWorkKey(2), []byte("{")); err != nil {
+			return err
+		}
+		return dbTx.Bucket(chainWorkBucket).Delete(chainWorkKey(3))
+	})
+	before := stateOfChain(t)
+	if SaveBlockToStorageInternal(next) {
+		t.Error("a block was stored though the total of work behind it cannot be worked out")
+	}
+	wantNothingChanged(t, before, "after the refused block")
+
+	path := BlockchainFile
+	closeAfterWork(t)
+	mustRefuseToStartOn(t, path)
+}
+
+func TestANodeWithOnlyTheRecordOfTotalWorkForItsTipGoneStartsAndHasTheSameTotal(t *testing.T) {
+	aChainOfThree(t)
+	before := TotalChainWork()
+	if before.Sign() <= 0 {
+		t.Fatal("set-up: the total of work is nought")
+	}
+	updateDB(t, func(dbTx *bbolt.Tx) error { return dbTx.Bucket(chainWorkBucket).Delete(chainWorkKey(3)) })
+	path := BlockchainFile
+	closeAfterWork(t)
+	atomic.StoreInt64(&localHeightState, 0)
+	BlockchainFile = path
+	if message, panicked := openingTheEngine(); panicked {
+		t.Fatalf("the node refused a sound file whose record of total work was gone: %v", message)
+	}
+	if after := TotalChainWork(); after.Cmp(before) != 0 {
+		t.Errorf("the total of work is %s, was %s", after, before)
+	}
+}
+
+// O. A backup whose height is written as 3 and not as the 16 digits a node
+// writes is refused by every check, and a restore leaves the chain file alone.
+func TestABackupWhoseHeightIsNotWrittenAsANodeWritesItIsRefusedAndNeverRestored(t *testing.T) {
+	startTestChain(t, "devnet")
+	t.Cleanup(func() { atomic.StoreInt64(&localHeightState, 0) })
+	genesis := buildGenesisBlock().Hash
+	timestamp := Params.GenesisTimestamp + 100
+	for i := 0; i < 3; i++ {
+		timestamp += 45
+		extendTestChain(t, timestamp, testAddress("miner"), nil)
+	}
+	backup, _, err := writeBackup(filepath.Join(t.TempDir(), "backups"), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeAfterWork(t)
+
+	altered := alteredCopyOf(t, backup, "unpadded-height.db", func(tx *bbolt.Tx) error {
+		return tx.Bucket(metaBucket).Put([]byte("height"), []byte("3"))
+	})
+	if _, err := checkChainFile(altered, genesis); err == nil {
+		t.Error("the quick check let in a backup whose height is written as 3")
+	}
+	if _, err := replayChainFile(altered, genesis); err == nil {
+		t.Error("the full check let in a backup whose height is written as 3")
+	}
+	sizeBefore, sumBefore := fileDigest(t, BlockchainFile)
+	if _, kept, err := restoreBackup(altered, genesis); err == nil {
+		t.Error("a backup whose height is written as 3 was restored")
+	} else if kept != "" {
+		t.Errorf("the refused restore kept %q", kept)
+	}
+	if size, sum := fileDigest(t, BlockchainFile); size != sizeBefore || sum != sumBefore {
+		t.Error("a refused restore changed the chain file")
+	}
+}
+
+// P. Two tests taken over from the outside reviewer's second file.
+
+// A record of spending or of a sweep that no block makes is refused, also
+// when it sits above the newest block or under a key that is no height.
+func TestAFullCheckRefusesARecordOfSpendingOrOfASweepThatNoBlockMakes(t *testing.T) {
+	chain := buildChainForFullCheck(t)
+	closeAfterWork(t)
+	theFileAsTheNodeWroteItPasses(t, chain)
+
+	cases := []struct {
+		name   string
+		change func(tx *bbolt.Tx) error
+	}{
+		{"extra undo record above newest block", func(tx *bbolt.Tx) error {
+			return tx.Bucket(undoBucket).Put(undoKey(chain.tip.Index+1), []byte("[]"))
+		}},
+		{"extra sweep record above newest block", func(tx *bbolt.Tx) error {
+			return tx.Bucket(sweepBucket).Put(chainWorkKey(chain.tip.Index+1), []byte("[]"))
+		}},
+		{"extra sweep record under a non-height key", func(tx *bbolt.Tx) error {
+			return tx.Bucket(sweepBucket).Put([]byte("not-a-height"), []byte("[]"))
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := alteredCopyOf(t, chain.path, "extra-record.db", c.change)
+			if _, err := replayChainFile(path, chain.genesis); err == nil {
+				t.Fatalf("replayChainFile passed a file with %s", c.name)
+			}
+		})
+	}
+}
+
+// A coin that cannot be read is taken for no coin when a transfer is checked,
+// so a sound block that spends it is refused, and the chain stays where it is.
+func TestASoundBlockThatSpendsACoinThatCannotBeReadIsRefusedAndTheTipDoesNotMove(t *testing.T) {
+	startTestChain(t, "devnet")
+	priv, pub, owner, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	timestamp := Params.GenesisTimestamp + 100
+	block1 := extendTestChain(t, timestamp, owner, nil)
+	transfer, err := BuildSignedTransfer(priv, pub, testAddress("dest"), cvn("49"), cvn("1"), ListSpendableCoins(owner))
+	if err != nil {
+		t.Fatal(err)
+	}
+	validBlock := mineTestBlock(t, timestamp+45, testAddress("miner"), []Transaction{transfer}, 0)
+
+	// The coin is spoilt in the file; the block is left as it was.
+	coinKey := []byte(utxoKey(block1.Transactions[0].ID, 0))
+	updateDB(t, func(dbTx *bbolt.Tx) error {
+		return dbTx.Bucket(utxoBucket).Put(coinKey, []byte("{corrupt"))
+	})
+
+	if ValidateBlockSignatures(validBlock) {
+		t.Fatal("ValidateBlockSignatures accepted a block whose input coin cannot be read")
+	}
+	if SaveBlockToStorageInternal(validBlock) {
+		t.Fatal("SaveBlockToStorageInternal stored a block whose input coin cannot be read")
+	}
+	if got := GetLatestBlockInternal().Index; got != 1 {
+		t.Fatalf("the tip moved to #%d; want #1", got)
+	}
+	// The lookup says there is no such coin, and does not make one up.
+	_ = GlobalBoltEngine.View(func(dbTx *bbolt.Tx) error {
+		if _, ok := bucketLookup(dbTx.Bucket(utxoBucket))(string(coinKey)); ok {
+			t.Fatal("bucketLookup found a coin whose record cannot be read")
 		}
 		return nil
 	})
