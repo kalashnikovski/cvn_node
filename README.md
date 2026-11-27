@@ -85,9 +85,9 @@ Seed nodes (all run by the project's maintainer; they are where a new node looks
 
 Any node answers these in a browser:
 
-- `http://NODE:18081/block` — current height, block hash and total work, and how many heights this node has seen two blocks compete at
-- `http://NODE:18081/addresses` — balances
-- `http://NODE:18081/` — a simple block explorer
+- `http://NODE:18081/block`: current height, block hash and total work, and how many heights this node has seen two blocks compete at
+- `http://NODE:18081/addresses`: balances
+- `http://NODE:18081/`: a simple block explorer
 
 ## Fair launch statement
 
