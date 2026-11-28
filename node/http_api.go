@@ -7,11 +7,28 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// explorerPage reads the block explorer's page, explorer.html. It is looked
+// for in the folder the node was started in, and then beside the program's
+// own file. The two are not always the same folder: a seed or a pool set up
+// by the scripts in deploy/ runs in the folder that holds its chain, while
+// the page stays with the program.
+func explorerPage() ([]byte, error) {
+	page, err := os.ReadFile("explorer.html")
+	if err == nil {
+		return page, nil
+	}
+	if folder := programFolder(); folder != "" {
+		return os.ReadFile(filepath.Join(folder, "explorer.html"))
+	}
+	return nil, err
+}
 
 // WHAT A NODE ANSWERS OVER HTTP
 //
@@ -82,7 +99,7 @@ func syncAPI() *http.ServeMux {
 
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			htmlBytes, err := os.ReadFile("explorer.html")
+			htmlBytes, err := explorerPage()
 			if err != nil {
 				StateMutex.RLock()
 				idx := GetLatestBlockInternal().Index
